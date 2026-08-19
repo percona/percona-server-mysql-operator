@@ -13,6 +13,7 @@ import (
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/cmd/bootstrap/utils"
 	database "github.com/percona/percona-server-mysql-operator/cmd/internal/db"
+	"github.com/percona/percona-server-mysql-operator/cmd/internal/secrets"
 	mysqldb "github.com/percona/percona-server-mysql-operator/pkg/db"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 )
@@ -74,7 +75,7 @@ func Bootstrap(ctx context.Context) error {
 	log.Printf("Donor: %s", donor)
 
 	log.Printf("Opening connection to %s", podIp)
-	operatorPass, err := utils.GetSecret(apiv1.UserOperator)
+	operatorPass, err := secrets.Get(apiv1.UserOperator)
 	if err != nil {
 		return errors.Wrapf(err, "get %s password", apiv1.UserOperator)
 	}
@@ -198,7 +199,7 @@ func Bootstrap(ctx context.Context) error {
 	if rStatus == mysqldb.ReplicationStatusNotInitiated || rStatus == mysqldb.ReplicationStatusStopped {
 		log.Println("configuring replication")
 
-		replicaPass, err := utils.GetSecret(apiv1.UserReplication)
+		replicaPass, err := secrets.Get(apiv1.UserReplication)
 		if err != nil {
 			return errors.Wrapf(err, "get %s password", apiv1.UserReplication)
 		}
@@ -223,7 +224,7 @@ func getTopology(ctx context.Context, fqdn string, peers sets.Set[string]) (stri
 	replicas := sets.New[string]()
 	primary := ""
 
-	operatorPass, err := utils.GetSecret(apiv1.UserOperator)
+	operatorPass, err := secrets.Get(apiv1.UserOperator)
 	if err != nil {
 		return "", nil, errors.Wrapf(err, "get %s password", apiv1.UserOperator)
 	}
@@ -289,7 +290,7 @@ func getTopology(ctx context.Context, fqdn string, peers sets.Set[string]) (stri
 func selectDonor(ctx context.Context, fqdn, primary string, replicas []string) (string, error) {
 	donor := ""
 
-	operatorPass, err := utils.GetSecret(apiv1.UserOperator)
+	operatorPass, err := secrets.Get(apiv1.UserOperator)
 	if err != nil {
 		return "", errors.Wrapf(err, "get %s password", apiv1.UserOperator)
 	}

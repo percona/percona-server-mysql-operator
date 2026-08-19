@@ -43,6 +43,8 @@ spec:
           name: config
         - mountPath: /etc/mysql/encryption-keys
           name: backup-encryption-keys
+        - mountPath: /etc/mysql/mysql-tls-secret
+          name: tls
       - name: pt-heartbeat
         volumeMounts:
         - mountPath: /opt/percona

@@ -5,7 +5,6 @@ import (
 	"log"
 	"net"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -13,7 +12,6 @@ import (
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/util/sets"
 
-	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	state "github.com/percona/percona-server-mysql-operator/cmd/internal/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
@@ -95,19 +93,6 @@ func GetSourceConnectRetry() (uint32, error) {
 	}
 
 	return uint32(sourceConnectRetry), nil
-}
-
-func GetSecret(username apiv1.SystemUser) (string, error) {
-	if !username.IsKnown() {
-		return "", errors.Errorf("unknown system user %q", string(username))
-	}
-	path := filepath.Join(naming.CredsMountPath, string(username))
-	sBytes, err := os.ReadFile(path)
-	if err != nil {
-		return "", errors.Wrapf(err, "read %s", path)
-	}
-
-	return strings.TrimSpace(string(sBytes)), nil
 }
 
 func GetPodIP(hostname string) (string, error) {

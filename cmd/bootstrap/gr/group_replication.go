@@ -29,6 +29,7 @@ import (
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/cmd/bootstrap/utils"
 	database "github.com/percona/percona-server-mysql-operator/cmd/internal/db"
+	"github.com/percona/percona-server-mysql-operator/cmd/internal/secrets"
 	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
@@ -71,7 +72,7 @@ func (m *mysqlsh) compareVersionWith(ver string) int {
 }
 
 func (m *mysqlsh) getURI() string {
-	operatorPass, err := utils.GetSecret(apiv1.UserOperator)
+	operatorPass, err := secrets.Get(apiv1.UserOperator)
 	if err != nil {
 		return ""
 	}
@@ -621,7 +622,7 @@ func Bootstrap(ctx context.Context) error {
 }
 
 func getSQLRunners(primary, replica string) (primarySQLRunner *sqlRunner, replicaSQLRunner *sqlRunner, err error) {
-	operatorPass, err := utils.GetSecret(apiv1.UserOperator)
+	operatorPass, err := secrets.Get(apiv1.UserOperator)
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "get %s password", apiv1.UserOperator)
 	}

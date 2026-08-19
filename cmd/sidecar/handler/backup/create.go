@@ -18,6 +18,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/cmd/internal/secrets"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	xb "github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
@@ -103,7 +104,7 @@ func (h *Handler) createBackupHandler(w http.ResponseWriter, req *http.Request) 
 	w.Header().Set("Connection", "keep-alive")
 
 	backupUser := apiv1.UserXtraBackup
-	backupPass, err := getSecret(backupUser)
+	backupPass, err := secrets.Get(backupUser)
 	if err != nil {
 		log.Error(err, "failed to get backup password")
 		http.Error(w, "backup failed", http.StatusInternalServerError)
@@ -292,7 +293,7 @@ func startReplicaSQLThread(ctx context.Context) error {
 
 	backupUser := apiv1.UserXtraBackup
 
-	backupPass, err := getSecret(backupUser)
+	backupPass, err := secrets.Get(backupUser)
 	if err != nil {
 		return errors.Wrap(err, "get password")
 	}
@@ -308,19 +309,6 @@ func startReplicaSQLThread(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-func getSecret(username apiv1.SystemUser) (string, error) {
-	if !username.IsKnown() {
-		return "", errors.Errorf("unknown system user %q", string(username))
-	}
-	path := filepath.Join(naming.CredsMountPath, string(username))
-	sBytes, err := os.ReadFile(path)
-	if err != nil {
-		return "", errors.Wrapf(err, "read %s", path)
-	}
-
-	return strings.TrimSpace(string(sBytes)), nil
 }
 
 func versionFileFor(keyFile string) string {

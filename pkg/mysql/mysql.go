@@ -30,7 +30,7 @@ const (
 	mysqlshVolumeName     = "mysqlsh"
 	mysqlshMountPath      = "/.mysqlsh"
 	tlsVolumeName         = "tls"
-	tlsMountPath          = "/etc/mysql/mysql-tls-secret"
+	TLSMountPath          = "/etc/mysql/mysql-tls-secret"
 	BackupLogDir          = "/var/log/xtrabackup"
 	vaultSecretVolumeName = "vault-keyring-secret"
 	vaultSecretMountPath  = "/etc/mysql/vault-keyring-secret"
@@ -43,6 +43,10 @@ const (
 	DefaultAdminPort = 33062
 	DefaultXPort     = 33060
 	SidecarHTTPPort  = 6450
+
+	// BinlogSourcePort is deliberately not DefaultPort: Orchestrator polls 3306 and
+	// must never discover the failover binlog source as a live instance.
+	BinlogSourcePort int32 = 33065
 
 	DefaultReadTimeoutSecondsSeconds  = 3600
 	DefaultCloneTimeoutSecondsSeconds = 3600
@@ -646,7 +650,7 @@ func mysqldVolumeMounts(cr *apiv1.PerconaServerMySQL) []corev1.VolumeMount {
 		},
 		{
 			Name:      tlsVolumeName,
-			MountPath: tlsMountPath,
+			MountPath: TLSMountPath,
 		},
 		{
 			Name:      configVolumeName,
@@ -818,6 +822,18 @@ func backupVolumeMounts(cr *apiv1.PerconaServerMySQL) []corev1.VolumeMount {
 			corev1.VolumeMount{
 				Name:      "backup-encryption-keys",
 				MountPath: "/etc/mysql/encryption-keys",
+			},
+		)
+	}
+
+	if cr.CompareVersion("1.3.0") >= 0 {
+		// The failover binlog source serves replicas over the replication protocol,
+		// which needs the same certificate mysqld serves.
+		mounts = append(
+			mounts,
+			corev1.VolumeMount{
+				Name:      tlsVolumeName,
+				MountPath: TLSMountPath,
 			},
 		)
 	}

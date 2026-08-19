@@ -14,8 +14,8 @@ import (
 	"time"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
-	"github.com/percona/percona-server-mysql-operator/cmd/bootstrap/utils"
 	"github.com/percona/percona-server-mysql-operator/cmd/internal/db"
+	"github.com/percona/percona-server-mysql-operator/cmd/internal/secrets"
 	"github.com/percona/percona-server-mysql-operator/pkg/binlogserver"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup/storage"
 )
@@ -62,7 +62,7 @@ func main() {
 		return db.NewDatabase(ctx, params)
 	}
 
-	if err := run(ctx, storage.NewS3, newDB, utils.GetSecret, applyBinlogs); err != nil {
+	if err := run(ctx, storage.NewS3, newDB, secrets.Get, applyBinlogs); err != nil {
 		log.Fatalf("pitr failed: %v", err)
 	}
 }

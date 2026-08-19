@@ -6,8 +6,6 @@ import (
 	"log"
 	"net"
 	"os"
-	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -15,6 +13,7 @@ import (
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	database "github.com/percona/percona-server-mysql-operator/cmd/internal/db"
 	state "github.com/percona/percona-server-mysql-operator/cmd/internal/naming"
+	"github.com/percona/percona-server-mysql-operator/cmd/internal/secrets"
 	mysqldb "github.com/percona/percona-server-mysql-operator/pkg/db"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
@@ -101,7 +100,7 @@ func checkReadinessAsync(ctx context.Context) error {
 		return errors.Wrap(err, "get pod IP")
 	}
 
-	monitorPass, err := getSecret(apiv1.UserMonitor)
+	monitorPass, err := secrets.Get(apiv1.UserMonitor)
 	if err != nil {
 		return errors.Wrapf(err, "get %s password", apiv1.UserMonitor)
 	}
@@ -147,7 +146,7 @@ func checkReadinessGR(ctx context.Context) error {
 		return errors.Wrap(err, "get pod IP")
 	}
 
-	monitorPass, err := getSecret(apiv1.UserMonitor)
+	monitorPass, err := secrets.Get(apiv1.UserMonitor)
 	if err != nil {
 		return errors.Wrapf(err, "get %s password", apiv1.UserMonitor)
 	}
@@ -181,7 +180,7 @@ func checkLivenessAsync(ctx context.Context) error {
 		return errors.Wrap(err, "get pod IP")
 	}
 
-	monitorPass, err := getSecret(apiv1.UserMonitor)
+	monitorPass, err := secrets.Get(apiv1.UserMonitor)
 	if err != nil {
 		return errors.Wrapf(err, "get %s password", apiv1.UserMonitor)
 	}
@@ -206,7 +205,7 @@ func checkLivenessGR(ctx context.Context) error {
 		return errors.Wrap(err, "get pod IP")
 	}
 
-	monitorPass, err := getSecret(apiv1.UserMonitor)
+	monitorPass, err := secrets.Get(apiv1.UserMonitor)
 	if err != nil {
 		return errors.Wrapf(err, "get %s password", apiv1.UserMonitor)
 	}
@@ -268,7 +267,7 @@ func checkReplication(ctx context.Context) error {
 		return errors.Wrap(err, "get pod IP")
 	}
 
-	monitorPass, err := getSecret(apiv1.UserMonitor)
+	monitorPass, err := secrets.Get(apiv1.UserMonitor)
 	if err != nil {
 		return errors.Wrapf(err, "get %s password", apiv1.UserMonitor)
 	}
@@ -295,19 +294,6 @@ func checkReplication(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-func getSecret(username apiv1.SystemUser) (string, error) {
-	if !username.IsKnown() {
-		return "", errors.Errorf("unknown system user %q", string(username))
-	}
-	path := filepath.Join(naming.CredsMountPath, string(username))
-	sBytes, err := os.ReadFile(path)
-	if err != nil {
-		return "", errors.Wrapf(err, "read %s", path)
-	}
-
-	return strings.TrimSpace(string(sBytes)), nil
 }
 
 func getPodHostname() (string, error) {
