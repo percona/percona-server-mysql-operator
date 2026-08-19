@@ -1,0 +1,16 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster=$(get_cluster_name)
+
+      # rotate to the second KEK in the keyring, binlogs already written with
+      # alpha must stay readable
+      kubectl -n "${NAMESPACE}" patch ps "${cluster}" \
+          --type merge \
+          -p '{"spec": {"backup": {"pitr": {"binlogServer": {"storage": {"encryption": {"kekId": "beta"}}}}}}}'
