@@ -629,7 +629,8 @@ func (r *PerconaServerMySQLBackupReconciler) getBackupSize(
 		return "", errors.Wrap(err, "new storage client")
 	}
 
-	objects, err := storageClient.ListObjectsWithSize(ctx, cr.Status.Destination.BackupName())
+	listPrefix := strings.TrimPrefix(cr.Status.Destination.PathWithoutBucket(), storageClient.GetPrefix())
+	objects, err := storageClient.ListObjectsWithSize(ctx, listPrefix)
 	if err != nil {
 		return "", errors.Wrap(err, "list objects with size")
 	}
