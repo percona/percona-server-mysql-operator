@@ -237,13 +237,9 @@ func getAndCheckKeyringSecret(
 		return nil, errors.Errorf("key %q not found in keyring secret %q", secretKey, secretName)
 	}
 
-	keyring, err := decodeKeyringStrict(data)
+	keyring, err := DecodeKeyring(data)
 	if err != nil {
 		return nil, errors.Wrap(err, "decode keyring")
-	}
-
-	if err := keyring.Validate(); err != nil {
-		return nil, errors.Wrap(err, "validate keyring")
 	}
 
 	return &keyring, nil
