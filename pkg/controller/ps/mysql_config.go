@@ -114,8 +114,9 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfig(
 }
 
 const (
-	readOnlyErrorString        = "ERROR 1238"
-	unknownVariableErrorString = "ERROR 1193"
+	readOnlyErrorString                = "ERROR 1238"
+	unknownVariableErrorString         = "ERROR 1193"
+	groupReplicationRunningErrorString = "ERROR 3093"
 )
 
 func isReadOnlyVariableError(err error) bool {
@@ -124,6 +125,10 @@ func isReadOnlyVariableError(err error) bool {
 
 func isUnknownVariableError(err error) bool {
 	return strings.Contains(err.Error(), unknownVariableErrorString)
+}
+
+func isGRRunningVariableError(err error) bool {
+	return strings.Contains(err.Error(), groupReplicationRunningErrorString)
 }
 
 func setGlobalVariables(
@@ -156,7 +161,7 @@ func setGlobalVariables(
 		for k, v := range kv {
 			err := mgr.SetGlobalVariable(ctx, k, v)
 			if err != nil {
-				if isReadOnlyVariableError(err) {
+				if isReadOnlyVariableError(err) || isGRRunningVariableError(err) {
 					restartNeeded = true
 					continue
 				}
