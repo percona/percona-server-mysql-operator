@@ -136,9 +136,11 @@ func run(ctx context.Context, newS3 newStorageFn, newDB newDatabaseFn, getSecret
 		if err != nil {
 			return fmt.Errorf("read keyring file: %w", err)
 		}
-		if err := json.Unmarshal(keyringData, &keyring); err != nil {
-			return fmt.Errorf("parse keyring json: %w", err)
+		kr, err := binlogserver.DecodeKeyring(keyringData)
+		if err != nil {
+			return fmt.Errorf("parse keyring %s: %w", keyringPath, err)
 		}
+		keyring = &kr
 		log.Printf("loaded %d keys from keyring", len(keyring.Keys))
 	}
 
