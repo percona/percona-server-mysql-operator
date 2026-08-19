@@ -440,9 +440,6 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileRejoin(ctx context.Con
 		case jobConditionTrue(existingJob, batchv1.JobComplete):
 			log.Info("Rejoin job completed successfully", "cluster", rejoinClusterName)
 
-			r.Recorder.Eventf(pcs, nil, corev1.EventTypeNormal, apiv1.EventTypeClusterSetMemberRejoined,
-				apiv1.EventTypeClusterSetMemberRejoined, "Cluster %s rejoined to ClusterSet", rejoinClusterName)
-
 			orig := pcs.DeepCopy()
 			delete(pcs.Annotations, naming.AnnotationClusterSetRejoinCluster.String())
 			if err := r.Patch(ctx, pcs, client.MergeFrom(orig)); err != nil {
@@ -455,6 +452,10 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileRejoin(ctx context.Con
 			}); err != nil {
 				return errors.Wrap(err, "update status after rejoin complete")
 			}
+
+			r.Recorder.Eventf(pcs, nil, corev1.EventTypeNormal, apiv1.EventTypeClusterSetMemberRejoined,
+				apiv1.EventTypeClusterSetMemberRejoined, "Cluster %s rejoined to ClusterSet", rejoinClusterName)
+
 			return nil
 
 		case jobConditionTrue(existingJob, batchv1.JobFailed):
