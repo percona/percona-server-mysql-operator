@@ -72,13 +72,37 @@ func TestXtrabackupArgs(t *testing.T) {
 				append(defaultArgs, "--compress", "--parallel=2")...,
 			),
 		},
-		"defaults file without value is first": {
+		"defaults file without value is not promoted": {
 			conf: &xb.BackupConfig{
 				ContainerOptions: &apiv1.BackupContainerOptions{
 					Args: apiv1.BackupContainerArgs{Xtrabackup: []string{"--defaults-file"}},
 				},
 			},
-			want: append([]string{"--defaults-file"}, defaultArgs...),
+			want: append(defaultArgs, "--defaults-file"),
+		},
+		"defaults file followed by flag is not promoted": {
+			conf: &xb.BackupConfig{
+				ContainerOptions: &apiv1.BackupContainerOptions{
+					Args: apiv1.BackupContainerArgs{Xtrabackup: []string{"--defaults-file", "--compress"}},
+				},
+			},
+			want: append(defaultArgs, "--defaults-file", "--compress"),
+		},
+		"defaults file with empty equals value is not promoted": {
+			conf: &xb.BackupConfig{
+				ContainerOptions: &apiv1.BackupContainerOptions{
+					Args: apiv1.BackupContainerArgs{Xtrabackup: []string{"--defaults-file="}},
+				},
+			},
+			want: append(defaultArgs, "--defaults-file="),
+		},
+		"defaults file with separate empty value is not promoted": {
+			conf: &xb.BackupConfig{
+				ContainerOptions: &apiv1.BackupContainerOptions{
+					Args: apiv1.BackupContainerArgs{Xtrabackup: []string{"--defaults-file", ""}},
+				},
+			},
+			want: append(defaultArgs, "--defaults-file", ""),
 		},
 		"encryption uses default algorithm": {
 			conf: &xb.BackupConfig{
