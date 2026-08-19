@@ -305,7 +305,10 @@ func (r *PerconaServerMySQLReconciler) repairBrokenReplicas(
 			continue
 		}
 
-		if instance.ReplicationIOThreadState.Exists() && !instance.ReplicationIOThreadState.IsRunning() {
+		// Heal only a replica whose IO thread is stuck connecting/erroring (Other);
+		// a cleanly Stopped IO thread is an intentional STOP REPLICA (user, backup,
+		// or test) and must be left alone.
+		if instance.ReplicationIOThreadState == orchestrator.ReplicationThreadStateOther {
 			broken = append(broken, instance)
 		}
 	}
