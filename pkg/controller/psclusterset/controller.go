@@ -208,6 +208,10 @@ func (r *PerconaServerMySQLClusterSetReconciler) Reconcile(ctx context.Context, 
 		return ctrl.Result{}, errors.Wrap(err, "reconcile replicas")
 	}
 
+	if err = r.reconcileRejoin(ctx, pcs); err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "reconcile rejoin")
+	}
+
 	if err = r.reconcileSwitchover(ctx, pcs); err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "reconcile switchover")
 	}
@@ -394,6 +398,117 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileReplicas(ctx context.C
 	return nil
 }
 
+func (r *PerconaServerMySQLClusterSetReconciler) reconcileRejoin(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet) error {
+	log := logf.FromContext(ctx)
+
+	rejoinClusterName, ok := pcs.Annotations[naming.AnnotationClusterSetRejoinCluster.String()]
+	if !ok || rejoinClusterName == "" {
+		if meta.IsStatusConditionTrue(pcs.Status.Conditions, apiv1.ConditionClusterSetRejoinInProgress) {
+			if err := pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) error {
+				meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionClusterSetRejoinInProgress)
+				return nil
+			}); err != nil {
+				return errors.Wrap(err, "remove stale rejoin condition")
+			}
+		}
+		return nil
+	}
+
+	cluster := pcs.GetCluster(rejoinClusterName)
+	if cluster == nil {
+		return fmt.Errorf("cluster %q specified in annotation %s not found in spec.clusters",
+			rejoinClusterName, naming.AnnotationClusterSetRejoinCluster)
+	}
+
+	if pcs.PrimaryCluster() != nil && cluster.InnoDBClusterName == pcs.PrimaryCluster().InnoDBClusterName {
+		log.Info("Ignoring rejoin annotation: target cluster is the primary", "cluster", rejoinClusterName)
+		return nil
+	}
+
+	if (pcs.Status.PrimaryCluster != "" && pcs.Spec.PrimaryCluster != pcs.Status.PrimaryCluster) ||
+		meta.IsStatusConditionTrue(pcs.Status.Conditions, apiv1.ConditionClusterSetPrimarySwitchOverInProg) {
+		log.Info("Switchover in progress, deferring rejoin", "cluster", rejoinClusterName)
+		return nil
+	}
+
+	rejoinJobKey := clusterset.ClusterSetManagerJobKey(pcs, cluster.InnoDBClusterName, clusterset.CmdRejoinCluster)
+	existingJob := &batchv1.Job{}
+	err := r.Get(ctx, rejoinJobKey, existingJob)
+
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return errors.Wrap(err, "get rejoin job")
+	}
+
+	if err == nil {
+		switch {
+		case jobConditionTrue(existingJob, batchv1.JobComplete):
+			log.Info("Rejoin job completed successfully", "cluster", rejoinClusterName)
+
+			orig := pcs.DeepCopy()
+			delete(pcs.Annotations, naming.AnnotationClusterSetRejoinCluster.String())
+			if err := r.Patch(ctx, pcs, client.MergeFrom(orig)); err != nil {
+				return errors.Wrap(err, "remove rejoin annotation")
+			}
+
+			if err := pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) error {
+				meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionClusterSetRejoinInProgress)
+				return nil
+			}); err != nil {
+				return errors.Wrap(err, "update status after rejoin complete")
+			}
+
+			r.Recorder.Eventf(pcs, nil, corev1.EventTypeNormal, apiv1.EventTypeClusterSetMemberRejoined,
+				apiv1.EventTypeClusterSetMemberRejoined, "Cluster %s rejoined to ClusterSet", rejoinClusterName)
+
+			return nil
+
+		case jobConditionTrue(existingJob, batchv1.JobFailed):
+			log.Info("Rejoin job failed, deleting failed job", "cluster", rejoinClusterName)
+
+			if err := r.Delete(ctx, existingJob, client.PropagationPolicy(metav1.DeletePropagationBackground)); err != nil && !k8serrors.IsNotFound(err) {
+				return errors.Wrap(err, "delete failed rejoin job")
+			}
+
+			if err := pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) error {
+				meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+					Type:    apiv1.ConditionClusterSetRejoinInProgress,
+					Status:  metav1.ConditionFalse,
+					Reason:  "RejoinFailed",
+					Message: fmt.Sprintf("Rejoin job for cluster %s failed", rejoinClusterName),
+				})
+				return nil
+			}); err != nil {
+				return errors.Wrap(err, "update status after rejoin failure")
+			}
+			return nil
+
+		default:
+			log.Info("Rejoin job is still running", "cluster", rejoinClusterName)
+			return nil
+		}
+	}
+
+	log.Info("Creating rejoin job", "cluster", rejoinClusterName)
+
+	if err := r.runClusterSetJob(ctx, clusterset.CmdRejoinCluster, pcs, cluster); err != nil {
+		return errors.Wrap(err, "create rejoin job")
+	}
+
+	if err := pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) error {
+		meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+			Type:    apiv1.ConditionClusterSetRejoinInProgress,
+			Status:  metav1.ConditionTrue,
+			Reason:  "RejoinInProgress",
+			Message: fmt.Sprintf("Rejoin job created for cluster %s", rejoinClusterName),
+		})
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "update status for rejoin in progress")
+	}
+
+	return nil
+}
+
 func (r *PerconaServerMySQLClusterSetReconciler) trackSwitchover(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet) error {
 	labels := naming.Labels(clusterset.ClusterSetReplicaManagerAppName, pcs.Name, "percona-server", clusterset.ClusterSetReplicaManagerComponent)
 	labels["command"] = clusterset.CmdSetPrimary
@@ -521,6 +636,8 @@ func (r *PerconaServerMySQLClusterSetReconciler) runClusterSetJob(
 		args = append(args, "--replica-port="+fmt.Sprintf("%d", cluster.Endpoints[0].GetPort()))
 		args = append(args, "--recovery-method="+string(pcs.Spec.CreateReplicaClusterOptions.RecoveryMethod))
 	case clusterset.CmdRemoveReplica:
+		args = append(args, "--replica-cluster-name="+cluster.InnoDBClusterName)
+	case clusterset.CmdRejoinCluster:
 		args = append(args, "--replica-cluster-name="+cluster.InnoDBClusterName)
 	}
 
