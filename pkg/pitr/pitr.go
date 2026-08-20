@@ -2,6 +2,7 @@ package pitr
 
 import (
 	"fmt"
+	"path/filepath"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -27,6 +28,8 @@ const (
 	binlogsVolumeName = "binlogs"
 	binlogsMountPath  = "/etc/pitr"
 	BinlogsConfigKey  = "binlogs.json"
+	keyringVolumeName = "keyring"
+	keyringMountPath  = "/etc/binlog_server/keyring"
 )
 
 func JobName(restore *apiv1.PerconaServerMySQLRestore) string {
@@ -50,6 +53,21 @@ func BinlogsConfigMap(cluster *apiv1.PerconaServerMySQL, restore *apiv1.PerconaS
 	}
 }
 
+func getKeyringSecretRef(
+	cluster *apiv1.PerconaServerMySQL,
+	restore *apiv1.PerconaServerMySQLRestore,
+) *apiv1.BinlogServerKeyringSecretSelector {
+	if restore.Spec.PITR != nil && restore.Spec.PITR.KeyringSecret != nil {
+		return restore.Spec.PITR.KeyringSecret
+	}
+
+	binlogSrv := cluster.Spec.Backup.PiTR.BinlogServer
+	if binlogSrv != nil && binlogSrv.KeyringSecret != nil {
+		return binlogSrv.KeyringSecret
+	}
+	return nil
+}
+
 func RestoreJob(
 	cluster *apiv1.PerconaServerMySQL,
 	restore *apiv1.PerconaServerMySQLRestore,
@@ -60,7 +78,7 @@ func RestoreJob(
 
 	pvcName := fmt.Sprintf("%s-%s-mysql-0", mysql.DataVolumeName, cluster.Name)
 
-	return &batchv1.Job{
+	job := &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "batch/v1",
 			Kind:       "Job",
@@ -166,6 +184,18 @@ func RestoreJob(
 			BackoffLimit: cluster.Spec.Backup.BackoffLimit,
 		},
 	}
+
+	if keyringSecretRef := getKeyringSecretRef(cluster, restore); keyringSecretRef != nil {
+		job.Spec.Template.Spec.Volumes = append(job.Spec.Template.Spec.Volumes, corev1.Volume{
+			Name: keyringVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: keyringSecretRef.Name,
+				},
+			},
+		})
+	}
+	return job
 }
 
 func restoreContainer(
@@ -259,7 +289,7 @@ func restoreContainer(
 
 	envs = append(envs, restore.GetContainerOptions(storage).GetEnv()...)
 
-	return corev1.Container{
+	c := corev1.Container{
 		Name:            appName,
 		Image:           cluster.Spec.MySQL.Image,
 		ImagePullPolicy: cluster.Spec.MySQL.ImagePullPolicy,
@@ -292,6 +322,18 @@ func restoreContainer(
 		SecurityContext:          storage.ContainerSecurityContext,
 		Resources:                storage.Resources,
 	}
+
+	if keyringSecretRef := getKeyringSecretRef(cluster, restore); keyringSecretRef != nil {
+		c.VolumeMounts = append(c.VolumeMounts, corev1.VolumeMount{
+			Name:      keyringVolumeName,
+			MountPath: keyringMountPath,
+		})
+		c.Env = append(c.Env, corev1.EnvVar{
+			Name:  "KEYRING_PATH",
+			Value: filepath.Join(keyringMountPath, keyringSecretRef.Key),
+		})
+	}
+	return c
 }
 
 func binlogsConfigMapName(restore *apiv1.PerconaServerMySQLRestore) string {
