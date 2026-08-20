@@ -99,6 +99,20 @@ func (m *MysqlshExec) RemoveInstanceWithExec(ctx context.Context, clusterName, i
 	return nil
 }
 
+func (m *MysqlshExec) DissolveWithExec(ctx context.Context) error {
+	cmd := "dba.getCluster().dissolve({'force': true})"
+
+	if err := m.runWithExec(ctx, cmd); err != nil {
+		// The cluster is already dissolved and the instance is now standalone.
+		if strings.Contains(err.Error(), "not available through a session to a standalone instance") {
+			return nil
+		}
+		return errors.Wrap(err, "dissolve cluster")
+	}
+
+	return nil
+}
+
 func (m *MysqlshExec) DoesClusterExistWithExec(ctx context.Context, clusterName string) bool {
 	log := logf.FromContext(ctx)
 
@@ -238,6 +252,14 @@ func (m *MysqlshExec) ForcePrimaryClusterWithExec(ctx context.Context, clusterNa
 	cmd := fmt.Sprintf("dba.getCluster().getClusterSet().forcePrimaryCluster('%s')", clusterName)
 	if err := m.runWithExec(ctx, cmd); err != nil {
 		return errors.Wrap(err, "force primary cluster")
+	}
+	return nil
+}
+
+func (m *MysqlshExec) RejoinClusterWithExec(ctx context.Context, clusterName string) error {
+	cmd := fmt.Sprintf("dba.getCluster().getClusterSet().rejoinCluster('%s')", clusterName)
+	if err := m.runWithExec(ctx, cmd); err != nil {
+		return errors.Wrap(err, "rejoin cluster")
 	}
 	return nil
 }

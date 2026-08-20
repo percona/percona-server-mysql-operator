@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net"
+	"strconv"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
@@ -75,7 +77,7 @@ func (p *DBParams) DSN() string {
 	config.User = string(p.User)
 	config.Passwd = p.Pass
 	config.Net = "tcp"
-	config.Addr = fmt.Sprintf("%s:%d", p.Host, p.Port)
+	config.Addr = net.JoinHostPort(p.Host, strconv.Itoa(int(p.Port)))
 	config.DBName = "performance_schema"
 	config.Params = map[string]string{
 		"interpolateParams": "true",
@@ -344,6 +346,20 @@ func (d *DB) GetMemberState(ctx context.Context, host string) (db.MemberState, e
 	var state db.MemberState
 
 	err := d.db.QueryRowContext(ctx, "SELECT MEMBER_STATE FROM replication_group_members WHERE MEMBER_HOST=?", host).Scan(&state)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return db.MemberStateOffline, nil
+		}
+		return db.MemberStateError, errors.Wrap(err, "query member state")
+	}
+
+	return state, nil
+}
+
+func (d *DB) GetSelfState(ctx context.Context) (db.MemberState, error) {
+	var state db.MemberState
+
+	err := d.db.QueryRowContext(ctx, "SELECT MEMBER_STATE FROM replication_group_members WHERE MEMBER_ID = @@global.server_uuid").Scan(&state)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return db.MemberStateOffline, nil

@@ -38,6 +38,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/validation"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
@@ -91,6 +92,8 @@ type PerconaServerMySQLSpec struct {
 	// Deprecated: not supported since v0.12.0. Use initContainer instead
 	InitImage     string            `json:"initImage,omitempty"`
 	InitContainer InitContainerSpec `json:"initContainer,omitempty"`
+
+	Users []User `json:"users,omitempty"`
 }
 
 // StorageAutoscaling returns the storage autoscaling configuration, if any.
@@ -688,12 +691,39 @@ type PiTRSpec struct {
 }
 
 type BinlogServerStorageSpec struct {
-	S3 *BackupStorageS3Spec `json:"s3,omitempty"`
+	S3         *BackupStorageS3Spec               `json:"s3,omitempty"`
+	Encryption *BinlogServerStorageEncryptionSpec `json:"encryption,omitempty"`
+}
+
+type BinlogServerStorageEncryptionSpec struct {
+	// KekID is the ID of the key encryption key (KEK) used to encrypt the data encryption key (DEK) in the keyring file.
+	// If unspecified, uses the first key in the file.
+	// +kubebuilder:validation:Optional
+	KekID string `json:"kekId,omitempty"`
+	// +kubebuilder:default=AES-256-CTR
+	// +kubebuilder:validation:Enum=AES-128-CTR;AES-192-CTR;AES-256-CTR
+	Cipher string `json:"cipher,omitempty"`
+}
+
+type BinlogServerKeyringSecretSelector struct {
+	// Name of the secret containing the keyring file.
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+	// Key in the Secret containing the keyring file. Defaults to "keyring.json".
+	// +kubebuilder:default=keyring.json
+	Key string `json:"key,omitempty"`
 }
 
 // +kubebuilder:validation:XValidation:rule="!has(self.size) || self.size <= 1",message="binlogServer size cannot be more than 1"
+// +kubebuilder:validation:XValidation:rule="!self.?storage.?encryption.hasValue() || has(self.keyringSecret)",message="binlogServer.keyringSecret is required when binlogServer.storage.encryption is set"
 type BinlogServerSpec struct {
 	Storage BinlogServerStorageSpec `json:"storage,omitempty"`
+
+	// KeyringSecret is a reference to a Secret containing the keyring file.
+	// It is required to encrypt new binlog files and to read already encrypted
+	// ones, so it must stay configured even after storage encryption is disabled
+	// if the storage still holds encrypted binlogs.
+	KeyringSecret *BinlogServerKeyringSecretSelector `json:"keyringSecret,omitempty"`
 
 	// The number of seconds the MySQL client library will wait to establish a connection with a remote host
 	// +kubebuilder:default=30
@@ -732,6 +762,12 @@ type BinlogServerSpec struct {
 }
 
 func (s *BinlogServerSpec) SetDefaults() {
+	if s.KeyringSecret != nil && s.KeyringSecret.Key == "" {
+		s.KeyringSecret.Key = "keyring.json"
+	}
+	if s.Storage.Encryption != nil && s.Storage.Encryption.Cipher == "" {
+		s.Storage.Encryption.Cipher = "AES-256-CTR"
+	}
 	if s.SSLMode == "" {
 		s.SSLMode = "verify_identity"
 	}
@@ -872,6 +908,7 @@ func (s StatefulAppState) String() string {
 }
 
 const (
+	StateNew          StatefulAppState = ""
 	StateInitializing StatefulAppState = "initializing"
 	StateStopping     StatefulAppState = "stopping"
 	StatePaused       StatefulAppState = "paused"
@@ -904,6 +941,54 @@ type PerconaServerMySQLStatus struct { // INSERT ADDITIONAL STATUS FIELD - defin
 	Host               string                              `json:"host"`
 	InnoDBClusterName  string                              `json:"innodbClusterName,omitempty"`
 	StorageAutoscaling map[string]StorageAutoscalingStatus `json:"storageAutoscaling,omitempty"`
+}
+
+type UserSecretKeySelector struct {
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default:=password
+	Key string `json:"key"`
+}
+
+// User defines a MySQL user
+type User struct {
+	// Name of the user to be created.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Pattern="^[^`'\\\\]*$"
+	Name string `json:"name"`
+	// PasswordSecretRef is a reference to the Secret that holds this user's password.
+	// +kubebuilder:validation:Optional
+	PasswordSecretRef *UserSecretKeySelector `json:"passwordSecretRef,omitempty"`
+	// DBs is a list of databases that the user has access to. If empty, the user will have access to all databases.
+	// +kubebuilder:validation:items:Pattern="^[^`'\\\\]*$"
+	DBs []string `json:"dbs,omitempty"`
+	// Hosts is a list of hosts that the user can connect from. If empty, the user will be able to connect from any host.
+	// +kubebuilder:validation:items:Pattern="^[^`'\\\\]*$"
+	Hosts []string `json:"hosts,omitempty"`
+	// Grants is a list of grants that the user has. If empty, the user will have all privileges.
+	Grants []string `json:"grants,omitempty"`
+	// WithGrantOption grants the user the ability to grant their own privileges to other users.
+	WithGrantOption bool `json:"withGrantOption,omitempty"`
+}
+
+var invalidSecretNameChars = regexp.MustCompile(`[^a-z0-9-]+`)
+
+// DefaultCustomUserSecretName returns the name of the Secret that stores the
+// auto-generated password for a custom user.
+func (cr *PerconaServerMySQL) DefaultCustomUserSecretName(u User) string {
+	name := fmt.Sprintf("%s-user-%s", cr.GetName(), u.Name)
+	if len(validation.IsDNS1123Subdomain(name)) == 0 {
+		return name
+	}
+
+	sanitized := strings.Trim(invalidSecretNameChars.ReplaceAllString(strings.ToLower(u.Name), "-"), "-")
+	hash := FNVHash([]byte(u.Name))
+	return fmt.Sprintf("%s-user-%s-%s", cr.GetName(), sanitized, hash)
+}
+
+func (cr *PerconaServerMySQL) InternalCustomUserSecretName() string {
+	return fmt.Sprintf("%s-internal-custom-users", cr.GetName())
 }
 
 func (s *PerconaServerMySQLStatus) CompareMySQLVersion(ver string) int {
@@ -941,8 +1026,7 @@ type PerconaServerMySQL struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec PerconaServerMySQLSpec `json:"spec,omitempty"`
-
+	Spec   PerconaServerMySQLSpec   `json:"spec,omitempty"`
 	Status PerconaServerMySQLStatus `json:"status,omitempty"` // Make sure that the Status is updated after making changes. See the description of `(*PerconaServerMySQLReconciler) reconcileCRStatus` method for details.
 }
 
@@ -967,6 +1051,7 @@ const (
 	UserRoot           SystemUser = "root"
 	UserXtraBackup     SystemUser = "xtrabackup"
 	UserClusterSet     SystemUser = "clusterset"
+	UserConfigurator   SystemUser = "configurator"
 )
 
 // systemUsers is the canonical, ordered list of every SystemUser value.
@@ -983,6 +1068,7 @@ var systemUsers = []SystemUser{
 	UserRoot,
 	UserXtraBackup,
 	UserClusterSet,
+	UserConfigurator,
 }
 
 // knownSystemUsers is the closed set of SystemUser values. Callers that join

@@ -1,0 +1,32 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster=$(get_cluster_name)
+      generation_before=$(kubectl -n "${NAMESPACE}" get sts "${cluster}-mysql" -o jsonpath='{.metadata.generation}')
+      uids_before=$(get_mysql_pod_uids "${cluster}")
+
+      kubectl -n "${NAMESPACE}" patch ps "${cluster}" \
+          --type merge \
+          -p '{"spec": {"mysql": {"configuration": "max_connections=400\ninnodb_buffer_pool_instances=2\n"}}}'
+
+      restarted="true"
+      wait_for_mysql_pods_restart "${cluster}" "${uids_before}" 600 || restarted="false"
+      wait_cluster_consistency_async "${cluster}" 3 3
+
+      generation_after=$(kubectl -n "${NAMESPACE}" get sts "${cluster}-mysql" -o jsonpath='{.metadata.generation}')
+      [[ ${generation_before} != "${generation_after}" ]] || restarted="false"
+
+      wait_for_mysql_variable "${cluster}" innodb_buffer_pool_instances 2 60 || true
+
+      kubectl -n "${NAMESPACE}" create configmap 10-set-static-config \
+          --from-literal=restarted="${restarted}" \
+          --from-literal=innodb_buffer_pool_instances="$(get_mysql_variable_on_pods "${cluster}" innodb_buffer_pool_instances)" \
+          --from-literal=max_connections="$(get_mysql_variable_on_pods "${cluster}" max_connections)" \
+          --from-literal=generation="${generation_before} ${generation_after}"
+    timeout: 1200

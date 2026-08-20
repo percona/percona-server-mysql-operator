@@ -49,13 +49,13 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/binlogserver"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/controller/psrestore"
 	database "github.com/percona/percona-server-mysql-operator/pkg/db"
 	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
+	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysqlsh"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
@@ -601,6 +601,9 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	if err := r.reconcileVersions(ctx, cr); err != nil {
 		log.Error(err, "failed to reconcile versions")
 	}
+	if err := r.reconcileClusterTypeChange(ctx, cr); err != nil {
+		return errors.Wrap(err, "failed to reconcile cluster type change")
+	}
 	userSecret, err := r.ensureUserSecrets(ctx, cr)
 	if err != nil {
 		return errors.Wrap(err, "users secret")
@@ -610,6 +613,9 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	}
 	if err := r.reconcileUsers(ctx, cr, userSecret); err != nil {
 		return errors.Wrap(err, "users")
+	}
+	if err := r.reconcileCustomUsers(ctx, cr); err != nil {
+		return errors.Wrap(err, "custom users")
 	}
 	if err := r.ensureTLSSecret(ctx, cr); err != nil {
 		return errors.Wrap(err, "TLS secret")
@@ -661,10 +667,6 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 }
 
 func (r *PerconaServerMySQLReconciler) validate(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
-	if err := validateClusterType(ctx, r.Client, cr); err != nil {
-		return errors.Wrap(err, "validate cluster type")
-	}
-
 	if err := validateVaultSecret(ctx, r.Client, cr); err != nil {
 		return errors.Wrap(err, "validate vault secret")
 	}
@@ -703,30 +705,38 @@ func validateVaultSecret(ctx context.Context, cl client.Client, cr *apiv1.Percon
 	return nil
 }
 
-func validateClusterType(ctx context.Context, cl client.Client, cr *apiv1.PerconaServerMySQL) error {
-	if cr.Spec.Pause {
-		return nil
-	}
-	sts := new(appsv1.StatefulSet)
-	if err := cl.Get(ctx, types.NamespacedName{Name: mysql.Name(cr), Namespace: cr.Namespace}, sts); err != nil {
-		if k8serrors.IsNotFound(err) {
-			return nil
-		}
-		return errors.Wrap(err, "failed to get mysql sts")
+// getObservedClusterType returns the MySQL cluster type recorded in the
+// StatefulSet's pod template (the CLUSTER_TYPE env var). Note this reflects the
+// spec the operator last applied, which is not guaranteed to match the cluster
+// type the running pods actually use until they are rolled out.
+func (r *PerconaServerMySQLReconciler) getObservedClusterType(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQL,
+) (apiv1.ClusterType, error) {
+	sts := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      mysql.Name(cr),
+			Namespace: cr.GetNamespace(),
+		},
 	}
 
+	if err := r.Get(ctx, client.ObjectKeyFromObject(sts), sts); err != nil {
+		return "", errors.Wrap(err, "get statefulset")
+	}
+
+	// Find the mysql container
 	containerName := mysql.AppName
 	var container *corev1.Container
-	for _, c := range sts.Spec.Template.Spec.Containers {
+	for i, c := range sts.Spec.Template.Spec.Containers {
 		if c.Name != containerName {
 			continue
 		}
 
-		container = &c
+		container = &sts.Spec.Template.Spec.Containers[i]
 		break
 	}
 	if container == nil {
-		return errors.New("failed to get mysql container")
+		return "", errors.New("failed to get mysql container")
 	}
 
 	currentClusterType := ""
@@ -740,14 +750,193 @@ func validateClusterType(ctx context.Context, cl client.Client, cr *apiv1.Percon
 	}
 
 	if currentClusterType == "" {
-		return errors.New("failed to get mysql cluster type")
+		return "", errors.New("failed to get mysql cluster type")
 	}
 
-	if cr.Spec.MySQL.ClusterType == apiv1.ClusterType(currentClusterType) {
+	return apiv1.ClusterType(currentClusterType), nil
+}
+
+func (r *PerconaServerMySQLReconciler) reconcileClusterTypeChange(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQL,
+) error {
+	if cr.Spec.Pause || cr.Status.State != apiv1.StateReady {
 		return nil
 	}
 
-	return errors.Errorf("cluster type cannot be changed from %s to %s on a running cluster", currentClusterType, cr.Spec.MySQL.ClusterType)
+	desiredType := cr.Spec.MySQL.ClusterType
+	observedType, err := r.getObservedClusterType(ctx, cr)
+	if err != nil {
+		return client.IgnoreNotFound(err)
+	}
+
+	// observedType is read from the StatefulSet pod template (see
+	// getObservedClusterType), which reflects the spec the operator last applied
+	// rather than the cluster type the running pods actually use. This relies on
+	// reconcileClusterTypeChange running before the MySQL StatefulSet is
+	// re-applied with the new type later in doReconcile (reconcileDatabase). If
+	// it ran afterwards, the template would already carry desiredType and this
+	// early return would skip the switch while the live pods still run the old
+	// type.
+	if desiredType == observedType {
+		return nil
+	}
+
+	log := logf.FromContext(ctx)
+
+	log.Info("Switching clusterType", "from", observedType, "to", desiredType)
+
+	switch observedType {
+	case apiv1.ClusterTypeAsync:
+		if err := r.teardownAsync(ctx, cr); err != nil {
+			return errors.Wrap(err, "teardown async")
+		}
+	case apiv1.ClusterTypeGR:
+		if err := r.teardownGR(ctx, cr); err != nil {
+			return errors.Wrap(err, "teardown GR")
+		}
+	default:
+		return errors.Errorf("unsupported cluster type: %s", observedType)
+	}
+
+	// Delete mysql pods
+	if err := r.Delete(ctx, &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      mysql.Name(cr),
+			Namespace: cr.GetNamespace(),
+		},
+	}); client.IgnoreNotFound(err) != nil {
+		return errors.Wrap(err, "delete mysql statefulset")
+	}
+
+	// Delete haproxy (if set)
+	if cr.Spec.Proxy.HAProxy.Enabled {
+		if err := r.Delete(ctx, &appsv1.StatefulSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      haproxy.Name(cr),
+				Namespace: cr.GetNamespace(),
+			},
+		}); client.IgnoreNotFound(err) != nil {
+			return errors.Wrap(err, "delete haproxy statefulset")
+		}
+	}
+
+	// Delete router (if set)
+	if cr.Spec.Proxy.Router.Enabled {
+		if err := r.Delete(ctx, &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      router.Name(cr),
+				Namespace: cr.GetNamespace(),
+			},
+		}); client.IgnoreNotFound(err) != nil {
+			return errors.Wrap(err, "delete router deployment")
+		}
+	}
+
+	log.Info("Cluster type switch initiated", "to", desiredType)
+	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) teardownGR(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQL,
+) error {
+	cr = cr.DeepCopy()
+	cr.Spec.MySQL.ClusterType = apiv1.ClusterTypeGR
+
+	primary, err := r.getPrimaryPod(ctx, cr)
+	if err != nil {
+		return errors.Wrap(err, "get primary pod")
+	}
+
+	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1.UserOperator)
+	if err != nil {
+		return errors.Wrap(err, "get operator password")
+	}
+
+	podFQDN := mysql.PodFQDN(cr, primary)
+	podUri := mysqlsh.URI(string(apiv1.UserOperator), operatorPass, podFQDN)
+
+	opts := &mysqlsh.ExecOptions{
+		Pod:           primary,
+		ContainerName: mysql.AppName,
+		Client:        r.ClientCmd,
+		Stdout:        &bytes.Buffer{},
+	}
+	mysh, err := mysqlsh.NewWithExec(podUri, opts)
+	if err != nil {
+		return err
+	}
+
+	if err := mysh.DissolveWithExec(ctx); err != nil {
+		return errors.Wrap(err, "dissolve GR")
+	}
+
+	// Dissolving the cluster removes the GR metadata but leaves the
+	// group_replication_* system variables persisted in mysqld-auto.cnf on
+	// every node. Reset them so the nodes don't attempt to rejoin the group
+	// after the switch to async replication.
+	pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr), cr.Namespace)
+	if err != nil {
+		return errors.Wrap(err, "get pods")
+	}
+
+	for i := range pods {
+		pod := &pods[i]
+		db := database.NewReplicationManager(pod, r.ClientCmd, apiv1.UserOperator, operatorPass, mysql.PodFQDN(cr, pod))
+		if err := db.ResetGroupReplicationPersistedVars(ctx); err != nil {
+			return errors.Wrapf(err, "reset persisted group replication variables on pod %s", pod.Name)
+		}
+	}
+
+	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) teardownAsync(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQL,
+) error {
+	if cr.Spec.Orchestrator.Enabled {
+		return errors.New("cannot switch clusterType from async while orchestrator is enabled; set spec.orchestrator.enabled=false first")
+	}
+
+	cr = cr.DeepCopy()
+	cr.Spec.MySQL.ClusterType = apiv1.ClusterTypeAsync
+
+	pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr), cr.Namespace)
+	if err != nil {
+		return errors.Wrap(err, "get pods")
+	}
+
+	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1.UserOperator)
+	if err != nil {
+		return errors.Wrap(err, "get operator password")
+	}
+
+	resetReplication := func(pod *corev1.Pod) error {
+		db := database.NewReplicationManager(pod, r.ClientCmd, apiv1.UserOperator, operatorPass, mysql.PodFQDN(cr, pod))
+		status, _, err := db.ReplicationStatus(ctx)
+		if err != nil {
+			return errors.Wrapf(err, "get replication status on pod %s", pod.Name)
+		}
+		if status == database.ReplicationStatusNotInitiated {
+			return nil
+		}
+		if err := db.StopReplication(ctx); err != nil {
+			return errors.Wrapf(err, "stop replication on pod %s", pod.Name)
+		}
+		if err := db.ResetReplication(ctx); err != nil {
+			return errors.Wrapf(err, "reset replication on pod %s", pod.Name)
+		}
+		return nil
+	}
+
+	for i, pod := range pods {
+		if err := resetReplication(&pods[i]); err != nil {
+			return errors.Wrapf(err, "reset replication on pod %s", pod.Name)
+		}
+	}
+	return nil
 }
 
 func (r *PerconaServerMySQLReconciler) reconcileDatabase(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
@@ -788,7 +977,12 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(ctx context.Context, cr
 		return errors.Wrap(err, "get statefulset")
 	}
 	if cr.Spec.UpdateStrategy == apiv1.SmartUpdateStatefulSetStrategyType {
-		return r.smartUpdate(ctx, sts, cr)
+		if err := r.smartUpdate(ctx, sts, cr); err != nil {
+			return errors.Wrap(err, "smart update")
+		}
+	}
+	if err := r.reconcileMySQLConfig(ctx, cr, sts); err != nil {
+		return errors.Wrap(err, "reconcile MySQL config")
 	}
 
 	return nil
@@ -918,7 +1112,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 
 	configMap := k8s.ConfigMap(cr, mysql.AutoConfigMapName(cr), mysql.CustomConfigKey, config, naming.ComponentDatabase)
 	if !k8s.EqualConfigMaps(currentConfigMap, configMap) {
-		if err := k8s.EnsureObject(ctx, r.Client, cr, configMap, r.Scheme); err != nil {
+		if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, configMap, r.Scheme); err != nil {
 			return errors.Wrapf(err, "ensure ConfigMap/%s", configMap.Name)
 		}
 		log.Info("ConfigMap updated", "name", configMap.Name, "data", configMap.Data)
@@ -1603,7 +1797,7 @@ func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context
 	}
 
 	configSecret.Data[binlogserver.ConfigKey] = configBytes
-	if err := k8s.EnsureObject(ctx, r.Client, cr, &configSecret, r.Scheme); err != nil {
+	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, &configSecret, r.Scheme); err != nil {
 		return errors.Wrap(err, "reconcile secret")
 	}
 

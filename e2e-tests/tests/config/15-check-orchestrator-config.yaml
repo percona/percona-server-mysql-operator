@@ -32,7 +32,7 @@ commands:
           done
 
           echo "${pod}: FailMasterPromotionOnLagMinutes=${lag_minutes} RecoveryPeriodBlockSeconds=${recovery_period}"
-          kubectl -n "${NAMESPACE}" create configmap "11-check-orchestrator-config-${idx}" \
+          kubectl -n "${NAMESPACE}" create configmap "15-check-orchestrator-config-${idx}" \
               --from-literal=fail_master_promotion_on_lag_minutes="${lag_minutes}" \
               --from-literal=recovery_period_block_seconds="${recovery_period}"
           idx=$((idx + 1))
