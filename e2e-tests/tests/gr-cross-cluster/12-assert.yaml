@@ -1,0 +1,64 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 420
+
+resourceRefs:
+- kind: PerconaServerMySQLClusterSet
+  apiVersion: ps.percona.com/v1
+  name: gr-cross-cluster
+  ref: cs
+assertAll:
+- celExpr: >-
+    !has(cs.metadata.annotations) ||
+    !("percona.com/clusterset-rejoin-cluster" in cs.metadata.annotations)
+  message: "rejoin annotation should be removed after successful rejoin"
+- celExpr: >-
+    !cs.status.conditions.exists(c,
+      c.type == "RejoinClusterInProgress"
+    )
+  message: "RejoinClusterInProgress condition should be removed after successful rejoin"
+
+commands:
+  - script: |-
+      set -o errexit
+      set -o pipefail
+      set -o xtrace
+
+      source ../../functions
+
+      mysql_user="-uroot -p'$(get_user_pass root test-secrets)'"
+
+      status=$(get_clusterset_status "-h gr-cross-cluster-dc2-mysql-primary" "${mysql_user}")
+
+      echo "${status}" | jq .
+      echo "${status}" | jq -e '
+          .status == "HEALTHY" and
+          .primaryCluster == "grcrossclusterdc2" and
+          .clusters.grcrossclusterdc1.clusterRole == "REPLICA" and
+          .clusters.grcrossclusterdc1.globalStatus == "OK" and
+          .clusters.grcrossclusterdc2.clusterRole == "PRIMARY" and
+          .clusters.grcrossclusterdc2.globalStatus == "OK"
+      '
+    timeout: 420
+---
+kind: PerconaServerMySQLClusterSet
+apiVersion: ps.percona.com/v1
+metadata:
+  name: gr-cross-cluster
+status:
+  conditions:
+  - type: MySQLShellRunnerReady
+    status: "True"
+  - type: ClusterSetBootstrapped
+    status: "True"
+  - type: Ready
+    status: "True"
+  clusters:
+    grcrossclusterdc1:
+      clusterRole: REPLICA
+      globalStatus: OK
+    grcrossclusterdc2:
+      clusterRole: PRIMARY
+      globalStatus: OK
+  primaryCluster: grcrossclusterdc2
+

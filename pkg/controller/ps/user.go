@@ -299,6 +299,10 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 			if err := um.CreateClusterSetUser(ctx, mysqlUser.Password); err != nil {
 				return errors.Wrap(err, "create clusterset user")
 			}
+		case apiv1.UserConfigurator:
+			if err := um.CreateConfiguratorUser(ctx, mysqlUser.Password); err != nil {
+				return errors.Wrap(err, "create configurator user")
+			}
 		}
 
 		log.V(1).Info("User password changed", "user", user)

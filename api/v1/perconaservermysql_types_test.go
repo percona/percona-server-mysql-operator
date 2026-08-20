@@ -7,6 +7,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/validation"
 
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 )
@@ -220,6 +222,37 @@ func TestCheckNSetDefaults(t *testing.T) {
 		assert.Equal(t, int32(30), bls.IdleTime)
 		assert.Equal(t, "info", bls.LogLevel)
 		assert.Equal(t, int32(100), bls.ServerID)
+	})
+	t.Run("binlog server encryption defaults are set", func(t *testing.T) {
+		cr := new(PerconaServerMySQL)
+		cr.Spec.MySQL.VolumeSpec = &VolumeSpec{
+			PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
+				Resources: corev1.VolumeResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceStorage: resource.MustParse("1G"),
+					},
+				},
+			},
+		}
+		cr.Spec.Backup = &BackupSpec{
+			PiTR: PiTRSpec{
+				BinlogServer: &BinlogServerSpec{
+					KeyringSecret: &BinlogServerKeyringSecretSelector{
+						Name: "keyring-secret",
+					},
+					Storage: BinlogServerStorageSpec{
+						Encryption: &BinlogServerStorageEncryptionSpec{},
+					},
+				},
+			},
+		}
+
+		err := cr.CheckNSetDefaults(t.Context(), nil)
+		assert.NoError(t, err)
+
+		binlogServer := cr.Spec.Backup.PiTR.BinlogServer
+		assert.Equal(t, "keyring.json", binlogServer.KeyringSecret.Key)
+		assert.Equal(t, "AES-256-CTR", binlogServer.Storage.Encryption.Cipher)
 	})
 	t.Run("binlog server explicit values are not overridden by defaults", func(t *testing.T) {
 		cr := new(PerconaServerMySQL)
@@ -869,4 +902,33 @@ func TestPiTREnabled(t *testing.T) {
 			assert.Equal(t, tc.want, cr.PiTREnabled())
 		})
 	}
+}
+
+func TestDefaultCustomUserSecretName(t *testing.T) {
+	cr := &PerconaServerMySQL{ObjectMeta: metav1.ObjectMeta{Name: "cluster1"}}
+
+	t.Run("valid DNS-1123 user name is kept as-is", func(t *testing.T) {
+		got := cr.DefaultCustomUserSecretName(User{Name: "app-user"})
+		assert.Equal(t, "cluster1-user-app-user", got)
+	})
+
+	t.Run("user names with invalid characters are sanitized and deduplicated", func(t *testing.T) {
+		first := cr.DefaultCustomUserSecretName(User{Name: "App_User"})
+		second := cr.DefaultCustomUserSecretName(User{Name: "app-user"})
+		third := cr.DefaultCustomUserSecretName(User{Name: "app.user"})
+
+		for _, errs := range [][]string{
+			validation.IsDNS1123Subdomain(first),
+			validation.IsDNS1123Subdomain(second),
+			validation.IsDNS1123Subdomain(third),
+		} {
+			assert.Empty(t, errs)
+		}
+
+		assert.NotEqual(t, first, second, "different user names must not collide on the same secret name")
+		assert.NotEqual(t, first, third, "different user names must not collide on the same secret name")
+
+		// Sanitization is deterministic.
+		assert.Equal(t, first, cr.DefaultCustomUserSecretName(User{Name: "App_User"}))
+	})
 }
