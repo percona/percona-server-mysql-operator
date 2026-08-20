@@ -163,12 +163,7 @@ func checkReadinessGR(ctx context.Context) error {
 	}
 	defer db.Close()
 
-	fqdn, err := getPodFQDN(os.Getenv("SERVICE_NAME"))
-	if err != nil {
-		return errors.Wrap(err, "get pod hostname")
-	}
-
-	state, err := db.GetMemberState(ctx, fqdn)
+	state, err := db.GetSelfState(ctx)
 	if err != nil {
 		return errors.Wrap(err, "get member state")
 	}
@@ -237,6 +232,22 @@ func checkLivenessGR(ctx context.Context) error {
 			log.Println("GR is not configured during manual bootstrap, skipping check")
 			return nil
 		}
+	}
+
+	state, err := db.GetSelfState(ctx)
+	if err != nil {
+		return errors.Wrap(err, "get group replication state")
+	}
+
+	// A member can enter error state either while applying transactions or during the recovery phase.
+	// Readiness probe will fail in error state.
+	if state == mysqldb.MemberStateRecovering || state == mysqldb.MemberStateError {
+		log.Printf("member in %s state, not killing", state)
+		return nil
+	}
+
+	if state != mysqldb.MemberStateOnline {
+		return errors.Errorf("member in %s state", state)
 	}
 
 	in, err := db.CheckIfInPrimaryPartition(ctx)

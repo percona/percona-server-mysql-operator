@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -93,19 +94,22 @@ func TestRun(t *testing.T) {
 	}
 
 	tests := map[string]struct {
-		entries       []binlogserver.BinlogEntry
-		rawContent    string
-		pitrType      string
-		pitrGTID      string
-		pitrDate      string
-		pitrForce     string
-		db            *fakeDB
-		newDB         func(ctx context.Context, params db.DBParams) (Database, error)
-		newS3         func(*fakeStorage) newStorageFn
-		getSecret     func(apiv1.SystemUser) (string, error)
-		applyErr      error
-		expectedError string
-		checkApply    func(t *testing.T, call applyCall)
+		entries        []binlogserver.BinlogEntry
+		rawContent     string
+		keyringContent string
+		pitrType       string
+		pitrGTID       string
+		pitrDate       string
+		pitrForce      string
+		db             *fakeDB
+		newDB          func(ctx context.Context, params db.DBParams) (Database, error)
+		newS3          func(*fakeStorage) newStorageFn
+		getSecret      func(apiv1.SystemUser) (string, error)
+		applyErr       error
+		expectedError  string
+		checkApply     func(t *testing.T, call applyCall)
+		checkObjects   func(t *testing.T, objects []binlogSource)
+		keyringPath    func(t *testing.T) string
 	}{
 		"missing BINLOGS_PATH": {
 			expectedError: "BINLOGS_PATH",
@@ -240,6 +244,100 @@ func TestRun(t *testing.T) {
 				}
 			},
 		},
+		"unencrypted binlog is not decrypted when later binlogs are encrypted": {
+			entries: []binlogserver.BinlogEntry{
+				{Name: "binlog.000001", URI: "s3://mybucket/binlogs/binlog.000001"},
+				{
+					Name: "binlog.000002",
+					URI:  "s3://mybucket/binlogs/binlog.000002",
+					Encryption: &binlogserver.Encryption{
+						FileKeyEnvelope: &binlogserver.FileKeyEnvelope{KekID: "alpha"},
+						FileDataEnvelope: &binlogserver.FileDataEnvelope{
+							Cipher: "AES-256-CTR",
+						},
+					},
+				},
+			},
+			pitrType: "gtid",
+			pitrGTID: "aaaaaaaa-0000-0000-0000-000000000001:1-10",
+			db:       &fakeDB{getGTIDExecutedResult: "aaaaaaaa-0000-0000-0000-000000000001:1-5"},
+			checkObjects: func(t *testing.T, objects []binlogSource) {
+				require.Len(t, objects, 2)
+
+				reader, err := objects[0].decrypt(io.NopCloser(strings.NewReader("plain binlog")))
+				require.NoError(t, err)
+				defer reader.Close() //nolint:errcheck
+
+				data, err := io.ReadAll(reader)
+				require.NoError(t, err)
+				assert.Equal(t, "plain binlog", string(data))
+			},
+		},
+		"keyring file with JSON null": {
+			entries:        defaultEntries,
+			pitrType:       "gtid",
+			pitrGTID:       "uuid:1",
+			db:             &fakeDB{},
+			keyringContent: "null",
+			expectedError:  "keyring must contain at least one key",
+		},
+		"keyring file with empty JSON object": {
+			entries:        defaultEntries,
+			pitrType:       "gtid",
+			pitrGTID:       "uuid:1",
+			db:             &fakeDB{},
+			keyringContent: "{}",
+			expectedError:  "keyring must contain at least one key",
+		},
+		"keyring file with empty key list": {
+			entries:        defaultEntries,
+			pitrType:       "gtid",
+			pitrGTID:       "uuid:1",
+			db:             &fakeDB{},
+			keyringContent: `{"version":1,"keys":[]}`,
+			expectedError:  "keyring must contain at least one key",
+		},
+		"keyring file with invalid JSON": {
+			entries:        defaultEntries,
+			pitrType:       "gtid",
+			pitrGTID:       "uuid:1",
+			db:             &fakeDB{},
+			keyringContent: "not-json",
+			expectedError:  "parse keyring",
+		},
+		"keyring file with unsupported cipher": {
+			entries:        defaultEntries,
+			pitrType:       "gtid",
+			pitrGTID:       "uuid:1",
+			db:             &fakeDB{},
+			keyringContent: `{"version":1,"keys":[{"id":"k1","cipher":"AES-256-XTS","data_hex":"00"}]}`,
+			expectedError:  "unsupported KEK cipher mode",
+		},
+		"keyring file with a key missing an ID": {
+			entries:        defaultEntries,
+			pitrType:       "gtid",
+			pitrGTID:       "uuid:1",
+			db:             &fakeDB{},
+			keyringContent: `{"version":1,"keys":[{"cipher":"AES-256-CBC","data_hex":"00"}]}`,
+			expectedError:  "empty ID",
+		},
+		"valid keyring file is loaded": {
+			entries:        defaultEntries,
+			pitrType:       "gtid",
+			pitrGTID:       "uuid:1",
+			db:             &fakeDB{},
+			keyringContent: `{"version":1,"keys":[{"id":"k1","cipher":"AES-256-CBC","data_hex":"000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"}]}`,
+		},
+		"missing keyring file": {
+			entries:  defaultEntries,
+			pitrType: "gtid",
+			pitrGTID: "uuid:1",
+			db:       &fakeDB{},
+			keyringPath: func(t *testing.T) string {
+				return filepath.Join(t.TempDir(), "does-not-exist.json")
+			},
+			expectedError: "read keyring file",
+		},
 	}
 
 	for name, tc := range tests {
@@ -267,6 +365,15 @@ func TestRun(t *testing.T) {
 			t.Setenv("PITR_DATE", tc.pitrDate)
 			t.Setenv("PITR_FORCE", tc.pitrForce)
 			t.Setenv("S3_BUCKET", bucket)
+			keyringPath := ""
+			switch {
+			case tc.keyringPath != nil:
+				keyringPath = tc.keyringPath(t)
+			case tc.keyringContent != "":
+				keyringPath = filepath.Join(t.TempDir(), "keyring.json")
+				require.NoError(t, os.WriteFile(keyringPath, []byte(tc.keyringContent), 0o600))
+			}
+			t.Setenv("KEYRING_PATH", keyringPath)
 
 			fakeDatabase := tc.db
 
@@ -291,11 +398,18 @@ func TestRun(t *testing.T) {
 			}
 
 			var captured applyCall
-			apply := func(_ context.Context, objectKeys []string, _ getObjectFn, mysqlbinlogArgs []string, mysqlArgs []string, _ string) error {
+			apply := func(_ context.Context, objects []binlogSource, _ getObjectFn, mysqlbinlogArgs []string, mysqlArgs []string, _ string) error {
+				var objectKeys []string
+				for _, obj := range objects {
+					objectKeys = append(objectKeys, obj.objectKey)
+				}
 				captured = applyCall{
 					objectKeys:      objectKeys,
 					mysqlbinlogArgs: mysqlbinlogArgs,
 					mysqlArgs:       mysqlArgs,
+				}
+				if tc.checkObjects != nil {
+					tc.checkObjects(t, objects)
 				}
 				return tc.applyErr
 			}
