@@ -56,13 +56,15 @@ func startTestServer(t *testing.T) (host string, port uint16, replicaTLS *tls.Co
 
 	serverTLS, replicaTLS := issueTestCerts(t)
 
-	srv := New(Config{
+	srv, err := New(Config{
 		IndexPath: filepath.Join("testdata", "binlog.index"),
 		User:      "replication",
 		Password:  "replpass",
 		ServerID:  9999,
 		TLS:       serverTLS,
 	})
+	require.NoError(t, err)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	go srv.Serve(ctx, ln) //nolint:errcheck
 	t.Cleanup(func() {
@@ -164,9 +166,23 @@ func TestReplicaReceivesTheDelta(t *testing.T) {
 	}
 }
 
+func TestNewRejectsAConfigWithoutACertificate(t *testing.T) {
+	for name, cfg := range map[string]Config{
+		"no TLS config":  {IndexPath: filepath.Join("testdata", "binlog.index")},
+		"no certificate": {IndexPath: filepath.Join("testdata", "binlog.index"), TLS: &tls.Config{MinVersion: tls.VersionTLS12}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := New(cfg)
+			require.Error(t, err)
+		})
+	}
+}
+
 func TestExecutedGTIDSetIsServedAsAString(t *testing.T) {
 	serverTLS, _ := issueTestCerts(t)
-	srv := New(Config{IndexPath: filepath.Join("testdata", "binlog.index"), TLS: serverTLS})
+	srv, err := New(Config{IndexPath: filepath.Join("testdata", "binlog.index"), TLS: serverTLS})
+	require.NoError(t, err)
+
 	set, err := srv.ExecutedGTIDSet()
 	require.NoError(t, err)
 	assert.NotEmpty(t, set)

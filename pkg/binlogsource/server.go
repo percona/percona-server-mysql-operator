@@ -38,7 +38,16 @@ type Server struct {
 	conns []*server.Conn
 }
 
-func New(cfg Config) *Server {
+// New returns a server serving the binary logs listed in cfg.IndexPath.
+//
+// caching_sha2_password needs an RSA key to encrypt the password on the wire and
+// go-mysql takes it from the TLS certificate, so a config without one is rejected
+// here: go-mysql itself panics on it.
+func New(cfg Config) (*Server, error) {
+	if cfg.TLS == nil || len(cfg.TLS.Certificates) == 0 {
+		return nil, errors.New("TLS config with at least one certificate is required")
+	}
+
 	if cfg.ServerID == 0 {
 		cfg.ServerID = 1
 	}
@@ -47,7 +56,7 @@ func New(cfg Config) *Server {
 		cfg:     cfg,
 		uuid:    uuid.NewString(),
 		_server: server.NewServer(serverVersion, mysql.DEFAULT_COLLATION_ID, mysql.AUTH_CACHING_SHA2_PASSWORD, nil, cfg.TLS),
-	}
+	}, nil
 }
 
 func (s *Server) Serve(ctx context.Context, ln net.Listener) error {

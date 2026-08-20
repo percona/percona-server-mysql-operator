@@ -27,6 +27,7 @@ func startServer() *http.Server {
 	mux.Handle("/backup/", handler.Backup())
 	mux.HandleFunc("/backup/checkpoint-info", handler.GetCheckpointInfoFunc)
 	mux.HandleFunc("/logs/", handler.LogsHandlerFunc)
+	mux.Handle("/failover/", handler.Failover())
 
 	srv := &http.Server{
 		Addr:              ":" + strconv.Itoa(mysql.SidecarHTTPPort),

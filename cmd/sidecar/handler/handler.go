@@ -17,12 +17,17 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/percona/percona-server-mysql-operator/cmd/sidecar/handler/backup"
+	"github.com/percona/percona-server-mysql-operator/cmd/sidecar/handler/failover"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	xb "github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
 )
 
 func Backup() http.Handler {
 	return new(backup.Handler)
+}
+
+func Failover() http.Handler {
+	return failover.Handler()
 }
 
 func LogsHandlerFunc(w http.ResponseWriter, req *http.Request) {
