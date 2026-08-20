@@ -226,6 +226,7 @@ const (
 	EventTypeClusterSetUnhealthy             string = "ClusterSetHealthDegraded"
 	EventTypeClusterSetMemberAdded           string = "ClusterSetMemberAdded"
 	EventTypeClusterSetMemberRemoved         string = "ClusterSetMemberRemoved"
+	EventTypeClusterSetMemberRejoined        string = "ClusterSetMemberRejoined"
 )
 
 const (
@@ -234,6 +235,7 @@ const (
 	ConditionClusterSetPrimarySwitchOverInProg string = "SwitchoverInProgress"
 	ConditionReplicaManagementFailure          string = "ReplicaManagementFailure"
 	ConditionClusterSetDissolving              string = "ClusterSetDissolving"
+	ConditionClusterSetRejoinInProgress        string = "RejoinClusterInProgress"
 	ConditionClusterSetReady                   string = "Ready"
 	ConditionClusterSetErrorReconcile          string = "ErrorReconcile"
 )

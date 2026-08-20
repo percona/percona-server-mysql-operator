@@ -1,0 +1,10 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 10
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      kubectl annotate -n "${NAMESPACE}" ps-clusterset gr-cross-cluster \
+        percona.com/clusterset-rejoin-cluster=grcrossclusterdc1
