@@ -29,6 +29,9 @@ func TestDecryptingReader(t *testing.T) {
 		{desc: "AES-128-CBC", kekCipher: "AES-128-CBC"},
 		{desc: "AES-192-CBC", kekCipher: "AES-192-CBC"},
 		{desc: "AES-256-CBC", kekCipher: "AES-256-CBC"},
+		{desc: "AES-128-CTR", kekCipher: "AES-128-CTR"},
+		{desc: "AES-192-CTR", kekCipher: "AES-192-CTR"},
+		{desc: "AES-256-CTR", kekCipher: "AES-256-CTR"},
 		{desc: "AES-128-GCM", kekCipher: "AES-128-GCM"},
 		{desc: "AES-192-GCM", kekCipher: "AES-192-GCM"},
 		{desc: "AES-256-GCM", kekCipher: "AES-256-GCM"},
@@ -88,7 +91,7 @@ func TestDecryptingReader(t *testing.T) {
 func encryptBinlogForTest(t *testing.T, plaintext []byte, kekCipher string) ([]byte, binlogserver.BinlogEntry, *binlogserver.Keyring) {
 	t.Helper()
 
-	keySize, mode, err := parseCipher(kekCipher)
+	keySize, mode, err := binlogserver.ParseCipher(kekCipher)
 	require.NoError(t, err)
 
 	kek := bytes.Repeat([]byte{0x11}, keySize)
@@ -148,6 +151,15 @@ func wrapFileKeyForTest(t *testing.T, kek []byte, mode string, fileKey []byte) *
 		iv := bytes.Repeat([]byte{0x44}, block.BlockSize())
 		wrapped := make([]byte, len(fileKey))
 		cipher.NewCBCEncrypter(block, iv).CryptBlocks(wrapped, fileKey)
+		return &binlogserver.FileKeyEnvelope{
+			DataHex: hex.EncodeToString(wrapped),
+			IVHex:   hex.EncodeToString(iv),
+		}
+
+	case "CTR":
+		iv := bytes.Repeat([]byte{0x44}, block.BlockSize())
+		wrapped := make([]byte, len(fileKey))
+		cipher.NewCTR(block, iv).XORKeyStream(wrapped, fileKey)
 		return &binlogserver.FileKeyEnvelope{
 			DataHex: hex.EncodeToString(wrapped),
 			IVHex:   hex.EncodeToString(iv),
