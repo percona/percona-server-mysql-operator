@@ -2341,3 +2341,284 @@ var _ = Describe("BinlogServer", Ordered, func() {
 		Expect(sts.Spec.Replicas).To(gs.PointTo(BeEquivalentTo(1)))
 	})
 })
+
+var _ = Describe("PVC Resizing with orphaned PVCs", Ordered, func() {
+	ctx := context.Background()
+
+	const crName = "pvc-resize-orphan"
+	const ns = crName
+	crNamespacedName := types.NamespacedName{Name: crName, Namespace: ns}
+
+	namespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ns,
+			Namespace: ns,
+		},
+	}
+
+	BeforeAll(func() {
+		Expect(k8sClient.Create(ctx, namespace)).To(Not(HaveOccurred()))
+	})
+
+	AfterAll(func() {
+		_ = k8sClient.Delete(ctx, namespace)
+	})
+
+	// Scaling the cluster up and back down leaves the PVCs of the removed
+	// replicas behind, still holding the old size. They have no pod, so they are
+	// never resized and must not be taken into account when the operator decides
+	// whether a resize is needed.
+	Context("PVCs left behind by a scale down are smaller than the live ones", Ordered, func() {
+		cr, err := readDefaultCR(crName, ns)
+
+		It("should read default cr.yaml", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		cr.Spec.VolumeExpansionEnabled = true
+		orphanSize := resource.MustParse("2Gi")
+		liveSize := resource.MustParse("3Gi")
+		cr.Spec.MySQL.VolumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage] = liveSize
+
+		It("should create PerconaServerMySQL", func() {
+			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+		})
+
+		It("should reconcile to create StatefulSet", func() {
+			_, err := reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: crNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		sts := &appsv1.StatefulSet{}
+		stsName := types.NamespacedName{Name: cr.Name + "-mysql", Namespace: ns}
+		It("should create MySQL StatefulSet", func() {
+			Eventually(func() bool {
+				return k8sClient.Get(ctx, stsName, sts) == nil
+			}, time.Second*15, time.Millisecond*250).Should(BeTrue())
+		})
+
+		It("should create StorageClass that supports volume expansion", func() {
+			allowVolumeExpansion := true
+			sc := &storagev1.StorageClass{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "orphan-storage-class",
+				},
+				Provisioner:          "kubernetes.io/no-provisioner",
+				AllowVolumeExpansion: &allowVolumeExpansion,
+			}
+			Expect(k8sClient.Create(ctx, sc)).Should(Succeed())
+		})
+
+		It("should create 5 PVCs where the 2 orphaned ones kept the old size", func() {
+			exposer := mysql.Exposer(*cr)
+			var claim *corev1.PersistentVolumeClaim
+			for _, c := range sts.Spec.VolumeClaimTemplates {
+				if c.Name == "datadir" {
+					claim = c.DeepCopy()
+				}
+			}
+			Expect(claim).NotTo(BeNil())
+
+			for i := 0; i < 5; i++ {
+				size := liveSize
+				if i >= int(cr.Spec.MySQL.Size) {
+					size = orphanSize
+				}
+
+				pvc := claim.DeepCopy()
+				pvc.Labels = exposer.MatchLabels()
+				pvc.Name = fmt.Sprintf("datadir-%s-%d", sts.Name, i)
+				pvc.Namespace = ns
+				pvc.Spec.VolumeName = fmt.Sprintf("pv-orphan-%s-%d", sts.Name, i)
+				pvc.Spec.Resources.Requests[corev1.ResourceStorage] = size
+				storageClassName := "orphan-storage-class"
+				pvc.Spec.StorageClassName = &storageClassName
+				Expect(k8sClient.Create(ctx, pvc)).Should(Succeed())
+
+				Eventually(func() bool {
+					if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(pvc), pvc); err != nil {
+						return false
+					}
+					pvc.Status.Phase = corev1.ClaimBound
+					pvc.Status.Capacity = corev1.ResourceList{corev1.ResourceStorage: size}
+					return k8sClient.Status().Update(ctx, pvc) == nil
+				}, time.Second*10, time.Millisecond*100).Should(BeTrue())
+			}
+		})
+
+		It("should create a pod for every live PVC only", func() {
+			exposer := mysql.Exposer(*cr)
+			for i := 0; i < int(cr.Spec.MySQL.Size); i++ {
+				pod := &corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      fmt.Sprintf("%s-%d", sts.Name, i),
+						Namespace: ns,
+						Labels:    exposer.MatchLabels(),
+					},
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{Name: "mysql", Image: "mysql:8.0"}},
+					},
+				}
+				Expect(k8sClient.Create(ctx, pod)).Should(Succeed())
+			}
+		})
+
+		It("should not start a resize when every live PVC already has the requested size", func() {
+			Expect(k8sClient.Get(ctx, crNamespacedName, cr)).Should(Succeed())
+			Expect(reconciler().reconcilePersistentVolumes(ctx, cr)).Should(Succeed())
+
+			Expect(k8sClient.Get(ctx, crNamespacedName, cr)).Should(Succeed())
+			_, exists := cr.GetAnnotations()[string(naming.AnnotationPVCResizeInProgress)]
+			Expect(exists).To(BeFalse(), "orphaned PVCs must not trigger a resize")
+		})
+
+		It("should not delete the StatefulSet", func() {
+			// envtest runs no garbage collector, so an orphan-propagation delete
+			// leaves the object behind with a deletion timestamp instead of
+			// removing it. Existence alone therefore proves nothing.
+			for i := 0; i < 3; i++ {
+				Expect(k8sClient.Get(ctx, crNamespacedName, cr)).Should(Succeed())
+				Expect(reconciler().reconcilePersistentVolumes(ctx, cr)).Should(Succeed())
+				Expect(k8sClient.Get(ctx, stsName, sts)).Should(Succeed(), "statefulset should not be deleted in a loop")
+				Expect(sts.DeletionTimestamp).To(BeNil(), "statefulset should not be deleted in a loop")
+			}
+		})
+
+		// A scale up reuses the leftover PVCs. They must be expanded before their
+		// replica is created, otherwise the new replica clones data onto a volume
+		// that is still too small.
+		When("the cluster is scaled back up", Ordered, func() {
+			stsUID := ""
+			It("should scale the CR up to 5", func() {
+				Expect(k8sClient.Get(ctx, stsName, sts)).Should(Succeed())
+				stsUID = string(sts.UID)
+				Expect(stsUID).NotTo(BeEmpty())
+
+				Expect(k8sClient.Get(ctx, crNamespacedName, cr)).Should(Succeed())
+				cr.Spec.MySQL.Size = 5
+				Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
+			})
+
+			It("should expand the leftover PVCs before their pods exist", func() {
+				Expect(k8sClient.Get(ctx, crNamespacedName, cr)).Should(Succeed())
+				Expect(reconciler().reconcilePersistentVolumes(ctx, cr)).Should(Succeed())
+
+				for i := 3; i < 5; i++ {
+					pvc := &corev1.PersistentVolumeClaim{}
+					key := types.NamespacedName{Name: fmt.Sprintf("datadir-%s-%d", sts.Name, i), Namespace: ns}
+					Expect(k8sClient.Get(ctx, key, pvc)).Should(Succeed())
+					requested := pvc.Spec.Resources.Requests[corev1.ResourceStorage]
+					Expect(requested.Cmp(liveSize)).To(Equal(0), "leftover PVC should be expanded before its replica is created")
+
+					pod := &corev1.Pod{}
+					podKey := types.NamespacedName{Name: fmt.Sprintf("%s-%d", sts.Name, i), Namespace: ns}
+					err := k8sClient.Get(ctx, podKey, pod)
+					Expect(k8serrors.IsNotFound(err)).To(BeTrue(), "the replica should not exist yet")
+				}
+
+				Expect(k8sClient.Get(ctx, crNamespacedName, cr)).Should(Succeed())
+				_, exists := cr.GetAnnotations()[string(naming.AnnotationPVCResizeInProgress)]
+				Expect(exists).To(BeTrue(), "resize should be marked as in progress")
+			})
+
+			It("should hold the StatefulSet at its current size while resizing", func() {
+				_, err := reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: crNamespacedName})
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(k8sClient.Get(ctx, stsName, sts)).Should(Succeed())
+				Expect(sts.Spec.Replicas).To(gs.PointTo(BeEquivalentTo(3)), "the new replicas must wait for the resize")
+			})
+
+			It("should finish the resize once the volumes are expanded", func() {
+				// the volume is expanded, only the filesystem is still to be grown,
+				// which kubelet does when the replica mounts it
+				for i := 3; i < 5; i++ {
+					pvc := &corev1.PersistentVolumeClaim{}
+					key := types.NamespacedName{Name: fmt.Sprintf("datadir-%s-%d", sts.Name, i), Namespace: ns}
+					Eventually(func() bool {
+						if err := k8sClient.Get(ctx, key, pvc); err != nil {
+							return false
+						}
+						pvc.Status.Conditions = []corev1.PersistentVolumeClaimCondition{{
+							Type:               corev1.PersistentVolumeClaimFileSystemResizePending,
+							Status:             corev1.ConditionTrue,
+							LastTransitionTime: metav1.Now(),
+						}}
+						return k8sClient.Status().Update(ctx, pvc) == nil
+					}, time.Second*10, time.Millisecond*100).Should(BeTrue())
+				}
+
+				Expect(k8sClient.Get(ctx, crNamespacedName, cr)).Should(Succeed())
+				Expect(reconciler().reconcilePersistentVolumes(ctx, cr)).Should(Succeed())
+
+				Expect(k8sClient.Get(ctx, crNamespacedName, cr)).Should(Succeed())
+				_, exists := cr.GetAnnotations()[string(naming.AnnotationPVCResizeInProgress)]
+				Expect(exists).To(BeFalse(), "resize should not block the scale up once the volumes are expanded")
+			})
+
+			It("should not recreate the StatefulSet when its volume template is already correct", func() {
+				Expect(k8sClient.Get(ctx, stsName, sts)).Should(Succeed())
+				Expect(string(sts.UID)).To(Equal(stsUID), "recreating the statefulset costs a needless rolling restart")
+				Expect(sts.DeletionTimestamp).To(BeNil(), "recreating the statefulset costs a needless rolling restart")
+			})
+
+			It("should let the StatefulSet scale up afterwards", func() {
+				Eventually(func() bool {
+					if _, err := reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: crNamespacedName}); err != nil {
+						return false
+					}
+					if err := k8sClient.Get(ctx, stsName, sts); err != nil {
+						return false
+					}
+					return sts.Spec.Replicas != nil && *sts.Spec.Replicas == 5
+				}, time.Second*15, time.Millisecond*250).Should(BeTrue())
+			})
+		})
+
+		// The statefulset must still be recreated when its volume claim template is
+		// stale, since that template is immutable.
+		When("the requested size no longer matches the volume template", Ordered, func() {
+			biggerSize := resource.MustParse("4Gi")
+			stsUID := ""
+
+			It("should request a bigger volume", func() {
+				Expect(k8sClient.Get(ctx, stsName, sts)).Should(Succeed())
+				stsUID = string(sts.UID)
+				configured := sts.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests[corev1.ResourceStorage]
+				Expect(configured.Cmp(biggerSize)).NotTo(Equal(0), "volume template should be stale for this case")
+
+				Expect(k8sClient.Get(ctx, crNamespacedName, cr)).Should(Succeed())
+				cr.Spec.MySQL.VolumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage] = biggerSize
+				Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
+			})
+
+			It("should resize every PVC of the cluster", func() {
+				Expect(k8sClient.Get(ctx, crNamespacedName, cr)).Should(Succeed())
+				Expect(reconciler().reconcilePersistentVolumes(ctx, cr)).Should(Succeed())
+
+				for i := 0; i < 5; i++ {
+					pvc := &corev1.PersistentVolumeClaim{}
+					key := types.NamespacedName{Name: fmt.Sprintf("datadir-%s-%d", sts.Name, i), Namespace: ns}
+					Eventually(func() bool {
+						if err := k8sClient.Get(ctx, key, pvc); err != nil {
+							return false
+						}
+						pvc.Status.Capacity = corev1.ResourceList{corev1.ResourceStorage: biggerSize}
+						return k8sClient.Status().Update(ctx, pvc) == nil
+					}, time.Second*10, time.Millisecond*100).Should(BeTrue())
+				}
+			})
+
+			It("should recreate the StatefulSet to update the stale volume template", func() {
+				Expect(k8sClient.Get(ctx, crNamespacedName, cr)).Should(Succeed())
+				Expect(reconciler().reconcilePersistentVolumes(ctx, cr)).Should(Succeed())
+
+				cur := &appsv1.StatefulSet{}
+				err := k8sClient.Get(ctx, stsName, cur)
+				deleted := k8serrors.IsNotFound(err) ||
+					(err == nil && (string(cur.UID) != stsUID || cur.DeletionTimestamp != nil))
+				Expect(deleted).To(BeTrue(), "a stale volume template must still force a recreate")
+			})
+		})
+	})
+})
