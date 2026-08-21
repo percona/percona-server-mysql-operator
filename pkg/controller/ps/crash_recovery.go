@@ -13,7 +13,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
-	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysqlsh"
@@ -23,8 +22,8 @@ import (
 const fullClusterCrashFile = "/var/lib/mysql/full-cluster-crash"
 
 type fullClusterCrashPods struct {
-	marked    []corev1.Pod
-	witnesses []corev1.Pod
+	marked    []corev1.Pod // pods that cannot connect and suspect a full cluster crash
+	witnesses []corev1.Pod // pods that are online and can witness the cluster status
 }
 
 func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
@@ -258,7 +257,7 @@ func (r *PerconaServerMySQLReconciler) clusterOnlineFromPods(
 			return false, nil
 		}
 
-		if isOnlineClusterStatus(status.DefaultReplicaSet.Status) {
+		if status.DefaultReplicaSet.Status.IsOnline() {
 			log.Info("Cluster is online", "pod", pod.Name, "host", podFQDN, "status", status.DefaultReplicaSet.Status)
 			return true, nil
 		}
@@ -318,18 +317,6 @@ func (r *PerconaServerMySQLReconciler) mysqlShellForPod(
 	}
 
 	return mysh, podFQDN, nil
-}
-
-func isOnlineClusterStatus(status innodbcluster.ClusterStatus) bool {
-	switch status {
-	case innodbcluster.ClusterStatusOK,
-		innodbcluster.ClusterStatusOKPartial,
-		innodbcluster.ClusterStatusOKNoTolerance,
-		innodbcluster.ClusterStatusOKNoTolerancePartial:
-		return true
-	default:
-		return false
-	}
 }
 
 func (r *PerconaServerMySQLReconciler) removeFullClusterCrashFileFromPod(ctx context.Context, pod *corev1.Pod) (bool, error) {
