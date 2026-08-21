@@ -776,6 +776,7 @@ last_lsn = 18446744073709551615
 flushed_lsn = 18446744073709551615
 redo_memory = 0
 redo_frames = 0
+backup_size = 78771
 `
 		var info CheckpointInfo
 		err := info.ParseFrom(strings.NewReader(input))
@@ -788,6 +789,7 @@ redo_frames = 0
 		assert.Equal(t, "18446744073709551615", info.FlushedLSN)
 		assert.Equal(t, "0", info.RedoMemory)
 		assert.Equal(t, "0", info.RedoFrames)
+		assert.Equal(t, int64(78771), info.BackupSize)
 	})
 
 	t.Run("incremental checkpoint file", func(t *testing.T) {
@@ -851,6 +853,28 @@ redo_frames = 0
 		assert.Equal(t, "999", info.ToLSN)
 		assert.Equal(t, "", info.LastLSN)
 		assert.Equal(t, "42", info.RedoFrames)
+		assert.Equal(t, int64(0), info.BackupSize)
+	})
+
+	t.Run("backup_size large value", func(t *testing.T) {
+		input := "backup_type = full-backuped\nbackup_size = 5368709120\n"
+
+		var info CheckpointInfo
+		err := info.ParseFrom(strings.NewReader(input))
+		require.NoError(t, err)
+
+		assert.Equal(t, int64(5368709120), info.BackupSize)
+	})
+
+	t.Run("backup_size invalid value ignored", func(t *testing.T) {
+		input := "backup_size = not-a-number\nbackup_type = full-backuped\n"
+
+		var info CheckpointInfo
+		err := info.ParseFrom(strings.NewReader(input))
+		require.NoError(t, err)
+
+		assert.Equal(t, int64(0), info.BackupSize)
+		assert.Equal(t, "full-backuped", info.BackupType)
 	})
 
 }

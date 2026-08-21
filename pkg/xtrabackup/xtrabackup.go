@@ -1137,6 +1137,7 @@ type CheckpointInfo struct {
 	FlushedLSN string `json:"flushed_lsn"`
 	RedoMemory string `json:"redo_memory"`
 	RedoFrames string `json:"redo_frames"`
+	BackupSize int64  `json:"backup_size"`
 }
 
 func (info *CheckpointInfo) ParseFrom(r io.Reader) error {
@@ -1165,6 +1166,11 @@ func (info *CheckpointInfo) ParseFrom(r io.Reader) error {
 			info.RedoMemory = value
 		case strings.Contains(key, "redo_frames"):
 			info.RedoFrames = value
+		case strings.Contains(key, "backup_size"):
+			size, err := strconv.ParseInt(value, 10, 64)
+			if err == nil {
+				info.BackupSize = size
+			}
 		default:
 			continue
 		}

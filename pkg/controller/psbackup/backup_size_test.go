@@ -2,7 +2,6 @@ package psbackup
 
 import (
 	"context"
-	"io"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -20,57 +19,49 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
-	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup/storage"
+	fakestorage "github.com/percona/percona-server-mysql-operator/pkg/xtrabackup/storage/fake"
 )
 
-type fakeStorageWithSize struct{}
+type fakeSidecarClientWithSize struct {
+	backupSize int64
+}
 
-func (c *fakeStorageWithSize) GetObject(_ context.Context, _ string) (io.ReadCloser, error) {
+func (c *fakeSidecarClientWithSize) GetRunningBackupConfig(_ context.Context) (*xtrabackup.BackupConfig, error) {
 	return nil, nil
 }
-func (c *fakeStorageWithSize) PutObject(_ context.Context, _ string, _ io.Reader, _ int64) error {
+
+func (c *fakeSidecarClientWithSize) DeleteBackup(_ context.Context, _ string, _ xtrabackup.BackupConfig) error {
 	return nil
 }
-func (c *fakeStorageWithSize) ListObjects(_ context.Context, _ string) ([]string, error) {
-	return nil, nil
-}
-func (c *fakeStorageWithSize) ListObjectsWithSize(_ context.Context, _ string) ([]storage.ObjectInfo, error) {
-	return []storage.ObjectInfo{
-		{Name: "file1.xb", Size: 40000},
-		{Name: "file2.xb", Size: 38771},
+
+func (c *fakeSidecarClientWithSize) GetCheckpointInfo(_ context.Context, _ xtrabackup.BackupConfig) (*xtrabackup.CheckpointInfo, error) {
+	return &xtrabackup.CheckpointInfo{
+		BackupType: "full-backuped",
+		BackupSize: c.backupSize,
 	}, nil
 }
-func (c *fakeStorageWithSize) DeleteObject(_ context.Context, _ string) error { return nil }
-func (c *fakeStorageWithSize) SetPrefix(_ string)                             {}
-func (c *fakeStorageWithSize) GetPrefix() string                              { return "" }
 
-type fakeStorageWithSizeValidatingPrefix struct {
-	t              *testing.T
-	expectedPrefix string
-	storagePrefix  string
+func newMySQLPod(clusterName, namespace string) *corev1.Pod {
+	return &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      clusterName + "-mysql-0",
+			Namespace: namespace,
+			Labels: map[string]string{
+				"app.kubernetes.io/component":  "database",
+				"app.kubernetes.io/instance":   clusterName,
+				"app.kubernetes.io/managed-by": "percona-server-mysql-operator",
+				"app.kubernetes.io/name":       "mysql",
+				"app.kubernetes.io/part-of":    "percona-server",
+			},
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			Conditions: []corev1.PodCondition{
+				{Type: corev1.ContainersReady, Status: corev1.ConditionTrue},
+			},
+		},
+	}
 }
-
-func (c *fakeStorageWithSizeValidatingPrefix) GetObject(_ context.Context, _ string) (io.ReadCloser, error) {
-	return nil, nil
-}
-func (c *fakeStorageWithSizeValidatingPrefix) PutObject(_ context.Context, _ string, _ io.Reader, _ int64) error {
-	return nil
-}
-func (c *fakeStorageWithSizeValidatingPrefix) ListObjects(_ context.Context, _ string) ([]string, error) {
-	return nil, nil
-}
-func (c *fakeStorageWithSizeValidatingPrefix) ListObjectsWithSize(_ context.Context, prefix string) ([]storage.ObjectInfo, error) {
-	assert.Equal(c.t, c.expectedPrefix, prefix)
-	return []storage.ObjectInfo{
-		{Name: "file1.xb.delta", Size: 5000},
-		{Name: "file2.xb.delta", Size: 3000},
-	}, nil
-}
-func (c *fakeStorageWithSizeValidatingPrefix) DeleteObject(_ context.Context, _ string) error {
-	return nil
-}
-func (c *fakeStorageWithSizeValidatingPrefix) SetPrefix(_ string) {}
-func (c *fakeStorageWithSizeValidatingPrefix) GetPrefix() string  { return c.storagePrefix }
 
 func TestBackupSizeOnSuccess(t *testing.T) {
 	const namespace = "backup-size-test"
@@ -120,19 +111,21 @@ func TestBackupSizeOnSuccess(t *testing.T) {
 		Status: corev1.ConditionTrue,
 	})
 
-	fakeStorageClient := func(ctx context.Context, opts storage.Options) (storage.Storage, error) {
-		return &fakeStorageWithSize{}, nil
-	}
+	mysqlPod := newMySQLPod(cluster.Name, namespace)
+	fakeSidecar := &fakeSidecarClientWithSize{backupSize: 78771} // ~76.92KB
 
 	cb := fake.NewClientBuilder().WithScheme(scheme).
-		WithObjects(cr, cluster.DeepCopy(), s3Secret, userSecret, job).
+		WithObjects(cr, cluster.DeepCopy(), s3Secret, userSecret, job, mysqlPod).
 		WithStatusSubresource(cr, cluster.DeepCopy(), s3Secret, job)
 
 	r := PerconaServerMySQLBackupReconciler{
 		Client:           cb.Build(),
 		Scheme:           scheme,
 		ServerVersion:    &platform.ServerVersion{Platform: platform.PlatformKubernetes},
-		NewStorageClient: fakeStorageClient,
+		NewStorageClient: fakestorage.NewFakeClient,
+		NewSidecarClient: func(_ string) xtrabackup.SidecarClient {
+			return fakeSidecar
+		},
 	}
 
 	_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(cr)})
@@ -146,8 +139,8 @@ func TestBackupSizeOnSuccess(t *testing.T) {
 	assert.Equal(t, "76.92KB", actual.Status.Size)
 }
 
-func TestBackupSizeIncrementalOnSuccess(t *testing.T) {
-	const namespace = "backup-size-incr-test"
+func TestBackupSizeZeroOnNoSize(t *testing.T) {
+	const namespace = "backup-size-zero-test"
 	const storageName = "s3-us-west"
 
 	ctx := context.Background()
@@ -181,13 +174,10 @@ func TestBackupSizeIncrementalOnSuccess(t *testing.T) {
 		},
 	}
 
-	// Set backup status to Running with incremental backup destination
 	cr.Status.State = apiv1.BackupRunning
 	cr.Status.Storage = stor.DeepCopy()
-	cr.Status.Destination = "s3://bucket/base-backup-full.incr/incr-backup-name"
-	cr.Status.Type = apiv1.BackupTypeIncremental
+	cr.Status.Destination = "s3://bucket/backup-name"
 
-	// Create a completed job
 	job, err := xtrabackup.Job(cluster.DeepCopy(), cr, "dest", "init-image", stor)
 	require.NoError(t, err)
 	job.Status.Conditions = append(job.Status.Conditions, batchv1.JobCondition{
@@ -195,22 +185,22 @@ func TestBackupSizeIncrementalOnSuccess(t *testing.T) {
 		Status: corev1.ConditionTrue,
 	})
 
-	fakeStorageClient := func(ctx context.Context, opts storage.Options) (storage.Storage, error) {
-		return &fakeStorageWithSizeValidatingPrefix{
-			t:              t,
-			expectedPrefix: "base-backup-full.incr/incr-backup-name",
-		}, nil
-	}
+	mysqlPod := newMySQLPod(cluster.Name, namespace)
+	// BackupSize is 0, meaning xtrabackup didn't report a size
+	fakeSidecar := &fakeSidecarClientWithSize{backupSize: 0}
 
 	cb := fake.NewClientBuilder().WithScheme(scheme).
-		WithObjects(cr, cluster.DeepCopy(), s3Secret, userSecret, job).
+		WithObjects(cr, cluster.DeepCopy(), s3Secret, userSecret, job, mysqlPod).
 		WithStatusSubresource(cr, cluster.DeepCopy(), s3Secret, job)
 
 	r := PerconaServerMySQLBackupReconciler{
 		Client:           cb.Build(),
 		Scheme:           scheme,
 		ServerVersion:    &platform.ServerVersion{Platform: platform.PlatformKubernetes},
-		NewStorageClient: fakeStorageClient,
+		NewStorageClient: fakestorage.NewFakeClient,
+		NewSidecarClient: func(_ string) xtrabackup.SidecarClient {
+			return fakeSidecar
+		},
 	}
 
 	_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(cr)})
@@ -221,88 +211,7 @@ func TestBackupSizeIncrementalOnSuccess(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, apiv1.BackupSucceeded, actual.Status.State)
-	assert.Equal(t, "7.81KB", actual.Status.Size)
-}
-
-func TestBackupSizeIncrementalWithStoragePrefix(t *testing.T) {
-	const namespace = "backup-size-incr-prefix-test"
-	const storageName = "s3-us-west"
-
-	ctx := context.Background()
-
-	scheme := runtime.NewScheme()
-	require.NoError(t, clientgoscheme.AddToScheme(scheme))
-	require.NoError(t, apiv1.AddToScheme(scheme))
-
-	cluster, err := readDefaultCR("ps-cluster1", namespace)
-	require.NoError(t, err)
-
-	cr, err := readDefaultCRBackup("some-name", namespace)
-	require.NoError(t, err)
-
-	cr.Spec.ClusterName = cluster.Name
-	cr.Spec.StorageName = storageName
-
-	stor := cluster.Spec.Backup.Storages[storageName]
-	// Simulate storage with prefix in bucket name
-	stor.S3.Bucket = "mybucket/myprefix"
-
-	s3Secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: stor.S3.CredentialsSecret, Namespace: namespace},
-		Data: map[string][]byte{
-			secret.CredentialsAWSAccessKey: []byte("access-key"),
-			secret.CredentialsAWSSecretKey: []byte("secret-key"),
-		},
-	}
-	userSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: cluster.InternalSecretName(), Namespace: namespace},
-		Data: map[string][]byte{
-			string(apiv1.UserOperator): []byte("operator-pass"),
-		},
-	}
-
-	// Set backup status with incremental destination that includes storage prefix
-	cr.Status.State = apiv1.BackupRunning
-	cr.Status.Storage = stor.DeepCopy()
-	cr.Status.Destination = "s3://mybucket/myprefix/base-backup-full.incr/incr-backup-name"
-	cr.Status.Type = apiv1.BackupTypeIncremental
-
-	// Create a completed job
-	job, err := xtrabackup.Job(cluster.DeepCopy(), cr, "dest", "init-image", stor)
-	require.NoError(t, err)
-	job.Status.Conditions = append(job.Status.Conditions, batchv1.JobCondition{
-		Type:   batchv1.JobComplete,
-		Status: corev1.ConditionTrue,
-	})
-
-	fakeStorageClient := func(ctx context.Context, opts storage.Options) (storage.Storage, error) {
-		return &fakeStorageWithSizeValidatingPrefix{
-			t:              t,
-			expectedPrefix: "base-backup-full.incr/incr-backup-name",
-			storagePrefix:  "myprefix/",
-		}, nil
-	}
-
-	cb := fake.NewClientBuilder().WithScheme(scheme).
-		WithObjects(cr, cluster.DeepCopy(), s3Secret, userSecret, job).
-		WithStatusSubresource(cr, cluster.DeepCopy(), s3Secret, job)
-
-	r := PerconaServerMySQLBackupReconciler{
-		Client:           cb.Build(),
-		Scheme:           scheme,
-		ServerVersion:    &platform.ServerVersion{Platform: platform.PlatformKubernetes},
-		NewStorageClient: fakeStorageClient,
-	}
-
-	_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(cr)})
-	require.NoError(t, err)
-
-	actual := new(apiv1.PerconaServerMySQLBackup)
-	err = r.Get(ctx, client.ObjectKeyFromObject(cr), actual)
-	require.NoError(t, err)
-
-	assert.Equal(t, apiv1.BackupSucceeded, actual.Status.State)
-	assert.Equal(t, "7.81KB", actual.Status.Size)
+	assert.Empty(t, actual.Status.Size)
 }
 
 func TestBackupSizeEmptyOnFailure(t *testing.T) {

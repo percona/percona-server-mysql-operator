@@ -617,30 +617,28 @@ func (r *PerconaServerMySQLBackupReconciler) getBackupSize(
 	cr *apiv1.PerconaServerMySQLBackup,
 	cluster *apiv1.PerconaServerMySQL,
 ) (string, error) {
-	if r.NewStorageClient == nil {
-		return "", errors.New("storage client is not configured")
-	}
-	storageOpts, err := xbstorage.GetOptionsFromBackupStatus(ctx, r.Client, cluster, cr.Spec.StorageName, cr.Status)
+	backupConf, err := xtrabackup.GetBackupConfig(ctx, r.Client, cr)
 	if err != nil {
-		return "", errors.Wrap(err, "get storage options")
-	}
-	storageClient, err := r.NewStorageClient(ctx, storageOpts)
-	if err != nil {
-		return "", errors.Wrap(err, "new storage client")
+		return "", errors.Wrap(err, "get backup config")
 	}
 
-	listPrefix := strings.TrimPrefix(cr.Status.Destination.PathWithoutBucket(), storageClient.GetPrefix())
-	objects, err := storageClient.ListObjectsWithSize(ctx, listPrefix)
+	pod, err := mysql.GetReadyPod(ctx, r.Client, cluster)
 	if err != nil {
-		return "", errors.Wrap(err, "list objects with size")
+		return "", errors.Wrap(err, "get ready mysql pod")
+	}
+	src := mysql.PodFQDN(cluster, pod)
+	sc := r.NewSidecarClient(src)
+
+	info, err := sc.GetCheckpointInfo(ctx, *backupConf)
+	if err != nil {
+		return "", errors.Wrap(err, "get checkpoint info")
 	}
 
-	var totalSize int64
-	for _, obj := range objects {
-		totalSize += obj.Size
+	if info.BackupSize <= 0 {
+		return "", nil
 	}
 
-	return FormatBytes(totalSize), nil
+	return FormatBytes(info.BackupSize), nil
 }
 
 func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context, cr *apiv1.PerconaServerMySQLBackup) error {
