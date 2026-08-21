@@ -140,6 +140,20 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		if err := r.releaseLeaseIfNeeded(ctx, cr, &status); err != nil {
 			return rr, errors.Wrap(err, "release lease")
 		}
+		if cr.Status.State == apiv1.BackupSucceeded && cr.Status.Size == "" {
+			cluster := &apiv1.PerconaServerMySQL{}
+			nn := types.NamespacedName{Name: cr.Spec.ClusterName, Namespace: cr.Namespace}
+			if err := r.Client.Get(ctx, nn, cluster); err != nil {
+				log.Error(err, "Failed to get cluster for backup size, will retry")
+				return rr, nil
+			}
+			size, err := r.getBackupSize(ctx, cr, cluster)
+			if err != nil {
+				log.Error(err, "Failed to get backup size, will retry")
+				return rr, nil
+			}
+			status.Size = size
+		}
 		return rr, nil
 	}
 
@@ -288,14 +302,6 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		}
 	case apiv1.BackupFailed, apiv1.BackupSucceeded:
 		log.Info("Running post finish tasks")
-		if status.State == apiv1.BackupSucceeded {
-			size, err := r.getBackupSize(ctx, cr, cluster)
-			if err != nil {
-				log.Error(err, "Failed to get backup size")
-			} else {
-				status.Size = size
-			}
-		}
 		if err := r.runPostFinishTasks(ctx, cr, cluster); err != nil {
 			return rr, errors.Wrap(err, "run post finish tasks")
 		}
