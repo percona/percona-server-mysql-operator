@@ -22,25 +22,6 @@ import (
 	fakestorage "github.com/percona/percona-server-mysql-operator/pkg/xtrabackup/storage/fake"
 )
 
-type fakeSidecarClientWithSize struct {
-	backupSize int64
-}
-
-func (c *fakeSidecarClientWithSize) GetRunningBackupConfig(_ context.Context) (*xtrabackup.BackupConfig, error) {
-	return nil, nil
-}
-
-func (c *fakeSidecarClientWithSize) DeleteBackup(_ context.Context, _ string, _ xtrabackup.BackupConfig) error {
-	return nil
-}
-
-func (c *fakeSidecarClientWithSize) GetCheckpointInfo(_ context.Context, _ xtrabackup.BackupConfig) (*xtrabackup.CheckpointInfo, error) {
-	return &xtrabackup.CheckpointInfo{
-		BackupType: "full-backuped",
-		BackupSize: c.backupSize,
-	}, nil
-}
-
 func newMySQLPod(clusterName, namespace string) *corev1.Pod {
 	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -112,7 +93,7 @@ func TestBackupSizeOnSuccess(t *testing.T) {
 	})
 
 	mysqlPod := newMySQLPod(cluster.Name, namespace)
-	fakeSidecar := &fakeSidecarClientWithSize{backupSize: 78771} // ~76.92KB
+	sidecar := &fakeSidecarClient{backupSize: 78771} // ~76.92KB
 
 	cb := fake.NewClientBuilder().WithScheme(scheme).
 		WithObjects(cr, cluster.DeepCopy(), s3Secret, userSecret, job, mysqlPod).
@@ -124,7 +105,7 @@ func TestBackupSizeOnSuccess(t *testing.T) {
 		ServerVersion:    &platform.ServerVersion{Platform: platform.PlatformKubernetes},
 		NewStorageClient: fakestorage.NewFakeClient,
 		NewSidecarClient: func(_ string) xtrabackup.SidecarClient {
-			return fakeSidecar
+			return sidecar
 		},
 	}
 
@@ -187,7 +168,7 @@ func TestBackupSizeZeroOnNoSize(t *testing.T) {
 
 	mysqlPod := newMySQLPod(cluster.Name, namespace)
 	// BackupSize is 0, meaning xtrabackup didn't report a size
-	fakeSidecar := &fakeSidecarClientWithSize{backupSize: 0}
+	sidecar := &fakeSidecarClient{backupSize: 0}
 
 	cb := fake.NewClientBuilder().WithScheme(scheme).
 		WithObjects(cr, cluster.DeepCopy(), s3Secret, userSecret, job, mysqlPod).
@@ -199,7 +180,7 @@ func TestBackupSizeZeroOnNoSize(t *testing.T) {
 		ServerVersion:    &platform.ServerVersion{Platform: platform.PlatformKubernetes},
 		NewStorageClient: fakestorage.NewFakeClient,
 		NewSidecarClient: func(_ string) xtrabackup.SidecarClient {
-			return fakeSidecar
+			return sidecar
 		},
 	}
 

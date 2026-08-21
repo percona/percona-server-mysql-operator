@@ -1113,6 +1113,7 @@ func TestGetBackupSource(t *testing.T) {
 
 type fakeSidecarClient struct {
 	destination string
+	backupSize  int64
 }
 
 func (f *fakeSidecarClient) GetRunningBackupConfig(ctx context.Context) (*xtrabackup.BackupConfig, error) {
@@ -1137,6 +1138,7 @@ func (f *fakeSidecarClient) GetCheckpointInfo(ctx context.Context, cfg xtrabacku
 		FlushedLSN: "4000",
 		RedoMemory: "5000",
 		RedoFrames: "6000",
+		BackupSize: f.backupSize,
 	}, nil
 }
 
