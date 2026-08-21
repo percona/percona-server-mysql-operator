@@ -1232,6 +1232,10 @@ func (f *fakeClientCmd) REST() restclient.Interface {
 	return nil
 }
 
+func (f *fakeClientCmd) Host() string {
+	return ""
+}
+
 func TestRenewDowntime(t *testing.T) {
 	ctx := context.Background()
 	scheme := runtime.NewScheme()
