@@ -22,16 +22,10 @@ import (
 
 var ErrObjectNotFound = errors.New("object not found")
 
-type ObjectInfo struct {
-	Name string
-	Size int64
-}
-
 type Storage interface {
 	GetObject(ctx context.Context, objectName string) (io.ReadCloser, error)
 	PutObject(ctx context.Context, name string, data io.Reader, size int64) error
 	ListObjects(ctx context.Context, prefix string) ([]string, error)
-	ListObjectsWithSize(ctx context.Context, prefix string) ([]ObjectInfo, error)
 	DeleteObject(ctx context.Context, objectName string) error
 	SetPrefix(prefix string)
 	GetPrefix() string
@@ -200,35 +194,6 @@ func (s *S3) SetPrefix(prefix string) {
 	s.prefix = prefix
 }
 
-func (s *S3) ListObjectsWithSize(ctx context.Context, prefix string) ([]ObjectInfo, error) {
-	opts := minio.ListObjectsOptions{
-		UseV1:     true,
-		Recursive: true,
-		Prefix:    s.prefix + prefix,
-	}
-	var list []ObjectInfo
-
-	var err error
-	for object := range s.client.ListObjects(ctx, s.bucketName, opts) {
-		if err != nil {
-			continue
-		}
-		if object.Err != nil {
-			err = errors.Wrapf(object.Err, "list object %s", object.Key)
-			continue
-		}
-		list = append(list, ObjectInfo{
-			Name: strings.TrimPrefix(object.Key, s.prefix),
-			Size: object.Size,
-		})
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	return list, nil
-}
-
 func (s *S3) GetPrefix() string {
 	return s.prefix
 }
@@ -321,36 +286,6 @@ func (a *Azure) ListObjects(ctx context.Context, prefix string) ([]string, error
 		}
 	}
 	return blobs, nil
-}
-
-func (a *Azure) ListObjectsWithSize(ctx context.Context, prefix string) ([]ObjectInfo, error) {
-	listPrefix := path.Join(a.prefix, prefix)
-	pg := a.client.NewListBlobsFlatPager(a.container, &container.ListBlobsFlatOptions{
-		Prefix: &listPrefix,
-	})
-	var objects []ObjectInfo
-	for pg.More() {
-		resp, err := pg.NextPage(ctx)
-		if err != nil {
-			return nil, errors.Wrapf(err, "next page: %s", prefix)
-		}
-		if resp.Segment != nil {
-			for _, item := range resp.Segment.BlobItems {
-				if item != nil && item.Name != nil {
-					name := strings.TrimPrefix(*item.Name, a.prefix)
-					var size int64
-					if item.Properties != nil && item.Properties.ContentLength != nil {
-						size = *item.Properties.ContentLength
-					}
-					objects = append(objects, ObjectInfo{
-						Name: name,
-						Size: size,
-					})
-				}
-			}
-		}
-	}
-	return objects, nil
 }
 
 func (a *Azure) SetPrefix(prefix string) {
