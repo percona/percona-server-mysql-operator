@@ -9825,6 +9825,19 @@ spec:
                     && ''cpu'' in self.resources.requests)) && ((has(self.resources.limits)
                     && ''memory'' in self.resources.limits) || (has(self.resources.requests)
                     && ''memory'' in self.resources.requests)))'
+                - message: mysql.resources cpu must be greater than 0 when mysql.autoconfig.enabled
+                    is true
+                  rule: '!(has(self.autoconfig) && has(self.autoconfig.enabled) &&
+                    self.autoconfig.enabled) || sign(quantity(has(self.resources.limits)
+                    && ''cpu'' in self.resources.limits ? self.resources.limits[''cpu'']
+                    : self.resources.requests[''cpu''])) == 1'
+                - message: mysql.resources memory must be at least 12Mi when mysql.autoconfig.enabled
+                    is true
+                  rule: '!(has(self.autoconfig) && has(self.autoconfig.enabled) &&
+                    self.autoconfig.enabled) || quantity(has(self.resources.limits)
+                    && ''memory'' in self.resources.limits ? self.resources.limits[''memory'']
+                    : self.resources.requests[''memory'']).compareTo(quantity(''12Mi''))
+                    >= 0'
               orchestrator:
                 properties:
                   affinity:

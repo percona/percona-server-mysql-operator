@@ -1121,7 +1121,10 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 			params, err = mysql.GetAutoTuneParams(cr, memory)
 		}
 		if err != nil {
-			return err
+			log.Error(err, "failed to calculate MySQL tuning parameters, starting without them")
+			r.Recorder.Event(cr, corev1.EventTypeWarning, "AutoConfigFailed",
+				fmt.Sprintf("failed to calculate MySQL tuning parameters, starting without them: %v", err))
+			params = ""
 		}
 		config += params
 	}
