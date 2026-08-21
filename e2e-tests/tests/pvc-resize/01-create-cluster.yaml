@@ -12,6 +12,7 @@ commands:
 
       cr="$(get_cr \
           | yq eval '.spec.mysql.clusterType="group-replication"' - \
+          | yq eval '.spec.unsafeFlags.mysqlSize=true' - \
           | yq eval '.spec.mysql.size=3' - \
           | yq eval '.spec.proxy.router.enabled=false' - \
           | yq eval '.spec.proxy.haproxy.enabled=true' - \

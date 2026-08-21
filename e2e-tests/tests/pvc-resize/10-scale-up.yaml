@@ -1,0 +1,48 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - timeout: 600
+    script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster_name="$(get_cluster_name)"
+
+      uid_before=$(kubectl -n "${NAMESPACE}" get sts "${cluster_name}-mysql" -o jsonpath='{.metadata.uid}')
+      echo "statefulset uid before scaling up: ${uid_before}"
+
+      kubectl -n "${NAMESPACE}" patch ps "${cluster_name}" \
+          --type=merge \
+          -p='{"spec":{"mysql":{"size":3}}}'
+
+      for i in {1..60}; do
+          ready=$(kubectl -n "${NAMESPACE}" get ps "${cluster_name}" -o jsonpath='{.status.mysql.ready}')
+          state=$(kubectl -n "${NAMESPACE}" get ps "${cluster_name}" -o jsonpath='{.status.state}')
+          echo "attempt ${i}/60: ready=${ready} state=${state}"
+          if [[ ${ready} == "3" && ${state} == "ready" ]]; then
+              break
+          fi
+          sleep 10
+      done
+
+      ready=$(kubectl -n "${NAMESPACE}" get ps "${cluster_name}" -o jsonpath='{.status.mysql.ready}')
+      if [[ ${ready} != "3" ]]; then
+          echo "ERROR: only ${ready}/3 replicas came back. A replica whose leftover PVC was never"
+          echo "       expanded cannot recover, and an unmounted PVC that never reports its resize"
+          echo "       status keeps the resize in progress, which holds the scale up back."
+          kubectl -n "${NAMESPACE}" get pvc -o custom-columns=NAME:.metadata.name,CAP:.status.capacity.storage,REQ:.spec.resources.requests.storage,STATUS:.status.allocatedResourceStatuses
+          kubectl -n "${NAMESPACE}" get ps "${cluster_name}" -o jsonpath='{.metadata.annotations}'
+          exit 1
+      fi
+
+      uid_after=$(kubectl -n "${NAMESPACE}" get sts "${cluster_name}-mysql" -o jsonpath='{.metadata.uid}')
+      if [[ ${uid_after} != "${uid_before}" ]]; then
+          echo "ERROR: statefulset was recreated while scaling up (${uid_before} -> ${uid_after})."
+          echo "       Its volume claim template already asked for the requested size, so recreating"
+          echo "       it only restarts the replicas for nothing."
+          exit 1
+      fi
+
+      echo "leftover PVCs expanded and replicas back without recreating the statefulset"

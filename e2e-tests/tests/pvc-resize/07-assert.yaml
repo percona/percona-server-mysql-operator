@@ -1,0 +1,23 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 60
+---
+# scaling down does not delete the PVCs of the removed replicas: they are left
+# behind at the old size and are the reason a later resize used to loop
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: datadir-pvc-resize-mysql-1
+status:
+  phase: Bound
+  capacity:
+    storage: 3Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: datadir-pvc-resize-mysql-2
+status:
+  phase: Bound
+  capacity:
+    storage: 3Gi

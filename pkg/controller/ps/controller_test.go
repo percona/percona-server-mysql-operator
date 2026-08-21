@@ -2375,7 +2375,7 @@ var _ = Describe("PVC Resizing with orphaned PVCs", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		cr.Spec.VolumeExpansionEnabled = true
+		cr.Spec.StorageScaling = &psv1.StorageScalingSpec{EnableVolumeScaling: true}
 		orphanSize := resource.MustParse("2Gi")
 		liveSize := resource.MustParse("3Gi")
 		cr.Spec.MySQL.VolumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage] = liveSize
@@ -2539,11 +2539,10 @@ var _ = Describe("PVC Resizing with orphaned PVCs", Ordered, func() {
 						if err := k8sClient.Get(ctx, key, pvc); err != nil {
 							return false
 						}
-						pvc.Status.Conditions = []corev1.PersistentVolumeClaimCondition{{
-							Type:               corev1.PersistentVolumeClaimFileSystemResizePending,
-							Status:             corev1.ConditionTrue,
-							LastTransitionTime: metav1.Now(),
-						}}
+						pvc.Status.AllocatedResources = corev1.ResourceList{corev1.ResourceStorage: liveSize}
+						pvc.Status.AllocatedResourceStatuses = map[corev1.ResourceName]corev1.ClaimResourceStatus{
+							corev1.ResourceStorage: corev1.PersistentVolumeClaimNodeResizePending,
+						}
 						return k8sClient.Status().Update(ctx, pvc) == nil
 					}, time.Second*10, time.Millisecond*100).Should(BeTrue())
 				}
@@ -2599,11 +2598,20 @@ var _ = Describe("PVC Resizing with orphaned PVCs", Ordered, func() {
 				for i := 0; i < 5; i++ {
 					pvc := &corev1.PersistentVolumeClaim{}
 					key := types.NamespacedName{Name: fmt.Sprintf("datadir-%s-%d", sts.Name, i), Namespace: ns}
+					mounted := i < int(cr.Spec.MySQL.Size) && i < 3
 					Eventually(func() bool {
 						if err := k8sClient.Get(ctx, key, pvc); err != nil {
 							return false
 						}
-						pvc.Status.Capacity = corev1.ResourceList{corev1.ResourceStorage: biggerSize}
+						if mounted {
+							pvc.Status.Capacity = corev1.ResourceList{corev1.ResourceStorage: biggerSize}
+						} else {
+							// no replica mounts it, so only the volume grows
+							pvc.Status.AllocatedResources = corev1.ResourceList{corev1.ResourceStorage: biggerSize}
+							pvc.Status.AllocatedResourceStatuses = map[corev1.ResourceName]corev1.ClaimResourceStatus{
+								corev1.ResourceStorage: corev1.PersistentVolumeClaimNodeResizePending,
+							}
+						}
 						return k8sClient.Status().Update(ctx, pvc) == nil
 					}, time.Second*10, time.Millisecond*100).Should(BeTrue())
 				}
@@ -2619,6 +2627,207 @@ var _ = Describe("PVC Resizing with orphaned PVCs", Ordered, func() {
 					(err == nil && (string(cur.UID) != stsUID || cur.DeletionTimestamp != nil))
 				Expect(deleted).To(BeTrue(), "a stale volume template must still force a recreate")
 			})
+		})
+	})
+})
+
+var _ = Describe("PVC Resizing with a size that is not whole GiB", Ordered, func() {
+	ctx := context.Background()
+
+	const crName = "pvc-resize-nogib"
+	const ns = crName
+	crNamespacedName := types.NamespacedName{Name: crName, Namespace: ns}
+
+	namespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ns,
+			Namespace: ns,
+		},
+	}
+
+	BeforeAll(func() {
+		Expect(k8sClient.Create(ctx, namespace)).To(Not(HaveOccurred()))
+	})
+
+	AfterAll(func() {
+		_ = k8sClient.Delete(ctx, namespace)
+	})
+
+	// PVCs are resized to whole GiB while the volume claim template keeps the
+	// size as written in the spec, and a replica that never mounted its volume
+	// can carry a stale resize status from an earlier expansion.
+	Context("a replica has no pod and the request is rounded up", Ordered, func() {
+		cr, err := readDefaultCR(crName, ns)
+
+		It("should read default cr.yaml", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		specSize := resource.MustParse("2500Mi") // what the template holds
+		roundedSize := resource.MustParse("3Gi") // what the PVCs are resized to
+		cr.Spec.StorageScaling = &psv1.StorageScalingSpec{EnableVolumeScaling: true}
+		cr.Spec.MySQL.VolumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage] = specSize
+
+		It("should create PerconaServerMySQL", func() {
+			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+		})
+
+		It("should reconcile to create StatefulSet", func() {
+			_, err := reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: crNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		sts := &appsv1.StatefulSet{}
+		stsName := types.NamespacedName{Name: cr.Name + "-mysql", Namespace: ns}
+		It("should create MySQL StatefulSet with the size as written", func() {
+			Eventually(func() bool {
+				return k8sClient.Get(ctx, stsName, sts) == nil
+			}, time.Second*15, time.Millisecond*250).Should(BeTrue())
+
+			configured := sts.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests[corev1.ResourceStorage]
+			Expect(configured.Cmp(specSize)).To(Equal(0), "the template holds the unrounded size")
+		})
+
+		It("should create StorageClass that supports volume expansion", func() {
+			allowVolumeExpansion := true
+			sc := &storagev1.StorageClass{
+				ObjectMeta:           metav1.ObjectMeta{Name: "nogib-storage-class"},
+				Provisioner:          "kubernetes.io/no-provisioner",
+				AllowVolumeExpansion: &allowVolumeExpansion,
+			}
+			Expect(k8sClient.Create(ctx, sc)).Should(Succeed())
+		})
+
+		It("should create PVCs, and a pod for all but the last replica", func() {
+			exposer := mysql.Exposer(*cr)
+			var claim *corev1.PersistentVolumeClaim
+			for _, c := range sts.Spec.VolumeClaimTemplates {
+				if c.Name == "datadir" {
+					claim = c.DeepCopy()
+				}
+			}
+			Expect(claim).NotTo(BeNil())
+
+			for i := 0; i < int(cr.Spec.MySQL.Size); i++ {
+				pvc := claim.DeepCopy()
+				pvc.Labels = exposer.MatchLabels()
+				pvc.Name = fmt.Sprintf("datadir-%s-%d", sts.Name, i)
+				pvc.Namespace = ns
+				pvc.Spec.VolumeName = fmt.Sprintf("pv-nogib-%s-%d", sts.Name, i)
+				storageClassName := "nogib-storage-class"
+				pvc.Spec.StorageClassName = &storageClassName
+				Expect(k8sClient.Create(ctx, pvc)).Should(Succeed())
+
+				Eventually(func() bool {
+					if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(pvc), pvc); err != nil {
+						return false
+					}
+					pvc.Status.Phase = corev1.ClaimBound
+					pvc.Status.Capacity = corev1.ResourceList{corev1.ResourceStorage: specSize}
+					return k8sClient.Status().Update(ctx, pvc) == nil
+				}, time.Second*10, time.Millisecond*100).Should(BeTrue())
+			}
+
+			// the last replica has no pod, so its volume is never mounted
+			for i := 0; i < int(cr.Spec.MySQL.Size)-1; i++ {
+				pod := &corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      fmt.Sprintf("%s-%d", sts.Name, i),
+						Namespace: ns,
+						Labels:    exposer.MatchLabels(),
+					},
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{Name: "mysql", Image: "mysql:8.0"}},
+					},
+				}
+				Expect(k8sClient.Create(ctx, pod)).Should(Succeed())
+			}
+		})
+
+		lastPVC := types.NamespacedName{}
+		It("should resize every PVC up to whole GiB", func() {
+			lastPVC = types.NamespacedName{
+				Name:      fmt.Sprintf("datadir-%s-%d", sts.Name, int(cr.Spec.MySQL.Size)-1),
+				Namespace: ns,
+			}
+
+			Expect(k8sClient.Get(ctx, crNamespacedName, cr)).Should(Succeed())
+			Expect(reconciler().reconcilePersistentVolumes(ctx, cr)).Should(Succeed())
+
+			pvc := &corev1.PersistentVolumeClaim{}
+			Expect(k8sClient.Get(ctx, lastPVC, pvc)).Should(Succeed())
+			requested := pvc.Spec.Resources.Requests[corev1.ResourceStorage]
+			Expect(requested.Cmp(roundedSize)).To(Equal(0))
+		})
+
+		It("should not treat a stale resize status as the current resize", func() {
+			// The volume of the pod-less replica was expanded to the OLD size by an
+			// earlier resize and never mounted since, so it still reports
+			// NodeResizePending and the sticky FileSystemResizePending condition
+			// while allocatedResources lags behind the new request.
+			pvc := &corev1.PersistentVolumeClaim{}
+			Eventually(func() bool {
+				if err := k8sClient.Get(ctx, lastPVC, pvc); err != nil {
+					return false
+				}
+				pvc.Status.AllocatedResources = corev1.ResourceList{corev1.ResourceStorage: specSize}
+				pvc.Status.AllocatedResourceStatuses = map[corev1.ResourceName]corev1.ClaimResourceStatus{
+					corev1.ResourceStorage: corev1.PersistentVolumeClaimNodeResizePending,
+				}
+				pvc.Status.Conditions = []corev1.PersistentVolumeClaimCondition{{
+					Type:               corev1.PersistentVolumeClaimFileSystemResizePending,
+					Status:             corev1.ConditionTrue,
+					LastTransitionTime: metav1.Now(),
+				}}
+				return k8sClient.Status().Update(ctx, pvc) == nil
+			}, time.Second*10, time.Millisecond*100).Should(BeTrue())
+
+			// the mounted ones are done
+			for i := 0; i < int(cr.Spec.MySQL.Size)-1; i++ {
+				p := &corev1.PersistentVolumeClaim{}
+				key := types.NamespacedName{Name: fmt.Sprintf("datadir-%s-%d", sts.Name, i), Namespace: ns}
+				Eventually(func() bool {
+					if err := k8sClient.Get(ctx, key, p); err != nil {
+						return false
+					}
+					p.Status.Capacity = corev1.ResourceList{corev1.ResourceStorage: roundedSize}
+					return k8sClient.Status().Update(ctx, p) == nil
+				}, time.Second*10, time.Millisecond*100).Should(BeTrue())
+			}
+
+			Expect(k8sClient.Get(ctx, crNamespacedName, cr)).Should(Succeed())
+			Expect(reconciler().reconcilePersistentVolumes(ctx, cr)).Should(Succeed())
+
+			Expect(k8sClient.Get(ctx, crNamespacedName, cr)).Should(Succeed())
+			_, exists := cr.GetAnnotations()[string(naming.AnnotationPVCResizeInProgress)]
+			Expect(exists).To(BeTrue(), "the volume has not been expanded for this request yet")
+		})
+
+		It("should finish and leave the StatefulSet alone once the volume is expanded", func() {
+			Expect(k8sClient.Get(ctx, stsName, sts)).Should(Succeed())
+			stsUID := string(sts.UID)
+
+			pvc := &corev1.PersistentVolumeClaim{}
+			Eventually(func() bool {
+				if err := k8sClient.Get(ctx, lastPVC, pvc); err != nil {
+					return false
+				}
+				pvc.Status.AllocatedResources = corev1.ResourceList{corev1.ResourceStorage: roundedSize}
+				return k8sClient.Status().Update(ctx, pvc) == nil
+			}, time.Second*10, time.Millisecond*100).Should(BeTrue())
+
+			Expect(k8sClient.Get(ctx, crNamespacedName, cr)).Should(Succeed())
+			Expect(reconciler().reconcilePersistentVolumes(ctx, cr)).Should(Succeed())
+
+			Expect(k8sClient.Get(ctx, crNamespacedName, cr)).Should(Succeed())
+			_, exists := cr.GetAnnotations()[string(naming.AnnotationPVCResizeInProgress)]
+			Expect(exists).To(BeFalse(), "resize should be complete")
+
+			// the template already holds the size as written in the spec, so
+			// recreating the statefulset would restart the replicas for nothing
+			Expect(k8sClient.Get(ctx, stsName, sts)).Should(Succeed())
+			Expect(string(sts.UID)).To(Equal(stsUID), "template matches the spec, no recreate needed")
+			Expect(sts.DeletionTimestamp).To(BeNil(), "template matches the spec, no recreate needed")
 		})
 	})
 })

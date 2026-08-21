@@ -185,6 +185,12 @@ func (r *PerconaServerMySQLReconciler) reconcilePersistentVolumes(ctx context.Co
 
 	configured := volumeTemplate.Spec.Resources.Requests[corev1.ResourceStorage]
 	requested := cr.Spec.MySQL.VolumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage]
+
+	// the volume claim template is rendered from the spec as written, so this is
+	// what an up to date template holds, unlike the rounded up size the PVCs are
+	// resized to
+	crRequest := requested.DeepCopy()
+
 	gib, err := RoundUpGiB(requested.Value())
 	if err != nil {
 		return errors.Wrap(err, "round GiB value")
@@ -277,11 +283,11 @@ func (r *PerconaServerMySQLReconciler) reconcilePersistentVolumes(ctx context.Co
 		resizeSucceeded := updatedPVCs == len(pvcsToUpdate)
 		if resizeSucceeded {
 			// The statefulset is only recreated to update its volume claim
-			// template, which is immutable. When the template already asks for the
-			// requested size there is nothing to update, and recreating it would
+			// template, which is immutable. When the template already asks for what
+			// the spec asks for there is nothing to update, and recreating it would
 			// cost a rolling restart of the replicas for nothing.
-			if configured.Cmp(requested) != 0 {
-				log.Info("Deleting statefulset", "configured", configured, "requested", requested)
+			if configured.Cmp(crRequest) != 0 {
+				log.Info("Deleting statefulset", "configured", configured, "requested", crRequest)
 
 				if err := r.Delete(ctx, sts, client.PropagationPolicy("Orphan")); err != nil && !k8serrors.IsNotFound(err) {
 					return errors.Wrapf(err, "delete statefulset/%s", sts.Name)
@@ -417,26 +423,29 @@ func isPVCMounted(pvc corev1.PersistentVolumeClaim, stsName string, podNames []s
 }
 
 // pvcSize reports the size of the volume behind the PVC. A PVC that no replica
-// mounts keeps reporting its old capacity until kubelet grows its filesystem, so
-// once its volume is expanded the requested size is what it actually has.
+// mounts keeps reporting its old capacity until kubelet grows its filesystem on
+// mount, so for those the size the resize controller has already allocated is
+// what the volume actually has.
+//
+// The allocated size is used rather than the requested one on purpose: a new
+// request lands in the spec immediately, while allocatedResources only follows
+// once the resize controller works on that request. Reading the spec here would
+// report a volume as expanded before it is.
 func pvcSize(pvc corev1.PersistentVolumeClaim, mounted bool) *resource.Quantity {
-	if !mounted && filesystemResizePending(pvc) {
-		return pvc.Spec.Resources.Requests.Storage()
+	if !mounted && nodeResizePending(pvc) {
+		return pvc.Status.AllocatedResources.Storage()
 	}
 
 	return pvc.Status.Capacity.Storage()
 }
 
-// filesystemResizePending reports whether the volume behind the PVC is already
-// expanded and only its filesystem is still waiting to be grown.
-func filesystemResizePending(pvc corev1.PersistentVolumeClaim) bool {
-	for _, condition := range pvc.Status.Conditions {
-		if condition.Type == corev1.PersistentVolumeClaimFileSystemResizePending && condition.Status == corev1.ConditionTrue {
-			return true
-		}
-	}
-
-	return false
+// nodeResizePending reports whether the volume behind the PVC is expanded up to
+// its allocated size and only the filesystem is still waiting to be grown on a
+// node. Unlike the FileSystemResizePending condition, which sticks around until
+// the volume is mounted and so can outlive the resize that set it, this status
+// is maintained per resize request.
+func nodeResizePending(pvc corev1.PersistentVolumeClaim) bool {
+	return pvc.Status.AllocatedResourceStatuses[corev1.ResourceStorage] == corev1.PersistentVolumeClaimNodeResizePending
 }
 
 func roundUpSize(volumeSizeBytes int64, allocationUnitBytes int64) int64 {

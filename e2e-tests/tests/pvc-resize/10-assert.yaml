@@ -1,0 +1,39 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 600
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: pvc-resize-mysql
+status:
+  replicas: 3
+  readyReplicas: 3
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: pvc-resize
+status:
+  mysql:
+    ready: 3
+    size: 3
+  state: ready
+---
+# the leftovers were expanded, so a returning replica no longer starts on a
+# volume that is too small for the data it has to recover
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: datadir-pvc-resize-mysql-1
+status:
+  capacity:
+    storage: 4Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: datadir-pvc-resize-mysql-2
+status:
+  capacity:
+    storage: 4Gi
