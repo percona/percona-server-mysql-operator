@@ -72,6 +72,11 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 	}
 
 	if currentSet.Status.ReadyReplicas < currentSet.Status.Replicas {
+		err := deleteOutdatedStuckPods(ctx, r.Client, pods.Items, currentSet.Status.UpdateRevision)
+		if err != nil {
+			return errors.Wrap(err, "delete outdated unready pods")
+		}
+
 		log.Info("Can't start/continue 'SmartUpdate': waiting for all replicas to be ready")
 		return nil
 	}
@@ -135,8 +140,48 @@ func stsChanged(sts *appsv1.StatefulSet, pods []corev1.Pod) bool {
 	// When https://github.com/kubernetes/kubernetes/issues/73492 bug gets fixed,
 	// we can simply compare sts.Status.UpdateRevision with sts.Status.CurrentRevision
 	for _, pod := range pods {
-		if pod.Labels["controller-revision-hash"] != sts.Status.UpdateRevision {
+		if pod.Labels[controllerRevisionHash] != sts.Status.UpdateRevision {
 			return true
+		}
+	}
+
+	return false
+}
+
+func deleteOutdatedStuckPods(ctx context.Context, cli client.Client, pods []corev1.Pod, updateRevision string) error {
+	log := logf.FromContext(ctx)
+
+	if updateRevision == "" {
+		return nil
+	}
+
+	for _, pod := range pods {
+		if (pod.Status.Phase != corev1.PodPending && !isPodInCrashLoopBackOff(pod)) ||
+			pod.Labels[controllerRevisionHash] == updateRevision ||
+			pod.DeletionTimestamp != nil {
+			continue
+		}
+
+		log.Info("deleting outdated stuck pod", "pod", pod.Name)
+		if err := cli.Delete(ctx, &pod); client.IgnoreNotFound(err) != nil {
+			return errors.Wrapf(err, "delete pod %s", pod.Name)
+		}
+	}
+
+	return nil
+}
+
+const crashLoopBackOffReason = "CrashLoopBackOff"
+
+func isPodInCrashLoopBackOff(pod corev1.Pod) bool {
+	for _, statuses := range [][]corev1.ContainerStatus{
+		pod.Status.InitContainerStatuses,
+		pod.Status.ContainerStatuses,
+	} {
+		for _, status := range statuses {
+			if status.State.Waiting != nil && status.State.Waiting.Reason == crashLoopBackOffReason {
+				return true
+			}
 		}
 	}
 
