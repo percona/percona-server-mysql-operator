@@ -641,7 +641,7 @@ func (r *PerconaServerMySQLBackupReconciler) getBackupSize(
 	}
 
 	if info.BackupSize <= 0 {
-		return "", nil
+		return "", errors.New("backup_size not found in xtrabackup_info; PXB 8.4.0-6+ is required")
 	}
 
 	return FormatBytes(info.BackupSize), nil

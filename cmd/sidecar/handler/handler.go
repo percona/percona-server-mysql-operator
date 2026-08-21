@@ -83,11 +83,18 @@ func GetCheckpointInfoFunc(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	info, err := fetchCheckpointInfo(req.Context(), log, &backupConf)
+	info, err := fetchXbcloudFile(req.Context(), log, &backupConf, "xtrabackup_checkpoints")
 	if err != nil {
 		log.Error(err, "failed to get checkpoint info")
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	backupInfo, err := fetchXbcloudFile(req.Context(), log, &backupConf, "xtrabackup_info")
+	if err != nil {
+		log.Info("failed to get backup info from xtrabackup_info, skipping backup size", "error", err)
+	} else {
+		info.BackupSize = backupInfo.BackupSize
 	}
 
 	infoB, err := json.Marshal(info)
@@ -109,11 +116,12 @@ func logClose(log logr.Logger, closer io.Closer) {
 	}
 }
 
-func fetchCheckpointInfo(
+func fetchXbcloudFile(
 	ctx context.Context,
 	log logr.Logger,
-	conf *xb.BackupConfig) (xb.CheckpointInfo, error) {
-	xbcloud := exec.CommandContext(ctx, "xbcloud", conf.XbcloudGetArgs("xtrabackup_checkpoints")...)
+	conf *xb.BackupConfig,
+	file string) (xb.CheckpointInfo, error) {
+	xbcloud := exec.CommandContext(ctx, "xbcloud", conf.XbcloudGetArgs(file)...)
 
 	xbOut, err := xbcloud.StdoutPipe()
 	if err != nil {
