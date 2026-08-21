@@ -37,7 +37,9 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -805,6 +807,22 @@ var _ = Describe("CR validations", Ordered, func() {
 			})
 		})
 
+		When("group-replication cluster omits proxy but unsafe flags are enabled", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-no-proxy", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeGR
+			cr.Spec.Unsafe.Proxy = true
+			cr.Spec.Unsafe.ProxySize = true
+			It("should create the cluster successfully", func() {
+				obj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(cr)
+				Expect(err).NotTo(HaveOccurred())
+				unstructured.RemoveNestedField(obj, "spec", "proxy")
+
+				Expect(k8sClient.Create(ctx, &unstructured.Unstructured{Object: obj})).Should(Succeed())
+			})
+		})
+
 		When("group-replication cluster type with router size less than 2", Ordered, func() {
 			cr, err := readDefaultCR("cr-validations-12", ns)
 			Expect(err).NotTo(HaveOccurred())
@@ -936,6 +954,58 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr.Spec.Orchestrator.Enabled = true
 			It("should create the cluster successfully", func() {
 				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+			})
+		})
+
+		When("async cluster type omits orchestrator but unsafe flag is enabled", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-no-orchestrator", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
+			cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
+			cr.Spec.Unsafe.Orchestrator = true
+			cr.Spec.Unsafe.Proxy = true
+			It("should create the cluster successfully", func() {
+				obj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(cr)
+				Expect(err).NotTo(HaveOccurred())
+				unstructured.RemoveNestedField(obj, "spec", "orchestrator")
+
+				Expect(k8sClient.Create(ctx, &unstructured.Unstructured{Object: obj})).Should(Succeed())
+			})
+		})
+
+		When("async cluster type with SmartUpdate omits orchestrator but unsafe flag is enabled", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-smart-update-no-orchestrator", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
+			cr.Spec.UpdateStrategy = psv1.SmartUpdateStatefulSetStrategyType
+			cr.Spec.Unsafe.Orchestrator = true
+			cr.Spec.Unsafe.Proxy = true
+			It("the creation of the cluster should fail with error message", func() {
+				obj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(cr)
+				Expect(err).NotTo(HaveOccurred())
+				unstructured.RemoveNestedField(obj, "spec", "orchestrator")
+
+				createErr := k8sClient.Create(ctx, &unstructured.Unstructured{Object: obj})
+				Expect(createErr).To(HaveOccurred())
+				Expect(createErr.Error()).To(ContainSubstring("Invalid configuration: For 'async' replication, SmartUpdate requires Orchestrator to be enabled"))
+			})
+		})
+
+		When("async cluster type with SmartUpdate disables orchestrator but unsafe flag is enabled", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-disabled-orchestrator", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
+			cr.Spec.UpdateStrategy = psv1.SmartUpdateStatefulSetStrategyType
+			cr.Spec.Orchestrator.Enabled = false
+			cr.Spec.Unsafe.Orchestrator = true
+			cr.Spec.Unsafe.Proxy = true
+			It("the creation of the cluster should fail with error message", func() {
+				createErr := k8sClient.Create(ctx, cr)
+				Expect(createErr).To(HaveOccurred())
+				Expect(createErr.Error()).To(ContainSubstring("Invalid configuration: For 'async' replication, SmartUpdate requires Orchestrator to be enabled"))
 			})
 		})
 
