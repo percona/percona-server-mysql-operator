@@ -48,6 +48,56 @@ func issueTestCerts(t *testing.T) (serverTLS, replicaTLS *tls.Config) {
 	return serverTLS, replicaTLS
 }
 
+func testSource(t *testing.T, indexPath string) *Server {
+	t.Helper()
+
+	serverTLS, _ := issueTestCerts(t)
+	srv, err := New(Config{IndexPath: indexPath, ServerID: 999, TLS: serverTLS})
+	require.NoError(t, err)
+
+	return srv
+}
+
+// A replica announces its checksum awareness with a SET and expects an OK
+// packet. Answering with a result set leaves the connection out of step.
+func TestChecksumAnnouncementIsAcknowledgedNotAnswered(t *testing.T) {
+	srv := testSource(t, filepath.Join("testdata", "binlog.index"))
+
+	res, err := srv.answer("SET @master_binlog_checksum = @@global.binlog_checksum, " +
+		"@source_binlog_checksum = @@global.binlog_checksum")
+	require.NoError(t, err)
+	assert.Nil(t, res, "a SET must be acknowledged, not answered with a result set")
+}
+
+// The replica reads the value back to learn which algorithm to expect. It has
+// to match the trailer on the events we synthesise, or the replica reads the
+// first rotate event four bytes wrong.
+func TestReportedChecksumMatchesTheServedLogs(t *testing.T) {
+	index := filepath.Join("testdata", "binlog.index")
+	srv := testSource(t, index)
+
+	idx, err := ReadIndex(index)
+	require.NoError(t, err)
+	on, err := fileHasChecksum(idx.Files[0])
+	require.NoError(t, err)
+
+	want := "NONE"
+	if on {
+		want = "CRC32"
+	}
+
+	res, err := srv.answer("SELECT @source_binlog_checksum")
+	require.NoError(t, err)
+	require.NotNil(t, res)
+
+	// A server-built result set carries raw rows; the client is what decodes them.
+	require.Len(t, res.RowDatas, 1)
+	row, err := res.RowDatas[0].ParseText(res.Fields, nil)
+	require.NoError(t, err)
+	require.Len(t, row, 1)
+	assert.Equal(t, want, string(row[0].AsString()))
+}
+
 func startTestServer(t *testing.T) (host string, port uint16, replicaTLS *tls.Config) {
 	t.Helper()
 

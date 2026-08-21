@@ -7,7 +7,6 @@ import (
 	"net"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/server"
@@ -33,9 +32,6 @@ type Server struct {
 
 	cfg  Config
 	uuid string
-
-	mu    sync.Mutex
-	conns []*server.Conn
 }
 
 // New returns a server serving the binary logs listed in cfg.IndexPath.
@@ -80,7 +76,13 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 func (s *Server) handle(ctx context.Context, c net.Conn) {
 	defer c.Close() //nolint:errcheck
 
-	conn, err := s._server.NewConn(c, s.cfg.User, s.cfg.Password, Handler{server: s})
+	// A context of this connection's own, so the dump and the heartbeats that
+	// follow it end when the connection does and not only when the whole source
+	// is torn down.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	conn, err := s._server.NewConn(c, s.cfg.User, s.cfg.Password, newHandler(ctx, s))
 	if err != nil {
 		log.Printf("ERROR: failed to handle connection: %v", err)
 		return
@@ -110,6 +112,10 @@ func (s *Server) answer(query string) (*mysql.Result, error) {
 	q := strings.ToLower(strings.TrimSpace(strings.TrimSuffix(query, ";")))
 
 	switch {
+	// A SET is never a request for a value, and some of them name variables the
+	// cases below match on.
+	case strings.HasPrefix(q, "set "):
+		return nil, nil
 	case strings.Contains(q, "@@global.server_id"), strings.Contains(q, "'server_id'"):
 		return oneRow("SERVER_ID", strconv.FormatUint(uint64(s.cfg.ServerID), 10))
 	case strings.Contains(q, "@@global.server_uuid"), strings.Contains(q, "@@server_uuid"):
@@ -128,8 +134,6 @@ func (s *Server) answer(query string) (*mysql.Result, error) {
 		return oneRow("UNIX_TIMESTAMP()", "0")
 	case strings.Contains(q, "binlog_checksum"):
 		return oneRow("BINLOG_CHECKSUM", "CRC32")
-	case strings.HasPrefix(q, "set "):
-		return nil, nil
 	}
 	return nil, nil
 }
