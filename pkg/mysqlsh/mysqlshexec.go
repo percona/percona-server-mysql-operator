@@ -256,6 +256,14 @@ func (m *MysqlshExec) ForcePrimaryClusterWithExec(ctx context.Context, clusterNa
 	return nil
 }
 
+func (m *MysqlshExec) RejoinClusterWithExec(ctx context.Context, clusterName string) error {
+	cmd := fmt.Sprintf("dba.getCluster().getClusterSet().rejoinCluster('%s')", clusterName)
+	if err := m.runWithExec(ctx, cmd); err != nil {
+		return errors.Wrap(err, "rejoin cluster")
+	}
+	return nil
+}
+
 func (m *MysqlshExec) ClusterSetStatusWithExec(ctx context.Context) (clusterset.Status, error) {
 	status := clusterset.Status{}
 
