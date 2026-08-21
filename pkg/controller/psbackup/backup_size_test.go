@@ -44,231 +44,129 @@ func newMySQLPod(clusterName, namespace string) *corev1.Pod {
 	}
 }
 
-func TestBackupSizeOnSuccess(t *testing.T) {
-	const namespace = "backup-size-test"
+func TestBackupSize(t *testing.T) {
 	const storageName = "s3-us-west"
 
-	ctx := context.Background()
-
-	scheme := runtime.NewScheme()
-	require.NoError(t, clientgoscheme.AddToScheme(scheme))
-	require.NoError(t, apiv1.AddToScheme(scheme))
-
-	cluster, err := readDefaultCR("ps-cluster1", namespace)
-	require.NoError(t, err)
-
-	cr, err := readDefaultCRBackup("some-name", namespace)
-	require.NoError(t, err)
-
-	cr.Spec.ClusterName = cluster.Name
-	cr.Spec.StorageName = storageName
-
-	stor := cluster.Spec.Backup.Storages[storageName]
-
-	s3Secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: stor.S3.CredentialsSecret, Namespace: namespace},
-		Data: map[string][]byte{
-			secret.CredentialsAWSAccessKey: []byte("access-key"),
-			secret.CredentialsAWSSecretKey: []byte("secret-key"),
+	tests := []struct {
+		name           string
+		namespace      string
+		backupSize     int64
+		jobCondition   batchv1.JobConditionType
+		needsMySQLPod  bool
+		reconcileCount int
+		expectedState  apiv1.BackupState
+		expectedSize   string
+	}{
+		{
+			name:           "size is set on success",
+			namespace:      "backup-size-test",
+			backupSize:     78771, // ~76.92KB
+			jobCondition:   batchv1.JobComplete,
+			needsMySQLPod:  true,
+			reconcileCount: 2, // 1st: Running->Succeeded, 2nd: fetches size
+			expectedState:  apiv1.BackupSucceeded,
+			expectedSize:   "76.92KB",
 		},
-	}
-	userSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: cluster.InternalSecretName(), Namespace: namespace},
-		Data: map[string][]byte{
-			string(apiv1.UserOperator): []byte("operator-pass"),
+		{
+			name:           "size is empty when xtrabackup reports zero",
+			namespace:      "backup-size-zero-test",
+			backupSize:     0,
+			jobCondition:   batchv1.JobComplete,
+			needsMySQLPod:  true,
+			reconcileCount: 2,
+			expectedState:  apiv1.BackupSucceeded,
+			expectedSize:   "",
 		},
-	}
-
-	// Set backup status to Running (simulating an in-progress backup)
-	cr.Status.State = apiv1.BackupRunning
-	cr.Status.Storage = stor.DeepCopy()
-	cr.Status.Destination = "s3://bucket/backup-name"
-
-	// Create a completed job
-	job, err := xtrabackup.Job(cluster.DeepCopy(), cr, "dest", "init-image", stor)
-	require.NoError(t, err)
-	job.Status.Conditions = append(job.Status.Conditions, batchv1.JobCondition{
-		Type:   batchv1.JobComplete,
-		Status: corev1.ConditionTrue,
-	})
-
-	mysqlPod := newMySQLPod(cluster.Name, namespace)
-	sidecar := &fakeSidecarClient{backupSize: 78771} // ~76.92KB
-
-	cb := fake.NewClientBuilder().WithScheme(scheme).
-		WithObjects(cr, cluster.DeepCopy(), s3Secret, userSecret, job, mysqlPod).
-		WithStatusSubresource(cr, cluster.DeepCopy(), s3Secret, job)
-
-	r := PerconaServerMySQLBackupReconciler{
-		Client:           cb.Build(),
-		Scheme:           scheme,
-		ServerVersion:    &platform.ServerVersion{Platform: platform.PlatformKubernetes},
-		NewStorageClient: fakestorage.NewFakeClient,
-		NewSidecarClient: func(_ string) xtrabackup.SidecarClient {
-			return sidecar
+		{
+			name:           "size is empty on failure",
+			namespace:      "backup-size-fail-test",
+			backupSize:     0,
+			jobCondition:   batchv1.JobFailed,
+			needsMySQLPod:  false,
+			reconcileCount: 1,
+			expectedState:  apiv1.BackupFailed,
+			expectedSize:   "",
 		},
 	}
 
-	// First reconcile: transitions BackupRunning -> BackupSucceeded
-	_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(cr)})
-	require.NoError(t, err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
 
-	actual := new(apiv1.PerconaServerMySQLBackup)
-	err = r.Get(ctx, client.ObjectKeyFromObject(cr), actual)
-	require.NoError(t, err)
-	assert.Equal(t, apiv1.BackupSucceeded, actual.Status.State)
+			scheme := runtime.NewScheme()
+			require.NoError(t, clientgoscheme.AddToScheme(scheme))
+			require.NoError(t, apiv1.AddToScheme(scheme))
 
-	// Second reconcile: fetches and sets backup size
-	_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(cr)})
-	require.NoError(t, err)
+			cluster, err := readDefaultCR("ps-cluster1", tt.namespace)
+			require.NoError(t, err)
 
-	err = r.Get(ctx, client.ObjectKeyFromObject(cr), actual)
-	require.NoError(t, err)
+			cr, err := readDefaultCRBackup("some-name", tt.namespace)
+			require.NoError(t, err)
 
-	assert.Equal(t, apiv1.BackupSucceeded, actual.Status.State)
-	assert.Equal(t, "76.92KB", actual.Status.Size)
-}
+			cr.Spec.ClusterName = cluster.Name
+			cr.Spec.StorageName = storageName
 
-func TestBackupSizeZeroOnNoSize(t *testing.T) {
-	const namespace = "backup-size-zero-test"
-	const storageName = "s3-us-west"
+			stor := cluster.Spec.Backup.Storages[storageName]
 
-	ctx := context.Background()
+			s3Secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: stor.S3.CredentialsSecret, Namespace: tt.namespace},
+				Data: map[string][]byte{
+					secret.CredentialsAWSAccessKey: []byte("access-key"),
+					secret.CredentialsAWSSecretKey: []byte("secret-key"),
+				},
+			}
+			userSecret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: cluster.InternalSecretName(), Namespace: tt.namespace},
+				Data: map[string][]byte{
+					string(apiv1.UserOperator): []byte("operator-pass"),
+				},
+			}
 
-	scheme := runtime.NewScheme()
-	require.NoError(t, clientgoscheme.AddToScheme(scheme))
-	require.NoError(t, apiv1.AddToScheme(scheme))
+			cr.Status.State = apiv1.BackupRunning
+			cr.Status.Storage = stor.DeepCopy()
+			cr.Status.Destination = "s3://bucket/backup-name"
 
-	cluster, err := readDefaultCR("ps-cluster1", namespace)
-	require.NoError(t, err)
+			job, err := xtrabackup.Job(cluster.DeepCopy(), cr, "dest", "init-image", stor)
+			require.NoError(t, err)
+			job.Status.Conditions = append(job.Status.Conditions, batchv1.JobCondition{
+				Type:   tt.jobCondition,
+				Status: corev1.ConditionTrue,
+			})
 
-	cr, err := readDefaultCRBackup("some-name", namespace)
-	require.NoError(t, err)
+			objects := []client.Object{cr, cluster.DeepCopy(), s3Secret, userSecret, job}
 
-	cr.Spec.ClusterName = cluster.Name
-	cr.Spec.StorageName = storageName
+			r := PerconaServerMySQLBackupReconciler{
+				Scheme:        scheme,
+				ServerVersion: &platform.ServerVersion{Platform: platform.PlatformKubernetes},
+			}
 
-	stor := cluster.Spec.Backup.Storages[storageName]
+			if tt.needsMySQLPod {
+				mysqlPod := newMySQLPod(cluster.Name, tt.namespace)
+				objects = append(objects, mysqlPod)
 
-	s3Secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: stor.S3.CredentialsSecret, Namespace: namespace},
-		Data: map[string][]byte{
-			secret.CredentialsAWSAccessKey: []byte("access-key"),
-			secret.CredentialsAWSSecretKey: []byte("secret-key"),
-		},
+				sidecar := &fakeSidecarClient{backupSize: tt.backupSize}
+				r.NewStorageClient = fakestorage.NewFakeClient
+				r.NewSidecarClient = func(_ string) xtrabackup.SidecarClient {
+					return sidecar
+				}
+			}
+
+			cb := fake.NewClientBuilder().WithScheme(scheme).
+				WithObjects(objects...).
+				WithStatusSubresource(cr, cluster.DeepCopy(), s3Secret, job)
+			r.Client = cb.Build()
+
+			for i := 0; i < tt.reconcileCount; i++ {
+				_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(cr)})
+				require.NoError(t, err)
+			}
+
+			actual := new(apiv1.PerconaServerMySQLBackup)
+			err = r.Get(ctx, client.ObjectKeyFromObject(cr), actual)
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.expectedState, actual.Status.State)
+			assert.Equal(t, tt.expectedSize, actual.Status.Size)
+		})
 	}
-	userSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: cluster.InternalSecretName(), Namespace: namespace},
-		Data: map[string][]byte{
-			string(apiv1.UserOperator): []byte("operator-pass"),
-		},
-	}
-
-	cr.Status.State = apiv1.BackupRunning
-	cr.Status.Storage = stor.DeepCopy()
-	cr.Status.Destination = "s3://bucket/backup-name"
-
-	job, err := xtrabackup.Job(cluster.DeepCopy(), cr, "dest", "init-image", stor)
-	require.NoError(t, err)
-	job.Status.Conditions = append(job.Status.Conditions, batchv1.JobCondition{
-		Type:   batchv1.JobComplete,
-		Status: corev1.ConditionTrue,
-	})
-
-	mysqlPod := newMySQLPod(cluster.Name, namespace)
-	// BackupSize is 0, meaning xtrabackup didn't report a size
-	sidecar := &fakeSidecarClient{backupSize: 0}
-
-	cb := fake.NewClientBuilder().WithScheme(scheme).
-		WithObjects(cr, cluster.DeepCopy(), s3Secret, userSecret, job, mysqlPod).
-		WithStatusSubresource(cr, cluster.DeepCopy(), s3Secret, job)
-
-	r := PerconaServerMySQLBackupReconciler{
-		Client:           cb.Build(),
-		Scheme:           scheme,
-		ServerVersion:    &platform.ServerVersion{Platform: platform.PlatformKubernetes},
-		NewStorageClient: fakestorage.NewFakeClient,
-		NewSidecarClient: func(_ string) xtrabackup.SidecarClient {
-			return sidecar
-		},
-	}
-
-	_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(cr)})
-	require.NoError(t, err)
-
-	actual := new(apiv1.PerconaServerMySQLBackup)
-	err = r.Get(ctx, client.ObjectKeyFromObject(cr), actual)
-	require.NoError(t, err)
-
-	assert.Equal(t, apiv1.BackupSucceeded, actual.Status.State)
-	assert.Empty(t, actual.Status.Size)
-}
-
-func TestBackupSizeEmptyOnFailure(t *testing.T) {
-	const namespace = "backup-size-fail-test"
-	const storageName = "s3-us-west"
-
-	ctx := context.Background()
-
-	scheme := runtime.NewScheme()
-	require.NoError(t, clientgoscheme.AddToScheme(scheme))
-	require.NoError(t, apiv1.AddToScheme(scheme))
-
-	cluster, err := readDefaultCR("ps-cluster1", namespace)
-	require.NoError(t, err)
-
-	cr, err := readDefaultCRBackup("some-name", namespace)
-	require.NoError(t, err)
-
-	cr.Spec.ClusterName = cluster.Name
-	cr.Spec.StorageName = storageName
-
-	stor := cluster.Spec.Backup.Storages[storageName]
-
-	s3Secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: stor.S3.CredentialsSecret, Namespace: namespace},
-		Data: map[string][]byte{
-			secret.CredentialsAWSAccessKey: []byte("access-key"),
-			secret.CredentialsAWSSecretKey: []byte("secret-key"),
-		},
-	}
-	userSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: cluster.InternalSecretName(), Namespace: namespace},
-		Data: map[string][]byte{
-			string(apiv1.UserOperator): []byte("operator-pass"),
-		},
-	}
-
-	// Set backup status to Running
-	cr.Status.State = apiv1.BackupRunning
-	cr.Status.Storage = stor.DeepCopy()
-	cr.Status.Destination = "s3://bucket/backup-name"
-
-	// Create a failed job
-	job, err := xtrabackup.Job(cluster.DeepCopy(), cr, "dest", "init-image", stor)
-	require.NoError(t, err)
-	job.Status.Conditions = append(job.Status.Conditions, batchv1.JobCondition{
-		Type:   batchv1.JobFailed,
-		Status: corev1.ConditionTrue,
-	})
-
-	cb := fake.NewClientBuilder().WithScheme(scheme).
-		WithObjects(cr, cluster.DeepCopy(), s3Secret, userSecret, job).
-		WithStatusSubresource(cr, cluster.DeepCopy(), s3Secret, job)
-
-	r := PerconaServerMySQLBackupReconciler{
-		Client:        cb.Build(),
-		Scheme:        scheme,
-		ServerVersion: &platform.ServerVersion{Platform: platform.PlatformKubernetes},
-	}
-
-	_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(cr)})
-	require.NoError(t, err)
-
-	actual := new(apiv1.PerconaServerMySQLBackup)
-	err = r.Get(ctx, client.ObjectKeyFromObject(cr), actual)
-	require.NoError(t, err)
-
-	assert.Equal(t, apiv1.BackupFailed, actual.Status.State)
-	assert.Empty(t, actual.Status.Size)
 }
