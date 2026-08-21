@@ -1,6 +1,17 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
 timeout: 300
+resourceRefs:
+- apiVersion: ps.percona.com/v1
+  kind: PerconaServerMySQLBackup
+  name: demand-backup-cloud-1
+  ref: bcp
+assertAll:
+- celExpr: bcp.status.state == "Succeeded"
+  message: "Backup should be succeeded"
+
+- celExpr: has(bcp.status.size) && bcp.status.size != "" && bcp.status.size != "0B"
+  message: "Backup size should be populated and non-zero when succeeded"
 ---
 kind: PerconaServerMySQLBackup
 apiVersion: ps.percona.com/v1

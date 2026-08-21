@@ -86,6 +86,7 @@ type PerconaServerMySQLBackupStatus struct {
 	Image        string             `json:"image,omitempty"`
 	BackupSource string             `json:"backupSource,omitempty"`
 	Compressed   bool               `json:"compressed,omitempty"`
+	Size         string             `json:"size,omitempty"`
 	Conditions   []metav1.Condition `json:"conditions,omitempty"`
 }
 
@@ -313,5 +314,6 @@ func (s *PerconaServerMySQLBackupStatus) Equals(other *PerconaServerMySQLBackupS
 		s.Image == other.Image &&
 		s.BackupSource == other.BackupSource &&
 		s.Compressed == other.Compressed &&
+		s.Size == other.Size &&
 		ConditionsEqual(s.Conditions, other.Conditions)
 }

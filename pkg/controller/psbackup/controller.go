@@ -140,6 +140,20 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		if err := r.releaseLeaseIfNeeded(ctx, cr, &status); err != nil {
 			return rr, errors.Wrap(err, "release lease")
 		}
+		if cr.Status.State == apiv1.BackupSucceeded && cr.Status.Size == "" {
+			cluster := &apiv1.PerconaServerMySQL{}
+			nn := types.NamespacedName{Name: cr.Spec.ClusterName, Namespace: cr.Namespace}
+			if err := r.Get(ctx, nn, cluster); err != nil {
+				log.Error(err, "Failed to get cluster for backup size, will retry")
+				return rr, nil
+			}
+			size, err := r.getBackupSize(ctx, cr, cluster)
+			if err != nil {
+				log.Error(err, "Failed to get backup size, will retry")
+				return rr, nil
+			}
+			status.Size = size
+		}
 		return rr, nil
 	}
 
@@ -604,6 +618,35 @@ func (r *PerconaServerMySQLBackupReconciler) runPostFinishTasks(
 	return nil
 }
 
+func (r *PerconaServerMySQLBackupReconciler) getBackupSize(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQLBackup,
+	cluster *apiv1.PerconaServerMySQL,
+) (string, error) {
+	backupConf, err := xtrabackup.GetBackupConfig(ctx, r.Client, cr)
+	if err != nil {
+		return "", errors.Wrap(err, "get backup config")
+	}
+
+	pod, err := mysql.GetReadyPod(ctx, r.Client, cluster)
+	if err != nil {
+		return "", errors.Wrap(err, "get ready mysql pod")
+	}
+	src := mysql.PodFQDN(cluster, pod)
+	sc := r.NewSidecarClient(src)
+
+	info, err := sc.GetCheckpointInfo(ctx, *backupConf)
+	if err != nil {
+		return "", errors.Wrap(err, "get checkpoint info")
+	}
+
+	if info.BackupSize <= 0 {
+		return "", errors.New("backup_size not found in xtrabackup_info; PXB 8.4.0-6+ is required")
+	}
+
+	return FormatBytes(info.BackupSize), nil
+}
+
 func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context, cr *apiv1.PerconaServerMySQLBackup) error {
 	if cr.DeletionTimestamp == nil || cr.Status.State == apiv1.BackupRunning || len(cr.Finalizers) == 0 {
 		return nil
@@ -1029,4 +1072,26 @@ func (r *PerconaServerMySQLBackupReconciler) getActiveRestore(ctx context.Contex
 		return restoreName, nil
 	}
 	return "", nil
+}
+
+func FormatBytes(bytes int64) string {
+	const (
+		KB = 1024
+		MB = KB * 1024
+		GB = MB * 1024
+		TB = GB * 1024
+	)
+
+	switch {
+	case bytes >= TB:
+		return fmt.Sprintf("%.2fTB", float64(bytes)/float64(TB))
+	case bytes >= GB:
+		return fmt.Sprintf("%.2fGB", float64(bytes)/float64(GB))
+	case bytes >= MB:
+		return fmt.Sprintf("%.2fMB", float64(bytes)/float64(MB))
+	case bytes >= KB:
+		return fmt.Sprintf("%.2fKB", float64(bytes)/float64(KB))
+	default:
+		return fmt.Sprintf("%dB", bytes)
+	}
 }
