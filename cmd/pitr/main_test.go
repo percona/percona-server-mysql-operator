@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -90,20 +91,22 @@ func TestRun(t *testing.T) {
 	}
 
 	tests := map[string]struct {
-		entries       []binlogserver.BinlogEntry
-		rawContent    string
-		pitrType      string
-		pitrGTID      string
-		pitrDate      string
-		pitrForce     string
-		db            *fakeDB
-		newDB         func(ctx context.Context, params db.DBParams) (Database, error)
-		newS3         func(*fakeStorage) newStorageFn
-		getSecret     func(apiv1.SystemUser) (string, error)
-		applyErr      error
-		expectedError string
-		checkApply    func(t *testing.T, call applyCall)
-		checkObjects  func(t *testing.T, objects []binlogSource)
+		entries        []binlogserver.BinlogEntry
+		rawContent     string
+		keyringContent string
+		pitrType       string
+		pitrGTID       string
+		pitrDate       string
+		pitrForce      string
+		db             *fakeDB
+		newDB          func(ctx context.Context, params db.DBParams) (Database, error)
+		newS3          func(*fakeStorage) newStorageFn
+		getSecret      func(apiv1.SystemUser) (string, error)
+		applyErr       error
+		expectedError  string
+		checkApply     func(t *testing.T, call applyCall)
+		checkObjects   func(t *testing.T, objects []binlogSource)
+		keyringPath    func(t *testing.T) string
 	}{
 		"missing BINLOGS_PATH": {
 			expectedError: "BINLOGS_PATH",
@@ -267,6 +270,71 @@ func TestRun(t *testing.T) {
 				assert.Equal(t, "plain binlog", string(data))
 			},
 		},
+		"keyring file with JSON null": {
+			entries:        defaultEntries,
+			pitrType:       "gtid",
+			pitrGTID:       "uuid:1",
+			db:             &fakeDB{},
+			keyringContent: "null",
+			expectedError:  "keyring must contain at least one key",
+		},
+		"keyring file with empty JSON object": {
+			entries:        defaultEntries,
+			pitrType:       "gtid",
+			pitrGTID:       "uuid:1",
+			db:             &fakeDB{},
+			keyringContent: "{}",
+			expectedError:  "keyring must contain at least one key",
+		},
+		"keyring file with empty key list": {
+			entries:        defaultEntries,
+			pitrType:       "gtid",
+			pitrGTID:       "uuid:1",
+			db:             &fakeDB{},
+			keyringContent: `{"version":1,"keys":[]}`,
+			expectedError:  "keyring must contain at least one key",
+		},
+		"keyring file with invalid JSON": {
+			entries:        defaultEntries,
+			pitrType:       "gtid",
+			pitrGTID:       "uuid:1",
+			db:             &fakeDB{},
+			keyringContent: "not-json",
+			expectedError:  "parse keyring",
+		},
+		"keyring file with unsupported cipher": {
+			entries:        defaultEntries,
+			pitrType:       "gtid",
+			pitrGTID:       "uuid:1",
+			db:             &fakeDB{},
+			keyringContent: `{"version":1,"keys":[{"id":"k1","cipher":"AES-256-XTS","data_hex":"00"}]}`,
+			expectedError:  "unsupported KEK cipher mode",
+		},
+		"keyring file with a key missing an ID": {
+			entries:        defaultEntries,
+			pitrType:       "gtid",
+			pitrGTID:       "uuid:1",
+			db:             &fakeDB{},
+			keyringContent: `{"version":1,"keys":[{"cipher":"AES-256-CBC","data_hex":"00"}]}`,
+			expectedError:  "empty ID",
+		},
+		"valid keyring file is loaded": {
+			entries:        defaultEntries,
+			pitrType:       "gtid",
+			pitrGTID:       "uuid:1",
+			db:             &fakeDB{},
+			keyringContent: `{"version":1,"keys":[{"id":"k1","cipher":"AES-256-CBC","data_hex":"000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"}]}`,
+		},
+		"missing keyring file": {
+			entries:  defaultEntries,
+			pitrType: "gtid",
+			pitrGTID: "uuid:1",
+			db:       &fakeDB{},
+			keyringPath: func(t *testing.T) string {
+				return filepath.Join(t.TempDir(), "does-not-exist.json")
+			},
+			expectedError: "read keyring file",
+		},
 	}
 
 	for name, tc := range tests {
@@ -294,7 +362,15 @@ func TestRun(t *testing.T) {
 			t.Setenv("PITR_DATE", tc.pitrDate)
 			t.Setenv("PITR_FORCE", tc.pitrForce)
 			t.Setenv("S3_BUCKET", bucket)
-			t.Setenv("KEYRING_PATH", "")
+			keyringPath := ""
+			switch {
+			case tc.keyringPath != nil:
+				keyringPath = tc.keyringPath(t)
+			case tc.keyringContent != "":
+				keyringPath = filepath.Join(t.TempDir(), "keyring.json")
+				require.NoError(t, os.WriteFile(keyringPath, []byte(tc.keyringContent), 0o600))
+			}
+			t.Setenv("KEYRING_PATH", keyringPath)
 
 			fakeDatabase := tc.db
 
