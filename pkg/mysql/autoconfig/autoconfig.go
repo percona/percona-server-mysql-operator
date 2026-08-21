@@ -58,6 +58,12 @@ type Request struct {
 	// ProviderCostPct optionally reserves a fraction (0..1) of the allocated
 	// resources to account for provider overhead. Zero disables the adjustment.
 	ProviderCostPct float64
+	// SharedResources declares that CPU and Memory are a budget mysqld shares
+	// with the proxy and monitoring components, and asks the calculator to split
+	// it between them. The operator runs the proxies in their own pods and gives
+	// the monitoring sidecar its own allocation, so its request describes an
+	// instance dedicated to mysqld - the zero value.
+	SharedResources bool
 }
 
 // Result holds the outcome of a Calculate call and the accessors the operator
@@ -98,6 +104,7 @@ func Calculate(req Request) (*Result, error) {
 		Output:          mysqlcalc.ResultOutputFormatJson,
 		Mysqlversion:    mysqlcalc.Version{Major: req.Version.Major, Minor: req.Version.Minor, Patch: req.Version.Patch},
 		ProviderCostPct: req.ProviderCostPct,
+		MySQLDedicated:  !req.SharedResources,
 		Dimension: mysqlcalc.Dimension{
 			Id:     mysqlcalc.DimensionOpen,
 			Cpu:    req.CPU,

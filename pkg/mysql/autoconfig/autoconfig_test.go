@@ -83,3 +83,29 @@ func TestCalculate(t *testing.T) {
 		})
 	}
 }
+
+// The whole allocation belongs to mysqld unless the caller says otherwise, so
+// nothing is held back for a proxy and a monitor that live elsewhere.
+func TestCalculateSharedResources(t *testing.T) {
+	req := Request{
+		DBType:      DBTypeGroupReplication,
+		CPU:         4000,
+		MemoryBytes: 8 << 30,
+		Version:     Version{Major: 8, Minor: 0, Patch: 46},
+		LoadType:    LoadTypeSomeWrites,
+	}
+
+	dedicated, err := Calculate(req)
+	require.NoError(t, err)
+	dedicatedParams, err := dedicated.MySQLdParams()
+	require.NoError(t, err)
+
+	req.SharedResources = true
+	shared, err := Calculate(req)
+	require.NoError(t, err)
+	sharedParams, err := shared.MySQLdParams()
+	require.NoError(t, err)
+
+	assert.Equal(t, "562", dedicatedParams["max_connections"])
+	assert.Equal(t, "442", sharedParams["max_connections"])
+}
