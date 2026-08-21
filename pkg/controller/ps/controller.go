@@ -34,7 +34,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -1052,17 +1051,11 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLServices(ctx context.Contex
 // sets read_only=0 for single-node clusters without Orchestrator
 func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("reconcileMySQLAutoConfig")
-	var memory *resource.Quantity
 	var err error
 
-	if res := cr.Spec.MySQL.Resources; res.Size() > 0 {
-		if _, ok := res.Requests[corev1.ResourceMemory]; ok {
-			memory = res.Requests.Memory()
-		}
-		if _, ok := res.Limits[corev1.ResourceMemory]; ok {
-			memory = res.Limits.Memory()
-		}
-	}
+	res := cr.Spec.MySQL.Resources
+	memory := mysql.EffectiveResource(res, corev1.ResourceMemory)
+	cpu := mysql.EffectiveResource(res, corev1.ResourceCPU)
 
 	nn := types.NamespacedName{
 		Name:      mysql.AutoConfigMapName(cr),
@@ -1103,11 +1096,34 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 	}
 
 	if memory != nil {
-		autotuneParams, err := mysql.GetAutoTuneParams(cr, memory)
+		var params string
+
+		// autoconfig derives a full configuration from the calculator when it is
+		// enabled and we have everything it needs (a CPU allocation and a known
+		// MySQL version). Otherwise we keep the legacy buffer-pool +
+		// max_connections autotune, which only requires memory.
+		switch {
+		case cr.Spec.MySQL.AutoConfig.IsEnabled() && cpu == nil:
+			// Enabled but the user set no CPU request/limit: we cannot size the
+			// configuration, so warn and fall back to autotune.
+			r.Recorder.Event(cr, corev1.EventTypeWarning, "AutoConfigFallback",
+				"autoconfig is enabled but no CPU request/limit is set; falling back to autotune")
+			params, err = mysql.GetAutoTuneParams(cr, memory)
+		case cr.Spec.MySQL.AutoConfig.IsEnabled() && cr.Status.MySQL.Version != "":
+			params, err = mysql.GetAutoConfigParams(cr, cpu, memory)
+			if err != nil {
+				log.Error(err, "failed to calculate autoconfig parameters, falling back to autotune")
+				r.Recorder.Event(cr, corev1.EventTypeWarning, "AutoConfigFallback",
+					fmt.Sprintf("failed to calculate MySQL configuration, falling back to autotune: %v", err))
+				params, err = mysql.GetAutoTuneParams(cr, memory)
+			}
+		default:
+			params, err = mysql.GetAutoTuneParams(cr, memory)
+		}
 		if err != nil {
 			return err
 		}
-		config += autotuneParams
+		config += params
 	}
 
 	configMap := k8s.ConfigMap(cr, mysql.AutoConfigMapName(cr), mysql.CustomConfigKey, config, naming.ComponentDatabase)

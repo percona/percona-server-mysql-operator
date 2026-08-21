@@ -1075,6 +1075,116 @@ var _ = Describe("CR validations", Ordered, func() {
 				Expect(createErr.Error()).To(ContainSubstring("growthStep must be a positive quantity"))
 			})
 		})
+
+		const autoConfigResourcesMsg = "mysql.resources must set cpu and memory (via limits or requests) when mysql.autoconfig.enabled is true"
+		autoConfigEnabled := true
+		autoConfigDisabled := false
+
+		When("autoconfig is enabled with cpu and memory limits", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-autoconfig-limits", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
+			cr.Spec.Orchestrator.Enabled = true
+			cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
+			cr.Spec.MySQL.AutoConfig.Enabled = &autoConfigEnabled
+			cr.Spec.MySQL.Resources.Requests = nil
+			cr.Spec.MySQL.Resources.Limits = corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("2"),
+				corev1.ResourceMemory: resource.MustParse("4Gi"),
+			}
+			It("should create successfully", func() {
+				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+			})
+		})
+
+		When("autoconfig is enabled with cpu and memory requests only", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-autoconfig-requests", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
+			cr.Spec.Orchestrator.Enabled = true
+			cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
+			cr.Spec.MySQL.AutoConfig.Enabled = &autoConfigEnabled
+			cr.Spec.MySQL.Resources.Limits = nil
+			cr.Spec.MySQL.Resources.Requests = corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("1"),
+				corev1.ResourceMemory: resource.MustParse("2Gi"),
+			}
+			It("should create successfully", func() {
+				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+			})
+		})
+
+		When("autoconfig is enabled but neither limits nor requests are set", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-autoconfig-none", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
+			cr.Spec.Orchestrator.Enabled = true
+			cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
+			cr.Spec.MySQL.AutoConfig.Enabled = &autoConfigEnabled
+			cr.Spec.MySQL.Resources.Limits = nil
+			cr.Spec.MySQL.Resources.Requests = nil
+			It("the creation of the cluster should fail with error message", func() {
+				createErr := k8sClient.Create(ctx, cr)
+				Expect(createErr).To(HaveOccurred())
+				Expect(createErr.Error()).To(ContainSubstring(autoConfigResourcesMsg))
+			})
+		})
+
+		When("autoconfig is enabled but cpu is missing from limits and requests", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-autoconfig-no-cpu", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
+			cr.Spec.Orchestrator.Enabled = true
+			cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
+			cr.Spec.MySQL.AutoConfig.Enabled = &autoConfigEnabled
+			cr.Spec.MySQL.Resources.Requests = nil
+			cr.Spec.MySQL.Resources.Limits = corev1.ResourceList{
+				corev1.ResourceMemory: resource.MustParse("4Gi"),
+			}
+			It("the creation of the cluster should fail with error message", func() {
+				createErr := k8sClient.Create(ctx, cr)
+				Expect(createErr).To(HaveOccurred())
+				Expect(createErr.Error()).To(ContainSubstring(autoConfigResourcesMsg))
+			})
+		})
+
+		When("autoconfig is enabled but memory is missing from limits and requests", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-autoconfig-no-memory", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
+			cr.Spec.Orchestrator.Enabled = true
+			cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
+			cr.Spec.MySQL.AutoConfig.Enabled = &autoConfigEnabled
+			cr.Spec.MySQL.Resources.Requests = nil
+			cr.Spec.MySQL.Resources.Limits = corev1.ResourceList{
+				corev1.ResourceCPU: resource.MustParse("2"),
+			}
+			It("the creation of the cluster should fail with error message", func() {
+				createErr := k8sClient.Create(ctx, cr)
+				Expect(createErr).To(HaveOccurred())
+				Expect(createErr.Error()).To(ContainSubstring(autoConfigResourcesMsg))
+			})
+		})
+
+		When("autoconfig is disabled, resources are not required", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-autoconfig-disabled", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
+			cr.Spec.Orchestrator.Enabled = true
+			cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
+			cr.Spec.MySQL.AutoConfig.Enabled = &autoConfigDisabled
+			cr.Spec.MySQL.Resources.Limits = nil
+			cr.Spec.MySQL.Resources.Requests = nil
+			It("should create successfully", func() {
+				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+			})
+		})
 	})
 
 	Context("PITR validation rules", Ordered, func() {
