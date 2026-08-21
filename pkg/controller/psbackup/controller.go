@@ -143,7 +143,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		if cr.Status.State == apiv1.BackupSucceeded && cr.Status.Size == "" {
 			cluster := &apiv1.PerconaServerMySQL{}
 			nn := types.NamespacedName{Name: cr.Spec.ClusterName, Namespace: cr.Namespace}
-			if err := r.Client.Get(ctx, nn, cluster); err != nil {
+			if err := r.Get(ctx, nn, cluster); err != nil {
 				log.Error(err, "Failed to get cluster for backup size, will retry")
 				return rr, nil
 			}

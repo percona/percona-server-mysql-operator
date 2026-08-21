@@ -109,10 +109,19 @@ func TestBackupSizeOnSuccess(t *testing.T) {
 		},
 	}
 
+	// First reconcile: transitions BackupRunning -> BackupSucceeded
 	_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(cr)})
 	require.NoError(t, err)
 
 	actual := new(apiv1.PerconaServerMySQLBackup)
+	err = r.Get(ctx, client.ObjectKeyFromObject(cr), actual)
+	require.NoError(t, err)
+	assert.Equal(t, apiv1.BackupSucceeded, actual.Status.State)
+
+	// Second reconcile: fetches and sets backup size
+	_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(cr)})
+	require.NoError(t, err)
+
 	err = r.Get(ctx, client.ObjectKeyFromObject(cr), actual)
 	require.NoError(t, err)
 
