@@ -10,12 +10,24 @@ commands:
 
       cluster="${test_name}"
 
-      kubectl -n "${NAMESPACE}" get events \
-          --field-selector reason=ErrantMemberRebuild,involvedObject.name="${cluster}" \
-          -o jsonpath='{.items[*].reason}' | grep -q ErrantMemberRebuild \
-          || { echo "no ErrantMemberRebuild event emitted"; \
-               kubectl -n "${NAMESPACE}" get events --field-selector involvedObject.name="${cluster}" || true; \
-               exit 1; }
+      # Detecting the errant GTID and acting on it takes an Orchestrator poll
+      # cycle plus a reconcile, so wait for the event instead of checking once.
+      found=""
+      for i in $(seq 1 30); do
+          if kubectl -n "${NAMESPACE}" get events \
+                  --field-selector reason=ErrantMemberRebuild,involvedObject.name="${cluster}" \
+                  -o jsonpath='{.items[*].reason}' | grep -q ErrantMemberRebuild; then
+              found="yes"
+              break
+          fi
+          echo "waiting for ErrantMemberRebuild event (attempt ${i})"
+          sleep 10
+      done
+      if [[ -z "${found}" ]]; then
+          echo "no ErrantMemberRebuild event emitted"
+          kubectl -n "${NAMESPACE}" get events --field-selector involvedObject.name="${cluster}" || true
+          exit 1
+      fi
 
       wait_cluster_consistency_async "${cluster}" "3" "3"
 
