@@ -355,6 +355,19 @@ func haproxyContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 		env = append(env, probsEnvs...)
 	}
 
+	if cr.CompareVersion("1.3.0") >= 0 {
+		env = append(env, []corev1.EnvVar{
+			{
+				Name:  "CLUSTER_NAME",
+				Value: cr.Name,
+			},
+			{
+				Name:  "HA_MAX_SLOTS",
+				Value: strconv.Itoa(int(max(9, cr.Spec.MySQL.Size))),
+			},
+		}...)
+	}
+
 	volumeMounts := []corev1.VolumeMount{
 		{
 			Name:      "bin",
@@ -441,6 +454,19 @@ func mysqlMonitContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 			},
 		}
 		env = append(env, cluserTypeEnv...)
+	}
+
+	if cr.CompareVersion("1.3.0") >= 0 {
+		env = append(env, []corev1.EnvVar{
+			{
+				Name:  "CLUSTER_NAME",
+				Value: cr.Name,
+			},
+			{
+				Name:  "HA_MAX_SLOTS",
+				Value: strconv.Itoa(int(max(9, cr.Spec.MySQL.Size))),
+			},
+		}...)
 	}
 
 	resources := spec.Resources
