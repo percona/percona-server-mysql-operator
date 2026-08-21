@@ -239,10 +239,8 @@ func checkLivenessGR(ctx context.Context) error {
 		return errors.Wrap(err, "get group replication state")
 	}
 
-	// A member can enter error state either while applying transactions or during the recovery phase.
-	// Readiness probe will fail in error state.
-	if state == mysqldb.MemberStateRecovering || state == mysqldb.MemberStateError {
-		log.Printf("member in %s state, not killing", state)
+	if state == mysqldb.MemberStateRecovering {
+		log.Println("member is recovering, not killing")
 		return nil
 	}
 
