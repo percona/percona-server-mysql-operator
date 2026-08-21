@@ -1,0 +1,32 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 300
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster="${test_name}"
+
+      # Don't trust the previous assert; wait for the cluster to settle, then pick
+      # a replica. Disabling super_read_only lets us write directly on it, producing
+      # a GTID under its own server_uuid the primary never has -> errant GTID.
+      wait_cluster_consistency_async "${cluster}" "3" "3"
+      replica_pod="$(find_async_replica "${cluster}")"
+      replica_fqdn="${replica_pod}.${cluster}-mysql.${NAMESPACE}"
+      echo "replica-with-errant=${replica_pod}"
+
+      run_mysql \
+          "SET GLOBAL super_read_only=0;
+           CREATE DATABASE IF NOT EXISTS errant_db;
+           CREATE TABLE IF NOT EXISTS errant_db.t (id INT PRIMARY KEY);
+           INSERT INTO errant_db.t (id) VALUES (1);
+           SET GLOBAL super_read_only=1;" \
+          "-h ${replica_fqdn} -P3306"
+
+      if [[ "$(run_mysql "SHOW DATABASES LIKE 'errant_db';" "-h ${replica_fqdn} -P3306")" != "errant_db" ]]; then
+          echo "failed to create the errant transaction on ${replica_pod}"
+          exit 1
+      fi
