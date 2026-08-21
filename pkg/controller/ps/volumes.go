@@ -414,6 +414,13 @@ func pvcOrdinal(pvcName, stsName string) (int, bool) {
 		return 0, false
 	}
 
+	// A statefulset only ever names a claim after a non negative ordinal written
+	// in its shortest form. Anything else is a claim it can never reuse, and
+	// treating it as one of the replicas would let it hold a resize back.
+	if ordinal < 0 || strconv.Itoa(ordinal) != suffix {
+		return 0, false
+	}
+
 	return ordinal, true
 }
 
