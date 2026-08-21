@@ -57,7 +57,6 @@ func PreviousGTIDs(file string) (*mysql.MysqlGTIDSet, error) {
 	stop := errors.New("stop")
 
 	p := replication.NewBinlogParser()
-	p.SetVerifyChecksum(true)
 	err := p.ParseFile(file, 0, func(e *replication.BinlogEvent) error {
 		ev, ok := e.Event.(*replication.PreviousGTIDsEvent)
 		if !ok {
@@ -100,7 +99,6 @@ func ExecutedGTIDs(idx *Index) (*mysql.MysqlGTIDSet, error) {
 	}
 
 	p := replication.NewBinlogParser()
-	p.SetVerifyChecksum(true)
 	err = p.ParseFile(last, 0, func(e *replication.BinlogEvent) error {
 		switch ev := e.Event.(type) {
 		case *replication.GTIDEvent:

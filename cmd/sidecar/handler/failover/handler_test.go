@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/pkg/binlogsource"
 	tlsutil "github.com/percona/percona-server-mysql-operator/pkg/tls"
 )
 
@@ -172,6 +173,44 @@ func TestStopSourceReleasesThePort(t *testing.T) {
 	h.ServeHTTP(rr, post)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("restart: want 200, got %d (%s)", rr.Code, rr.Body)
+	}
+}
+
+// sourceTLSConfig reads the mount the operator provides in the sidecar, so keep
+// it working against the file names the cluster secret actually uses.
+func TestSourceTLSConfigLoadsTheClusterCertificate(t *testing.T) {
+	dir := t.TempDir()
+	_, cert, key, err := tlsutil.IssueCerts([]string{"localhost"})
+	if err != nil {
+		t.Fatalf("issue certs: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "tls.crt"), cert, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "tls.key"), key, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := sourceTLSConfig(dir)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if len(cfg.Certificates) != 1 {
+		t.Fatalf("want one certificate, got %d", len(cfg.Certificates))
+	}
+
+	// binlogsource needs the certificate to carry an RSA key.
+	if _, err := binlogsource.New(binlogsource.Config{
+		IndexPath: filepath.Join("..", "..", "..", "..", "pkg", "binlogsource", "testdata", "binlog.index"),
+		TLS:       cfg,
+	}); err != nil {
+		t.Errorf("binlog source rejected the loaded config: %v", err)
+	}
+}
+
+func TestSourceTLSConfigFailsWithoutAMount(t *testing.T) {
+	if _, err := sourceTLSConfig(t.TempDir()); err == nil {
+		t.Error("want an error when the TLS mount is absent")
 	}
 }
 

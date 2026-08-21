@@ -744,6 +744,7 @@ func TestBackupVolumeMounts(t *testing.T) {
 		{Name: vaultSecretVolumeName, MountPath: vaultSecretMountPath},
 		{Name: configVolumeName, MountPath: configMountPath},
 		{Name: "backup-encryption-keys", MountPath: "/etc/mysql/encryption-keys"},
+		{Name: tlsVolumeName, MountPath: tlsMountPath},
 	}
 
 	mounts := backupVolumeMounts(cr)

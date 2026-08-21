@@ -2,6 +2,7 @@ package binlogsource
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
@@ -27,28 +28,17 @@ func (h Handler) HandleBinlogDump(pos mysql.Position) (*replication.BinlogStream
 }
 
 func (h Handler) HandleBinlogDumpGTID(replicaSet *mysql.MysqlGTIDSet) (*replication.BinlogStreamer, error) {
+	log.Printf("HandleBinlogDumpGTID replicaSet: %v", replicaSet)
 	idx, err := ReadIndex(h.server.cfg.IndexPath)
 	if err != nil {
 		return nil, err
-	}
-	start, err := StartFile(idx, replicaSet)
-	if err != nil {
-		return nil, err
-	}
-
-	from := 0
-	for i, f := range idx.Files {
-		if f == start {
-			from = i
-			break
-		}
 	}
 
 	streamer := replication.NewBinlogStreamer()
 	go func() {
 		p := replication.NewBinlogParser()
 		p.SetRawMode(true)
-		for _, f := range idx.Files[from:] {
+		for _, f := range idx.Files {
 			err := p.ParseFile(f, 0, func(e *replication.BinlogEvent) error {
 				return streamer.AddEventToStreamer(e)
 			})

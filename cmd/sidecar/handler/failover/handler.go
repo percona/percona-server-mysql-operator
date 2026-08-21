@@ -64,7 +64,9 @@ func (h *failoverHandler) init() {
 		}
 	}
 	if h.sourceTLS == nil {
-		h.sourceTLS = sourceTLSConfig
+		h.sourceTLS = func() (*tls.Config, error) {
+			return sourceTLSConfig(tlsMountPath)
+		}
 	}
 }
 
@@ -84,10 +86,10 @@ func binlogIndex() string {
 
 // sourceTLSConfig loads the cluster certificate the replica already trusts,
 // since mysqld serves the same one.
-func sourceTLSConfig() (*tls.Config, error) {
+func sourceTLSConfig(dir string) (*tls.Config, error) {
 	cert, err := tls.LoadX509KeyPair(
-		filepath.Join(tlsMountPath, "tls.crt"),
-		filepath.Join(tlsMountPath, "tls.key"),
+		filepath.Join(dir, "tls.crt"),
+		filepath.Join(dir, "tls.key"),
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, "load key pair")

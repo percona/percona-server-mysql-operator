@@ -815,6 +815,18 @@ func backupVolumeMounts(cr *apiv1.PerconaServerMySQL) []corev1.VolumeMount {
 		)
 	}
 
+	if cr.CompareVersion("1.3.0") >= 0 {
+		// The failover binlog source serves replicas over the replication
+		// protocol, which needs the same certificate mysqld serves.
+		mounts = append(
+			mounts,
+			corev1.VolumeMount{
+				Name:      tlsVolumeName,
+				MountPath: tlsMountPath,
+			},
+		)
+	}
+
 	return mounts
 }
 
