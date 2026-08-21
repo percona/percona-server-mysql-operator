@@ -69,7 +69,7 @@ type Replication struct {
 	IdleTime       int32           `json:"idle_time,omitempty"`
 	VerifyChecksum bool            `json:"verify_checksum,omitempty"`
 	Mode           ReplicationMode `json:"mode,omitempty"`
-	Rewrite        Rewrite         `json:"rewrite,omitempty"`
+	Rewrite        Rewrite         `json:"rewrite"`
 }
 
 type Storage struct {
@@ -82,11 +82,11 @@ type Storage struct {
 }
 
 type Configuration struct {
-	Logger      Logger         `json:"logger,omitempty"`
+	Logger      Logger         `json:"logger"`
 	Connection  Connection     `json:"connection"`
-	Replication Replication    `json:"replication,omitempty"`
+	Replication Replication    `json:"replication"`
 	Keyring     *KeyringConfig `json:"keyring,omitempty"`
-	Storage     Storage        `json:"storage,omitempty"`
+	Storage     Storage        `json:"storage"`
 }
 
 // KeyringConfig is the top-level keyring section. It is needed both to encrypt
