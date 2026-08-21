@@ -30,6 +30,8 @@ const (
 	storageCredsVolumeName = "storage"
 	ConfigKey              = "config.json"
 	customConfigKey        = "custom.json"
+	keyringMountPath       = "/etc/binlog_server/keyring"
+	keyringVolumeName      = "keyring"
 )
 
 const controllerRevisionHashLength = 11
@@ -230,6 +232,16 @@ func volumes(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServerSpec, configS
 		},
 	)
 
+	if spec.KeyringSecret != nil {
+		vols = append(vols, corev1.Volume{
+			Name: keyringVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: spec.KeyringSecret.Name,
+				},
+			},
+		})
+	}
 	return vols
 }
 
@@ -277,6 +289,13 @@ func binlogServerContainer(spec *apiv1.BinlogServerSpec) corev1.Container {
 			MountPath: BufferMountPath,
 		},
 	)
+
+	if spec.KeyringSecret != nil {
+		mounts = append(mounts, corev1.VolumeMount{
+			Name:      keyringVolumeName,
+			MountPath: keyringMountPath,
+		})
+	}
 
 	return corev1.Container{
 		Name:                     AppName,
