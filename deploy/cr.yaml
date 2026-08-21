@@ -119,8 +119,10 @@ spec:
 #      minAvailable: 0
     resources:
       limits:
+        cpu: "2"
         memory: 4Gi
       requests:
+        cpu: "1"
         memory: 2Gi
 #    startupProbe:
 #      failureThreshold: 1
@@ -255,6 +257,9 @@ spec:
 #          resources:
 #            requests:
 #              storage: 1Gi
+    autoconfig:
+      enabled: true
+      loadType: someWrites
 #    bootstrap:
 #      mode: auto
   proxy:

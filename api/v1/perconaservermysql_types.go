@@ -246,11 +246,15 @@ func (t ClusterType) isValid() bool {
 
 // +kubebuilder:validation:XValidation:rule="has(self.image) && size(self.image) > 0",message="mysql.image is required"
 // +kubebuilder:validation:XValidation:rule="has(self.size) && self.size > 0",message="mysql.size must be greater than 0"
+// +kubebuilder:validation:XValidation:rule="!(has(self.autoconfig) && has(self.autoconfig.enabled) && self.autoconfig.enabled) || (has(self.resources) && ((has(self.resources.limits) && 'cpu' in self.resources.limits) || (has(self.resources.requests) && 'cpu' in self.resources.requests)) && ((has(self.resources.limits) && 'memory' in self.resources.limits) || (has(self.resources.requests) && 'memory' in self.resources.requests)))",message="mysql.resources must set cpu and memory (via limits or requests) when mysql.autoconfig.enabled is true"
+// +kubebuilder:validation:XValidation:rule="!(has(self.autoconfig) && has(self.autoconfig.enabled) && self.autoconfig.enabled) || sign(quantity(has(self.resources.limits) && 'cpu' in self.resources.limits ? self.resources.limits['cpu'] : self.resources.requests['cpu'])) == 1",message="mysql.resources cpu must be greater than 0 when mysql.autoconfig.enabled is true"
+// +kubebuilder:validation:XValidation:rule="!(has(self.autoconfig) && has(self.autoconfig.enabled) && self.autoconfig.enabled) || quantity(has(self.resources.limits) && 'memory' in self.resources.limits ? self.resources.limits['memory'] : self.resources.requests['memory']).compareTo(quantity('12Mi')) >= 0",message="mysql.resources memory must be at least 12Mi when mysql.autoconfig.enabled is true"
 type MySQLSpec struct {
 	// +kubebuilder:validation:Enum=group-replication;async
 	// +kubebuilder:default=group-replication
 	ClusterType   ClusterType            `json:"clusterType,omitempty"`
 	Bootstrap     BootstrapConfig        `json:"bootstrap,omitempty"`
+	AutoConfig    AutoConfigSpec         `json:"autoconfig,omitempty"`
 	ExposePrimary ServiceExposeTogglable `json:"exposePrimary,omitempty"`
 	Expose        ServiceExposeTogglable `json:"expose,omitempty"`
 	AutoRecovery  bool                   `json:"autoRecovery,omitempty"`
@@ -264,6 +268,26 @@ type MySQLSpec struct {
 	VolumeSpec *VolumeSpec `json:"volumeSpec,omitempty"`
 
 	PodSpec `json:",inline"`
+}
+
+type AutoConfigLoadType string
+
+const (
+	AutoConfigLoadTypeMostlyReads      AutoConfigLoadType = "mostlyReads"
+	AutoConfigLoadTypeSomeWrites       AutoConfigLoadType = "someWrites"
+	AutoConfigLoadTypeEqualReadsWrites AutoConfigLoadType = "equalReadsWrites"
+	AutoConfigLoadTypeHeavyWrites      AutoConfigLoadType = "heavyWrites"
+)
+
+type AutoConfigSpec struct {
+	Enabled *bool `json:"enabled,omitempty"`
+	// +kubebuilder:validation:Enum=mostlyReads;someWrites;equalReadsWrites;heavyWrites
+	LoadType AutoConfigLoadType `json:"loadType,omitempty"`
+}
+
+// IsEnabled reports whether autoconfig is turned on.
+func (s AutoConfigSpec) IsEnabled() bool {
+	return s.Enabled != nil && *s.Enabled
 }
 
 type BootstrapMode string
@@ -1173,6 +1197,10 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 
 	if valid := cr.Spec.MySQL.ClusterType.isValid(); !valid {
 		return errors.Errorf("%s is not a valid clusterType, valid options are %s and %s", cr.Spec.MySQL.ClusterType, ClusterTypeGR, ClusterTypeAsync)
+	}
+
+	if cr.Spec.MySQL.AutoConfig.IsEnabled() && cr.Spec.MySQL.AutoConfig.LoadType == "" {
+		cr.Spec.MySQL.AutoConfig.LoadType = AutoConfigLoadTypeSomeWrites
 	}
 
 	if err := cr.validateStorageAutoscaling(); err != nil {

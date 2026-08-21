@@ -52,6 +52,12 @@ var (
 	loosePrefixRegex  = regexp.MustCompile(`^loose[-_]`)
 )
 
+// IsLooseVariable reports whether key carries the loose prefix, which tells
+// mysqld to ignore the option when the server doesn't know it.
+func IsLooseVariable(key string) bool {
+	return loosePrefixRegex.MatchString(key)
+}
+
 func (m *AdminManager) SetGlobalVariable(ctx context.Context, key, value string) error {
 	key = loosePrefixRegex.ReplaceAllString(key, "")
 	if !variableNameRegex.MatchString(key) {

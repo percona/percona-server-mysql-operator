@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/flosch/pongo2"
+	v "github.com/hashicorp/go-version"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -17,6 +19,7 @@ import (
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/config"
+	"github.com/percona/percona-server-mysql-operator/pkg/mysql/autoconfig"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
@@ -58,6 +61,7 @@ func (c *Configurable) ExecuteConfigurationTemplate(input string, memory *resour
 	return result, nil
 }
 
+// GetAutoTuneParams is the legacy tuning implementation the onsides
 func GetAutoTuneParams(cr *apiv1.PerconaServerMySQL, q *resource.Quantity) (string, error) {
 	autotuneParams := ""
 
@@ -108,6 +112,132 @@ func GetAutoTuneParams(cr *apiv1.PerconaServerMySQL, q *resource.Quantity) (stri
 	return autotuneParams, nil
 }
 
+// EffectiveResource returns the quantity autoconfig should size the MySQL
+// configuration against for the given resource, or nil when neither a limit nor
+// a request is set.
+func EffectiveResource(res corev1.ResourceRequirements, name corev1.ResourceName) *resource.Quantity {
+	if q, ok := res.Limits[name]; ok {
+		return &q
+	}
+	if q, ok := res.Requests[name]; ok {
+		return &q
+	}
+	return nil
+}
+
+// GetAutoConfigParams derives a full, production-grade set of mysqld parameters
+// from the pod's CPU/memory allocation, the configured workload profile, the
+// running MySQL version and the replication topology, using the mysqloperatorcalculator library.
+func GetAutoConfigParams(cr *apiv1.PerconaServerMySQL, cpu, memory *resource.Quantity) (string, error) {
+	if cpu == nil || cpu.IsZero() {
+		return "", errors.New("cpu is required for autoconfig")
+	}
+	if memory == nil || memory.IsZero() {
+		return "", errors.New("memory is required for autoconfig")
+	}
+
+	ver, err := parseMySQLVersion(cr.Status.MySQL.Version)
+	if err != nil {
+		return "", errors.Wrap(err, "parse mysql version")
+	}
+
+	dbType := autoconfig.DBTypeGroupReplication
+	if cr.Spec.MySQL.IsAsync() {
+		dbType = autoconfig.DBTypeAsync
+	}
+
+	res, err := autoconfig.Calculate(autoconfig.Request{
+		DBType:      dbType,
+		CPU:         int(cpu.MilliValue()),
+		MemoryBytes: memory.Value(),
+		Version:     ver,
+		LoadType:    autoConfigLoadType(cr.Spec.MySQL.AutoConfig.LoadType),
+	})
+	if err != nil {
+		return "", errors.Wrap(err, "calculate configuration")
+	}
+
+	params, err := res.MySQLdParams()
+	if err != nil {
+		return "", errors.Wrap(err, "get mysqld params")
+	}
+
+	userKeys, err := userConfigKeys(cr.Spec.MySQL.Configuration)
+	if err != nil {
+		return "", errors.Wrap(err, "parse user configuration")
+	}
+
+	// Sort for a stable ConfigMap payload so unchanged resources don't produce
+	// a churning config hash and needless rollout restarts.
+	names := make([]string, 0, len(params))
+	for name := range params {
+		if _, ok := userKeys[name]; ok {
+			continue
+		}
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	var b strings.Builder
+	for _, name := range names {
+		b.WriteString("\n")
+		b.WriteString(name)
+		b.WriteString("=")
+		b.WriteString(params[name])
+	}
+	return b.String(), nil
+}
+
+func autoConfigLoadType(lt apiv1.AutoConfigLoadType) int {
+	switch lt {
+	case apiv1.AutoConfigLoadTypeMostlyReads:
+		return autoconfig.LoadTypeMostlyReads
+	case apiv1.AutoConfigLoadTypeEqualReadsWrites:
+		return autoconfig.LoadTypeEqualReadsWrites
+	case apiv1.AutoConfigLoadTypeHeavyWrites:
+		return autoconfig.LoadTypeHeavyWrites
+	default:
+		return autoconfig.LoadTypeSomeWrites
+	}
+}
+
+func parseMySQLVersion(s string) (autoconfig.Version, error) {
+	if strings.TrimSpace(s) == "" {
+		return autoconfig.Version{}, errors.New("version is empty")
+	}
+	parsed, err := v.NewVersion(s)
+	if err != nil {
+		return autoconfig.Version{}, err
+	}
+	seg := parsed.Segments()
+	ver := autoconfig.Version{}
+	if len(seg) > 0 {
+		ver.Major = seg[0]
+	}
+	if len(seg) > 1 {
+		ver.Minor = seg[1]
+	}
+	if len(seg) > 2 {
+		ver.Patch = seg[2]
+	}
+	return ver, nil
+}
+
+func userConfigKeys(configuration string) (map[string]struct{}, error) {
+	keys := make(map[string]struct{})
+	if strings.TrimSpace(configuration) == "" {
+		return keys, nil
+	}
+	section, err := config.ParseSection(io.NopCloser(strings.NewReader(configuration)), "mysqld")
+	if err != nil {
+		return nil, err
+	}
+	for _, k := range section.Keys() {
+		keys[k.Name()] = struct{}{}
+	}
+	return keys, nil
+}
+
 func GetConfig(
 	ctx context.Context,
 	cl client.Reader,
@@ -116,7 +246,15 @@ func GetConfig(
 	configurable := Configurable(*cr)
 	cmName := configurable.GetConfigMapName()
 	nn := types.NamespacedName{Name: cmName, Namespace: cr.Namespace}
-	parts := make([]string, 0, 2)
+	parts := make([]string, 0, 3)
+
+	autoCM := &corev1.ConfigMap{}
+	autoNN := types.NamespacedName{Name: AutoConfigMapName(cr), Namespace: cr.Namespace}
+	if err := cl.Get(ctx, autoNN, autoCM); client.IgnoreNotFound(err) != nil {
+		return config.EmptySection, errors.Wrap(err, "get auto configmap")
+	} else if err == nil {
+		parts = append(parts, readConfig(autoCM, configurable))
+	}
 
 	cm := &corev1.ConfigMap{}
 	if err := cl.Get(ctx, nn, cm); client.IgnoreNotFound(err) != nil {
@@ -136,6 +274,10 @@ func GetConfig(
 		return config.EmptySection, nil
 	}
 
+	for i, part := range parts {
+		parts[i] = withMySQLdSection(part)
+	}
+
 	merged := strings.Join(parts, "\n")
 	section, err := config.ParseSection(io.NopCloser(strings.NewReader(merged)), "mysqld")
 	if err != nil {
@@ -144,6 +286,20 @@ func GetConfig(
 
 	result := config.Section{Section: *section}
 	return result, nil
+}
+
+func withMySQLdSection(part string) string {
+	for _, line := range strings.Split(part, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
+			continue
+		}
+		if strings.HasPrefix(line, "[") {
+			return part
+		}
+		break
+	}
+	return "[mysqld]\n" + part
 }
 
 func readConfig(object client.Object, cfg Configurable) string {

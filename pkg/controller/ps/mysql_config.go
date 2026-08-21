@@ -154,6 +154,8 @@ func setGlobalVariables(
 		kv[k] = mysql.FormatConfigValue(key.Value())
 	}
 
+	log := logf.FromContext(ctx)
+
 	unknownVariables := map[string]struct{}{}
 	restartNeeded := false
 	for _, pod := range pods {
@@ -166,6 +168,10 @@ func setGlobalVariables(
 					continue
 				}
 				if isUnknownVariableError(err) {
+					if db.IsLooseVariable(k) {
+						log.V(1).Info("Skipping unknown loose variable", "variable", k, "pod", pod.Name)
+						continue
+					}
 					unknownVariables[k] = struct{}{}
 					continue
 				}
@@ -182,7 +188,6 @@ func setGlobalVariables(
 		return strings.Join(keys, ", ")
 	}
 
-	log := logf.FromContext(ctx)
 	if len(unknownVariables) > 0 {
 		err := fmt.Errorf("unknown configuration variables: [%s]", printUnknownVariables())
 		log.Error(err, "setGlobalVariables failed", "unknownVariables", printUnknownVariables())
