@@ -6,6 +6,7 @@ import (
 	"maps"
 	"math"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -112,23 +113,21 @@ func (r *PerconaServerMySQLReconciler) reconcilePersistentVolumes(ctx context.Co
 		return errors.Wrap(err, "list pods")
 	}
 
-	if len(podList.Items) < int(cr.Spec.MySQL.Size) {
-		return nil
-	}
-
 	podNames := make([]string, 0, len(podList.Items))
 	for _, pod := range podList.Items {
 		podNames = append(podNames, pod.Name)
 	}
 
+	// Picked by ordinal, not by the presence of a pod: a scale up must expand the
+	// PVCs it is about to reuse before their replica starts cloning into them.
 	pvcsToUpdate := make([]string, 0, len(pvcList.Items))
 	for _, pvc := range pvcList.Items {
 		if !validatePVCName(pvc, stsName) {
 			continue
 		}
 
-		podName := strings.SplitN(pvc.Name, "-", 2)[1]
-		if !slices.Contains(podNames, podName) {
+		ordinal, ok := pvcOrdinal(pvc.Name, stsName)
+		if !ok || ordinal >= int(cr.Spec.MySQL.Size) {
 			continue
 		}
 
@@ -141,7 +140,7 @@ func (r *PerconaServerMySQLReconciler) reconcilePersistentVolumes(ctx context.Co
 
 	var actual resource.Quantity
 	for _, pvc := range pvcList.Items {
-		if !validatePVCName(pvc, stsName) {
+		if !slices.Contains(pvcsToUpdate, pvc.Name) {
 			continue
 		}
 
@@ -149,10 +148,12 @@ func (r *PerconaServerMySQLReconciler) reconcilePersistentVolumes(ctx context.Co
 			continue
 		}
 
+		size := pvcSize(pvc, isPVCMounted(pvc, stsName, podNames))
+
 		// we need to find the smallest size among all PVCs
 		// since it indicates a failed resize operation
-		if actual.IsZero() || pvc.Status.Capacity.Storage().Cmp(actual) < 0 {
-			actual = *pvc.Status.Capacity.Storage()
+		if actual.IsZero() || size.Cmp(actual) < 0 {
+			actual = *size
 		}
 	}
 
@@ -182,6 +183,10 @@ func (r *PerconaServerMySQLReconciler) reconcilePersistentVolumes(ctx context.Co
 
 	configured := volumeTemplate.Spec.Resources.Requests[corev1.ResourceStorage]
 	requested := cr.Spec.MySQL.VolumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage]
+
+	// what an up to date volume claim template holds, unlike the rounded up size
+	crRequest := requested.DeepCopy()
+
 	gib, err := RoundUpGiB(requested.Value())
 	if err != nil {
 		return errors.Wrap(err, "round GiB value")
@@ -199,13 +204,19 @@ func (r *PerconaServerMySQLReconciler) reconcilePersistentVolumes(ctx context.Co
 		var resizeErrors []error
 		pendingResize := false
 		for _, pvc := range pvcList.Items {
-			if !validatePVCName(pvc, stsName) {
+			if !slices.Contains(pvcsToUpdate, pvc.Name) {
 				continue
 			}
 
-			if pvc.Status.Capacity.Storage().Cmp(requested) == 0 {
+			mounted := isPVCMounted(pvc, stsName, podNames)
+
+			if pvcSize(pvc, mounted).Cmp(requested) == 0 {
 				updatedPVCs++
-				log.Info("PVC resize finished", "name", pvc.Name, "size", pvc.Status.Capacity.Storage())
+				if mounted {
+					log.Info("PVC resize finished", "name", pvc.Name, "size", pvc.Status.Capacity.Storage())
+				} else {
+					log.Info("PVC expanded, filesystem will be resized once the replica starts", "name", pvc.Name, "requested", requested)
+				}
 				continue
 			}
 
@@ -267,13 +278,14 @@ func (r *PerconaServerMySQLReconciler) reconcilePersistentVolumes(ctx context.Co
 
 		resizeSucceeded := updatedPVCs == len(pvcsToUpdate)
 		if resizeSucceeded {
-			log.Info("Deleting statefulset")
+			// The statefulset is only recreated to update its immutable volume
+			// claim template, and doing so costs a rolling restart of the replicas.
+			if configured.Cmp(crRequest) != 0 {
+				log.Info("Deleting statefulset", "configured", configured, "requested", crRequest)
 
-			if err := r.Delete(ctx, sts, client.PropagationPolicy("Orphan")); err != nil {
-				if k8serrors.IsNotFound(err) {
-					return nil
+				if err := r.Delete(ctx, sts, client.PropagationPolicy("Orphan")); err != nil && !k8serrors.IsNotFound(err) {
+					return errors.Wrapf(err, "delete statefulset/%s", sts.Name)
 				}
-				return errors.Wrapf(err, "delete statefulset/%s", sts.Name)
 			}
 
 			if err := k8s.DeannotateObject(ctx, r.Client, cr, naming.AnnotationPVCResizeInProgress); err != nil {
@@ -319,7 +331,7 @@ func (r *PerconaServerMySQLReconciler) reconcilePersistentVolumes(ctx context.Co
 			continue
 		}
 
-		if pvc.Status.Capacity.Storage().Cmp(requested) == 0 {
+		if pvcSize(pvc, isPVCMounted(pvc, stsName, podNames)).Cmp(requested) == 0 {
 			log.Info("PVC already resized", "name", pvc.Name, "actual", pvc.Status.Capacity.Storage(), "requested", requested)
 			continue
 		}
@@ -382,6 +394,89 @@ func (r *PerconaServerMySQLReconciler) revertVolumeTemplate(ctx context.Context,
 	}
 
 	return nil
+}
+
+// pvcOrdinal returns the ordinal of the replica a datadir PVC belongs to.
+func pvcOrdinal(pvcName, stsName string) (int, bool) {
+	suffix, ok := strings.CutPrefix(pvcName, mysql.DataVolumeName+"-"+stsName+"-")
+	if !ok {
+		return 0, false
+	}
+
+	ordinal, err := strconv.Atoi(suffix)
+	if err != nil {
+		return 0, false
+	}
+
+	// a statefulset only names claims after a non negative ordinal in its
+	// shortest form, and any other claim it can never reuse
+	if ordinal < 0 || strconv.Itoa(ordinal) != suffix {
+		return 0, false
+	}
+
+	return ordinal, true
+}
+
+// isPVCMounted reports whether the replica that mounts the PVC exists.
+func isPVCMounted(pvc corev1.PersistentVolumeClaim, stsName string, podNames []string) bool {
+	return slices.Contains(podNames, extractPodNameFromPVC(pvc.Name, stsName))
+}
+
+// pvcSize reports the size of the volume behind the PVC. One that no replica
+// mounts keeps reporting its old capacity until kubelet grows its filesystem on
+// mount, so its allocated size is what it actually has. The allocated size is
+// used rather than the requested one because a new request lands in the spec at
+// once, while allocatedResources only follows when the resize controller picks
+// it up.
+func pvcSize(pvc corev1.PersistentVolumeClaim, mounted bool) *resource.Quantity {
+	if mounted {
+		return pvc.Status.Capacity.Storage()
+	}
+
+	if reportsResizeStatus(pvc) {
+		if nodeResizePending(pvc) {
+			return pvc.Status.AllocatedResources.Storage()
+		}
+
+		return pvc.Status.Capacity.Storage()
+	}
+
+	// Nothing reports which request the volume was expanded for. The condition can
+	// outlive the resize that set it, reporting a volume as expanded early, but
+	// waiting for a size the cluster never reports would hold the replica forever.
+	if filesystemResizePending(pvc) {
+		return pvc.Spec.Resources.Requests.Storage()
+	}
+
+	return pvc.Status.Capacity.Storage()
+}
+
+// nodeResizePending reports whether the volume is expanded up to its allocated
+// size and only its filesystem is still to be grown. Kept per resize request, so
+// it cannot outlive the resize that set it.
+func nodeResizePending(pvc corev1.PersistentVolumeClaim) bool {
+	return pvc.Status.AllocatedResourceStatuses[corev1.ResourceStorage] == corev1.PersistentVolumeClaimNodeResizePending
+}
+
+// reportsResizeStatus reports whether the cluster fills in the per request resize
+// status at all. It needs RecoverVolumeExpansionFailure, which is not enabled on
+// every supported platform.
+func reportsResizeStatus(pvc corev1.PersistentVolumeClaim) bool {
+	_, ok := pvc.Status.AllocatedResourceStatuses[corev1.ResourceStorage]
+	return ok
+}
+
+// filesystemResizePending reports the same as nodeResizePending, from a condition
+// that sticks around until the volume is mounted. Only used where nothing better
+// is reported.
+func filesystemResizePending(pvc corev1.PersistentVolumeClaim) bool {
+	for _, condition := range pvc.Status.Conditions {
+		if condition.Type == corev1.PersistentVolumeClaimFileSystemResizePending && condition.Status == corev1.ConditionTrue {
+			return true
+		}
+	}
+
+	return false
 }
 
 func roundUpSize(volumeSizeBytes int64, allocationUnitBytes int64) int64 {
