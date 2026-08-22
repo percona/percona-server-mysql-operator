@@ -118,10 +118,8 @@ func (r *PerconaServerMySQLReconciler) reconcilePersistentVolumes(ctx context.Co
 		podNames = append(podNames, pod.Name)
 	}
 
-	// PVCs are picked by their ordinal rather than by the presence of their pod.
-	// The ones a scale down left behind sit outside the requested size and can
-	// never be resized, while the ones a scale up is about to reuse still have no
-	// pod but must be resized before their replica starts cloning data into them.
+	// Picked by ordinal, not by the presence of a pod: a scale up must expand the
+	// PVCs it is about to reuse before their replica starts cloning into them.
 	pvcsToUpdate := make([]string, 0, len(pvcList.Items))
 	for _, pvc := range pvcList.Items {
 		if !validatePVCName(pvc, stsName) {
@@ -186,9 +184,7 @@ func (r *PerconaServerMySQLReconciler) reconcilePersistentVolumes(ctx context.Co
 	configured := volumeTemplate.Spec.Resources.Requests[corev1.ResourceStorage]
 	requested := cr.Spec.MySQL.VolumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage]
 
-	// the volume claim template is rendered from the spec as written, so this is
-	// what an up to date template holds, unlike the rounded up size the PVCs are
-	// resized to
+	// what an up to date volume claim template holds, unlike the rounded up size
 	crRequest := requested.DeepCopy()
 
 	gib, err := RoundUpGiB(requested.Value())
@@ -282,10 +278,8 @@ func (r *PerconaServerMySQLReconciler) reconcilePersistentVolumes(ctx context.Co
 
 		resizeSucceeded := updatedPVCs == len(pvcsToUpdate)
 		if resizeSucceeded {
-			// The statefulset is only recreated to update its volume claim
-			// template, which is immutable. When the template already asks for what
-			// the spec asks for there is nothing to update, and recreating it would
-			// cost a rolling restart of the replicas for nothing.
+			// The statefulset is only recreated to update its immutable volume
+			// claim template, and doing so costs a rolling restart of the replicas.
 			if configured.Cmp(crRequest) != 0 {
 				log.Info("Deleting statefulset", "configured", configured, "requested", crRequest)
 
@@ -414,9 +408,8 @@ func pvcOrdinal(pvcName, stsName string) (int, bool) {
 		return 0, false
 	}
 
-	// A statefulset only ever names a claim after a non negative ordinal written
-	// in its shortest form. Anything else is a claim it can never reuse, and
-	// treating it as one of the replicas would let it hold a resize back.
+	// a statefulset only names claims after a non negative ordinal in its
+	// shortest form, and any other claim it can never reuse
 	if ordinal < 0 || strconv.Itoa(ordinal) != suffix {
 		return 0, false
 	}
@@ -429,30 +422,61 @@ func isPVCMounted(pvc corev1.PersistentVolumeClaim, stsName string, podNames []s
 	return slices.Contains(podNames, extractPodNameFromPVC(pvc.Name, stsName))
 }
 
-// pvcSize reports the size of the volume behind the PVC. A PVC that no replica
+// pvcSize reports the size of the volume behind the PVC. One that no replica
 // mounts keeps reporting its old capacity until kubelet grows its filesystem on
-// mount, so for those the size the resize controller has already allocated is
-// what the volume actually has.
-//
-// The allocated size is used rather than the requested one on purpose: a new
-// request lands in the spec immediately, while allocatedResources only follows
-// once the resize controller works on that request. Reading the spec here would
-// report a volume as expanded before it is.
+// mount, so its allocated size is what it actually has. The allocated size is
+// used rather than the requested one because a new request lands in the spec at
+// once, while allocatedResources only follows when the resize controller picks
+// it up.
 func pvcSize(pvc corev1.PersistentVolumeClaim, mounted bool) *resource.Quantity {
-	if !mounted && nodeResizePending(pvc) {
-		return pvc.Status.AllocatedResources.Storage()
+	if mounted {
+		return pvc.Status.Capacity.Storage()
+	}
+
+	if reportsResizeStatus(pvc) {
+		if nodeResizePending(pvc) {
+			return pvc.Status.AllocatedResources.Storage()
+		}
+
+		return pvc.Status.Capacity.Storage()
+	}
+
+	// Nothing reports which request the volume was expanded for. The condition can
+	// outlive the resize that set it, reporting a volume as expanded early, but
+	// waiting for a size the cluster never reports would hold the replica forever.
+	if filesystemResizePending(pvc) {
+		return pvc.Spec.Resources.Requests.Storage()
 	}
 
 	return pvc.Status.Capacity.Storage()
 }
 
-// nodeResizePending reports whether the volume behind the PVC is expanded up to
-// its allocated size and only the filesystem is still waiting to be grown on a
-// node. Unlike the FileSystemResizePending condition, which sticks around until
-// the volume is mounted and so can outlive the resize that set it, this status
-// is maintained per resize request.
+// nodeResizePending reports whether the volume is expanded up to its allocated
+// size and only its filesystem is still to be grown. Kept per resize request, so
+// it cannot outlive the resize that set it.
 func nodeResizePending(pvc corev1.PersistentVolumeClaim) bool {
 	return pvc.Status.AllocatedResourceStatuses[corev1.ResourceStorage] == corev1.PersistentVolumeClaimNodeResizePending
+}
+
+// reportsResizeStatus reports whether the cluster fills in the per request resize
+// status at all. It needs RecoverVolumeExpansionFailure, which is not enabled on
+// every supported platform.
+func reportsResizeStatus(pvc corev1.PersistentVolumeClaim) bool {
+	_, ok := pvc.Status.AllocatedResourceStatuses[corev1.ResourceStorage]
+	return ok
+}
+
+// filesystemResizePending reports the same as nodeResizePending, from a condition
+// that sticks around until the volume is mounted. Only used where nothing better
+// is reported.
+func filesystemResizePending(pvc corev1.PersistentVolumeClaim) bool {
+	for _, condition := range pvc.Status.Conditions {
+		if condition.Type == corev1.PersistentVolumeClaimFileSystemResizePending && condition.Status == corev1.ConditionTrue {
+			return true
+		}
+	}
+
+	return false
 }
 
 func roundUpSize(volumeSizeBytes int64, allocationUnitBytes int64) int64 {

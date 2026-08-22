@@ -2829,5 +2829,57 @@ var _ = Describe("PVC Resizing with a size that is not whole GiB", Ordered, func
 			Expect(string(sts.UID)).To(Equal(stsUID), "template matches the spec, no recreate needed")
 			Expect(sts.DeletionTimestamp).To(BeNil(), "template matches the spec, no recreate needed")
 		})
+
+		// Wherever RecoverVolumeExpansionFailure is off the per request resize
+		// status is not reported at all, and a resize that never finishes holds the
+		// replicas back for good.
+		When("the cluster reports no resize status", Ordered, func() {
+			lastSize := resource.MustParse("6Gi")
+
+			It("should request a bigger volume", func() {
+				Expect(k8sClient.Get(ctx, crNamespacedName, cr)).Should(Succeed())
+				cr.Spec.MySQL.VolumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage] = lastSize
+				Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
+
+				Expect(k8sClient.Get(ctx, crNamespacedName, cr)).Should(Succeed())
+				Expect(reconciler().reconcilePersistentVolumes(ctx, cr)).Should(Succeed())
+			})
+
+			It("should finish the resize from the condition alone", func() {
+				for i := 0; i < int(cr.Spec.MySQL.Size)-1; i++ {
+					p := &corev1.PersistentVolumeClaim{}
+					key := types.NamespacedName{Name: fmt.Sprintf("datadir-%s-%d", sts.Name, i), Namespace: ns}
+					Eventually(func() bool {
+						if err := k8sClient.Get(ctx, key, p); err != nil {
+							return false
+						}
+						p.Status.Capacity = corev1.ResourceList{corev1.ResourceStorage: lastSize}
+						return k8sClient.Status().Update(ctx, p) == nil
+					}, time.Second*10, time.Millisecond*100).Should(BeTrue())
+				}
+
+				pvc := &corev1.PersistentVolumeClaim{}
+				Eventually(func() bool {
+					if err := k8sClient.Get(ctx, lastPVC, pvc); err != nil {
+						return false
+					}
+					pvc.Status.AllocatedResources = nil
+					pvc.Status.AllocatedResourceStatuses = nil
+					pvc.Status.Conditions = []corev1.PersistentVolumeClaimCondition{{
+						Type:               corev1.PersistentVolumeClaimFileSystemResizePending,
+						Status:             corev1.ConditionTrue,
+						LastTransitionTime: metav1.Now(),
+					}}
+					return k8sClient.Status().Update(ctx, pvc) == nil
+				}, time.Second*10, time.Millisecond*100).Should(BeTrue())
+
+				Expect(k8sClient.Get(ctx, crNamespacedName, cr)).Should(Succeed())
+				Expect(reconciler().reconcilePersistentVolumes(ctx, cr)).Should(Succeed())
+
+				Expect(k8sClient.Get(ctx, crNamespacedName, cr)).Should(Succeed())
+				_, exists := cr.GetAnnotations()[string(naming.AnnotationPVCResizeInProgress)]
+				Expect(exists).To(BeFalse(), "a resize that never finishes holds the replicas back")
+			})
+		})
 	})
 })
