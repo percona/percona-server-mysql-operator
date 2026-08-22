@@ -8,5 +8,5 @@ metadata:
   name: pvc-resize
 status:
   mysql:
-    ready: 3
+    ready: 5
   state: ready

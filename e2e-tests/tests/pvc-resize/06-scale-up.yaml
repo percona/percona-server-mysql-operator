@@ -6,4 +6,4 @@ metadata:
     - percona.com/delete-mysql-pods-in-order
 spec:
   mysql:
-    size: 1
+    size: 5

@@ -1,6 +1,6 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 300
+timeout: 420
 ---
 apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQL
@@ -8,8 +8,8 @@ metadata:
   name: pvc-resize
 status:
   mysql:
-    ready: 1
-    size: 1
+    ready: 3
+    size: 3
   state: ready
 ---
 apiVersion: v1
@@ -40,5 +40,5 @@ spec:
           storage: 4Gi
       volumeMode: Filesystem
 status:
-  replicas: 1
-  readyReplicas: 1
+  replicas: 3
+  readyReplicas: 3

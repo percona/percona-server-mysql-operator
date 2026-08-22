@@ -10,8 +10,8 @@ commands:
 
       cluster_name="$(get_cluster_name)"
 
-      # The leftover PVCs stay at the old size on purpose: nothing mounts them.
-      for i in 1 2; do
+      # the claims of the removed replicas stay at the old size on purpose
+      for i in 3 4; do
           size=$(kubectl -n "${NAMESPACE}" get pvc "datadir-${cluster_name}-mysql-${i}" -o jsonpath='{.status.capacity.storage}')
           if [[ ${size} != "3Gi" ]]; then
               echo "ERROR: leftover PVC datadir-${cluster_name}-mysql-${i} is ${size}, expected it to stay 3Gi"
@@ -19,8 +19,6 @@ commands:
           fi
       done
 
-      # The resize is finished, so it must not be running any more. A statefulset
-      # that keeps being recreated is the signature of the loop this guards.
       uid_before=$(kubectl -n "${NAMESPACE}" get sts "${cluster_name}-mysql" -o jsonpath='{.metadata.uid}')
       generation_before=$(kubectl -n "${NAMESPACE}" get sts "${cluster_name}-mysql" -o jsonpath='{.metadata.generation}')
 
@@ -35,14 +33,9 @@ commands:
           fi
 
           uid_now=$(kubectl -n "${NAMESPACE}" get sts "${cluster_name}-mysql" -o jsonpath='{.metadata.uid}')
-          if [[ ${uid_now} != "${uid_before}" ]]; then
-              echo "ERROR: statefulset was recreated (${uid_before} -> ${uid_now})"
-              exit 1
-          fi
-
           generation_now=$(kubectl -n "${NAMESPACE}" get sts "${cluster_name}-mysql" -o jsonpath='{.metadata.generation}')
-          if [[ ${generation_now} != "${generation_before}" ]]; then
-              echo "ERROR: statefulset keeps changing (generation ${generation_before} -> ${generation_now})"
+          if [[ ${uid_now} != "${uid_before}" || ${generation_now} != "${generation_before}" ]]; then
+              echo "ERROR: statefulset keeps being changed (${uid_before}/${generation_before} -> ${uid_now}/${generation_now})"
               exit 1
           fi
       done

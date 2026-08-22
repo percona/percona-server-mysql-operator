@@ -1,14 +1,14 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 420
+timeout: 600
 ---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: pvc-resize-mysql
 status:
-  replicas: 1
-  readyReplicas: 1
+  replicas: 5
+  readyReplicas: 5
 ---
 apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQL
@@ -16,6 +16,25 @@ metadata:
   name: pvc-resize
 status:
   mysql:
-    ready: 1
-    size: 1
+    ready: 5
+    size: 5
   state: ready
+---
+# the two new replicas got their claims at the size in the template
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: datadir-pvc-resize-mysql-3
+status:
+  phase: Bound
+  capacity:
+    storage: 3Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: datadir-pvc-resize-mysql-4
+status:
+  phase: Bound
+  capacity:
+    storage: 3Gi

@@ -8,9 +8,9 @@ commands:
 
       source ../../functions
 
-      # The PVCs left behind by the scale down are smaller than the requested
-      # size and have no pod, so they can never be resized. They must not be
-      # taken into account when the operator decides whether a resize is needed.
+      # The claims left behind by the scale down are smaller than the requested
+      # size and have no pod, so they can never report the new size themselves.
+      # They must not keep the operator asking for the resize over and over.
       kubectl -n "${NAMESPACE}" patch ps pvc-resize \
           --type=merge \
           -p='{"spec":{"mysql":{"volumeSpec":{"persistentVolumeClaim":{"resources":{"requests":{"storage":"4Gi"}}}}}}}'
