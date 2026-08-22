@@ -2,6 +2,10 @@ package ps
 
 import (
 	"testing"
+	"time"
+
+	eventsv1 "k8s.io/api/events/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -53,19 +57,12 @@ func TestPVCSizeWithoutCapacity(t *testing.T) {
 	requested := resource.MustParse("3Gi")
 
 	tests := []struct {
-		name    string
-		pvc     corev1.PersistentVolumeClaim
-		mounted bool
+		name string
+		pvc  corev1.PersistentVolumeClaim
 	}{
 		{
-			name:    "pending claim with a pod",
-			pvc:     corev1.PersistentVolumeClaim{},
-			mounted: true,
-		},
-		{
-			name:    "pending claim without a pod",
-			pvc:     corev1.PersistentVolumeClaim{},
-			mounted: false,
+			name: "pending claim",
+			pvc:  corev1.PersistentVolumeClaim{},
 		},
 		{
 			// maps that exist but carry no storage entry, which is the case the
@@ -76,7 +73,6 @@ func TestPVCSizeWithoutCapacity(t *testing.T) {
 					Capacity: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1")},
 				},
 			},
-			mounted: true,
 		},
 		{
 			name: "allocatedResources present without a storage entry",
@@ -88,7 +84,6 @@ func TestPVCSizeWithoutCapacity(t *testing.T) {
 					},
 				},
 			},
-			mounted: false,
 		},
 		{
 			// the branch that reads allocatedResources, before that map is filled
@@ -100,13 +95,12 @@ func TestPVCSizeWithoutCapacity(t *testing.T) {
 					},
 				},
 			},
-			mounted: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			size := pvcSize(tt.pvc, tt.mounted)
+			size := pvcSize(tt.pvc)
 			if size == nil {
 				t.Fatal("pvcSize returned nil, callers dereference it")
 			}
@@ -122,8 +116,8 @@ func TestPVCSizeWithoutCapacity(t *testing.T) {
 
 // Not every platform fills in allocatedResourceStatuses: it needs
 // RecoverVolumeExpansionFailure, which is off on some supported Kubernetes
-// versions. Where it is reported it must be used, because it cannot outlive the
-// resize that set it, and where it is not the condition has to do.
+// versions. Where it is reported it wins, because it cannot outlive the resize
+// that set it; where it is not, the sticky condition is all there is.
 func TestPVCSizeSignals(t *testing.T) {
 	const (
 		old = "3Gi"
@@ -162,17 +156,10 @@ func TestPVCSizeSignals(t *testing.T) {
 	}
 
 	tests := []struct {
-		name    string
-		pvc     corev1.PersistentVolumeClaim
-		mounted bool
-		want    string
+		name string
+		pvc  corev1.PersistentVolumeClaim
+		want string
 	}{
-		{
-			name:    "a mounted claim reports its own capacity",
-			pvc:     pvc(withStatus(corev1.PersistentVolumeClaimNodeResizePending, new)),
-			mounted: true,
-			want:    old,
-		},
 		{
 			name: "the volume is expanded and the node resize is pending",
 			pvc:  pvc(withStatus(corev1.PersistentVolumeClaimNodeResizePending, new)),
@@ -184,8 +171,8 @@ func TestPVCSizeSignals(t *testing.T) {
 			want: old,
 		},
 		{
-			// the condition must not be trusted where the status is reported,
-			// since it can be left over from an earlier expansion
+			// a condition left over from an earlier expansion must never stand in
+			// for the current one, or a replica starts on an undersized volume
 			name: "a leftover condition is ignored when the status is reported",
 			pvc: pvc(func(p *corev1.PersistentVolumeClaim) {
 				withStatus(corev1.PersistentVolumeClaimControllerResizeInProgress, old)(p)
@@ -194,9 +181,19 @@ func TestPVCSizeSignals(t *testing.T) {
 			want: old,
 		},
 		{
-			// platforms that do not report the status at all
+			// the only signal such a platform gives: it may be left over from an
+			// earlier expansion, which the next resize corrects once the volume is
+			// mounted and reports its capacity again
 			name: "the condition is used when no status is reported",
 			pvc:  pvc(withCondition),
+			want: new,
+		},
+		{
+			// nothing to expand yet: it is created at the size it asks for
+			name: "an unbound claim reports the size it asks for",
+			pvc: pvc(func(p *corev1.PersistentVolumeClaim) {
+				p.Status.Capacity = nil
+			}),
 			want: new,
 		},
 		{
@@ -209,9 +206,58 @@ func TestPVCSizeSignals(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			want := resource.MustParse(tt.want)
-			got := pvcSize(tt.pvc, tt.mounted)
+			got := pvcSize(tt.pvc)
 			if got.Cmp(want) != 0 {
 				t.Fatalf("pvcSize = %s, want %s", got, &want)
+			}
+		})
+	}
+}
+
+// Repeated events are coalesced into one object whose first timestamp stays put
+// while the last one moves, and events written through the core API carry no
+// eventTime at all.
+func TestLastSeen(t *testing.T) {
+	first := time.Date(2026, 8, 22, 17, 19, 44, 0, time.UTC)
+	last := time.Date(2026, 8, 22, 17, 25, 19, 0, time.UTC)
+
+	tests := []struct {
+		name  string
+		event eventsv1.Event
+		want  time.Time
+	}{
+		{
+			name: "coalesced event with no eventTime",
+			event: eventsv1.Event{
+				DeprecatedFirstTimestamp: metav1.NewTime(first),
+				DeprecatedLastTimestamp:  metav1.NewTime(last),
+			},
+			want: last,
+		},
+		{
+			name:  "a fresh event carries its own time",
+			event: eventsv1.Event{EventTime: metav1.NewMicroTime(last)},
+			want:  last,
+		},
+		{
+			name: "a series reports when it was last observed",
+			event: eventsv1.Event{
+				DeprecatedFirstTimestamp: metav1.NewTime(first),
+				Series:                   &eventsv1.EventSeries{LastObservedTime: metav1.NewMicroTime(last)},
+			},
+			want: last,
+		},
+		{
+			name:  "nothing but a creation timestamp",
+			event: eventsv1.Event{ObjectMeta: metav1.ObjectMeta{CreationTimestamp: metav1.NewTime(first)}},
+			want:  first,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := lastSeen(tt.event); !got.Equal(tt.want) {
+				t.Fatalf("lastSeen = %s, want %s", got, tt.want)
 			}
 		})
 	}

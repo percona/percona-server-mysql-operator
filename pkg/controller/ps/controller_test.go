@@ -2831,8 +2831,9 @@ var _ = Describe("PVC Resizing with a size that is not whole GiB", Ordered, func
 		})
 
 		// Wherever RecoverVolumeExpansionFailure is off the per request resize
-		// status is not reported at all, and a resize that never finishes holds the
-		// replicas back for good.
+		// status is not reported at all. The event of this resize is then the only
+		// sign that the volume is expanded, and a resize that never finishes holds
+		// the replicas back for good.
 		When("the cluster reports no resize status", Ordered, func() {
 			lastSize := resource.MustParse("6Gi")
 
@@ -2843,9 +2844,9 @@ var _ = Describe("PVC Resizing with a size that is not whole GiB", Ordered, func
 
 				Expect(k8sClient.Get(ctx, crNamespacedName, cr)).Should(Succeed())
 				Expect(reconciler().reconcilePersistentVolumes(ctx, cr)).Should(Succeed())
-			})
 
-			It("should finish the resize from the condition alone", func() {
+				// the mounted claims are done, the pod-less one reports no status at
+				// all and keeps a condition left over from the previous expansion
 				for i := 0; i < int(cr.Spec.MySQL.Size)-1; i++ {
 					p := &corev1.PersistentVolumeClaim{}
 					key := types.NamespacedName{Name: fmt.Sprintf("datadir-%s-%d", sts.Name, i), Namespace: ns}
@@ -2868,17 +2869,99 @@ var _ = Describe("PVC Resizing with a size that is not whole GiB", Ordered, func
 					pvc.Status.Conditions = []corev1.PersistentVolumeClaimCondition{{
 						Type:               corev1.PersistentVolumeClaimFileSystemResizePending,
 						Status:             corev1.ConditionTrue,
-						LastTransitionTime: metav1.Now(),
+						LastTransitionTime: metav1.NewTime(time.Now().Add(-time.Hour)),
 					}}
 					return k8sClient.Status().Update(ctx, pvc) == nil
 				}, time.Second*10, time.Millisecond*100).Should(BeTrue())
+			})
 
+			It("should finish from the condition where no status is reported", func() {
 				Expect(k8sClient.Get(ctx, crNamespacedName, cr)).Should(Succeed())
 				Expect(reconciler().reconcilePersistentVolumes(ctx, cr)).Should(Succeed())
 
 				Expect(k8sClient.Get(ctx, crNamespacedName, cr)).Should(Succeed())
 				_, exists := cr.GetAnnotations()[string(naming.AnnotationPVCResizeInProgress)]
 				Expect(exists).To(BeFalse(), "a resize that never finishes holds the replicas back")
+			})
+
+			It("should not start the resize over again", func() {
+				// the claim reports a capacity below the request until a replica
+				// mounts it, so a size read that disagrees with the one that ended
+				// the resize starts it again, and the replicas never arrive
+				for i := 0; i < 3; i++ {
+					Expect(k8sClient.Get(ctx, crNamespacedName, cr)).Should(Succeed())
+					Expect(reconciler().reconcilePersistentVolumes(ctx, cr)).Should(Succeed())
+
+					Expect(k8sClient.Get(ctx, crNamespacedName, cr)).Should(Succeed())
+					_, exists := cr.GetAnnotations()[string(naming.AnnotationPVCResizeInProgress)]
+					Expect(exists).To(BeFalse(), "the resize must not be started over")
+				}
+			})
+		})
+
+		// A claim can already be bigger than the request, for instance after a
+		// resize that only some of them completed. It needs no expansion, and it
+		// can never shrink to match, so it has to count as done.
+		When("a claim is already bigger than the request", Ordered, func() {
+			bigger := resource.MustParse("8Gi")
+			biggest := resource.MustParse("10Gi")
+
+			It("should start a resize with one claim already past it", func() {
+				first := types.NamespacedName{Name: fmt.Sprintf("datadir-%s-0", sts.Name), Namespace: ns}
+				p := &corev1.PersistentVolumeClaim{}
+
+				// grow it past the size that is about to be requested, spec and all,
+				// so that asking it to match would be a shrink the API refuses
+				Eventually(func() bool {
+					if err := k8sClient.Get(ctx, first, p); err != nil {
+						return false
+					}
+					p.Spec.Resources.Requests[corev1.ResourceStorage] = biggest
+					return k8sClient.Update(ctx, p) == nil
+				}, time.Second*10, time.Millisecond*100).Should(BeTrue())
+
+				Eventually(func() bool {
+					if err := k8sClient.Get(ctx, first, p); err != nil {
+						return false
+					}
+					p.Status.Capacity = corev1.ResourceList{corev1.ResourceStorage: biggest}
+					return k8sClient.Status().Update(ctx, p) == nil
+				}, time.Second*10, time.Millisecond*100).Should(BeTrue())
+
+				Expect(k8sClient.Get(ctx, crNamespacedName, cr)).Should(Succeed())
+				cr.Spec.MySQL.VolumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage] = bigger
+				Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
+
+				Expect(k8sClient.Get(ctx, crNamespacedName, cr)).Should(Succeed())
+				Expect(reconciler().reconcilePersistentVolumes(ctx, cr)).Should(Succeed())
+
+				// it must not be asked to shrink, which the API would refuse
+				Expect(k8sClient.Get(ctx, first, p)).Should(Succeed())
+				requested := p.Spec.Resources.Requests[corev1.ResourceStorage]
+				Expect(requested.Cmp(biggest)).To(Equal(0), "a bigger claim must be left alone")
+			})
+
+			It("should finish once the smaller claims caught up", func() {
+				for i := 1; i < int(cr.Spec.MySQL.Size); i++ {
+					p := &corev1.PersistentVolumeClaim{}
+					key := types.NamespacedName{Name: fmt.Sprintf("datadir-%s-%d", sts.Name, i), Namespace: ns}
+					Eventually(func() bool {
+						if err := k8sClient.Get(ctx, key, p); err != nil {
+							return false
+						}
+						p.Status.Capacity = corev1.ResourceList{corev1.ResourceStorage: bigger}
+						p.Status.AllocatedResources = nil
+						p.Status.AllocatedResourceStatuses = nil
+						return k8sClient.Status().Update(ctx, p) == nil
+					}, time.Second*10, time.Millisecond*100).Should(BeTrue())
+				}
+
+				Expect(k8sClient.Get(ctx, crNamespacedName, cr)).Should(Succeed())
+				Expect(reconciler().reconcilePersistentVolumes(ctx, cr)).Should(Succeed())
+
+				Expect(k8sClient.Get(ctx, crNamespacedName, cr)).Should(Succeed())
+				_, exists := cr.GetAnnotations()[string(naming.AnnotationPVCResizeInProgress)]
+				Expect(exists).To(BeFalse(), "a claim that needs no expansion must not hold the resize open")
 			})
 		})
 	})

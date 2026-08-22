@@ -108,16 +108,6 @@ func (r *PerconaServerMySQLReconciler) reconcilePersistentVolumes(ctx context.Co
 		return nil
 	}
 
-	podList := corev1.PodList{}
-	if err := r.List(ctx, &podList, client.InNamespace(cr.Namespace), client.MatchingLabels(ls)); err != nil {
-		return errors.Wrap(err, "list pods")
-	}
-
-	podNames := make([]string, 0, len(podList.Items))
-	for _, pod := range podList.Items {
-		podNames = append(podNames, pod.Name)
-	}
-
 	// Picked by ordinal, not by the presence of a pod: a scale up must expand the
 	// PVCs it is about to reuse before their replica starts cloning into them.
 	pvcsToUpdate := make([]string, 0, len(pvcList.Items))
@@ -144,11 +134,7 @@ func (r *PerconaServerMySQLReconciler) reconcilePersistentVolumes(ctx context.Co
 			continue
 		}
 
-		if pvc.Status.Capacity == nil || pvc.Status.Capacity.Storage() == nil {
-			continue
-		}
-
-		size := pvcSize(pvc, isPVCMounted(pvc, stsName, podNames))
+		size := pvcSize(pvc)
 
 		// we need to find the smallest size among all PVCs
 		// since it indicates a failed resize operation
@@ -208,15 +194,9 @@ func (r *PerconaServerMySQLReconciler) reconcilePersistentVolumes(ctx context.Co
 				continue
 			}
 
-			mounted := isPVCMounted(pvc, stsName, podNames)
-
-			if pvcSize(pvc, mounted).Cmp(requested) == 0 {
+			if pvcSize(pvc).Cmp(requested) >= 0 {
 				updatedPVCs++
-				if mounted {
-					log.Info("PVC resize finished", "name", pvc.Name, "size", pvc.Status.Capacity.Storage())
-				} else {
-					log.Info("PVC expanded, filesystem will be resized once the replica starts", "name", pvc.Name, "requested", requested)
-				}
+				log.Info("PVC resize finished", "name", pvc.Name, "size", pvcSize(pvc))
 				continue
 			}
 
@@ -241,17 +221,15 @@ func (r *PerconaServerMySQLReconciler) reconcilePersistentVolumes(ctx context.Co
 			}
 
 			for _, event := range events.Items {
-				eventTime := event.EventTime.Time
-				if event.EventTime.IsZero() {
-					eventTime = event.DeprecatedFirstTimestamp.Time
-				}
-
-				if eventTime.Before(resizeStartedAt) {
+				if lastSeen(event).Before(resizeStartedAt) {
 					continue
 				}
 
 				switch event.Reason {
-				case "Resizing", "ExternalExpanding", "FileSystemResizeRequired":
+				case "Resizing", "ExternalExpanding":
+					log.Info("PVC resize in progress", "pvc", pvc.Name, "reason", event.Reason, "message", event.Note)
+					pendingResize = true
+				case "FileSystemResizeRequired":
 					log.Info("PVC resize in progress", "pvc", pvc.Name, "reason", event.Reason, "message", event.Note)
 					pendingResize = true
 				case "FileSystemResizeSuccessful":
@@ -263,6 +241,7 @@ func (r *PerconaServerMySQLReconciler) reconcilePersistentVolumes(ctx context.Co
 					continue
 				}
 			}
+
 		}
 
 		if len(resizeErrors) > 0 {
@@ -317,11 +296,14 @@ func (r *PerconaServerMySQLReconciler) reconcilePersistentVolumes(ctx context.Co
 		return nil
 	}
 
-	now := metav1.Now().Format(time.RFC3339)
+	// stamped once per resize, so the events belonging to it stay in the window
+	if !cr.PVCResizeInProgress() {
+		now := metav1.Now().Format(time.RFC3339)
 
-	err = k8s.AnnotateObject(ctx, r.Client, cr, map[naming.AnnotationKey]string{naming.AnnotationPVCResizeInProgress: now})
-	if err != nil {
-		return errors.Wrap(err, "annotate ps")
+		err = k8s.AnnotateObject(ctx, r.Client, cr, map[naming.AnnotationKey]string{naming.AnnotationPVCResizeInProgress: now})
+		if err != nil {
+			return errors.Wrap(err, "annotate ps")
+		}
 	}
 
 	log.Info("Resizing PVCs", "requested", requested, "actual", actual, "pvcList", strings.Join(pvcsToUpdate, ","))
@@ -331,7 +313,7 @@ func (r *PerconaServerMySQLReconciler) reconcilePersistentVolumes(ctx context.Co
 			continue
 		}
 
-		if pvcSize(pvc, isPVCMounted(pvc, stsName, podNames)).Cmp(requested) == 0 {
+		if pvcSize(pvc).Cmp(requested) >= 0 {
 			log.Info("PVC already resized", "name", pvc.Name, "actual", pvc.Status.Capacity.Storage(), "requested", requested)
 			continue
 		}
@@ -417,34 +399,69 @@ func pvcOrdinal(pvcName, stsName string) (int, bool) {
 	return ordinal, true
 }
 
-// isPVCMounted reports whether the replica that mounts the PVC exists.
-func isPVCMounted(pvc corev1.PersistentVolumeClaim, stsName string, podNames []string) bool {
-	return slices.Contains(podNames, extractPodNameFromPVC(pvc.Name, stsName))
+// filesystemResizePending reports that the volume is expanded and only its
+// filesystem is still to be grown. Unlike nodeResizePending this sticks around
+// until the volume is mounted, so it can outlive the resize that set it.
+func filesystemResizePending(pvc corev1.PersistentVolumeClaim) bool {
+	for _, condition := range pvc.Status.Conditions {
+		if condition.Type == corev1.PersistentVolumeClaimFileSystemResizePending && condition.Status == corev1.ConditionTrue {
+			return true
+		}
+	}
+
+	return false
 }
 
-// pvcSize reports the size of the volume behind the PVC. One that no replica
-// mounts keeps reporting its old capacity until kubelet grows its filesystem on
-// mount, so its allocated size is what it actually has. The allocated size is
-// used rather than the requested one because a new request lands in the spec at
-// once, while allocatedResources only follows when the resize controller picks
-// it up.
-func pvcSize(pvc corev1.PersistentVolumeClaim, mounted bool) *resource.Quantity {
-	if mounted {
-		return pvc.Status.Capacity.Storage()
+// lastSeen reports when the event was last seen. Repeated events are coalesced
+// into one object that keeps its first timestamp and only moves the last one, so
+// the first timestamp can predate the resize that made the event recur.
+func lastSeen(event eventsv1.Event) time.Time {
+	times := []time.Time{
+		event.EventTime.Time,
+		event.DeprecatedLastTimestamp.Time,
+		event.DeprecatedFirstTimestamp.Time,
+		event.CreationTimestamp.Time,
+	}
+	if event.Series != nil {
+		times = append(times, event.Series.LastObservedTime.Time)
 	}
 
-	if reportsResizeStatus(pvc) {
-		if nodeResizePending(pvc) {
-			return pvc.Status.AllocatedResources.Storage()
+	var latest time.Time
+	for _, t := range times {
+		if t.After(latest) {
+			latest = t
 		}
-
-		return pvc.Status.Capacity.Storage()
 	}
 
-	// Nothing reports which request the volume was expanded for. The condition can
-	// outlive the resize that set it, reporting a volume as expanded early, but
-	// waiting for a size the cluster never reports would hold the replica forever.
-	if filesystemResizePending(pvc) {
+	return latest
+}
+
+// pvcSize reports the size of the volume behind the PVC. It deliberately does
+// not look at pods: a claim keeps reporting its old capacity until kubelet grows
+// its filesystem on mount, and whether a pod object exists says nothing about
+// whether that has happened yet.
+//
+// The allocated size is used rather than the requested one because a new request
+// lands in the spec at once, while allocatedResources only follows when the
+// resize controller picks it up.
+func pvcSize(pvc corev1.PersistentVolumeClaim) *resource.Quantity {
+	// An unbound claim has no volume to expand: it is created at the size its
+	// spec asks for, so that is the size it is going to have.
+	if pvc.Status.Capacity.Storage().IsZero() {
+		return pvc.Spec.Resources.Requests.Storage()
+	}
+
+	// the volume is expanded and only its filesystem is still to be grown
+	if nodeResizePending(pvc) {
+		return pvc.Status.AllocatedResources.Storage()
+	}
+
+	// Where nothing reports the per request status this condition is all there
+	// is. It can be left over from an earlier expansion, so the volume may turn
+	// out to be smaller than asked for, which the next resize picks up once a
+	// replica mounts it and its capacity is known again. Ignoring it instead
+	// leaves the claim below the request for good, which holds the replicas back.
+	if !reportsResizeStatus(pvc) && filesystemResizePending(pvc) {
 		return pvc.Spec.Resources.Requests.Storage()
 	}
 
@@ -464,19 +481,6 @@ func nodeResizePending(pvc corev1.PersistentVolumeClaim) bool {
 func reportsResizeStatus(pvc corev1.PersistentVolumeClaim) bool {
 	_, ok := pvc.Status.AllocatedResourceStatuses[corev1.ResourceStorage]
 	return ok
-}
-
-// filesystemResizePending reports the same as nodeResizePending, from a condition
-// that sticks around until the volume is mounted. Only used where nothing better
-// is reported.
-func filesystemResizePending(pvc corev1.PersistentVolumeClaim) bool {
-	for _, condition := range pvc.Status.Conditions {
-		if condition.Type == corev1.PersistentVolumeClaimFileSystemResizePending && condition.Status == corev1.ConditionTrue {
-			return true
-		}
-	}
-
-	return false
 }
 
 func roundUpSize(volumeSizeBytes int64, allocationUnitBytes int64) int64 {
