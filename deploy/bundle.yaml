@@ -14966,7 +14966,7 @@ spec:
             fieldRef:
               apiVersion: v1
               fieldPath: metadata.namespace
-        image: perconalab/percona-server-mysql-operator:1.2.0-k8sps-849
+        image: perconalab/percona-server-mysql-operator:1.2.0-K8SPS-849
         imagePullPolicy: Always
         livenessProbe:
           httpGet:

@@ -1,4 +1,4 @@
-IMAGE_OPERATOR=perconalab/percona-server-mysql-operator:1.2.0-k8sps-849
+IMAGE_OPERATOR=perconalab/percona-server-mysql-operator:1.2.0-K8SPS-849
 IMAGE_MYSQL84=percona/percona-server:8.4.10-10.1
 IMAGE_BACKUP84=percona/percona-xtrabackup:8.4.0-6.1
 IMAGE_ROUTER84=percona/percona-mysql-router:8.4.10
