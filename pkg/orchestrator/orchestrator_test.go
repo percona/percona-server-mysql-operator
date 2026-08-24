@@ -85,7 +85,7 @@ func TestStatefulSet(t *testing.T) {
 		sts := StatefulSet(cluster, initImage, configHash, tlsHash)
 		assert.Equal(t, int64(600), *sts.Spec.Template.Spec.TerminationGracePeriodSeconds)
 
-		cluster.Spec.Orchestrator.TerminationGracePeriodSeconds = ptr.To(int64(30))
+		cluster.Spec.Orchestrator.TerminationGracePeriodSeconds = new(int64(30))
 
 		sts = StatefulSet(cluster, initImage, configHash, tlsHash)
 		assert.Equal(t, int64(30), *sts.Spec.Template.Spec.TerminationGracePeriodSeconds)
@@ -147,7 +147,7 @@ func TestStatefulSet(t *testing.T) {
 				Operator:          "Exists",
 				Value:             "value",
 				Effect:            "NoExecute",
-				TolerationSeconds: ptr.To(int64(1001)),
+				TolerationSeconds: new(int64(1001)),
 			},
 		}
 		cluster.Spec.Orchestrator.Tolerations = tolerations

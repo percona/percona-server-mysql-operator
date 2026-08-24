@@ -162,7 +162,7 @@ func EnsureObjectWithHash(
 	obj.SetAnnotations(objAnnotations)
 
 	val := reflect.ValueOf(obj)
-	if val.Kind() == reflect.Ptr {
+	if val.Kind() == reflect.Pointer {
 		val = reflect.Indirect(val)
 	}
 	oldObject := reflect.New(val.Type()).Interface().(client.Object)
@@ -335,7 +335,7 @@ func setIgnoredLabels(cr *apiv1.PerconaServerMySQL, obj, oldObject client.Object
 }
 
 func ObjectHash(obj runtime.Object) (string, error) {
-	var dataToMarshal interface{}
+	var dataToMarshal any
 
 	switch object := obj.(type) {
 	case *appsv1.StatefulSet:
