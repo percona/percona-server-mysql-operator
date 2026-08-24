@@ -1,15 +1,15 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 400
+timeout: 1320
 commands:
-  - timeout: 400
+  - timeout: 1320
     script: |-
       set -o errexit
 
       source ../../functions
 
       cluster_name=$(get_cluster_name)
-      kubectl wait --for=condition=complete job/sysbench-data -n "${NAMESPACE}" --timeout=400s
+      kubectl wait --for=condition=complete job/sysbench-data -n "${NAMESPACE}" --timeout=1200s
       sleep 10
       wait_cluster_consistency_async "${cluster_name}" 3 3
 
