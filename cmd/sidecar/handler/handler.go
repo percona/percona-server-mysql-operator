@@ -187,36 +187,49 @@ func fetchXbcloudFileDecompressed(
 	if err != nil {
 		return xb.BackupInfo{}, fmt.Errorf("failed to create temp dir: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer os.RemoveAll(tmpDir) //nolint:errcheck
 
-	xbcloudArgs := conf.XbcloudGetArgs(file)
-	//nolint:gosec
-	cmd := exec.CommandContext(ctx, "bash", "-c",
-		fmt.Sprintf("xbcloud %s | xbstream -x --decompress -C %s",
-			shelljoin(xbcloudArgs), tmpDir))
+	xbcloud := exec.CommandContext(ctx, "xbcloud", conf.XbcloudGetArgs(file)...)
+	xbstream := exec.CommandContext(ctx, "xbstream", "-x", "--decompress", "-C", tmpDir)
 
-	cmdErr, err := cmd.StderrPipe()
+	xbcloudOut, err := xbcloud.StdoutPipe()
 	if err != nil {
-		return xb.BackupInfo{}, fmt.Errorf("failed to create stderr pipe: %w", err)
+		return xb.BackupInfo{}, fmt.Errorf("failed to create xbcloud stdout pipe: %w", err)
 	}
-	defer logClose(log, cmdErr)
+	defer logClose(log, xbcloudOut)
 
-	if err := cmd.Start(); err != nil {
-		return xb.BackupInfo{}, fmt.Errorf("failed to start command: %w", err)
+	xbcloudErr, err := xbcloud.StderrPipe()
+	if err != nil {
+		return xb.BackupInfo{}, fmt.Errorf("failed to create xbcloud stderr pipe: %w", err)
+	}
+	defer logClose(log, xbcloudErr)
+
+	xbstream.Stdin = xbcloudOut
+
+	if err := xbcloud.Start(); err != nil {
+		return xb.BackupInfo{}, fmt.Errorf("failed to start xbcloud: %w", err)
+	}
+
+	if err := xbstream.Start(); err != nil {
+		return xb.BackupInfo{}, fmt.Errorf("failed to start xbstream: %w", err)
 	}
 
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		io.Copy(os.Stderr, cmdErr) //nolint:errcheck
+		io.Copy(os.Stderr, xbcloudErr) //nolint:errcheck
 	}()
 
-	if err := cmd.Wait(); err != nil {
+	if err := xbstream.Wait(); err != nil {
 		wg.Wait()
-		return xb.BackupInfo{}, fmt.Errorf("command failed: %w", err)
+		return xb.BackupInfo{}, fmt.Errorf("xbstream command failed: %w", err)
 	}
 	wg.Wait()
+
+	if err := xbcloud.Wait(); err != nil {
+		return xb.BackupInfo{}, fmt.Errorf("xbcloud command failed: %w", err)
+	}
 
 	f, err := os.Open(filepath.Join(tmpDir, originalFile))
 	if err != nil {
@@ -230,12 +243,4 @@ func fetchXbcloudFileDecompressed(
 	}
 
 	return info, nil
-}
-
-func shelljoin(args []string) string {
-	quoted := make([]string, len(args))
-	for i, a := range args {
-		quoted[i] = "'" + strings.ReplaceAll(a, "'", "'\\''") + "'"
-	}
-	return strings.Join(quoted, " ")
 }
