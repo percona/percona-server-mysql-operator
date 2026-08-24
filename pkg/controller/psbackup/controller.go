@@ -635,9 +635,9 @@ func (r *PerconaServerMySQLBackupReconciler) getBackupSize(
 	src := mysql.PodFQDN(cluster, pod)
 	sc := r.NewSidecarClient(src)
 
-	info, err := sc.GetCheckpointInfo(ctx, *backupConf)
+	info, err := sc.GetBackupInfo(ctx, *backupConf)
 	if err != nil {
-		return "", errors.Wrap(err, "get checkpoint info")
+		return "", errors.Wrap(err, "get backup info")
 	}
 
 	if info.BackupSize <= 0 {
@@ -883,9 +883,9 @@ func (r *PerconaServerMySQLBackupReconciler) getPreviousBackupLSN(
 	}
 
 	sc := r.NewSidecarClient(backupSource)
-	info, err := sc.GetCheckpointInfo(ctx, *req)
+	info, err := sc.GetBackupInfo(ctx, *req)
 	if err != nil {
-		return "", errors.Wrap(err, "failed to get checkpoint info")
+		return "", errors.Wrap(err, "failed to get backup info")
 	}
 
 	if info.ToLSN == "" {

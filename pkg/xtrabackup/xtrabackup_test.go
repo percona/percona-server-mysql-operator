@@ -767,7 +767,7 @@ func TestGetDestination(t *testing.T) {
 	}
 }
 
-func TestCheckpointInfoParseFrom(t *testing.T) {
+func TestBackupInfoParseFrom(t *testing.T) {
 	t.Run("full checkpoint file", func(t *testing.T) {
 		input := `backup_type = full-backuped
 from_lsn = 0
@@ -778,7 +778,7 @@ redo_memory = 0
 redo_frames = 0
 backup_size = 78771
 `
-		var info CheckpointInfo
+		var info BackupInfo
 		err := info.ParseFrom(strings.NewReader(input))
 		require.NoError(t, err)
 
@@ -801,7 +801,7 @@ flushed_lsn = 27660855
 redo_memory = 0
 redo_frames = 0
 `
-		var info CheckpointInfo
+		var info BackupInfo
 		err := info.ParseFrom(strings.NewReader(input))
 		require.NoError(t, err)
 
@@ -815,7 +815,7 @@ redo_frames = 0
 	t.Run("extra whitespace", func(t *testing.T) {
 		input := "  backup_type  =  full-prepared  \n  from_lsn  =  100  \n"
 
-		var info CheckpointInfo
+		var info BackupInfo
 		err := info.ParseFrom(strings.NewReader(input))
 		require.NoError(t, err)
 
@@ -826,7 +826,7 @@ redo_frames = 0
 	t.Run("lines without equals are skipped", func(t *testing.T) {
 		input := "this line has no separator\nbackup_type = full-backuped\nmalformed line\n"
 
-		var info CheckpointInfo
+		var info BackupInfo
 		err := info.ParseFrom(strings.NewReader(input))
 		require.NoError(t, err)
 
@@ -834,17 +834,17 @@ redo_frames = 0
 	})
 
 	t.Run("empty input", func(t *testing.T) {
-		var info CheckpointInfo
+		var info BackupInfo
 		err := info.ParseFrom(strings.NewReader(""))
 		require.NoError(t, err)
 
-		assert.Equal(t, CheckpointInfo{}, info)
+		assert.Equal(t, BackupInfo{}, info)
 	})
 
 	t.Run("partial fields", func(t *testing.T) {
 		input := "to_lsn = 999\nredo_frames = 42\n"
 
-		var info CheckpointInfo
+		var info BackupInfo
 		err := info.ParseFrom(strings.NewReader(input))
 		require.NoError(t, err)
 
@@ -859,7 +859,7 @@ redo_frames = 0
 	t.Run("backup_size large value", func(t *testing.T) {
 		input := "backup_type = full-backuped\nbackup_size = 5368709120\n"
 
-		var info CheckpointInfo
+		var info BackupInfo
 		err := info.ParseFrom(strings.NewReader(input))
 		require.NoError(t, err)
 
@@ -869,7 +869,7 @@ redo_frames = 0
 	t.Run("backup_size invalid value ignored", func(t *testing.T) {
 		input := "backup_size = not-a-number\nbackup_type = full-backuped\n"
 
-		var info CheckpointInfo
+		var info BackupInfo
 		err := info.ParseFrom(strings.NewReader(input))
 		require.NoError(t, err)
 

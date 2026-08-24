@@ -60,13 +60,13 @@ func LogsHandlerFunc(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func GetCheckpointInfoFunc(w http.ResponseWriter, req *http.Request) {
+func GetBackupInfoFunc(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodPost {
 		http.Error(w, "method not supported", http.StatusMethodNotAllowed)
 		return
 	}
 
-	log := logf.Log.WithName("GetCheckpointInfo")
+	log := logf.Log.WithName("GetBackupInfo")
 
 	defer logClose(log, req.Body)
 	data, err := io.ReadAll(req.Body)
@@ -99,8 +99,8 @@ func GetCheckpointInfoFunc(w http.ResponseWriter, req *http.Request) {
 
 	infoB, err := json.Marshal(info)
 	if err != nil {
-		log.Error(err, "failed to marshal checkpoint info")
-		http.Error(w, "failed to marshal checkpoint info", http.StatusInternalServerError)
+		log.Error(err, "failed to marshal backup info")
+		http.Error(w, "failed to marshal backup info", http.StatusInternalServerError)
 		return
 	}
 
@@ -120,23 +120,23 @@ func fetchXbcloudFile(
 	ctx context.Context,
 	log logr.Logger,
 	conf *xb.BackupConfig,
-	file string) (xb.CheckpointInfo, error) {
+	file string) (xb.BackupInfo, error) {
 	xbcloud := exec.CommandContext(ctx, "xbcloud", conf.XbcloudGetArgs(file)...)
 
 	xbOut, err := xbcloud.StdoutPipe()
 	if err != nil {
-		return xb.CheckpointInfo{}, fmt.Errorf("failed to create stdout pipe: %w", err)
+		return xb.BackupInfo{}, fmt.Errorf("failed to create stdout pipe: %w", err)
 	}
 	defer logClose(log, xbOut)
 
 	xbErr, err := xbcloud.StderrPipe()
 	if err != nil {
-		return xb.CheckpointInfo{}, fmt.Errorf("failed to create stderr pipe: %w", err)
+		return xb.BackupInfo{}, fmt.Errorf("failed to create stderr pipe: %w", err)
 	}
 	defer logClose(log, xbErr)
 
 	if err := xbcloud.Start(); err != nil {
-		return xb.CheckpointInfo{}, fmt.Errorf("failed to start xbcloud: %w", err)
+		return xb.BackupInfo{}, fmt.Errorf("failed to start xbcloud: %w", err)
 	}
 
 	var wg sync.WaitGroup
@@ -146,15 +146,15 @@ func fetchXbcloudFile(
 		io.Copy(os.Stderr, xbErr) //nolint:errcheck
 	}()
 
-	var info xb.CheckpointInfo
+	var info xb.BackupInfo
 	if err := info.ParseFrom(xbOut); err != nil {
-		return xb.CheckpointInfo{}, fmt.Errorf("failed to read checkpoint info: %w", err)
+		return xb.BackupInfo{}, fmt.Errorf("failed to read backup info: %w", err)
 	}
 
 	wg.Wait()
 
 	if err := xbcloud.Wait(); err != nil {
-		return xb.CheckpointInfo{}, fmt.Errorf("xbcloud command failed: %w", err)
+		return xb.BackupInfo{}, fmt.Errorf("xbcloud command failed: %w", err)
 	}
 
 	return info, nil

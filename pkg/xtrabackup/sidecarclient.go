@@ -18,7 +18,7 @@ import (
 type SidecarClient interface {
 	GetRunningBackupConfig(ctx context.Context) (*BackupConfig, error)
 	DeleteBackup(ctx context.Context, name string, cfg BackupConfig) error
-	GetCheckpointInfo(ctx context.Context, cfg BackupConfig) (*CheckpointInfo, error)
+	GetBackupInfo(ctx context.Context, cfg BackupConfig) (*BackupInfo, error)
 }
 
 type NewSidecarClientFunc func(srcNode string) SidecarClient
@@ -98,12 +98,12 @@ func (c *sidecarClient) DeleteBackup(ctx context.Context, name string, cfg Backu
 	return nil
 }
 
-func (c *sidecarClient) GetCheckpointInfo(ctx context.Context, cfg BackupConfig) (*CheckpointInfo, error) {
-	log := logf.FromContext(ctx).WithName("GetCheckpointInfo")
+func (c *sidecarClient) GetBackupInfo(ctx context.Context, cfg BackupConfig) (*BackupInfo, error) {
+	log := logf.FromContext(ctx).WithName("GetBackupInfo")
 	sidecarURL := url.URL{
 		Host:   c.srcNode + ":" + c.port(),
 		Scheme: "http",
-		Path:   "/backup/checkpoint-info",
+		Path:   "/backup/info",
 	}
 	reqData, err := json.Marshal(cfg)
 	if err != nil {
@@ -116,7 +116,7 @@ func (c *sidecarClient) GetCheckpointInfo(ctx context.Context, cfg BackupConfig)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, errors.Wrap(err, "get checkpoint info")
+		return nil, errors.Wrap(err, "get backup info")
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
@@ -129,12 +129,12 @@ func (c *sidecarClient) GetCheckpointInfo(ctx context.Context, cfg BackupConfig)
 		if err != nil {
 			return nil, errors.Wrap(err, "read response body")
 		}
-		return nil, errors.Errorf("get checkpoint info failed: %s (status: %d)", string(body), resp.StatusCode)
+		return nil, errors.Errorf("get backup info failed: %s (status: %d)", string(body), resp.StatusCode)
 	}
 
-	info := new(CheckpointInfo)
+	info := new(BackupInfo)
 	if err := json.NewDecoder(resp.Body).Decode(info); err != nil {
-		return nil, errors.Wrap(err, "decode checkpoint info")
+		return nil, errors.Wrap(err, "decode backup info")
 	}
 	return info, nil
 }

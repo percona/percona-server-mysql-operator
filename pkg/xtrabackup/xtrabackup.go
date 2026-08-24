@@ -1129,7 +1129,7 @@ func GetDestination(
 	return d, nil
 }
 
-type CheckpointInfo struct {
+type BackupInfo struct {
 	BackupType string `json:"backup_type"`
 	FromLSN    string `json:"from_lsn"`
 	ToLSN      string `json:"to_lsn"`
@@ -1140,7 +1140,7 @@ type CheckpointInfo struct {
 	BackupSize int64  `json:"backup_size"`
 }
 
-func (info *CheckpointInfo) ParseFrom(r io.Reader) error {
+func (info *BackupInfo) ParseFrom(r io.Reader) error {
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())

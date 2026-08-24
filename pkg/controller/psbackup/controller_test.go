@@ -1129,8 +1129,8 @@ func (f *fakeSidecarClient) DeleteBackup(ctx context.Context, name string, cfg x
 	return nil
 }
 
-func (f *fakeSidecarClient) GetCheckpointInfo(ctx context.Context, cfg xtrabackup.BackupConfig) (*xtrabackup.CheckpointInfo, error) {
-	return &xtrabackup.CheckpointInfo{
+func (f *fakeSidecarClient) GetBackupInfo(ctx context.Context, cfg xtrabackup.BackupConfig) (*xtrabackup.BackupInfo, error) {
+	return &xtrabackup.BackupInfo{
 		BackupType: "full",
 		FromLSN:    "1000",
 		ToLSN:      "2000",
