@@ -242,6 +242,9 @@ const (
 
 type ClusterSetClusterStatuses map[string]ClusterSetClusterStatus
 
+// Deprecated: use ClusterSetClusterStatuses.
+type ClusterSetStatus = ClusterSetClusterStatuses
+
 type PerconaServerMySQLClusterSetStatus struct {
 	PrimaryCluster         string                    `json:"primaryCluster"`
 	PrimaryClusterEndpoint string                    `json:"primaryClusterEndpoint"`
