@@ -131,6 +131,21 @@ func (r *PerconaServerMySQLReconciler) finishFullClusterCrashRecovery(
 func (r *PerconaServerMySQLReconciler) primaryPodAfterFullClusterCrash(ctx context.Context, cr *apiv1.PerconaServerMySQL) (*corev1.Pod, error) {
 	var primary *corev1.Pod
 
+	// Backoff Configuration:
+	// Steps: 10, Duration: 10s, Factor: 1.50, Jitter: 0.00, Cap: none
+
+	// Step    Duration
+	// ----    --------
+	// 1       10s
+	// 2       15s
+	// 3       22.5s
+	// 4       33.75s
+	// 5       50.625s
+	// 6       1m15.9375s
+	// 7       1m53.90625s
+	// 8       2m50.859375s
+	// 9       4m16.2890625s
+	// 10      6m24.43359375s
 	err := retry.OnError(wait.Backoff{
 		Duration: 10 * time.Second,
 		Factor:   1.5,
@@ -188,6 +203,8 @@ func (r *PerconaServerMySQLReconciler) getFullClusterCrashPods(ctx context.Conte
 	crashPods := fullClusterCrashPods{}
 
 	for _, pod := range pods {
+		// This file is present on all pods when a cluster needs to be re-bootstrapped into an independent GR cluster
+		// from a ClusterSet replica. When that is in progress, we don't want full-cluster-crash to kick in.
 		if ok, err := r.hasClusterSetRecoveryFile(ctx, &pod); err != nil {
 			return crashPods, err
 		} else if ok {
