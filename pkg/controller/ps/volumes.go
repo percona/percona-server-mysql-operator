@@ -226,10 +226,7 @@ func (r *PerconaServerMySQLReconciler) reconcilePersistentVolumes(ctx context.Co
 				}
 
 				switch event.Reason {
-				case "Resizing", "ExternalExpanding":
-					log.Info("PVC resize in progress", "pvc", pvc.Name, "reason", event.Reason, "message", event.Note)
-					pendingResize = true
-				case "FileSystemResizeRequired":
+				case "Resizing", "ExternalExpanding", "FileSystemResizeRequired":
 					log.Info("PVC resize in progress", "pvc", pvc.Name, "reason", event.Reason, "message", event.Note)
 					pendingResize = true
 				case "FileSystemResizeSuccessful":
@@ -257,8 +254,9 @@ func (r *PerconaServerMySQLReconciler) reconcilePersistentVolumes(ctx context.Co
 
 		resizeSucceeded := updatedPVCs == len(pvcsToUpdate)
 		if resizeSucceeded {
-			// The statefulset is only recreated to update its immutable volume
-			// claim template, and doing so costs a rolling restart of the replicas.
+			// Recreated only to update the immutable volume claim template. The
+			// delete orphans the pods and the new set adopts them back, but its
+			// controller revision differs, which makes the smart update roll them.
 			if configured.Cmp(crRequest) != 0 {
 				log.Info("Deleting statefulset", "configured", configured, "requested", crRequest)
 
@@ -403,13 +401,9 @@ func pvcOrdinal(pvcName, stsName string) (int, bool) {
 // filesystem is still to be grown. Unlike nodeResizePending this sticks around
 // until the volume is mounted, so it can outlive the resize that set it.
 func filesystemResizePending(pvc corev1.PersistentVolumeClaim) bool {
-	for _, condition := range pvc.Status.Conditions {
-		if condition.Type == corev1.PersistentVolumeClaimFileSystemResizePending && condition.Status == corev1.ConditionTrue {
-			return true
-		}
-	}
-
-	return false
+	return slices.ContainsFunc(pvc.Status.Conditions, func(c corev1.PersistentVolumeClaimCondition) bool {
+		return c.Type == corev1.PersistentVolumeClaimFileSystemResizePending && c.Status == corev1.ConditionTrue
+	})
 }
 
 // lastSeen reports when the event was last seen. Repeated events are coalesced
