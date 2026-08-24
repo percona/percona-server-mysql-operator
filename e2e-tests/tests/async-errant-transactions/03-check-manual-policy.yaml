@@ -1,0 +1,41 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 360
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster="${test_name}"
+
+      # manual policy: operator must report the errant GTID but not touch the member.
+      found=""
+      for i in $(seq 1 30); do
+          if kubectl -n "${NAMESPACE}" get events \
+                  --field-selector reason=ErrantGTIDsDetected,involvedObject.name="${cluster}" \
+                  -o jsonpath='{.items[*].reason}' | grep -q ErrantGTIDsDetected; then
+              found="yes"
+              break
+          fi
+          echo "waiting for ErrantGTIDsDetected event (attempt ${i})"
+          sleep 10
+      done
+      if [[ -z "${found}" ]]; then
+          echo "operator never reported the errant transaction (manual policy)"
+          kubectl -n "${NAMESPACE}" get events --field-selector involvedObject.name="${cluster}" || true
+          exit 1
+      fi
+
+      present=""
+      for pod in $(get_mysql_pods); do
+          fqdn="${pod}.${cluster}-mysql.${NAMESPACE}"
+          if [[ "$(run_mysql "SHOW DATABASES LIKE 'errant_db';" "-h ${fqdn} -P3306")" == "errant_db" ]]; then
+              present="yes"
+          fi
+      done
+      if [[ -z "${present}" ]]; then
+          echo "errant_db disappeared under manual policy (it must not be auto-repaired)"
+          exit 1
+      fi
