@@ -93,6 +93,16 @@ func GetBackupInfoFunc(w http.ResponseWriter, req *http.Request) {
 	backupInfo, err := fetchXbcloudFile(req.Context(), log, &backupConf, "xtrabackup_info")
 	if err != nil {
 		log.Info("failed to get backup info from xtrabackup_info, skipping backup size", "error", err)
+	} else if backupInfo.BackupSize == 0 {
+		// For compressed backups, xtrabackup_info is stored as xtrabackup_info.zst
+		// Need to decompress it until [!!!insert link to PXB ticket!!!] is fixed.
+		compressedInfo, err := fetchXbcloudFileDecompressed(req.Context(), log, &backupConf, "xtrabackup_info.zst")
+		if err != nil {
+			log.Info("failed to get compressed xtrabackup_info.zst, skipping backup size", "error", err)
+		} else {
+			info.BackupSize = compressedInfo.BackupSize
+			info.UncompressedBackupSize = compressedInfo.UncompressedBackupSize
+		}
 	} else {
 		info.BackupSize = backupInfo.BackupSize
 		info.UncompressedBackupSize = backupInfo.UncompressedBackupSize
@@ -159,4 +169,73 @@ func fetchXbcloudFile(
 	}
 
 	return info, nil
+}
+
+func fetchXbcloudFileDecompressed(
+	ctx context.Context,
+	log logr.Logger,
+	conf *xb.BackupConfig,
+	file string) (xb.BackupInfo, error) {
+	// xbcloud outputs data in xbstream format, so we need to:
+	// 1. xbcloud get <file> — downloads chunks in xbstream format
+	// 2. xbstream -x --decompress — extracts and decompresses .zst files
+	// 3. Read the resulting plain text file
+
+	originalFile := strings.TrimSuffix(file, ".zst")
+
+	tmpDir, err := os.MkdirTemp("", "xb-decompress-*")
+	if err != nil {
+		return xb.BackupInfo{}, fmt.Errorf("failed to create temp dir: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	xbcloudArgs := conf.XbcloudGetArgs(file)
+	//nolint:gosec
+	cmd := exec.CommandContext(ctx, "bash", "-c",
+		fmt.Sprintf("xbcloud %s | xbstream -x --decompress -C %s",
+			shelljoin(xbcloudArgs), tmpDir))
+
+	cmdErr, err := cmd.StderrPipe()
+	if err != nil {
+		return xb.BackupInfo{}, fmt.Errorf("failed to create stderr pipe: %w", err)
+	}
+	defer logClose(log, cmdErr)
+
+	if err := cmd.Start(); err != nil {
+		return xb.BackupInfo{}, fmt.Errorf("failed to start command: %w", err)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		io.Copy(os.Stderr, cmdErr) //nolint:errcheck
+	}()
+
+	if err := cmd.Wait(); err != nil {
+		wg.Wait()
+		return xb.BackupInfo{}, fmt.Errorf("command failed: %w", err)
+	}
+	wg.Wait()
+
+	f, err := os.Open(filepath.Join(tmpDir, originalFile))
+	if err != nil {
+		return xb.BackupInfo{}, fmt.Errorf("failed to open decompressed file: %w", err)
+	}
+	defer logClose(log, f)
+
+	var info xb.BackupInfo
+	if err := info.ParseFrom(f); err != nil {
+		return xb.BackupInfo{}, fmt.Errorf("failed to parse decompressed file: %w", err)
+	}
+
+	return info, nil
+}
+
+func shelljoin(args []string) string {
+	quoted := make([]string, len(args))
+	for i, a := range args {
+		quoted[i] = "'" + strings.ReplaceAll(a, "'", "'\\''") + "'"
+	}
+	return strings.Join(quoted, " ")
 }
