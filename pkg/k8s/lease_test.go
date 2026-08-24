@@ -12,7 +12,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
@@ -60,8 +59,8 @@ func TestAcquireLease(t *testing.T) {
 				Namespace: "ns",
 			},
 			Spec: coordv1.LeaseSpec{
-				HolderIdentity:       ptr.To(naming.LeaseHolderName("restore1", "restore1-uid")),
-				LeaseDurationSeconds: ptr.To(int32(30)),
+				HolderIdentity:       new(naming.LeaseHolderName("restore1", "restore1-uid")),
+				LeaseDurationSeconds: new(int32(30)),
 				AcquireTime:          &metav1.MicroTime{Time: now},
 				RenewTime:            &metav1.MicroTime{Time: now},
 			},
@@ -102,8 +101,8 @@ func TestAcquireLease(t *testing.T) {
 				Namespace: "ns",
 			},
 			Spec: coordv1.LeaseSpec{
-				HolderIdentity:       ptr.To(naming.LeaseHolderName("restore1", "restore1-uid")),
-				LeaseDurationSeconds: ptr.To(int32(30)),
+				HolderIdentity:       new(naming.LeaseHolderName("restore1", "restore1-uid")),
+				LeaseDurationSeconds: new(int32(30)),
 				AcquireTime:          &metav1.MicroTime{Time: now.Add(-time.Minute)},
 				RenewTime:            &metav1.MicroTime{Time: now.Add(-time.Minute)},
 			},
@@ -147,8 +146,8 @@ func TestReleaseLease(t *testing.T) {
 			Namespace: "ns",
 		},
 		Spec: coordv1.LeaseSpec{
-			HolderIdentity:       ptr.To(naming.LeaseHolderName(restore.Name, string(restore.UID))),
-			LeaseDurationSeconds: ptr.To(int32(30)),
+			HolderIdentity:       new(naming.LeaseHolderName(restore.Name, string(restore.UID))),
+			LeaseDurationSeconds: new(int32(30)),
 			AcquireTime:          &metav1.MicroTime{Time: now},
 			RenewTime:            &metav1.MicroTime{Time: now},
 		},
@@ -172,8 +171,8 @@ func TestReleaseLease(t *testing.T) {
 				Namespace: "ns",
 			},
 			Spec: coordv1.LeaseSpec{
-				HolderIdentity:       ptr.To(naming.LeaseHolderName("restore1", "restore1-uid")),
-				LeaseDurationSeconds: ptr.To(int32(30)),
+				HolderIdentity:       new(naming.LeaseHolderName("restore1", "restore1-uid")),
+				LeaseDurationSeconds: new(int32(30)),
 				AcquireTime:          &metav1.MicroTime{Time: now},
 				RenewTime:            &metav1.MicroTime{Time: now},
 			},

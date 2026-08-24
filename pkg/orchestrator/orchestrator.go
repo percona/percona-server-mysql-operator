@@ -559,7 +559,7 @@ var reservedOrchestratorConfigKeys = map[string]bool{
 }
 
 func ConfigMapData(cr *apiv1.PerconaServerMySQL) (string, error) {
-	config := make(map[string]interface{}, 0)
+	config := make(map[string]any, 0)
 
 	config["RaftNodes"] = RaftNodes(cr)
 
@@ -579,7 +579,7 @@ func ConfigMapData(cr *apiv1.PerconaServerMySQL) (string, error) {
 	}
 
 	if cfg := cr.Spec.Orchestrator.Configuration; cfg != "" {
-		userConfig := make(map[string]interface{})
+		userConfig := make(map[string]any)
 		if err := json.Unmarshal([]byte(cfg), &userConfig); err != nil {
 			return "", errors.Wrap(err, "unmarshal spec.orchestrator.configuration: must be a JSON object")
 		}
