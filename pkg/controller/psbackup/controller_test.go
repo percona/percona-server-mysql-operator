@@ -23,7 +23,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/yaml"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	restclient "k8s.io/client-go/rest"
-	"k8s.io/utils/ptr"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -306,8 +305,8 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 						Namespace: namespace,
 					},
 					Spec: coordv1.LeaseSpec{
-						HolderIdentity:       ptr.To("restore1|restore1-uid"),
-						LeaseDurationSeconds: ptr.To(int32(30)),
+						HolderIdentity:       new("restore1|restore1-uid"),
+						LeaseDurationSeconds: new(int32(30)),
 						RenewTime:            &metav1.MicroTime{Time: time.Now()},
 					},
 				},
@@ -350,7 +349,7 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 						Namespace: namespace,
 					},
 					Spec: coordv1.LeaseSpec{
-						HolderIdentity: ptr.To("restore1|restore1-uid"),
+						HolderIdentity: new("restore1|restore1-uid"),
 					},
 				},
 			},
