@@ -68,6 +68,8 @@ type PerconaServerMySQLBackupReconciler struct {
 
 const controllerName = "psbackup-controller"
 
+var ErrBackupSizeUnavailable = errors.New("backup_size not found in xtrabackup_info; PXB 8.4.0-6+ is required")
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *PerconaServerMySQLBackupReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
@@ -149,8 +151,12 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 			}
 			size, err := r.getBackupSize(ctx, cr, cluster)
 			if err != nil {
-				log.Error(err, "Failed to get backup size, will retry")
-				return rr, nil
+				if errors.Is(err, ErrBackupSizeUnavailable) {
+					log.Info(err.Error())
+				} else {
+					log.Error(err, "Failed to get backup size, will retry")
+					return rr, nil
+				}
 			}
 			status.Size = size
 		}
@@ -641,7 +647,7 @@ func (r *PerconaServerMySQLBackupReconciler) getBackupSize(
 	}
 
 	if info.BackupSize <= 0 {
-		return "", errors.New("backup_size not found in xtrabackup_info; PXB 8.4.0-6+ is required")
+		return "", ErrBackupSizeUnavailable
 	}
 
 	return FormatBytes(info.BackupSize), nil
