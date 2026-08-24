@@ -95,6 +95,7 @@ func GetBackupInfoFunc(w http.ResponseWriter, req *http.Request) {
 		log.Info("failed to get backup info from xtrabackup_info, skipping backup size", "error", err)
 	} else {
 		info.BackupSize = backupInfo.BackupSize
+		info.UncompressedBackupSize = backupInfo.UncompressedBackupSize
 	}
 
 	infoB, err := json.Marshal(info)

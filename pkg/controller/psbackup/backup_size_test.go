@@ -48,44 +48,63 @@ func TestBackupSize(t *testing.T) {
 	const storageName = "s3-us-west"
 
 	tests := []struct {
-		name           string
-		namespace      string
-		backupSize     int64
-		jobCondition   batchv1.JobConditionType
-		needsMySQLPod  bool
-		reconcileCount int
-		expectedState  apiv1.BackupState
-		expectedSize   string
+		name                   string
+		namespace              string
+		backupSize             int64
+		uncompressedBackupSize int64
+		compressed             bool
+		jobCondition           batchv1.JobConditionType
+		needsMySQLPod          bool
+		reconcileCount         int
+		expectedState          apiv1.BackupState
+		expectedSize           string
+		expectedUncompressed   string
 	}{
 		{
-			name:           "size is set on success",
-			namespace:      "backup-size-test",
-			backupSize:     78771, // ~76.92KB
-			jobCondition:   batchv1.JobComplete,
-			needsMySQLPod:  true,
-			reconcileCount: 2, // 1st: Running->Succeeded, 2nd: fetches size
-			expectedState:  apiv1.BackupSucceeded,
-			expectedSize:   "76.92KB",
+			name:                 "size is set on success",
+			namespace:            "backup-size-test",
+			backupSize:           78771, // ~76.92KB
+			jobCondition:         batchv1.JobComplete,
+			needsMySQLPod:        true,
+			reconcileCount:       2, // 1st: Running->Succeeded, 2nd: fetches size
+			expectedState:        apiv1.BackupSucceeded,
+			expectedSize:         "76.92KB",
+			expectedUncompressed: "76.92KB",
 		},
 		{
-			name:           "size is empty when xtrabackup reports zero",
-			namespace:      "backup-size-zero-test",
-			backupSize:     0,
-			jobCondition:   batchv1.JobComplete,
-			needsMySQLPod:  true,
-			reconcileCount: 2,
-			expectedState:  apiv1.BackupSucceeded,
-			expectedSize:   "",
+			name:                   "compressed backup shows uncompressed size",
+			namespace:              "backup-size-compressed-test",
+			backupSize:             50000,
+			uncompressedBackupSize: 200000,
+			compressed:             true,
+			jobCondition:           batchv1.JobComplete,
+			needsMySQLPod:          true,
+			reconcileCount:         2,
+			expectedState:          apiv1.BackupSucceeded,
+			expectedSize:           "48.83KB",
+			expectedUncompressed:   "195.31KB",
 		},
 		{
-			name:           "size is empty on failure",
-			namespace:      "backup-size-fail-test",
-			backupSize:     0,
-			jobCondition:   batchv1.JobFailed,
-			needsMySQLPod:  false,
-			reconcileCount: 1,
-			expectedState:  apiv1.BackupFailed,
-			expectedSize:   "",
+			name:                 "size is empty when xtrabackup reports zero",
+			namespace:            "backup-size-zero-test",
+			backupSize:           0,
+			jobCondition:         batchv1.JobComplete,
+			needsMySQLPod:        true,
+			reconcileCount:       2,
+			expectedState:        apiv1.BackupSucceeded,
+			expectedSize:         "",
+			expectedUncompressed: "",
+		},
+		{
+			name:                 "size is empty on failure",
+			namespace:            "backup-size-fail-test",
+			backupSize:           0,
+			jobCondition:         batchv1.JobFailed,
+			needsMySQLPod:        false,
+			reconcileCount:       1,
+			expectedState:        apiv1.BackupFailed,
+			expectedSize:         "",
+			expectedUncompressed: "",
 		},
 	}
 
@@ -125,6 +144,7 @@ func TestBackupSize(t *testing.T) {
 			cr.Status.State = apiv1.BackupRunning
 			cr.Status.Storage = stor.DeepCopy()
 			cr.Status.Destination = "s3://bucket/backup-name"
+			cr.Status.Compressed = tt.compressed
 
 			job, err := xtrabackup.Job(cluster.DeepCopy(), cr, "dest", "init-image", stor)
 			require.NoError(t, err)
@@ -144,7 +164,7 @@ func TestBackupSize(t *testing.T) {
 				mysqlPod := newMySQLPod(cluster.Name, tt.namespace)
 				objects = append(objects, mysqlPod)
 
-				sidecar := &fakeSidecarClient{backupSize: tt.backupSize}
+				sidecar := &fakeSidecarClient{backupSize: tt.backupSize, uncompressedBackupSize: tt.uncompressedBackupSize}
 				r.NewStorageClient = fakestorage.NewFakeClient
 				r.NewSidecarClient = func(_ string) xtrabackup.SidecarClient {
 					return sidecar
@@ -167,6 +187,7 @@ func TestBackupSize(t *testing.T) {
 
 			assert.Equal(t, tt.expectedState, actual.Status.State)
 			assert.Equal(t, tt.expectedSize, actual.Status.Size)
+			assert.Equal(t, tt.expectedUncompressed, actual.Status.UncompressedSize)
 		})
 	}
 }

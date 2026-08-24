@@ -1219,6 +1219,8 @@ spec:
                 type: object
               type:
                 type: string
+              uncompressedSize:
+                type: string
             type: object
         type: object
     served: true

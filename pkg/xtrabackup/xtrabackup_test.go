@@ -877,4 +877,26 @@ redo_frames = 0
 		assert.Equal(t, "full-backuped", info.BackupType)
 	})
 
+	t.Run("uncompressed_backup_size parsed", func(t *testing.T) {
+		input := "backup_size = 50000\nuncompressed_backup_size = 200000\n"
+
+		var info BackupInfo
+		err := info.ParseFrom(strings.NewReader(input))
+		require.NoError(t, err)
+
+		assert.Equal(t, int64(50000), info.BackupSize)
+		assert.Equal(t, int64(200000), info.UncompressedBackupSize)
+	})
+
+	t.Run("uncompressed_backup_size absent defaults to zero", func(t *testing.T) {
+		input := "backup_size = 78771\n"
+
+		var info BackupInfo
+		err := info.ParseFrom(strings.NewReader(input))
+		require.NoError(t, err)
+
+		assert.Equal(t, int64(78771), info.BackupSize)
+		assert.Equal(t, int64(0), info.UncompressedBackupSize)
+	})
+
 }

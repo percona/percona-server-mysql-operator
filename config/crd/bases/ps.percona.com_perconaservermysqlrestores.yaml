@@ -1084,6 +1084,8 @@ spec:
                     type: object
                   type:
                     type: string
+                  uncompressedSize:
+                    type: string
                 type: object
               clusterName:
                 type: string

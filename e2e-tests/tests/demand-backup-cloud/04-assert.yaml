@@ -12,6 +12,9 @@ assertAll:
 
 - celExpr: has(bcp.status.size) && bcp.status.size != "" && bcp.status.size != "0B"
   message: "Backup size should be populated and non-zero when succeeded"
+
+- celExpr: has(bcp.status.uncompressedSize) && bcp.status.uncompressedSize == bcp.status.size
+  message: "For uncompressed backups, uncompressedSize should equal size"
 ---
 kind: PerconaServerMySQLBackup
 apiVersion: ps.percona.com/v1

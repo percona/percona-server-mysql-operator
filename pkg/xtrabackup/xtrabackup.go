@@ -1130,14 +1130,15 @@ func GetDestination(
 }
 
 type BackupInfo struct {
-	BackupType string `json:"backup_type"`
-	FromLSN    string `json:"from_lsn"`
-	ToLSN      string `json:"to_lsn"`
-	LastLSN    string `json:"last_lsn"`
-	FlushedLSN string `json:"flushed_lsn"`
-	RedoMemory string `json:"redo_memory"`
-	RedoFrames string `json:"redo_frames"`
-	BackupSize int64  `json:"backup_size"`
+	BackupType             string `json:"backup_type"`
+	FromLSN                string `json:"from_lsn"`
+	ToLSN                  string `json:"to_lsn"`
+	LastLSN                string `json:"last_lsn"`
+	FlushedLSN             string `json:"flushed_lsn"`
+	RedoMemory             string `json:"redo_memory"`
+	RedoFrames             string `json:"redo_frames"`
+	BackupSize             int64  `json:"backup_size"`
+	UncompressedBackupSize int64  `json:"uncompressed_backup_size"`
 }
 
 func (info *BackupInfo) ParseFrom(r io.Reader) error {
@@ -1166,6 +1167,11 @@ func (info *BackupInfo) ParseFrom(r io.Reader) error {
 			info.RedoMemory = value
 		case strings.Contains(key, "redo_frames"):
 			info.RedoFrames = value
+		case strings.Contains(key, "uncompressed_backup_size"):
+			size, err := strconv.ParseInt(value, 10, 64)
+			if err == nil {
+				info.UncompressedBackupSize = size
+			}
 		case strings.Contains(key, "backup_size"):
 			size, err := strconv.ParseInt(value, 10, 64)
 			if err == nil {

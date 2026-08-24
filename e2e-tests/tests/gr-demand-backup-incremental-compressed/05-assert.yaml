@@ -20,5 +20,14 @@ assertAll:
 - celExpr: incr.status.compressed == true
   message: "Compressed incremental backup should have compressed=true in status"
 
+- celExpr: has(incr.status.size) && incr.status.size != "" && incr.status.size != "0B"
+  message: "Compressed incremental backup size should be populated and non-zero"
+
+- celExpr: has(incr.status.uncompressedSize) && incr.status.uncompressedSize != "" && incr.status.uncompressedSize != "0B"
+  message: "Compressed incremental backup uncompressedSize should be populated and non-zero"
+
+- celExpr: incr.status.uncompressedSize != incr.status.size
+  message: "For compressed incremental backups, uncompressedSize should differ from size"
+
 - celExpr: base.status.destination.contains(incr.metadata.annotations["percona.com/base-backup-name"])
   message: "Incremental backup annotation should reference the correct base backup"

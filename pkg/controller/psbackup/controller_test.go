@@ -1112,8 +1112,9 @@ func TestGetBackupSource(t *testing.T) {
 }
 
 type fakeSidecarClient struct {
-	destination string
-	backupSize  int64
+	destination            string
+	backupSize             int64
+	uncompressedBackupSize int64
 }
 
 func (f *fakeSidecarClient) GetRunningBackupConfig(ctx context.Context) (*xtrabackup.BackupConfig, error) {
@@ -1131,14 +1132,15 @@ func (f *fakeSidecarClient) DeleteBackup(ctx context.Context, name string, cfg x
 
 func (f *fakeSidecarClient) GetBackupInfo(ctx context.Context, cfg xtrabackup.BackupConfig) (*xtrabackup.BackupInfo, error) {
 	return &xtrabackup.BackupInfo{
-		BackupType: "full",
-		FromLSN:    "1000",
-		ToLSN:      "2000",
-		LastLSN:    "3000",
-		FlushedLSN: "4000",
-		RedoMemory: "5000",
-		RedoFrames: "6000",
-		BackupSize: f.backupSize,
+		BackupType:             "full",
+		FromLSN:                "1000",
+		ToLSN:                  "2000",
+		LastLSN:                "3000",
+		FlushedLSN:             "4000",
+		RedoMemory:             "5000",
+		RedoFrames:             "6000",
+		BackupSize:             f.backupSize,
+		UncompressedBackupSize: f.uncompressedBackupSize,
 	}, nil
 }
 

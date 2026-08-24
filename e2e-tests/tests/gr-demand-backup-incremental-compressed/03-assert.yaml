@@ -19,3 +19,9 @@ assertAll:
 - celExpr: has(bcp.status.size) && bcp.status.size != "" && bcp.status.size != "0B"
   message: "Compressed base backup size should be populated and non-zero when succeeded"
 
+- celExpr: has(bcp.status.uncompressedSize) && bcp.status.uncompressedSize != "" && bcp.status.uncompressedSize != "0B"
+  message: "Compressed base backup uncompressedSize should be populated and non-zero"
+
+- celExpr: bcp.status.uncompressedSize != bcp.status.size
+  message: "For compressed backups, uncompressedSize should differ from size"
+

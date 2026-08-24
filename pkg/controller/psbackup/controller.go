@@ -149,7 +149,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 				log.Error(err, "Failed to get cluster for backup size, will retry")
 				return rr, nil
 			}
-			size, err := r.getBackupSize(ctx, cr, cluster)
+			size, uncompressedSize, err := r.getBackupSize(ctx, cr, cluster)
 			if err != nil {
 				if errors.Is(err, ErrBackupSizeUnavailable) {
 					log.Info(err.Error())
@@ -159,6 +159,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 				}
 			}
 			status.Size = size
+			status.UncompressedSize = uncompressedSize
 		}
 		return rr, nil
 	}
@@ -628,29 +629,35 @@ func (r *PerconaServerMySQLBackupReconciler) getBackupSize(
 	ctx context.Context,
 	cr *apiv1.PerconaServerMySQLBackup,
 	cluster *apiv1.PerconaServerMySQL,
-) (string, error) {
+) (string, string, error) {
 	backupConf, err := xtrabackup.GetBackupConfig(ctx, r.Client, cr)
 	if err != nil {
-		return "", errors.Wrap(err, "get backup config")
+		return "", "", errors.Wrap(err, "get backup config")
 	}
 
 	pod, err := mysql.GetReadyPod(ctx, r.Client, cluster)
 	if err != nil {
-		return "", errors.Wrap(err, "get ready mysql pod")
+		return "", "", errors.Wrap(err, "get ready mysql pod")
 	}
 	src := mysql.PodFQDN(cluster, pod)
 	sc := r.NewSidecarClient(src)
 
 	info, err := sc.GetBackupInfo(ctx, *backupConf)
 	if err != nil {
-		return "", errors.Wrap(err, "get backup info")
+		return "", "", errors.Wrap(err, "get backup info")
 	}
 
 	if info.BackupSize <= 0 {
-		return "", ErrBackupSizeUnavailable
+		return "", "", ErrBackupSizeUnavailable
 	}
 
-	return FormatBytes(info.BackupSize), nil
+	size := FormatBytes(info.BackupSize)
+	uncompressedSize := size
+	if cr.Status.Compressed && info.UncompressedBackupSize > 0 {
+		uncompressedSize = FormatBytes(info.UncompressedBackupSize)
+	}
+
+	return size, uncompressedSize, nil
 }
 
 func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context, cr *apiv1.PerconaServerMySQLBackup) error {
