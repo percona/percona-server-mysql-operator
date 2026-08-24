@@ -12,7 +12,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/yaml"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
@@ -130,7 +129,7 @@ func printBackup() error {
 		Spec: apiv1.PerconaServerMySQLBackupSpec{
 			ClusterName:               defaults.NameCluster,
 			Type:                      apiv1.BackupTypeFull,
-			IncrementalBaseBackupName: ptr.To("some-backup"),
+			IncrementalBaseBackupName: new("some-backup"),
 			StorageName:               "minio",
 			SourcePod:                 defaults.SourcePod,
 		},

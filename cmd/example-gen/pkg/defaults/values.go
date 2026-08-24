@@ -2,7 +2,6 @@ package defaults
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
@@ -37,8 +36,8 @@ var (
 	NodeSelector = map[string]string{
 		"topology.kubernetes.io/zone": "us-east-1a",
 	}
-	VerifyTLS         = ptr.To(true)
-	RuntimeClassName  = ptr.To("image-rc")
+	VerifyTLS         = new(true)
+	RuntimeClassName  = new("image-rc")
 	SchedulerName     = "default-scheduler"
 	PriorityClassName = "high-priority"
 	SourcePod         = mysql.PodName(&apiv1.PerconaServerMySQL{ObjectMeta: metav1.ObjectMeta{Name: NameCluster}}, 1)

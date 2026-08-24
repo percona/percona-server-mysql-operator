@@ -23,8 +23,8 @@ func hasEnv(env []corev1.EnvVar, name string) bool {
 func onChangeArg(t *testing.T, args []string) string {
 	t.Helper()
 	for _, a := range args {
-		if strings.HasPrefix(a, "-on-change=") {
-			return strings.TrimPrefix(a, "-on-change=")
+		if after, ok := strings.CutPrefix(a, "-on-change="); ok {
+			return after
 		}
 	}
 	require.Fail(t, "no -on-change arg found", "args: %v", args)

@@ -19,9 +19,9 @@ import (
 )
 
 type orcResponse struct {
-	Code    string      `json:"Code"`
-	Message string      `json:"Message"`
-	Details interface{} `json:"Details,omitempty"`
+	Code    string `json:"Code"`
+	Message string `json:"Message"`
+	Details any    `json:"Details,omitempty"`
 }
 
 func (r *orcResponse) Error() error {
@@ -390,7 +390,7 @@ func EndDowntime(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, 
 	return orcResp.Error()
 }
 
-func unmarshalOrcResponse(body []byte, v interface{}) error {
+func unmarshalOrcResponse(body []byte, v any) error {
 	if len(body) == 0 {
 		return ErrEmptyResponse
 	}

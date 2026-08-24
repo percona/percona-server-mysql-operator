@@ -23,8 +23,8 @@ func parseDatum(datum string) state.MySQLState {
 		return state.MySQLDown
 	}
 
-	if strings.HasPrefix(lines[0], "STATUS=") {
-		status := strings.TrimPrefix(lines[0], "STATUS=")
+	if after, ok := strings.CutPrefix(lines[0], "STATUS="); ok {
+		status := after
 
 		switch status {
 		case "Server is operational":

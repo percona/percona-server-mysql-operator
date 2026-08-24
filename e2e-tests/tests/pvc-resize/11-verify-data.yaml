@@ -1,0 +1,21 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      # every replica came back on an expanded volume with the data intact
+      original_count=$(kubectl get configmap -n "${NAMESPACE}" initial-data-count -o jsonpath='{.data.count}')
+      current_count=$(run_mysql "SELECT COUNT(*) FROM pvctest.data" "-h $(get_haproxy_svc $(get_cluster_name))")
+
+      # 05-verify-data inserted one extra row
+      expected_count=$((original_count + 1))
+      if [[ ${current_count} != "${expected_count}" ]]; then
+          echo "ERROR: data count mismatch after scaling back up. expected ${expected_count}, got ${current_count}"
+          exit 1
+      fi
+
+      echo "data intact on a cluster whose replicas returned to expanded volumes"

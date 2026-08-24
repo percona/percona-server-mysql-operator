@@ -1,0 +1,85 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - timeout: 900
+    script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster_name="$(get_cluster_name)"
+
+      uid_before=$(kubectl -n "${NAMESPACE}" get sts "${cluster_name}-mysql" -o jsonpath='{.metadata.uid}')
+      echo "statefulset uid before scaling up: ${uid_before}"
+
+      kubectl -n "${NAMESPACE}" patch ps "${cluster_name}" \
+          --type=merge \
+          -p='{"spec":{"mysql":{"size":5}}}'
+
+      for i in {1..80}; do
+          ready=$(kubectl -n "${NAMESPACE}" get ps "${cluster_name}" -o jsonpath='{.status.mysql.ready}')
+          state=$(kubectl -n "${NAMESPACE}" get ps "${cluster_name}" -o jsonpath='{.status.state}')
+          echo "attempt ${i}/80: ready=${ready} state=${state}"
+          if [[ ${ready} == "5" && ${state} == "ready" ]]; then
+              break
+          fi
+          sleep 10
+      done
+
+      ready=$(kubectl -n "${NAMESPACE}" get ps "${cluster_name}" -o jsonpath='{.status.mysql.ready}')
+      if [[ ${ready} != "5" ]]; then
+          echo "ERROR: only ${ready}/5 replicas came back. A replica whose leftover claim was never"
+          echo "       expanded cannot recover, and a claim that never reports the new size keeps the"
+          echo "       resize in progress, which holds the scale up back."
+          kubectl -n "${NAMESPACE}" get pvc -o custom-columns=NAME:.metadata.name,CAP:.status.capacity.storage,REQ:.spec.resources.requests.storage,STATUS:.status.allocatedResourceStatuses,COND:.status.conditions[*].type
+          kubectl -n "${NAMESPACE}" get ps "${cluster_name}" -o jsonpath='{.metadata.annotations}'
+          exit 1
+      fi
+
+      # the leftovers had to be expanded before their replica could recover
+      for i in 3 4; do
+          size=$(kubectl -n "${NAMESPACE}" get pvc "datadir-${cluster_name}-mysql-${i}" -o jsonpath='{.status.capacity.storage}')
+          if [[ ${size} != "4Gi" ]]; then
+              echo "ERROR: reused claim datadir-${cluster_name}-mysql-${i} is ${size}, expected 4Gi"
+              exit 1
+          fi
+      done
+
+      # The point of the fix: the volume has to be expanded before the replica
+      # exists, or it starts cloning onto a volume that is too small. Both
+      # timestamps are RFC3339 in UTC, so they compare as strings.
+      for i in 3 4; do
+          pod_created=$(kubectl -n "${NAMESPACE}" get pod "${cluster_name}-mysql-${i}" -o jsonpath='{.metadata.creationTimestamp}')
+          expanded_at=$(kubectl -n "${NAMESPACE}" get events.events.k8s.io \
+              --field-selector "regarding.name=datadir-${cluster_name}-mysql-${i}" -o json \
+              | jq -r '[.items[]
+                        | select(.reason == "ExternalExpanding" or .reason == "Resizing" or .reason == "FileSystemResizeRequired")
+                        | (.deprecatedFirstTimestamp // .eventTime)]
+                       | sort | first // empty')
+
+          if [[ -z ${expanded_at} ]]; then
+              echo "ERROR: no expansion was ever recorded for datadir-${cluster_name}-mysql-${i},"
+              echo "       so there is nothing to show it was expanded before its replica started"
+              kubectl -n "${NAMESPACE}" get events.events.k8s.io --field-selector "regarding.name=datadir-${cluster_name}-mysql-${i}"
+              exit 1
+          fi
+
+          echo "claim ${i}: expansion started ${expanded_at}, replica created ${pod_created}"
+          if [[ ${expanded_at} > ${pod_created} ]]; then
+              echo "ERROR: datadir-${cluster_name}-mysql-${i} was expanded at ${expanded_at}, after its"
+              echo "       replica was created at ${pod_created}. The replica started cloning onto a"
+              echo "       volume that was still too small."
+              exit 1
+          fi
+      done
+
+      uid_after=$(kubectl -n "${NAMESPACE}" get sts "${cluster_name}-mysql" -o jsonpath='{.metadata.uid}')
+      if [[ ${uid_after} != "${uid_before}" ]]; then
+          echo "ERROR: statefulset was recreated while scaling up (${uid_before} -> ${uid_after})."
+          echo "       Its volume claim template already asked for the requested size, so recreating"
+          echo "       it only restarts the replicas for nothing."
+          exit 1
+      fi
+
+      echo "leftover claims expanded and all replicas back without recreating the statefulset"
