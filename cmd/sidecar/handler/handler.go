@@ -213,11 +213,9 @@ func fetchXbcloudFileDecompressed(
 	}
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		io.Copy(os.Stderr, xbcloudErr) //nolint:errcheck
-	}()
+	})
 
 	if err := xbstream.Wait(); err != nil {
 		wg.Wait()
