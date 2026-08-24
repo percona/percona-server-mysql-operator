@@ -365,6 +365,25 @@ func connectToCluster(ctx context.Context, peers sets.Set[string], version *v.Ve
 	return nil, errors.New("failed to open connection to cluster")
 }
 
+func isGRConfigured(ctx context.Context, shell *mysqlsh) (bool, error) {
+	result, err := shell.runSQL(ctx, "SELECT @@global.group_replication_group_name")
+	if err != nil {
+		return false, errors.Wrap(err, "query group_replication_group_name")
+	}
+
+	if len(result.Rows) == 0 {
+		return false, nil
+	}
+
+	v, ok := result.Rows[0]["@@global.group_replication_group_name"]
+	if !ok {
+		return false, nil
+	}
+
+	s, _ := v.(string)
+	return s != "", nil
+}
+
 func handleFullClusterCrash(ctx context.Context, version *v.Version) error {
 	localShell, err := connectToLocal(version)
 	if err != nil {
@@ -481,6 +500,18 @@ func Bootstrap(ctx context.Context) error {
 
 		if peers.Len() == 1 {
 			if os.Getenv("BOOTSTRAP_MODE") == string(apiv1.BootstrapModeManual) {
+				grConfigured, err := isGRConfigured(ctx, localShell)
+				if err != nil {
+					log.Printf("WARNING: failed to check if GR is configured: %v", err)
+				}
+				if grConfigured {
+					log.Printf("GR was previously configured (group_replication_group_name is non-empty), triggering full cluster crash recovery")
+					if err := handleFullClusterCrash(ctx, mysqlshVer); err != nil {
+						return errors.Wrap(err, "handle full cluster crash")
+					}
+					os.Exit(1)
+				}
+
 				log.Printf("Manual bootstrap mode: skipping cluster creation")
 				return nil
 			}
