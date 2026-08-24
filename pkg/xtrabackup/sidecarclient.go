@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strconv"
 
+	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -100,10 +101,20 @@ func (c *sidecarClient) DeleteBackup(ctx context.Context, name string, cfg Backu
 
 func (c *sidecarClient) GetBackupInfo(ctx context.Context, cfg BackupConfig) (*BackupInfo, error) {
 	log := logf.FromContext(ctx).WithName("GetBackupInfo")
+
+	info, err := c.getBackupInfoFromPath(ctx, log, cfg, "/backup/info")
+	if err != nil {
+		log.Info("/backup/info endpoint not available, falling back to /backup/checkpoint-info", "error", err)
+		return c.getBackupInfoFromPath(ctx, log, cfg, "/backup/checkpoint-info")
+	}
+	return info, nil
+}
+
+func (c *sidecarClient) getBackupInfoFromPath(ctx context.Context, log logr.Logger, cfg BackupConfig, path string) (*BackupInfo, error) {
 	sidecarURL := url.URL{
 		Host:   c.srcNode + ":" + c.port(),
 		Scheme: "http",
-		Path:   "/backup/info",
+		Path:   path,
 	}
 	reqData, err := json.Marshal(cfg)
 	if err != nil {
