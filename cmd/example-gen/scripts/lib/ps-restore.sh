@@ -57,6 +57,7 @@ remove_fields() {
 		| yq "del(.spec.backupSource.completed)" \
 		| yq "del(.spec.backupSource.image)" \
 		| yq "del(.spec.backupSource.size)" \
+		| yq "del(.spec.backupSource.uncompressedSize)" \
 		| yq "del(.spec.backupSource.state)" \
 		| yq "del(.spec.backupSource.stateDescription)" \
 		| yq "del(.spec.backupSource.storage.azure)" \
