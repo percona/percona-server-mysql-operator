@@ -930,7 +930,7 @@ func (r *PerconaServerMySQLBackupReconciler) getPreviousBackupLSN(
 	if cluster.CompareVersion("1.3.0") >= 0 {
 		info, err = sc.GetBackupInfo(ctx, *req)
 	} else {
-		info, err = sc.GetCheckpointInfo(ctx, *req)
+		info, err = sc.GetCheckpointInfo(ctx, *req) //nolint:staticcheck
 	}
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get backup info")
