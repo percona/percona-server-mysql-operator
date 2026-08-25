@@ -21,6 +21,9 @@ import (
 	xb "github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
 )
 
+// compressExtensions lists file extensions produced by xtrabackup compression algorithms.
+var compressExtensions = []string{".zst", ".lz4"}
+
 func Backup() http.Handler {
 	return new(backup.Handler)
 }
@@ -115,28 +118,34 @@ func GetBackupInfoFunc(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	// Try compressed only: xtrabackup_info.zst (decompress)
-	if info.BackupSize == 0 {
-		compressedInfo, err := fetchXbcloudFileWithXbstream(req.Context(), log, &backupConf, "xtrabackup_info.zst", "--decompress")
-		if err != nil {
-			log.Info("failed to get compressed xtrabackup_info.zst", "error", err)
-		} else if compressedInfo.BackupSize > 0 {
-			info.BackupSize = compressedInfo.BackupSize
-			info.UncompressedBackupSize = compressedInfo.UncompressedBackupSize
+	// Try compressed only: xtrabackup_info.zst or xtrabackup_info.lz4 (decompress)
+	for _, compExt := range compressExtensions {
+		if info.BackupSize == 0 {
+			compFile := "xtrabackup_info" + compExt
+			compressedInfo, err := fetchXbcloudFileWithXbstream(req.Context(), log, &backupConf, compFile, "--decompress")
+			if err != nil {
+				log.Info("failed to get compressed "+compFile, "error", err)
+			} else if compressedInfo.BackupSize > 0 {
+				info.BackupSize = compressedInfo.BackupSize
+				info.UncompressedBackupSize = compressedInfo.UncompressedBackupSize
+			}
 		}
 	}
 
-	// Try compressed + encrypted: xtrabackup_info.zst.xbcrypt (decrypt then decompress)
-	if info.BackupSize == 0 {
-		encryptArgs := encryptionXbstreamArgs(&backupConf)
-		if len(encryptArgs) > 0 {
-			bothArgs := append(encryptArgs, "--decompress")
-			compEncInfo, err := fetchXbcloudFileWithXbstream(req.Context(), log, &backupConf, "xtrabackup_info.zst.xbcrypt", bothArgs...)
-			if err != nil {
-				log.Info("failed to get compressed+encrypted xtrabackup_info.zst.xbcrypt, skipping backup size", "error", err)
-			} else {
-				info.BackupSize = compEncInfo.BackupSize
-				info.UncompressedBackupSize = compEncInfo.UncompressedBackupSize
+	// Try compressed + encrypted: xtrabackup_info.{zst,lz4}.xbcrypt (decrypt then decompress)
+	for _, compExt := range compressExtensions {
+		if info.BackupSize == 0 {
+			encryptArgs := encryptionXbstreamArgs(&backupConf)
+			if len(encryptArgs) > 0 {
+				compEncFile := "xtrabackup_info" + compExt + ".xbcrypt"
+				bothArgs := append(encryptArgs, "--decompress")
+				compEncInfo, err := fetchXbcloudFileWithXbstream(req.Context(), log, &backupConf, compEncFile, bothArgs...)
+				if err != nil {
+					log.Info("failed to get compressed+encrypted "+compEncFile+", skipping backup size", "error", err)
+				} else {
+					info.BackupSize = compEncInfo.BackupSize
+					info.UncompressedBackupSize = compEncInfo.UncompressedBackupSize
+				}
 			}
 		}
 	}
@@ -213,9 +222,8 @@ func fetchXbcloudFileWithXbstream(
 	// 2. xbstream -x [--decompress] [--decrypt=...] — extracts and processes files
 	// 3. Read the resulting plain text file
 
-	// Strip all known extensions to get the original file name
 	originalFile := file
-	for _, ext := range []string{".xbcrypt", ".zst"} {
+	for _, ext := range append([]string{".xbcrypt"}, compressExtensions...) {
 		originalFile = strings.TrimSuffix(originalFile, ext)
 	}
 
