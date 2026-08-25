@@ -10,7 +10,6 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
@@ -248,7 +247,7 @@ func TestGetAppliedCRVersion(t *testing.T) {
 				Generation: 2,
 			},
 			Spec: appsv1.StatefulSetSpec{
-				Replicas: ptr.To(int32(3)),
+				Replicas: new(int32(3)),
 				Template: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{
