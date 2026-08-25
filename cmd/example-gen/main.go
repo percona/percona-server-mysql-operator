@@ -197,7 +197,7 @@ func printRestore() error {
 				Date: "2024-11-18T11:10:48Z",
 				GTID: "a3e5ff70-83e2-11ef-8e57-7a62caf7e1e3:1-36",
 			},
-			BackupSource: &apiv1.PerconaServerMySQLBackupStatus{
+			BackupSource: &apiv1.RestoreBackupSource{
 				Destination: "s3://S3-BACKUP-BUCKET-NAME-HERE/backup-path",
 				Storage: &apiv1.BackupStorageSpec{
 					Type: apiv1.BackupStorageS3,
