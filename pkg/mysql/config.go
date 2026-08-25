@@ -61,7 +61,9 @@ func (c *Configurable) ExecuteConfigurationTemplate(input string, memory *resour
 	return result, nil
 }
 
-// GetAutoTuneParams is the legacy tuning implementation the onsides
+// GetAutoTuneParams derives innodb_buffer_pool_size, innodb_buffer_pool_chunk_size
+// and max_connections from the given memory quantity. Values the user already set
+// in .spec.mysql.configuration are left untouched.
 func GetAutoTuneParams(cr *apiv1.PerconaServerMySQL, q *resource.Quantity) (string, error) {
 	autotuneParams := ""
 
