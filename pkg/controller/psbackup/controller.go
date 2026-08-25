@@ -685,9 +685,13 @@ func (r *PerconaServerMySQLBackupReconciler) getBackupSize(
 	}
 
 	size := formatBytes(info.BackupSize)
-	uncompressedSize := size
-	if cr.Status.Compressed && info.UncompressedBackupSize > 0 {
-		uncompressedSize = formatBytes(info.UncompressedBackupSize)
+	var uncompressedSize string
+	if cr.Status.Compressed {
+		if info.UncompressedBackupSize > 0 {
+			uncompressedSize = formatBytes(info.UncompressedBackupSize)
+		}
+	} else {
+		uncompressedSize = size
 	}
 
 	return size, uncompressedSize, nil
