@@ -149,6 +149,11 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 				log.Error(err, "Failed to get cluster for backup size, will retry")
 				return rr, nil
 			}
+
+			if cluster.CompareVersion("1.3.0") < 0 {
+				return rr, nil
+			}
+
 			size, uncompressedSize, err := r.getBackupSize(ctx, cr, cluster)
 			if err != nil {
 				if errors.Is(err, ErrBackupSizeUnavailable) {
