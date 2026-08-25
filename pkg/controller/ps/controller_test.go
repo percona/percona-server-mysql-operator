@@ -2419,7 +2419,7 @@ var _ = Describe("PVC Resizing with orphaned PVCs", Ordered, func() {
 			}
 			Expect(claim).NotTo(BeNil())
 
-			for i := 0; i < 5; i++ {
+			for i := range 5 {
 				size := liveSize
 				if i >= int(cr.Spec.MySQL.Size) {
 					size = orphanSize
@@ -2476,7 +2476,7 @@ var _ = Describe("PVC Resizing with orphaned PVCs", Ordered, func() {
 			// envtest runs no garbage collector, so an orphan-propagation delete
 			// leaves the object behind with a deletion timestamp instead of
 			// removing it. Existence alone therefore proves nothing.
-			for i := 0; i < 3; i++ {
+			for range 3 {
 				Expect(k8sClient.Get(ctx, crNamespacedName, cr)).Should(Succeed())
 				Expect(reconciler().reconcilePersistentVolumes(ctx, cr)).Should(Succeed())
 				Expect(k8sClient.Get(ctx, stsName, sts)).Should(Succeed(), "statefulset should not be deleted in a loop")
@@ -2595,7 +2595,7 @@ var _ = Describe("PVC Resizing with orphaned PVCs", Ordered, func() {
 				Expect(k8sClient.Get(ctx, crNamespacedName, cr)).Should(Succeed())
 				Expect(reconciler().reconcilePersistentVolumes(ctx, cr)).Should(Succeed())
 
-				for i := 0; i < 5; i++ {
+				for i := range 5 {
 					pvc := &corev1.PersistentVolumeClaim{}
 					key := types.NamespacedName{Name: fmt.Sprintf("datadir-%s-%d", sts.Name, i), Namespace: ns}
 					mounted := i < int(cr.Spec.MySQL.Size) && i < 3
@@ -2888,7 +2888,7 @@ var _ = Describe("PVC Resizing with a size that is not whole GiB", Ordered, func
 				// the claim reports a capacity below the request until a replica
 				// mounts it, so a size read that disagrees with the one that ended
 				// the resize starts it again, and the replicas never arrive
-				for i := 0; i < 3; i++ {
+				for range 3 {
 					Expect(k8sClient.Get(ctx, crNamespacedName, cr)).Should(Succeed())
 					Expect(reconciler().reconcilePersistentVolumes(ctx, cr)).Should(Succeed())
 
