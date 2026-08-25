@@ -670,7 +670,12 @@ func (r *PerconaServerMySQLBackupReconciler) getBackupSize(
 	src := mysql.PodFQDN(cluster, pod)
 	sc := r.NewSidecarClient(src)
 
-	info, err := sc.GetBackupInfo(ctx, *backupConf)
+	var info *xtrabackup.BackupInfo
+	if cluster.CompareVersion("1.3.0") >= 0 {
+		info, err = sc.GetBackupInfo(ctx, *backupConf)
+	} else {
+		info, err = sc.GetCheckpointInfo(ctx, *backupConf) //nolint:staticcheck
+	}
 	if err != nil {
 		return "", "", errors.Wrap(err, "get backup info")
 	}
