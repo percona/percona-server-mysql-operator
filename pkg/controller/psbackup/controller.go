@@ -478,7 +478,7 @@ func (r *PerconaServerMySQLBackupReconciler) createBackupJob(
 	}
 
 	if cr.Spec.Type == apiv1.BackupTypeIncremental {
-		lsn, err := r.getPreviousBackupLSN(ctx, cr, backupSource, storage)
+		lsn, err := r.getPreviousBackupLSN(ctx, cr, cluster, backupSource, storage)
 		if err != nil {
 			return errors.Wrap(err, "get previous backup LSN")
 		}
@@ -878,6 +878,7 @@ func getBackupSourcePod(ctx context.Context, cl client.Client, namespace, src st
 func (r *PerconaServerMySQLBackupReconciler) getPreviousBackupLSN(
 	ctx context.Context,
 	cr *apiv1.PerconaServerMySQLBackup,
+	cluster *apiv1.PerconaServerMySQL,
 	backupSource string,
 	storage *apiv1.BackupStorageSpec,
 ) (string, error) {
@@ -901,7 +902,13 @@ func (r *PerconaServerMySQLBackupReconciler) getPreviousBackupLSN(
 	}
 
 	sc := r.NewSidecarClient(backupSource)
-	info, err := sc.GetBackupInfo(ctx, *req)
+
+	var info *xtrabackup.BackupInfo
+	if cluster.CompareVersion("1.3.0") >= 0 {
+		info, err = sc.GetBackupInfo(ctx, *req)
+	} else {
+		info, err = sc.GetCheckpointInfo(ctx, *req)
+	}
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get backup info")
 	}

@@ -19,6 +19,8 @@ import (
 type SidecarClient interface {
 	GetRunningBackupConfig(ctx context.Context) (*BackupConfig, error)
 	DeleteBackup(ctx context.Context, name string, cfg BackupConfig) error
+	// Deprecated: Use GetBackupInfo instead. GetCheckpointInfo
+	GetCheckpointInfo(ctx context.Context, cfg BackupConfig) (*BackupInfo, error)
 	GetBackupInfo(ctx context.Context, cfg BackupConfig) (*BackupInfo, error)
 }
 
@@ -99,15 +101,14 @@ func (c *sidecarClient) DeleteBackup(ctx context.Context, name string, cfg Backu
 	return nil
 }
 
+func (c *sidecarClient) GetCheckpointInfo(ctx context.Context, cfg BackupConfig) (*BackupInfo, error) {
+	log := logf.FromContext(ctx).WithName("GetCheckpointInfo")
+	return c.getBackupInfoFromPath(ctx, log, cfg, "/backup/checkpoint-info")
+}
+
 func (c *sidecarClient) GetBackupInfo(ctx context.Context, cfg BackupConfig) (*BackupInfo, error) {
 	log := logf.FromContext(ctx).WithName("GetBackupInfo")
-
-	info, err := c.getBackupInfoFromPath(ctx, log, cfg, "/backup/info")
-	if err != nil {
-		log.Info("/backup/info endpoint not available, falling back to /backup/checkpoint-info", "error", err)
-		return c.getBackupInfoFromPath(ctx, log, cfg, "/backup/checkpoint-info")
-	}
-	return info, nil
+	return c.getBackupInfoFromPath(ctx, log, cfg, "/backup/info")
 }
 
 func (c *sidecarClient) getBackupInfoFromPath(ctx context.Context, log logr.Logger, cfg BackupConfig, path string) (*BackupInfo, error) {
