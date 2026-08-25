@@ -142,7 +142,8 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		if err := r.releaseLeaseIfNeeded(ctx, cr, &status); err != nil {
 			return rr, errors.Wrap(err, "release lease")
 		}
-		if cr.Status.State == apiv1.BackupSucceeded && cr.Status.Size == "" {
+		if cr.Status.State == apiv1.BackupSucceeded && cr.Status.Size == "" &&
+			meta.FindStatusCondition(status.Conditions, apiv1.ConditionBackupSizeResolved) == nil {
 			cluster := &apiv1.PerconaServerMySQL{}
 			nn := types.NamespacedName{Name: cr.Spec.ClusterName, Namespace: cr.Namespace}
 			if err := r.Get(ctx, nn, cluster); err != nil {
@@ -151,6 +152,13 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 			}
 
 			if cluster.CompareVersion("1.3.0") < 0 {
+				meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+					Type:               apiv1.ConditionBackupSizeResolved,
+					Status:             metav1.ConditionFalse,
+					Reason:             "UnsupportedVersion",
+					ObservedGeneration: cr.GetGeneration(),
+					Message:            "Cluster version does not support backup size retrieval",
+				})
 				return rr, nil
 			}
 
@@ -158,13 +166,28 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 			if err != nil {
 				if errors.Is(err, ErrBackupSizeUnavailable) {
 					log.Info("Backup size will be left empty: " + err.Error())
+					meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+						Type:               apiv1.ConditionBackupSizeResolved,
+						Status:             metav1.ConditionFalse,
+						Reason:             "SizeUnavailable",
+						ObservedGeneration: cr.GetGeneration(),
+						Message:            err.Error(),
+					})
 				} else {
 					log.Error(err, "Failed to get backup size, will retry")
 					return rr, nil
 				}
+			} else {
+				status.Size = size
+				status.UncompressedSize = uncompressedSize
+				meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+					Type:               apiv1.ConditionBackupSizeResolved,
+					Status:             metav1.ConditionTrue,
+					Reason:             "SizeResolved",
+					ObservedGeneration: cr.GetGeneration(),
+					Message:            "Backup size successfully retrieved",
+				})
 			}
-			status.Size = size
-			status.UncompressedSize = uncompressedSize
 		}
 		return rr, nil
 	}
