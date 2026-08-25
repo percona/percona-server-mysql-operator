@@ -78,6 +78,7 @@ spec:
           value: /etc/mysql/vault-keyring-secret/keyring_vault.cnf
         - name: BACKUPS_ENABLED
           value: "true"
+        - name: CR_VERSION
         imagePullPolicy: Always
         livenessProbe:
           exec:

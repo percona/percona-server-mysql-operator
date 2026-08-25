@@ -156,6 +156,13 @@ func (m *mysqlshellClusterSetManager) ForcePrimaryCluster(ctx context.Context, c
 	return nil
 }
 
+func (m *mysqlshellClusterSetManager) RejoinCluster(ctx context.Context, clusterName string) error {
+	if err := m.shell.RejoinClusterWithExec(ctx, clusterName); err != nil {
+		return errors.Wrap(err, "rejoin cluster")
+	}
+	return nil
+}
+
 func (m *mysqlshellClusterSetManager) Status(ctx context.Context) (clusterset.Status, error) {
 	return m.shell.ClusterSetStatusWithExec(ctx)
 }
