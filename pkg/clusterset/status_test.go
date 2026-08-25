@@ -7,7 +7,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"k8s.io/utils/ptr"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 )
@@ -276,7 +275,7 @@ func TestClusterStatusesIntoAPI(t *testing.T) {
 					ClusterRole:           ClusterRoleReplica,
 					GlobalStatus:          "OK",
 					Primary:               "dc2-mysql-0:3306",
-					ReplicationLagSeconds: ptr.To(int64(11)),
+					ReplicationLagSeconds: new(int64(11)),
 				},
 			},
 		},
