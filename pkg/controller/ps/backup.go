@@ -158,7 +158,7 @@ func (r *PerconaServerMySQLReconciler) reconcileScheduledBackup(ctx context.Cont
 		}
 	}
 
-	r.Crons.backupJobs.Range(func(k, v interface{}) bool {
+	r.Crons.backupJobs.Range(func(k, v any) bool {
 		item := v.(backupScheduleJob)
 		if !strings.HasPrefix(item.Name, backupNamePrefix) {
 			return true

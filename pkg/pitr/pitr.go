@@ -7,7 +7,6 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
@@ -90,8 +89,8 @@ func RestoreJob(
 			Annotations: util.SSMapMerge(cluster.GlobalAnnotations(), restore.Annotations, storage.Annotations),
 		},
 		Spec: batchv1.JobSpec{
-			Parallelism: ptr.To(int32(1)),
-			Completions: ptr.To(int32(1)),
+			Parallelism: new(int32(1)),
+			Completions: new(int32(1)),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      labels,
