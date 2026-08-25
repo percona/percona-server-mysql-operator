@@ -139,8 +139,8 @@ func adjustInitImageWithCRVersion(cr *apiv1.PerconaServerMySQL, imageName string
 }
 
 func stripDigest(image string) string {
-	if idx := strings.Index(image, "@"); idx != -1 {
-		return image[:idx]
+	if before, _, ok := strings.Cut(image, "@"); ok {
+		return before
 	}
 	return image
 }
