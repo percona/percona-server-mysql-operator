@@ -49,14 +49,16 @@ func main() {
 	}
 	log.Println("MySQL is ready")
 
+	ctx := context.Background()
+
 	clusterType := os.Getenv("CLUSTER_TYPE")
 	switch clusterType {
 	case "group-replication":
-		if err := gr.Bootstrap(context.Background()); err != nil {
+		if err := gr.Bootstrap(ctx); err != nil {
 			log.Fatalf("bootstrap failed: %v", err)
 		}
 	case "async":
-		if err := async.Bootstrap(context.Background()); err != nil {
+		if err := async.Bootstrap(ctx); err != nil {
 			log.Fatalf("bootstrap failed: %v", err)
 		}
 	default:
