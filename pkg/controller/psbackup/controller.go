@@ -679,10 +679,10 @@ func (r *PerconaServerMySQLBackupReconciler) getBackupSize(
 		return "", "", ErrBackupSizeUnavailable
 	}
 
-	size := FormatBytes(info.BackupSize)
+	size := formatBytes(info.BackupSize)
 	uncompressedSize := size
 	if cr.Status.Compressed && info.UncompressedBackupSize > 0 {
-		uncompressedSize = FormatBytes(info.UncompressedBackupSize)
+		uncompressedSize = formatBytes(info.UncompressedBackupSize)
 	}
 
 	return size, uncompressedSize, nil
@@ -1122,7 +1122,7 @@ func (r *PerconaServerMySQLBackupReconciler) getActiveRestore(ctx context.Contex
 	return "", nil
 }
 
-func FormatBytes(bytes int64) string {
+func formatBytes(bytes int64) string {
 	const (
 		KB = 1024
 		MB = KB * 1024

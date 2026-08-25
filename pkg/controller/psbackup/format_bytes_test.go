@@ -66,7 +66,7 @@ func TestFormatBytes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := FormatBytes(tt.bytes)
+			result := formatBytes(tt.bytes)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
