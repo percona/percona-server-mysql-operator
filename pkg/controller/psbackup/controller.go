@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	humanize "github.com/dustin/go-humanize"
 	"github.com/pkg/errors"
 	batchv1 "k8s.io/api/batch/v1"
 	coordv1 "k8s.io/api/coordination/v1"
@@ -1132,23 +1133,5 @@ func (r *PerconaServerMySQLBackupReconciler) getActiveRestore(ctx context.Contex
 }
 
 func formatBytes(bytes int64) string {
-	const (
-		KB = 1024
-		MB = KB * 1024
-		GB = MB * 1024
-		TB = GB * 1024
-	)
-
-	switch {
-	case bytes >= TB:
-		return fmt.Sprintf("%.2fTB", float64(bytes)/float64(TB))
-	case bytes >= GB:
-		return fmt.Sprintf("%.2fGB", float64(bytes)/float64(GB))
-	case bytes >= MB:
-		return fmt.Sprintf("%.2fMB", float64(bytes)/float64(MB))
-	case bytes >= KB:
-		return fmt.Sprintf("%.2fKB", float64(bytes)/float64(KB))
-	default:
-		return fmt.Sprintf("%dB", bytes)
-	}
+	return strings.ReplaceAll(humanize.IBytes(uint64(bytes)), " ", "")
 }

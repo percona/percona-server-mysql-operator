@@ -1816,42 +1816,42 @@ func TestFormatBytes(t *testing.T) {
 		{
 			name:     "exactly 1 KB",
 			bytes:    1024,
-			expected: "1.00KB",
+			expected: "1.0KiB",
 		},
 		{
 			name:     "kilobytes",
 			bytes:    78771, // ~76.92KB
-			expected: "76.92KB",
+			expected: "77KiB",
 		},
 		{
 			name:     "exactly 1 MB",
 			bytes:    1024 * 1024,
-			expected: "1.00MB",
+			expected: "1.0MiB",
 		},
 		{
 			name:     "megabytes",
 			bytes:    5 * 1024 * 1024,
-			expected: "5.00MB",
+			expected: "5.0MiB",
 		},
 		{
 			name:     "exactly 1 GB",
 			bytes:    1024 * 1024 * 1024,
-			expected: "1.00GB",
+			expected: "1.0GiB",
 		},
 		{
 			name:     "gigabytes",
 			bytes:    3 * 1024 * 1024 * 1024,
-			expected: "3.00GB",
+			expected: "3.0GiB",
 		},
 		{
 			name:     "exactly 1 TB",
 			bytes:    1024 * 1024 * 1024 * 1024,
-			expected: "1.00TB",
+			expected: "1.0TiB",
 		},
 		{
 			name:     "terabytes",
 			bytes:    2 * 1024 * 1024 * 1024 * 1024,
-			expected: "2.00TB",
+			expected: "2.0TiB",
 		},
 	}
 
