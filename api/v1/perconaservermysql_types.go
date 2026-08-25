@@ -999,6 +999,7 @@ const (
 	ConditionInnoDBClusterBootstrapped string = "InnoDBClusterBootstrapped"
 	ConditionClusterSetMember          string = "ClusterSetMember"
 	ConditionAwaitingExternalBootstrap string = "AwaitingExternalBootstrap"
+	ConditionMySQLConfigSynced                = "MySQLConfigSynced"
 
 	// Deprecated, preserved only for backward compatibility
 	ConditionClusterSetReplicationRunning string = "ClusterSetReplicationRunning"
