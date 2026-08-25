@@ -59,31 +59,31 @@ func (cs ClusterStatus) getPrimaryMemberReplicationLagSeconds() *int64 {
 		if topo.MemberRole != ClusterRolePrimary {
 			continue
 		}
-
-		lagDurationStr := topo.ReplicationLagFromOriginalSource
-		if lagDurationStr == "" {
-			return nil
+		if dur := mysqlTimediffToDuration(topo.ReplicationLagFromOriginalSource); dur != nil {
+			return new(int64(dur.Seconds()))
 		}
-		return new(int64(mysqlTimediffToDuration(lagDurationStr).Seconds()))
 	}
 	return nil
 }
 
-func mysqlTimediffToDuration(timediff string) time.Duration {
+func mysqlTimediffToDuration(timediff string) *time.Duration {
+	if timediff == "" {
+		return nil
+	}
+
 	parts := strings.Split(timediff, ":")
 	if len(parts) != 3 {
-		return 0
+		return nil
 	}
 
 	hours := parts[0]
 	minutes := parts[1]
 	seconds := parts[2]
-	durationString := fmt.Sprintf("%sh%sm%ss", hours, minutes, seconds)
-	duration, err := time.ParseDuration(durationString)
+	duration, err := time.ParseDuration(fmt.Sprintf("%sh%sm%ss", hours, minutes, seconds))
 	if err != nil {
-		return 0
+		return nil
 	}
-	return duration
+	return new(duration)
 }
 
 type TopologyStatus struct {

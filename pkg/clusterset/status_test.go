@@ -15,37 +15,52 @@ func TestMySQLTimediffToDuration(t *testing.T) {
 	testCases := []struct {
 		desc     string
 		timediff string
-		expected time.Duration
+		expected *time.Duration
 	}{
 		{
 			desc:     "seconds only",
 			timediff: "00:00:05",
-			expected: 5 * time.Second,
+			expected: new(5 * time.Second),
 		},
 		{
 			desc:     "hours, minutes and seconds",
 			timediff: "01:02:03",
-			expected: time.Hour + 2*time.Minute + 3*time.Second,
+			expected: new(time.Hour + 2*time.Minute + 3*time.Second),
 		},
 		{
 			desc:     "microsecond precision",
 			timediff: "00:00:01.500000",
-			expected: 1500 * time.Millisecond,
+			expected: new(1500 * time.Millisecond),
 		},
 		{
 			desc:     "no lag",
 			timediff: "00:00:00",
-			expected: 0,
+			expected: new(time.Duration(0)),
 		},
 		{
 			desc:     "replica ahead of source reports a negative timediff",
 			timediff: "-00:00:01",
-			expected: -time.Second,
+			expected: new(-time.Second),
 		},
 		{
 			desc:     "empty string",
 			timediff: "",
-			expected: 0,
+			expected: nil,
+		},
+		{
+			desc:     "not enough parts",
+			timediff: "00:05",
+			expected: nil,
+		},
+		{
+			desc:     "too many parts",
+			timediff: "00:00:00:05",
+			expected: nil,
+		},
+		{
+			desc:     "unparseable parts",
+			timediff: "aa:bb:cc",
+			expected: nil,
 		},
 	}
 
