@@ -7,7 +7,6 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
@@ -71,8 +70,8 @@ func TestRestoreJob(t *testing.T) {
 			storage:   &apiv1.BackupStorageSpec{},
 			initImage: "init:latest",
 			verify: func(t *testing.T, job *batchv1.Job) {
-				assert.Equal(t, ptr.To(int32(1)), job.Spec.Parallelism)
-				assert.Equal(t, ptr.To(int32(1)), job.Spec.Completions)
+				assert.Equal(t, new(int32(1)), job.Spec.Parallelism)
+				assert.Equal(t, new(int32(1)), job.Spec.Completions)
 				assert.Equal(t, corev1.RestartPolicyNever, job.Spec.Template.Spec.RestartPolicy)
 			},
 		},
@@ -83,7 +82,7 @@ func TestRestoreJob(t *testing.T) {
 					SecretsName:   "cluster-secrets",
 					SSLSecretName: "cluster-ssl",
 					Backup: &apiv1.BackupSpec{
-						BackoffLimit: ptr.To(int32(5)),
+						BackoffLimit: new(int32(5)),
 						PiTR: apiv1.PiTRSpec{
 							BinlogServer: &apiv1.BinlogServerSpec{},
 						},
@@ -96,7 +95,7 @@ func TestRestoreJob(t *testing.T) {
 			storage:   &apiv1.BackupStorageSpec{},
 			initImage: "init:latest",
 			verify: func(t *testing.T, job *batchv1.Job) {
-				assert.Equal(t, ptr.To(int32(5)), job.Spec.BackoffLimit)
+				assert.Equal(t, new(int32(5)), job.Spec.BackoffLimit)
 			},
 		},
 		"pvc name uses cluster name": {

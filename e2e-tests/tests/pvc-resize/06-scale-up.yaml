@@ -1,0 +1,9 @@
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: pvc-resize
+  finalizers:
+    - percona.com/delete-mysql-pods-in-order
+spec:
+  mysql:
+    size: 5

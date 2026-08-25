@@ -9,7 +9,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/cmd/bootstrap/utils"
@@ -273,7 +272,7 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 										Path: "my-config.cnf",
 									},
 								},
-								Optional: ptr.To(true),
+								Optional: new(true),
 							},
 						},
 						{
@@ -287,7 +286,7 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 										Path: "auto-config.cnf",
 									},
 								},
-								Optional: ptr.To(true),
+								Optional: new(true),
 							},
 						},
 						{
@@ -301,7 +300,7 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 										Path: "my-secret.cnf",
 									},
 								},
-								Optional: ptr.To(true),
+								Optional: new(true),
 							},
 						},
 					},
