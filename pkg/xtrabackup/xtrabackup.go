@@ -1069,6 +1069,18 @@ func GetBackupConfig(ctx context.Context, cl client.Client, cr *apiv1.PerconaSer
 	default:
 		return nil, errors.New("unknown backup storage type")
 	}
+
+	if storage.EncryptionKeySecret != nil && cl != nil {
+		cluster := &apiv1.PerconaServerMySQL{}
+		clusterNN := types.NamespacedName{Name: cr.Spec.ClusterName, Namespace: cr.Namespace}
+		if err := cl.Get(ctx, clusterNN, cluster); err == nil {
+			keyFile := encryptionKeyFileName(cluster, cr)
+			if keyFile != "" {
+				conf.EncryptionKeyFile = path.Join(encryptionKeysMountPath, keyFile)
+			}
+		}
+	}
+
 	return conf, nil
 }
 

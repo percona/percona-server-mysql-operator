@@ -90,22 +90,55 @@ func GetBackupInfoFunc(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// Try to get backup size from xtrabackup_info.
+	// xtrabackup applies: compress → encrypt, so we reverse: decrypt → decompress.
+	// Attempt order: plain → encrypted → compressed → compressed+encrypted.
 	backupInfo, err := fetchXbcloudFile(req.Context(), log, &backupConf, "xtrabackup_info")
 	if err != nil {
-		log.Info("failed to get backup info from xtrabackup_info, skipping backup size", "error", err)
-	} else if backupInfo.BackupSize == 0 {
-		// For compressed backups, xtrabackup_info is stored as xtrabackup_info.zst
-		// Need to decompress it first.
-		compressedInfo, err := fetchXbcloudFileDecompressed(req.Context(), log, &backupConf, "xtrabackup_info.zst")
+		log.Info("failed to get backup info from xtrabackup_info", "error", err)
+	} else if backupInfo.BackupSize > 0 {
+		info.BackupSize = backupInfo.BackupSize
+		info.UncompressedBackupSize = backupInfo.UncompressedBackupSize
+	}
+
+	// Try encrypted only: xtrabackup_info.xbcrypt (decrypt first)
+	if info.BackupSize == 0 {
+		encryptArgs := encryptionXbstreamArgs(&backupConf)
+		if len(encryptArgs) > 0 {
+			encInfo, err := fetchXbcloudFileWithXbstream(req.Context(), log, &backupConf, "xtrabackup_info.xbcrypt", encryptArgs...)
+			if err != nil {
+				log.Info("failed to get encrypted xtrabackup_info.xbcrypt", "error", err)
+			} else if encInfo.BackupSize > 0 {
+				info.BackupSize = encInfo.BackupSize
+				info.UncompressedBackupSize = encInfo.UncompressedBackupSize
+			}
+		}
+	}
+
+	// Try compressed only: xtrabackup_info.zst (decompress)
+	if info.BackupSize == 0 {
+		compressedInfo, err := fetchXbcloudFileWithXbstream(req.Context(), log, &backupConf, "xtrabackup_info.zst", "--decompress")
 		if err != nil {
-			log.Info("failed to get compressed xtrabackup_info.zst, skipping backup size", "error", err)
-		} else {
+			log.Info("failed to get compressed xtrabackup_info.zst", "error", err)
+		} else if compressedInfo.BackupSize > 0 {
 			info.BackupSize = compressedInfo.BackupSize
 			info.UncompressedBackupSize = compressedInfo.UncompressedBackupSize
 		}
-	} else {
-		info.BackupSize = backupInfo.BackupSize
-		info.UncompressedBackupSize = backupInfo.UncompressedBackupSize
+	}
+
+	// Try compressed + encrypted: xtrabackup_info.zst.xbcrypt (decrypt then decompress)
+	if info.BackupSize == 0 {
+		encryptArgs := encryptionXbstreamArgs(&backupConf)
+		if len(encryptArgs) > 0 {
+			bothArgs := append(encryptArgs, "--decompress")
+			compEncInfo, err := fetchXbcloudFileWithXbstream(req.Context(), log, &backupConf, "xtrabackup_info.zst.xbcrypt", bothArgs...)
+			if err != nil {
+				log.Info("failed to get compressed+encrypted xtrabackup_info.zst.xbcrypt, skipping backup size", "error", err)
+			} else {
+				info.BackupSize = compEncInfo.BackupSize
+				info.UncompressedBackupSize = compEncInfo.UncompressedBackupSize
+			}
+		}
 	}
 
 	infoB, err := json.Marshal(info)
@@ -169,17 +202,22 @@ func fetchXbcloudFile(
 	return info, nil
 }
 
-func fetchXbcloudFileDecompressed(
+func fetchXbcloudFileWithXbstream(
 	ctx context.Context,
 	log logr.Logger,
 	conf *xb.BackupConfig,
-	file string) (xb.BackupInfo, error) {
+	file string,
+	xbstreamArgs ...string) (xb.BackupInfo, error) {
 	// xbcloud outputs data in xbstream format, so we need to:
 	// 1. xbcloud get <file> — downloads chunks in xbstream format
-	// 2. xbstream -x --decompress — extracts and decompresses .zst files
+	// 2. xbstream -x [--decompress] [--decrypt=...] — extracts and processes files
 	// 3. Read the resulting plain text file
 
-	originalFile := strings.TrimSuffix(file, ".zst")
+	// Strip all known extensions to get the original file name
+	originalFile := file
+	for _, ext := range []string{".xbcrypt", ".zst"} {
+		originalFile = strings.TrimSuffix(originalFile, ext)
+	}
 
 	tmpDir, err := os.MkdirTemp("", "xb-decompress-*")
 	if err != nil {
@@ -188,7 +226,10 @@ func fetchXbcloudFileDecompressed(
 	defer os.RemoveAll(tmpDir) //nolint:errcheck
 
 	xbcloud := exec.CommandContext(ctx, "xbcloud", conf.XbcloudGetArgs(file)...)
-	xbstream := exec.CommandContext(ctx, "xbstream", "-x", "--decompress", "-C", tmpDir)
+
+	streamArgs := append([]string{"-x"}, xbstreamArgs...)
+	streamArgs = append(streamArgs, "-C", tmpDir)
+	xbstream := exec.CommandContext(ctx, "xbstream", streamArgs...)
 
 	xbcloudOut, err := xbcloud.StdoutPipe()
 	if err != nil {
@@ -239,4 +280,20 @@ func fetchXbcloudFileDecompressed(
 	}
 
 	return info, nil
+}
+
+func encryptionXbstreamArgs(conf *xb.BackupConfig) []string {
+	if conf.EncryptionKeyFile == "" {
+		return nil
+	}
+	algorithm := "AES256"
+	if conf.ContainerOptions != nil {
+		if v := conf.ContainerOptions.GetArgs().GetXtrabackupFlagValue("--encrypt"); v != "" {
+			algorithm = v
+		}
+	}
+	return []string{
+		fmt.Sprintf("--decrypt=%s", algorithm),
+		fmt.Sprintf("--encrypt-key-file=%s", conf.EncryptionKeyFile),
+	}
 }
