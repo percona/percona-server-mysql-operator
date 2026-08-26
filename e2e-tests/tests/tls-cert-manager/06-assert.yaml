@@ -2,6 +2,15 @@ apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
 timeout: 500
 ---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: 06-renew-certs
+data:
+  reloaded: "true"
+  mysql_recycled: "false"
+  proxies_recycled: "true"
+---
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:

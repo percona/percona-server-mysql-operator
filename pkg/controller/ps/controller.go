@@ -985,6 +985,10 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(ctx context.Context, cr
 		return errors.Wrap(err, "reconcile MySQL config")
 	}
 
+	if err := r.reconcileTLSReload(ctx, cr, sts); err != nil {
+		return errors.Wrap(err, "reconcile TLS reload")
+	}
+
 	return nil
 }
 
