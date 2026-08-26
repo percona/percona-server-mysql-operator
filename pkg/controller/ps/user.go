@@ -238,6 +238,21 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		return nil
 	}
 
+	appliedCRVersion, err := mysql.GetAppliedCRVersion(ctx, r.Client, cr)
+	if err != nil {
+		if errors.Is(err, mysql.ErrRolloutInProgress) {
+			log.Info("Waiting for mysql pods rollout to complete")
+			return nil
+		}
+		return errors.Wrap(err, "get applied CR version")
+	}
+
+	// Wait for the pods to be re-created so that any new users may be created at container startup.
+	if cr.CompareVersion("1.3.0") >= 0 && (appliedCRVersion == "" || appliedCRVersion != cr.Spec.CRVersion) {
+		log.Info("Waiting for smart update to finish")
+		return nil
+	}
+
 	var (
 		restartMySQL        bool
 		restartReplication  bool
@@ -290,19 +305,6 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 			restartReplication = true
 		case apiv1.UserOrchestrator:
 			restartOrchestrator = true && cr.Spec.MySQL.IsAsync()
-		case apiv1.UserClusterSet:
-			// The clusterset user was introduced in 1.2.0 and the entrypoint
-			// creates users only on initial datadir initialization. On clusters
-			// upgraded from older versions the user doesn't exist in MySQL yet,
-			// making the ALTER USER below fail with ERROR 1396. Create it
-			// idempotently before updating passwords.
-			if err := um.CreateClusterSetUser(ctx, mysqlUser.Password); err != nil {
-				return errors.Wrap(err, "create clusterset user")
-			}
-		case apiv1.UserConfigurator:
-			if err := um.CreateConfiguratorUser(ctx, mysqlUser.Password); err != nil {
-				return errors.Wrap(err, "create configurator user")
-			}
 		}
 
 		log.V(1).Info("User password changed", "user", user)
