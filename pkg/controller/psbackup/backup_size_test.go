@@ -68,8 +68,8 @@ func TestBackupSize(t *testing.T) {
 			needsMySQLPod:        true,
 			reconcileCount:       2, // 1st: Running->Succeeded, 2nd: fetches size
 			expectedState:        apiv1.BackupSucceeded,
-			expectedSize:         "76.92KB",
-			expectedUncompressed: "76.92KB",
+			expectedSize:         "77KiB",
+			expectedUncompressed: "77KiB",
 		},
 		{
 			name:                   "compressed backup shows uncompressed size",
@@ -81,8 +81,8 @@ func TestBackupSize(t *testing.T) {
 			needsMySQLPod:          true,
 			reconcileCount:         2,
 			expectedState:          apiv1.BackupSucceeded,
-			expectedSize:           "48.83KB",
-			expectedUncompressed:   "195.31KB",
+			expectedSize:           "49KiB",
+			expectedUncompressed:   "195KiB",
 		},
 		{
 			name:                 "size is empty when xtrabackup reports zero",
