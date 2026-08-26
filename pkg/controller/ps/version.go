@@ -3,8 +3,10 @@ package ps
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"regexp"
+	"strings"
 
 	v "github.com/hashicorp/go-version"
 	"github.com/pkg/errors"
@@ -35,11 +37,26 @@ func (r *PerconaServerMySQLReconciler) reconcileVersions(ctx context.Context, cr
 	return nil
 }
 
+var mysqldVersionOutput = regexp.MustCompile(`Ver (\d+\.\d+\.\d+(?:-\d+)?)`)
+
 func (r *PerconaServerMySQLReconciler) reconcileMySQLVersion(
 	ctx context.Context,
 	cr *apiv1.PerconaServerMySQL,
 ) error {
 	log := logf.FromContext(ctx)
+
+	configured, err := cr.ConfiguredMySQLVersion()
+	if err != nil {
+		log.V(1).Info("MySQL version is unknown until a pod is running",
+			"image", cr.Spec.MySQL.Image, "reason", err.Error())
+	}
+
+	if configured != "" && cr.Status.MySQL.Version != configured {
+		if err := r.setMySQLVersion(ctx, cr, configured, ""); err != nil {
+			return errors.Wrap(err, "set configured MySQL version")
+		}
+		log.V(1).Info("MySQL version taken from the custom resource", "version", configured)
+	}
 
 	pod, err := mysql.GetReadyPod(ctx, r.Client, cr)
 	if err != nil {
@@ -49,48 +66,103 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLVersion(
 		return errors.Wrap(err, "get ready mysql pod")
 	}
 
-	imageId, err := k8s.GetImageIDFromPod(pod, mysql.AppName)
+	imageID, err := k8s.GetImageIDFromPod(pod, mysql.AppName)
 	if err != nil {
 		return errors.Wrapf(err, "get MySQL image id from %s", pod.Name)
 	}
 
-	if len(cr.Status.MySQL.Version) > 0 && cr.Status.MySQL.ImageID == imageId {
+	if cr.Status.MySQL.Version != "" && cr.Status.MySQL.ImageID == imageID {
 		return nil
 	}
 
-	re, err := regexp.Compile(`Ver (\d+\.\d+\.\d+(?:-\d+)?)`)
+	running, err := r.runningMySQLVersion(ctx, pod)
 	if err != nil {
 		return err
 	}
 
-	var stdoutb, stderrb bytes.Buffer
-
-	err = r.ClientCmd.Exec(ctx, pod, mysql.AppName, []string{"mysqld", "--version"}, nil, &stdoutb, &stderrb, false)
-	if err != nil {
-		return errors.Wrapf(err, "run mysqld --version (stdout: %s, stderr: %s)", stdoutb.String(), stderrb.String())
+	// The running version confirms what the operator configured; it replaces it
+	// only when neither the spec nor the image tag gave us a version to start with.
+	version := configured
+	if version == "" {
+		version = running
+	} else if !mysqlVersionsMatch(configured, running) {
+		log.Info("configured MySQL version doesn't match the running one",
+			"configured", configured, "running", running, "pod", pod.Name)
+		r.Recorder.Event(cr, corev1.EventTypeWarning, "MySQLVersionMismatch",
+			fmt.Sprintf("configured MySQL version %s doesn't match %s running in %s", configured, running, pod.Name))
 	}
 
-	f := re.FindSubmatch(stdoutb.Bytes())
-	if len(f) < 1 {
-		return errors.Errorf(
+	if err := r.setMySQLVersion(ctx, cr, version, imageID); err != nil {
+		return errors.Wrap(err, "set MySQL version")
+	}
+
+	log.V(1).Info("MySQL Server Version: " + running)
+	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) setMySQLVersion(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQL,
+	version, imageID string,
+) error {
+	if err := writeStatus(ctx, r.Client, client.ObjectKeyFromObject(cr), func(status *apiv1.PerconaServerMySQLStatus) error {
+		status.MySQL.Version = version
+		status.MySQL.ImageID = imageID
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "write status")
+	}
+
+	// The configuration reconcilers run later in this same pass and read the
+	// version from the in-memory custom resource.
+	cr.Status.MySQL.Version = version
+	cr.Status.MySQL.ImageID = imageID
+	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) runningMySQLVersion(ctx context.Context, pod *corev1.Pod) (string, error) {
+	var stdoutb, stderrb bytes.Buffer
+	if err := r.ClientCmd.Exec(ctx, pod, mysql.AppName, []string{"mysqld", "--version"}, nil, &stdoutb, &stderrb, false); err != nil {
+		return "", errors.Wrapf(err, "run mysqld --version (stdout: %s, stderr: %s)", stdoutb.String(), stderrb.String())
+	}
+
+	f := mysqldVersionOutput.FindSubmatch(stdoutb.Bytes())
+	if len(f) < 2 {
+		return "", errors.Errorf(
 			"couldn't extract version information from mysqld --version (stdout: %s, stderr: %s)",
 			stdoutb.String(), stderrb.String())
 	}
 
 	version, err := v.NewVersion(string(f[1]))
 	if err != nil {
-		return errors.Wrap(err, "parse version")
+		return "", errors.Wrap(err, "parse version")
 	}
 
-	if err := writeStatus(ctx, r.Client, client.ObjectKeyFromObject(cr), func(status *apiv1.PerconaServerMySQLStatus) error {
-		status.MySQL.ImageID = imageId
-		status.MySQL.Version = version.String()
-		return nil
-	}); err != nil {
-		return errors.Wrap(err, "write status")
+	return version.String(), nil
+}
+
+// mysqlVersionsMatch compares only the segments the configured version spells
+// out, so that 8.4 configured against 8.4.3 running is not a mismatch.
+func mysqlVersionsMatch(configured, running string) bool {
+	cv, err := v.NewVersion(configured)
+	if err != nil {
+		return false
 	}
-	log.V(1).Info("MySQL Server Version: " + version.String())
-	return nil
+
+	rv, err := v.NewVersion(running)
+	if err != nil {
+		return false
+	}
+
+	segments := strings.Count(strings.SplitN(configured, "-", 2)[0], ".") + 1
+	cs, rs := cv.Segments(), rv.Segments()
+	for i := 0; i < segments && i < len(cs) && i < len(rs); i++ {
+		if cs[i] != rs[i] {
+			return false
+		}
+	}
+
+	return true
 }
 
 func (r *PerconaServerMySQLReconciler) reconcileHAProxyVersion(

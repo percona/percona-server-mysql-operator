@@ -5695,6 +5695,8 @@ spec:
                     type: array
                   vaultSecretName:
                     type: string
+                  version:
+                    type: string
                   volumeSpec:
                     properties:
                       emptyDir:

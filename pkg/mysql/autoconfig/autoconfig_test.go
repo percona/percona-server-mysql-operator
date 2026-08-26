@@ -49,8 +49,26 @@ func TestCalculate(t *testing.T) {
 			wantErr: ErrCPURequired,
 		},
 		"invalid memory string": {
-			req:             Request{CPU: 4000, Memory: "not-a-size"},
+			req:             Request{CPU: 4000, Memory: "not-a-size", Version: Version{Major: 8, Minor: 4, Patch: 8}},
 			wantErrContains: "convert memory",
+		},
+		"version below the supported range": {
+			req:     Request{CPU: 4000, Memory: "8G", Version: Version{Major: 8, Minor: 0, Patch: 45}},
+			wantErr: ErrVersionUnsupported,
+		},
+		"version above the supported range": {
+			req:     Request{CPU: 4000, Memory: "8G", Version: Version{Major: 12}},
+			wantErr: ErrVersionUnsupported,
+		},
+		"version unset": {
+			req:     Request{CPU: 4000, Memory: "8G"},
+			wantErr: ErrVersionUnsupported,
+		},
+		"lowest supported version": {
+			req: Request{CPU: 4000, Memory: "8G", Version: MinSupportedVersion},
+		},
+		"highest supported version": {
+			req: Request{CPU: 4000, Memory: "8G", Version: MaxSupportedVersion},
 		},
 	}
 

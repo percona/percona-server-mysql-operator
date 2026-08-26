@@ -253,6 +253,7 @@ type MySQLSpec struct {
 	// +kubebuilder:validation:Enum=group-replication;async
 	// +kubebuilder:default=group-replication
 	ClusterType   ClusterType            `json:"clusterType,omitempty"`
+	Version       string                 `json:"version,omitempty"`
 	Bootstrap     BootstrapConfig        `json:"bootstrap,omitempty"`
 	AutoConfig    AutoConfigSpec         `json:"autoconfig,omitempty"`
 	ExposePrimary ServiceExposeTogglable `json:"exposePrimary,omitempty"`
@@ -288,6 +289,59 @@ type AutoConfigSpec struct {
 // IsEnabled reports whether autoconfig is turned on.
 func (s AutoConfigSpec) IsEnabled() bool {
 	return s.Enabled != nil && *s.Enabled
+}
+
+// ErrMySQLVersionUnknown is returned when the MySQL version is neither
+// configured in the spec nor derivable from the image reference.
+var ErrMySQLVersionUnknown = errors.New("mysql version is not configured and can't be parsed from the image")
+
+// Percona builds tag the MySQL version after a psmysql marker
+// (0.11.0-psmysql8.4.6), upstream-style images carry it at the start of the tag
+// (8.4.6-6.1).
+var (
+	psmysqlTagVersion = regexp.MustCompile(`psmysql(\d+)\.(\d+)(?:\.(\d+))?`)
+	leadingTagVersion = regexp.MustCompile(`^(\d+)\.(\d+)(?:\.(\d+))?`)
+)
+
+// ConfiguredMySQLVersion returns the version the operator configures the
+// cluster for before any pod is running: mysql.version when set, otherwise the
+// version parsed from the mysql.image tag.
+func (cr *PerconaServerMySQL) ConfiguredMySQLVersion() (string, error) {
+	if ver := strings.TrimSpace(cr.Spec.MySQL.Version); ver != "" {
+		return ver, nil
+	}
+	return MySQLVersionFromImage(cr.Spec.MySQL.Image)
+}
+
+// MySQLVersionFromImage extracts the MySQL version from an image reference,
+// e.g. percona/percona-server:8.4.6-6.1 gives 8.4.6. A tag without a leading
+// version and a digest-only reference both yield ErrMySQLVersionUnknown.
+func MySQLVersionFromImage(image string) (string, error) {
+	ref := image
+	if i := strings.LastIndex(ref, "@"); i >= 0 {
+		ref = ref[:i]
+	}
+
+	i := strings.LastIndex(ref, ":")
+	if i < 0 || i < strings.LastIndex(ref, "/") {
+		return "", ErrMySQLVersionUnknown
+	}
+
+	tag := ref[i+1:]
+	m := psmysqlTagVersion.FindStringSubmatch(tag)
+	if m == nil {
+		m = leadingTagVersion.FindStringSubmatch(tag)
+	}
+	if m == nil {
+		return "", ErrMySQLVersionUnknown
+	}
+
+	patch := m[3]
+	if patch == "" {
+		patch = "0"
+	}
+
+	return m[1] + "." + m[2] + "." + patch, nil
 }
 
 type BootstrapMode string

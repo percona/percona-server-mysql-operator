@@ -1,6 +1,8 @@
 package autoconfig
 
 import (
+	"strconv"
+
 	"github.com/pkg/errors"
 
 	mysqlcalc "github.com/Tusamarco/mysqloperatorcalculator/src/mysqloperatorcalculator"
@@ -24,6 +26,24 @@ const (
 var (
 	ErrMemoryRequired = errors.New("memory is required")
 	ErrCPURequired    = errors.New("cpu is required")
+	// ErrVersionUnsupported guards the calculator's silent behaviour outside its
+	// supported range: it returns an empty configuration instead of an error.
+	ErrVersionUnsupported = errors.New("mysql version is out of the supported range")
+)
+
+// MinSupportedVersion and MaxSupportedVersion mirror the bounds the calculator
+// filters its parameters by.
+var (
+	MinSupportedVersion = Version{
+		Major: mysqlcalc.MySQLMinSupported.Major,
+		Minor: mysqlcalc.MySQLMinSupported.Minor,
+		Patch: mysqlcalc.MySQLMinSupported.Patch,
+	}
+	MaxSupportedVersion = Version{
+		Major: mysqlcalc.MySQLMaxSupported.Major,
+		Minor: mysqlcalc.MySQLMaxSupported.Minor,
+		Patch: mysqlcalc.MySQLMaxSupported.Patch,
+	}
 )
 
 // Version identifies the target MySQL server version.
@@ -31,6 +51,24 @@ type Version struct {
 	Major int
 	Minor int
 	Patch int
+}
+
+func (v Version) String() string {
+	return strconv.Itoa(v.Major) + "." + strconv.Itoa(v.Minor) + "." + strconv.Itoa(v.Patch)
+}
+
+func (v Version) compare(o Version) int {
+	if v.Major != o.Major {
+		return v.Major - o.Major
+	}
+	if v.Minor != o.Minor {
+		return v.Minor - o.Minor
+	}
+	return v.Patch - o.Patch
+}
+
+func (v Version) supported() bool {
+	return v.compare(MinSupportedVersion) >= 0 && v.compare(MaxSupportedVersion) <= 0
 }
 
 // Request describes the workload the operator wants MySQL tuned for. Only CPU
@@ -95,6 +133,11 @@ func Calculate(req Request) (*Result, error) {
 	}
 	if req.LoadType == 0 {
 		req.LoadType = LoadTypeSomeWrites
+	}
+	if !req.Version.supported() {
+		return nil, errors.Wrapf(ErrVersionUnsupported, "%d.%d.%d is outside %s..%s",
+			req.Version.Major, req.Version.Minor, req.Version.Patch,
+			MinSupportedVersion, MaxSupportedVersion)
 	}
 
 	moReq := mysqlcalc.ConfigurationRequest{
