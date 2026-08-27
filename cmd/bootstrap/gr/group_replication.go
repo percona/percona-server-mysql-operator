@@ -366,21 +366,25 @@ func connectToCluster(ctx context.Context, peers sets.Set[string], version *v.Ve
 }
 
 func isGRConfigured(ctx context.Context, shell *mysqlsh) (bool, error) {
-	result, err := shell.runSQL(ctx, "SELECT @@global.group_replication_group_name")
+	result, err := shell.runSQL(ctx, "SELECT COALESCE(@@global.group_replication_group_name, '') AS gr_group_name")
 	if err != nil {
 		return false, errors.Wrap(err, "query group_replication_group_name")
 	}
 
-	if len(result.Rows) == 0 {
-		return false, nil
+	if len(result.Rows) != 1 {
+		return false, errors.Errorf("unexpected output: %+v", result)
 	}
 
-	v, ok := result.Rows[0]["@@global.group_replication_group_name"]
+	v, ok := result.Rows[0]["gr_group_name"]
 	if !ok {
-		return false, nil
+		return false, errors.Errorf("unexpected output: %+v", result)
 	}
 
-	s, _ := v.(string)
+	s, ok := v.(string)
+	if !ok {
+		return false, errors.Errorf("unexpected type for gr_group_name: %T", v)
+	}
+
 	return s != "", nil
 }
 
