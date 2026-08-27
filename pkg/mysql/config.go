@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/flosch/pongo2"
+	"github.com/go-ini/ini"
 	v "github.com/hashicorp/go-version"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
@@ -59,6 +61,24 @@ func (c *Configurable) ExecuteConfigurationTemplate(input string, memory *resour
 		return "", errors.Wrap(err, "execute template")
 	}
 	return result, nil
+}
+
+// loosePrefix matches the prefix that tells mysqld to ignore an option it
+// doesn't recognize. It is not part of the variable's identity: both mysqld and
+// SET GLOBAL read loose_x and x as the same variable, so the two spellings must
+// never be treated as separate options.
+var loosePrefix = regexp.MustCompile(`^loose[-_]`)
+
+// IsLooseVariable reports whether key carries the loose prefix, which tells
+// mysqld to ignore the option when the server doesn't know it.
+func IsLooseVariable(key string) bool {
+	return loosePrefix.MatchString(key)
+}
+
+// CanonicalVariableName strips the loose prefix so that aliases of the same
+// mysqld variable compare equal.
+func CanonicalVariableName(key string) string {
+	return loosePrefix.ReplaceAllString(key, "")
 }
 
 // GetAutoTuneParams derives innodb_buffer_pool_size, innodb_buffer_pool_chunk_size
@@ -129,8 +149,8 @@ func EffectiveResource(res corev1.ResourceRequirements, name corev1.ResourceName
 
 // GetAutoConfigParams derives a full, production-grade set of mysqld parameters
 // from the pod's CPU/memory allocation, the configured workload profile, the
-// running MySQL version and the replication topology, using the mysqloperatorcalculator library.
-func GetAutoConfigParams(cr *apiv1.PerconaServerMySQL, cpu, memory *resource.Quantity) (string, error) {
+// given MySQL version and the replication topology, using the mysqloperatorcalculator library.
+func GetAutoConfigParams(cr *apiv1.PerconaServerMySQL, version string, cpu, memory *resource.Quantity) (string, error) {
 	if cpu == nil || cpu.IsZero() {
 		return "", errors.New("cpu is required for autoconfig")
 	}
@@ -138,7 +158,7 @@ func GetAutoConfigParams(cr *apiv1.PerconaServerMySQL, cpu, memory *resource.Qua
 		return "", errors.New("memory is required for autoconfig")
 	}
 
-	ver, err := parseMySQLVersion(cr.Status.MySQL.Version)
+	ver, err := parseMySQLVersion(version)
 	if err != nil {
 		return "", errors.Wrap(err, "parse mysql version")
 	}
@@ -170,10 +190,13 @@ func GetAutoConfigParams(cr *apiv1.PerconaServerMySQL, cpu, memory *resource.Qua
 	}
 
 	// Sort for a stable ConfigMap payload so unchanged resources don't produce
-	// a churning config hash and needless rollout restarts.
+	// a churning config hash and needless rollout restarts. Keys are compared
+	// canonically, so a user's group_replication_x suppresses the calculator's
+	// loose_group_replication_x rather than leaving both spellings of the same
+	// variable in the merged configuration.
 	names := make([]string, 0, len(params))
 	for name := range params {
-		if _, ok := userKeys[name]; ok {
+		if _, ok := userKeys[CanonicalVariableName(name)]; ok {
 			continue
 		}
 		names = append(names, name)
@@ -225,6 +248,8 @@ func parseMySQLVersion(s string) (autoconfig.Version, error) {
 	return ver, nil
 }
 
+// userConfigKeys returns the canonical names of the variables the user set in
+// .spec.mysql.configuration.
 func userConfigKeys(configuration string) (map[string]struct{}, error) {
 	keys := make(map[string]struct{})
 	if strings.TrimSpace(configuration) == "" {
@@ -235,7 +260,7 @@ func userConfigKeys(configuration string) (map[string]struct{}, error) {
 		return nil, err
 	}
 	for _, k := range section.Keys() {
-		keys[k.Name()] = struct{}{}
+		keys[CanonicalVariableName(k.Name())] = struct{}{}
 	}
 	return keys, nil
 }
@@ -286,8 +311,30 @@ func GetConfig(
 		return config.EmptySection, errors.Wrap(err, "parse config section")
 	}
 
+	dropAliasedKeys(section)
+
 	result := config.Section{Section: *section}
 	return result, nil
+}
+
+// dropAliasedKeys keeps a single key per canonical variable name, the last one,
+// so that the same variable spelled two ways collapses the way the ini parser
+// already collapses identical spellings. Parts are merged auto-config first and
+// user configuration last, so the surviving key is the user's. Without this the
+// section would carry both loose_x and x, and the dynamic-configuration
+// reconciler would issue a SET GLOBAL for each in map iteration order, letting
+// a different value win on each pod.
+func dropAliasedKeys(section *ini.Section) {
+	lastByCanonical := make(map[string]string, len(section.Keys()))
+	for _, k := range section.Keys() {
+		lastByCanonical[CanonicalVariableName(k.Name())] = k.Name()
+	}
+
+	for _, k := range section.Keys() {
+		if lastByCanonical[CanonicalVariableName(k.Name())] != k.Name() {
+			section.DeleteKey(k.Name())
+		}
+	}
 }
 
 func withMySQLdSection(part string) string {

@@ -168,7 +168,7 @@ func setGlobalVariables(
 					continue
 				}
 				if isUnknownVariableError(err) {
-					if db.IsLooseVariable(k) {
+					if mysql.IsLooseVariable(k) {
 						log.V(1).Info("Skipping unknown loose variable", "variable", k, "pod", pod.Name)
 						continue
 					}

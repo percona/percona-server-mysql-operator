@@ -1101,24 +1101,35 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 		// autoconfig derives a full configuration from the calculator when it is
 		// enabled and we have everything it needs (a CPU allocation and a known
 		// MySQL version). Otherwise we keep the legacy buffer-pool +
-		// max_connections autotune, which only requires memory.
-		switch {
-		case cr.Spec.MySQL.AutoConfig.IsEnabled() && cpu == nil:
-			// Enabled but the user set no CPU request/limit: we cannot size the
-			// configuration, so warn and fall back to autotune.
+		// max_connections autotune, which only requires memory. The fallback is
+		// recomputed on every pass, so correcting the spec brings the calculated
+		// configuration back without any further intervention.
+		autotune := func(reason string) (string, error) {
+			log.Info("falling back to autotune", "reason", reason)
 			r.Recorder.Event(cr, corev1.EventTypeWarning, "AutoConfigFallback",
-				"autoconfig is enabled but no CPU request/limit is set; falling back to autotune")
+				fmt.Sprintf("falling back to autotune: %s", reason))
+			return mysql.GetAutoTuneParams(cr, memory)
+		}
+
+		version := strings.TrimSpace(cr.Spec.MySQL.AutoConfig.Version)
+
+		switch {
+		case !cr.Spec.MySQL.AutoConfig.IsEnabled():
 			params, err = mysql.GetAutoTuneParams(cr, memory)
-		case cr.Spec.MySQL.AutoConfig.IsEnabled() && cr.Status.MySQL.Version != "":
-			params, err = mysql.GetAutoConfigParams(cr, cpu, memory)
-			if err != nil {
-				log.Error(err, "failed to calculate autoconfig parameters, falling back to autotune")
-				r.Recorder.Event(cr, corev1.EventTypeWarning, "AutoConfigFallback",
-					fmt.Sprintf("failed to calculate MySQL configuration, falling back to autotune: %v", err))
-				params, err = mysql.GetAutoTuneParams(cr, memory)
-			}
+		case cpu == nil:
+			// Enabled but the user set no CPU request/limit: we cannot size the
+			// configuration.
+			params, err = autotune("autoconfig is enabled but no CPU request/limit is set")
+		case version == "":
+			// The CRD requires the version whenever autoconfig is enabled, so
+			// this only happens against an outdated CRD.
+			params, err = autotune("autoconfig is enabled but mysql.autoconfig.version is not set")
 		default:
-			params, err = mysql.GetAutoTuneParams(cr, memory)
+			params, err = mysql.GetAutoConfigParams(cr, version, cpu, memory)
+			if err != nil {
+				log.Error(err, "failed to calculate autoconfig parameters")
+				params, err = autotune(err.Error())
+			}
 		}
 		if err != nil {
 			log.Error(err, "failed to calculate MySQL tuning parameters, starting without them")

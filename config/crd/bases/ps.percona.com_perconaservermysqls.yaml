@@ -3236,6 +3236,9 @@ spec:
                         - equalReadsWrites
                         - heavyWrites
                         type: string
+                      version:
+                        pattern: ^\d+\.\d+(\.\d+)?$
+                        type: string
                     type: object
                   bootstrap:
                     properties:
@@ -5695,8 +5698,6 @@ spec:
                     type: array
                   vaultSecretName:
                     type: string
-                  version:
-                    type: string
                   volumeSpec:
                     properties:
                       emptyDir:
@@ -5835,6 +5836,11 @@ spec:
                     && ''memory'' in self.resources.limits ? self.resources.limits[''memory'']
                     : self.resources.requests[''memory'']).compareTo(quantity(''12Mi''))
                     >= 0'
+                - message: mysql.autoconfig.version is required when mysql.autoconfig.enabled
+                    is true
+                  rule: '!(has(self.autoconfig) && has(self.autoconfig.enabled) &&
+                    self.autoconfig.enabled) || (has(self.autoconfig.version) && size(self.autoconfig.version)
+                    > 0)'
               orchestrator:
                 properties:
                   affinity:

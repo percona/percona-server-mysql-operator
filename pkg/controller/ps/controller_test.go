@@ -1273,6 +1273,52 @@ var _ = Describe("CR validations", Ordered, func() {
 			})
 		})
 
+		When("autoconfig is enabled without a version", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-autoconfig-no-version", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
+			cr.Spec.Orchestrator.Enabled = true
+			cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
+			cr.Spec.MySQL.AutoConfig.Enabled = &autoConfigEnabled
+			cr.Spec.MySQL.AutoConfig.Version = ""
+			It("the creation of the cluster should fail with error message", func() {
+				createErr := k8sClient.Create(ctx, cr)
+				Expect(createErr).To(HaveOccurred())
+				Expect(createErr.Error()).To(ContainSubstring("mysql.autoconfig.version is required when mysql.autoconfig.enabled is true"))
+			})
+		})
+
+		When("autoconfig version is not a version number", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-autoconfig-bad-version", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
+			cr.Spec.Orchestrator.Enabled = true
+			cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
+			cr.Spec.MySQL.AutoConfig.Enabled = &autoConfigEnabled
+			cr.Spec.MySQL.AutoConfig.Version = "8.4.6-6.1"
+			It("the creation of the cluster should fail with error message", func() {
+				createErr := k8sClient.Create(ctx, cr)
+				Expect(createErr).To(HaveOccurred())
+				Expect(createErr.Error()).To(ContainSubstring("autoconfig.version"))
+			})
+		})
+
+		When("autoconfig version is a major.minor version", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-autoconfig-version", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
+			cr.Spec.Orchestrator.Enabled = true
+			cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
+			cr.Spec.MySQL.AutoConfig.Enabled = &autoConfigEnabled
+			cr.Spec.MySQL.AutoConfig.Version = "8.4"
+			It("should create successfully", func() {
+				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+			})
+		})
+
 		When("autoconfig is disabled, resources are not required", Ordered, func() {
 			cr, err := readDefaultCR("cr-validations-autoconfig-disabled", ns)
 			Expect(err).NotTo(HaveOccurred())

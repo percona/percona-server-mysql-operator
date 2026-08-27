@@ -144,6 +144,35 @@ func TestGetConfig(t *testing.T) {
 			secret:     new("[mysqld]\nmax_connections=200\n"),
 			want:       map[string]string{"max_connections": "200"},
 		},
+		{
+			// loose_x and x are the same variable to mysqld and to SET GLOBAL, so
+			// only one may survive the merge; otherwise the dynamic-configuration
+			// reconciler would apply both in map iteration order and let a
+			// different value win on each pod.
+			desc:       "the configmap overrides a loose key set by the auto-config",
+			autoConfig: new("\nloose_group_replication_member_expel_timeout=5"),
+			configMap:  new("[mysqld]\ngroup_replication_member_expel_timeout=99\n"),
+			want:       map[string]string{"group_replication_member_expel_timeout": "99"},
+		},
+		{
+			desc:       "a loose key in the configmap overrides the bare auto-config key",
+			autoConfig: new("\nmax_connections=442"),
+			configMap:  new("[mysqld]\nloose_max_connections=100\n"),
+			want:       map[string]string{"loose_max_connections": "100"},
+		},
+		{
+			desc:       "the secret overrides a loose key set by the auto-config",
+			autoConfig: new("\nloose_group_replication_member_expel_timeout=5"),
+			secret:     new("[mysqld]\ngroup_replication_member_expel_timeout=99\n"),
+			want:       map[string]string{"group_replication_member_expel_timeout": "99"},
+		},
+		{
+			// Nothing to collapse: the loose spelling is the only one present and
+			// keeps its prefix, so an unknown variable stays skippable.
+			desc:       "a loose key with no counterpart keeps its prefix",
+			autoConfig: new("\nloose_group_replication_member_expel_timeout=5"),
+			want:       map[string]string{"loose_group_replication_member_expel_timeout": "5"},
+		},
 	}
 
 	for _, tt := range tests {
@@ -292,7 +321,7 @@ func newAutoConfigCR(clusterType apiv1.ClusterType, loadType apiv1.AutoConfigLoa
 	cr.Spec.MySQL.ClusterType = clusterType
 	cr.Spec.MySQL.AutoConfig.LoadType = loadType
 	cr.Spec.MySQL.Configuration = userConf
-	cr.Status.MySQL.Version = version
+	cr.Spec.MySQL.AutoConfig.Version = version
 	return cr
 }
 
@@ -306,8 +335,10 @@ func TestGetAutoConfigParams(t *testing.T) {
 		cpu             *resource.Quantity
 		memory          *resource.Quantity
 		wantErrContains string
-		wantContains    []string
-		wantAbsent      []string
+		// wantContains keys must appear in the output.
+		wantContains []string
+		// wantAbsent keys must NOT appear in the output.
+		wantAbsent []string
 	}{
 		"group replication produces GR + innodb tuning": {
 			cr:     newAutoConfigCR(apiv1.ClusterTypeGR, apiv1.AutoConfigLoadTypeSomeWrites, "8.4.8", ""),
@@ -333,6 +364,23 @@ func TestGetAutoConfigParams(t *testing.T) {
 			wantAbsent:   []string{"innodb_buffer_pool_size=", "max_connections="},
 			wantContains: []string{"innodb_redo_log_capacity="},
 		},
+		// The calculator emits this one as loose_group_replication_member_expel_timeout.
+		// Both spellings name the same variable, so the user's must win outright
+		// rather than the two ending up side by side.
+		"user configuration overrides a calculated loose key": {
+			cr:           newAutoConfigCR(apiv1.ClusterTypeGR, apiv1.AutoConfigLoadTypeSomeWrites, "8.4.8", "[mysqld]\ngroup_replication_member_expel_timeout=99"),
+			cpu:          cpu,
+			memory:       mem,
+			wantAbsent:   []string{"group_replication_member_expel_timeout="},
+			wantContains: []string{"loose_group_replication_autorejoin_tries="},
+		},
+		"a loose user key overrides the calculated bare key": {
+			cr:           newAutoConfigCR(apiv1.ClusterTypeGR, apiv1.AutoConfigLoadTypeSomeWrites, "8.4.8", "[mysqld]\nloose_max_connections=999"),
+			cpu:          cpu,
+			memory:       mem,
+			wantAbsent:   []string{"max_connections="},
+			wantContains: []string{"innodb_buffer_pool_size="},
+		},
 		"missing cpu": {
 			cr:              newAutoConfigCR(apiv1.ClusterTypeGR, apiv1.AutoConfigLoadTypeSomeWrites, "8.4.8", ""),
 			cpu:             zero,
@@ -355,7 +403,7 @@ func TestGetAutoConfigParams(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got, err := GetAutoConfigParams(tc.cr, tc.cpu, tc.memory)
+			got, err := GetAutoConfigParams(tc.cr, tc.cr.Spec.MySQL.AutoConfig.Version, tc.cpu, tc.memory)
 
 			if tc.wantErrContains != "" {
 				require.ErrorContains(t, err, tc.wantErrContains)
