@@ -1399,6 +1399,9 @@ spec:
                       type: string
                     primary:
                       type: string
+                    replicationLagSeconds:
+                      format: int64
+                      type: integer
                   required:
                   - clusterRole
                   - globalStatus
