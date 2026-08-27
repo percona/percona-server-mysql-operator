@@ -1703,8 +1703,9 @@ func TestRunPostFinishTasks(t *testing.T) {
 			}
 
 			testCR := cr.DeepCopy()
+			status := testCR.Status.DeepCopy()
 
-			err := r.runPostFinishTasks(ctx, testCR, tt.cluster)
+			err := r.runPostFinishTasks(ctx, testCR, tt.cluster, status)
 
 			if tt.wantErr {
 				require.Error(t, err)

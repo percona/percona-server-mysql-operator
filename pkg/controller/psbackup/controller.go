@@ -69,6 +69,8 @@ type PerconaServerMySQLBackupReconciler struct {
 
 const controllerName = "psbackup-controller"
 
+const backupSizeRetryTimeout = 5 * time.Minute
+
 var ErrBackupSizeUnavailable = errors.New("backup_size not found in xtrabackup_info; PXB 8.4.0-6+ is required")
 
 // SetupWithManager sets up the controller with the Manager.
@@ -142,53 +144,6 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	case apiv1.BackupFailed, apiv1.BackupSucceeded, apiv1.BackupError:
 		if err := r.releaseLeaseIfNeeded(ctx, cr, &status); err != nil {
 			return rr, errors.Wrap(err, "release lease")
-		}
-		if cr.Status.State == apiv1.BackupSucceeded && cr.Status.Size == "" &&
-			meta.FindStatusCondition(status.Conditions, apiv1.ConditionBackupSizeResolved) == nil {
-			cluster := &apiv1.PerconaServerMySQL{}
-			nn := types.NamespacedName{Name: cr.Spec.ClusterName, Namespace: cr.Namespace}
-			if err := r.Get(ctx, nn, cluster); err != nil {
-				log.Error(err, "Failed to get cluster for backup size, will retry")
-				return rr, nil
-			}
-
-			if cluster.CompareVersion("1.3.0") < 0 {
-				meta.SetStatusCondition(&status.Conditions, metav1.Condition{
-					Type:               apiv1.ConditionBackupSizeResolved,
-					Status:             metav1.ConditionFalse,
-					Reason:             "UnsupportedVersion",
-					ObservedGeneration: cr.GetGeneration(),
-					Message:            "Cluster version does not support backup size retrieval",
-				})
-				return rr, nil
-			}
-
-			size, uncompressedSize, err := r.getBackupSize(ctx, cr, cluster)
-			if err != nil {
-				if errors.Is(err, ErrBackupSizeUnavailable) {
-					log.Info("Backup size will be left empty: " + err.Error())
-					meta.SetStatusCondition(&status.Conditions, metav1.Condition{
-						Type:               apiv1.ConditionBackupSizeResolved,
-						Status:             metav1.ConditionFalse,
-						Reason:             "SizeUnavailable",
-						ObservedGeneration: cr.GetGeneration(),
-						Message:            err.Error(),
-					})
-				} else {
-					log.Error(err, "Failed to get backup size, will retry")
-					return rr, nil
-				}
-			} else {
-				status.Size = size
-				status.UncompressedSize = uncompressedSize
-				meta.SetStatusCondition(&status.Conditions, metav1.Condition{
-					Type:               apiv1.ConditionBackupSizeResolved,
-					Status:             metav1.ConditionTrue,
-					Reason:             "SizeResolved",
-					ObservedGeneration: cr.GetGeneration(),
-					Message:            "Backup size successfully retrieved",
-				})
-			}
 		}
 		return rr, nil
 	}
@@ -299,6 +254,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		return rr, nil
 	}
 
+	var jobFinishState apiv1.BackupState
 	for _, cond := range job.Status.Conditions {
 		if cond.Status != corev1.ConditionTrue {
 			continue
@@ -306,16 +262,16 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 
 		switch cond.Type {
 		case batchv1.JobFailed:
-			status.State = apiv1.BackupFailed
+			jobFinishState = apiv1.BackupFailed
 		case batchv1.JobComplete:
-			status.State = apiv1.BackupSucceeded
+			jobFinishState = apiv1.BackupSucceeded
 		}
 
 		status.CompletedAt = job.Status.CompletionTime
 	}
 
-	switch status.State {
-	case apiv1.BackupStarting:
+	switch {
+	case status.State == apiv1.BackupStarting:
 		if job.Status.Active == 0 {
 			return rr, nil
 		}
@@ -328,17 +284,19 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		if running {
 			status.State = apiv1.BackupRunning
 		}
-	case apiv1.BackupRunning:
-		if job.Status.Active > 0 {
-			// Backup is still running, check and renew downtime before it ends.
-			if err := r.renewDowntime(ctx, cr, cluster, status.BackupSource); err != nil {
-				return rr, errors.Wrap(err, "renew downtime for backup source")
-			}
-			return rr, nil
+	case status.State == apiv1.BackupRunning && job.Status.Active > 0:
+		// Backup is still running, check and renew downtime before it ends.
+		if err := r.renewDowntime(ctx, cr, cluster, status.BackupSource); err != nil {
+			return rr, errors.Wrap(err, "renew downtime for backup source")
 		}
-	case apiv1.BackupFailed, apiv1.BackupSucceeded:
+		return rr, nil
+	case jobFinishState != "":
 		log.Info("Running post finish tasks")
-		if err := r.runPostFinishTasks(ctx, cr, cluster); err != nil {
+		status.State = jobFinishState
+		if err := r.runPostFinishTasks(ctx, cr, cluster, &status); err != nil {
+			// Keep backup in the previous state so post-finish tasks are retried
+			// on the next reconcile.
+			status.State = cr.Status.State
 			return rr, errors.Wrap(err, "run post finish tasks")
 		}
 		return rr, nil
@@ -632,12 +590,22 @@ func (r *PerconaServerMySQLBackupReconciler) runPostFinishTasks(
 	ctx context.Context,
 	cr *apiv1.PerconaServerMySQLBackup,
 	cluster *apiv1.PerconaServerMySQL,
+	status *apiv1.PerconaServerMySQLBackupStatus,
 ) error {
+	log := logf.FromContext(ctx)
+
+	if status.State == apiv1.BackupSucceeded && status.Size == "" {
+		if err := r.fetchAndSetBackupSize(ctx, cr, cluster, status); err != nil {
+			if status.CompletedAt != nil && time.Since(status.CompletedAt.Time) < backupSizeRetryTimeout {
+				return errors.Wrap(err, "fetch backup size")
+			}
+			log.Error(err, "Failed to get backup size after retries, giving up")
+		}
+	}
+
 	if !cluster.Spec.MySQL.IsAsync() || !cluster.Spec.Orchestrator.Enabled {
 		return nil
 	}
-
-	log := logf.FromContext(ctx)
 
 	pod, err := orchestrator.GetReadyPod(ctx, r.Client, cluster)
 	if err != nil {
@@ -651,6 +619,29 @@ func (r *PerconaServerMySQLBackupReconciler) runPostFinishTasks(
 		return errors.Wrapf(err, "end downtime for %s", cr.Status.BackupSource)
 	}
 
+	return nil
+}
+
+func (r *PerconaServerMySQLBackupReconciler) fetchAndSetBackupSize(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQLBackup,
+	cluster *apiv1.PerconaServerMySQL,
+	status *apiv1.PerconaServerMySQLBackupStatus,
+) error {
+	if cluster.CompareVersion("1.3.0") < 0 {
+		return nil
+	}
+
+	size, uncompressedSize, err := r.getBackupSize(ctx, cr, cluster)
+	if err != nil {
+		if errors.Is(err, ErrBackupSizeUnavailable) {
+			return nil
+		}
+		return err
+	}
+
+	status.Size = size
+	status.UncompressedSize = uncompressedSize
 	return nil
 }
 

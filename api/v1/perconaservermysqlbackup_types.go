@@ -73,7 +73,6 @@ const (
 
 const (
 	ConditionBackupLeaseAcquired = "BackupLeaseAcquired"
-	ConditionBackupSizeResolved  = "BackupSizeResolved"
 )
 
 // PerconaServerMySQLBackupStatus defines the observed state of PerconaServerMySQLBackup

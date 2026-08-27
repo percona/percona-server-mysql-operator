@@ -66,7 +66,7 @@ func TestBackupSize(t *testing.T) {
 			backupSize:           78771, // ~76.92KB
 			jobCondition:         batchv1.JobComplete,
 			needsMySQLPod:        true,
-			reconcileCount:       2, // 1st: Running->Succeeded, 2nd: fetches size
+			reconcileCount:       1,
 			expectedState:        apiv1.BackupSucceeded,
 			expectedSize:         "77KiB",
 			expectedUncompressed: "77KiB",
@@ -79,7 +79,7 @@ func TestBackupSize(t *testing.T) {
 			compressed:             true,
 			jobCondition:           batchv1.JobComplete,
 			needsMySQLPod:          true,
-			reconcileCount:         2,
+			reconcileCount:         1,
 			expectedState:          apiv1.BackupSucceeded,
 			expectedSize:           "49KiB",
 			expectedUncompressed:   "195KiB",
@@ -90,7 +90,7 @@ func TestBackupSize(t *testing.T) {
 			backupSize:           0,
 			jobCondition:         batchv1.JobComplete,
 			needsMySQLPod:        true,
-			reconcileCount:       2,
+			reconcileCount:       1,
 			expectedState:        apiv1.BackupSucceeded,
 			expectedSize:         "",
 			expectedUncompressed: "",
