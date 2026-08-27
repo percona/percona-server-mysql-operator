@@ -238,6 +238,21 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		return nil
 	}
 
+	appliedCRVersion, err := mysql.GetAppliedCRVersion(ctx, r.Client, cr)
+	if err != nil {
+		if errors.Is(err, mysql.ErrRolloutInProgress) {
+			log.Info("Waiting for mysql pods rollout to complete")
+			return nil
+		}
+		return errors.Wrap(err, "get applied CR version")
+	}
+
+	// Wait for the pods to be re-created so that any new users may be created at container startup.
+	if cr.CompareVersion("1.3.0") >= 0 && (appliedCRVersion == "" || appliedCRVersion != cr.Spec.CRVersion) {
+		log.Info("Waiting for smart update to finish")
+		return nil
+	}
+
 	var (
 		restartMySQL        bool
 		restartReplication  bool

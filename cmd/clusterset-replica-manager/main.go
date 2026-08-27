@@ -10,6 +10,7 @@ import (
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
+	"github.com/percona/percona-server-mysql-operator/pkg/clusterset"
 	csmanager "github.com/percona/percona-server-mysql-operator/pkg/clusterset/manager"
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -34,6 +35,7 @@ type replicaManager interface {
 	CreateReplicaCluster(ctx context.Context, cluster *apiv1.ClusterSetCluster, recoverMethod string) error
 	RemoveReplicaCluster(ctx context.Context, clusterName string, force bool) error
 	SetPrimaryCluster(ctx context.Context, clusterName string) error
+	RejoinCluster(ctx context.Context, clusterName string) error
 }
 
 func main() {
@@ -89,19 +91,23 @@ func main() {
 	}
 
 	switch os.Args[1] {
-	case "add-replica":
+	case clusterset.CmdAddReplica:
 		if err := addReplica(ctx, manager, args); err != nil {
 			log.Fatalf("failed to add replica: %v", err)
 		}
-	case "remove-replica":
+	case clusterset.CmdRemoveReplica:
 		force := psClusterSet.Spec.UnsafeClusterSetFlags.ForcedClusterRemoval != nil && *psClusterSet.Spec.UnsafeClusterSetFlags.ForcedClusterRemoval
 		if err := removeReplica(ctx, manager, args, force); err != nil {
 			log.Fatalf("failed to remove replica: %v", err)
 		}
 
-	case "set-primary":
+	case clusterset.CmdSetPrimary:
 		if err := setPrimary(ctx, manager, psClusterSet.Spec.PrimaryCluster); err != nil {
 			log.Fatalf("failed to set primary cluster: %v", err)
+		}
+	case clusterset.CmdRejoinCluster:
+		if err := rejoinCluster(ctx, manager, args); err != nil {
+			log.Fatalf("failed to rejoin cluster: %v", err)
 		}
 	default:
 		log.Fatalf("invalid command: %s", os.Args[1])
@@ -146,6 +152,15 @@ func setPrimary(ctx context.Context, manager replicaManager, primary string) err
 		}
 		return errors.Wrap(err, "failed to set primary cluster")
 	}
+	return nil
+}
+
+func rejoinCluster(ctx context.Context, manager replicaManager, args replicaInitArgs) error {
+	log.Printf("Rejoining cluster '%s' to clusterset '%s'", args.replicaClusterName, args.psClusterSetName)
+	if err := manager.RejoinCluster(ctx, args.replicaClusterName); err != nil {
+		return errors.Wrap(err, "failed to rejoin cluster")
+	}
+	log.Printf("Cluster '%s' rejoined to clusterset '%s'", args.replicaClusterName, args.psClusterSetName)
 	return nil
 }
 

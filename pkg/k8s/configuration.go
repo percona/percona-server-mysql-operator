@@ -44,8 +44,8 @@ func CustomConfigHash(ctx context.Context, cl client.Client, cr *apiv1.PerconaSe
 			return "", nil
 		}
 
-		if exists && !metav1.IsControlledBy(currCm, cr) {
-			// ConfigMap exists and is created by the user, not the operator
+		// ConfigMap exists and is created by the user, not the operator
+		if !metav1.IsControlledBy(currCm, cr) {
 			if cmName == cr.Name+"-mysql" && currCm.Data["my.cnf"] == "" {
 				return "", errors.New("Failed to update config map. Please use my.cnf as a config name. Only in this case config map will be applied to the cluster")
 			}
@@ -85,7 +85,7 @@ func CustomConfigHash(ctx context.Context, cl client.Client, cr *apiv1.PerconaSe
 
 	cm := ConfigMap(cr, cmName, configurable.GetConfigMapKey(), configuration, component)
 	if !EqualConfigMaps(currCm, cm) {
-		if err := EnsureObject(ctx, cl, cr, cm, cl.Scheme()); err != nil {
+		if err := EnsureObjectWithHash(ctx, cl, cr, cm, cl.Scheme()); err != nil {
 			return "", errors.Wrapf(err, "ensure ConfigMap/%s", cmName)
 		}
 

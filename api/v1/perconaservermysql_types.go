@@ -38,6 +38,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/validation"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
@@ -54,17 +55,17 @@ const (
 
 // PerconaServerMySQLSpec defines the desired state of PerconaServerMySQL
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async') || self.unsafeFlags.orchestrator || self.orchestrator.enabled",message="Invalid configuration: When 'mysql.clusterType' is set to 'async', 'orchestrator.enabled' must be true unless 'unsafeFlags.orchestrator' is enabled"
-// +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async') || self.unsafeFlags.proxy || self.proxy.haproxy.enabled",message="Invalid configuration: When 'mysql.clusterType' is set to 'async', 'proxy.haproxy.enabled' must be true unless 'unsafeFlags.proxy' is enabled"
-// +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async') || self.proxy.router == null || !has(self.proxy.router.enabled) || !self.proxy.router.enabled",message="Invalid configuration: When 'mysql.clusterType' is set to 'async', 'proxy.router.enabled' must be disabled"
+// +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async') || self.unsafeFlags.proxy || (has(self.proxy.haproxy) && self.proxy.haproxy.enabled)",message="Invalid configuration: When 'mysql.clusterType' is set to 'async', 'proxy.haproxy.enabled' must be true unless 'unsafeFlags.proxy' is enabled"
+// +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async') || !has(self.proxy.router) || !has(self.proxy.router.enabled) || !self.proxy.router.enabled",message="Invalid configuration: When 'mysql.clusterType' is set to 'async', 'proxy.router.enabled' must be disabled"
 // +kubebuilder:validation:XValidation:rule="!(has(self.mysql.size) && self.mysql.size < 3) || self.unsafeFlags.mysqlSize",message="Invalid configuration: Scaling MySQL replicas below 3 requires 'unsafeFlags.mysqlSize: true'"
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'group-replication' && has(self.mysql.size) && self.mysql.size >= 9) || self.unsafeFlags.mysqlSize",message="Invalid configuration: For 'group replication', scaling MySQL replicas above 9 requires 'unsafeFlags.mysqlSize: true'"
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'group-replication' && has(self.mysql.size) && self.mysql.size % 2 == 0) || self.unsafeFlags.mysqlSize",message="Invalid configuration: For 'group replication', using an even number of MySQL replicas requires 'unsafeFlags.mysqlSize: true'"
-// +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'group-replication') || self.unsafeFlags.proxy || self.proxy.router.enabled || self.proxy.haproxy.enabled",message="Invalid configuration: For 'group replication', MySQL Router or HAProxy must be enabled unless 'unsafeFlags.proxy' is enabled"
-// +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'group-replication' && self.proxy.router.enabled && has(self.proxy.router.size) && self.proxy.router.size < 2) || self.unsafeFlags.proxySize",message="Invalid configuration: For 'group replication', Router size must be 2 or greater unless 'unsafeFlags.proxySize' is enabled"
+// +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'group-replication') || self.unsafeFlags.proxy || (has(self.proxy.router) && self.proxy.router.enabled) || (has(self.proxy.haproxy) && self.proxy.haproxy.enabled)",message="Invalid configuration: For 'group replication', MySQL Router or HAProxy must be enabled unless 'unsafeFlags.proxy' is enabled"
+// +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'group-replication' && has(self.proxy.router) && self.proxy.router.enabled && has(self.proxy.router.size) && self.proxy.router.size < 2) || self.unsafeFlags.proxySize",message="Invalid configuration: For 'group replication', Router size must be 2 or greater unless 'unsafeFlags.proxySize' is enabled"
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'group-replication' && has(self.mysql.size) && self.mysql.size < 3) || self.unsafeFlags.mysqlSize",message="Invalid configuration: For 'group replication', MySQL size must be 3 or greater unless 'unsafeFlags.mysqlSize' is enabled"
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async' && has(self.orchestrator.size) && (self.orchestrator.size < 3 || self.orchestrator.size % 2 == 0) && self.orchestrator.size > 0) || self.unsafeFlags.orchestratorSize",message="Invalid configuration: For 'async' replication, Orchestrator size must be 3 or greater and odd unless 'unsafeFlags.orchestratorSize' is enabled"
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async' && self.updateStrategy == 'SmartUpdate') || self.orchestrator.enabled",message="Invalid configuration: For 'async' replication, SmartUpdate requires Orchestrator to be enabled"
-// +kubebuilder:validation:XValidation:rule="!(self.proxy.router != null && has(self.proxy.router.enabled) && self.proxy.router.enabled && self.proxy.haproxy != null && has(self.proxy.haproxy.enabled) && self.proxy.haproxy.enabled)",message="Invalid configuration: MySQL Router and HAProxy can't be enabled at the same time"
+// +kubebuilder:validation:XValidation:rule="!(has(self.proxy.router) && has(self.proxy.router.enabled) && self.proxy.router.enabled && has(self.proxy.haproxy) && has(self.proxy.haproxy.enabled) && self.proxy.haproxy.enabled)",message="Invalid configuration: MySQL Router and HAProxy can't be enabled at the same time"
 type PerconaServerMySQLSpec struct {
 	Metadata  *Metadata `json:"metadata,omitempty"`
 	CRVersion string    `json:"crVersion,omitempty"`
@@ -91,6 +92,8 @@ type PerconaServerMySQLSpec struct {
 	// Deprecated: not supported since v0.12.0. Use initContainer instead
 	InitImage     string            `json:"initImage,omitempty"`
 	InitContainer InitContainerSpec `json:"initContainer,omitempty"`
+
+	Users []User `json:"users,omitempty"`
 }
 
 // StorageAutoscaling returns the storage autoscaling configuration, if any.
@@ -688,12 +691,39 @@ type PiTRSpec struct {
 }
 
 type BinlogServerStorageSpec struct {
-	S3 *BackupStorageS3Spec `json:"s3,omitempty"`
+	S3         *BackupStorageS3Spec               `json:"s3,omitempty"`
+	Encryption *BinlogServerStorageEncryptionSpec `json:"encryption,omitempty"`
+}
+
+type BinlogServerStorageEncryptionSpec struct {
+	// KekID is the ID of the key encryption key (KEK) used to encrypt the data encryption key (DEK) in the keyring file.
+	// If unspecified, uses the first key in the file.
+	// +kubebuilder:validation:Optional
+	KekID string `json:"kekId,omitempty"`
+	// +kubebuilder:default=AES-256-CTR
+	// +kubebuilder:validation:Enum=AES-128-CTR;AES-192-CTR;AES-256-CTR
+	Cipher string `json:"cipher,omitempty"`
+}
+
+type BinlogServerKeyringSecretSelector struct {
+	// Name of the secret containing the keyring file.
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+	// Key in the Secret containing the keyring file. Defaults to "keyring.json".
+	// +kubebuilder:default=keyring.json
+	Key string `json:"key,omitempty"`
 }
 
 // +kubebuilder:validation:XValidation:rule="!has(self.size) || self.size <= 1",message="binlogServer size cannot be more than 1"
+// +kubebuilder:validation:XValidation:rule="!self.?storage.?encryption.hasValue() || has(self.keyringSecret)",message="binlogServer.keyringSecret is required when binlogServer.storage.encryption is set"
 type BinlogServerSpec struct {
 	Storage BinlogServerStorageSpec `json:"storage,omitempty"`
+
+	// KeyringSecret is a reference to a Secret containing the keyring file.
+	// It is required to encrypt new binlog files and to read already encrypted
+	// ones, so it must stay configured even after storage encryption is disabled
+	// if the storage still holds encrypted binlogs.
+	KeyringSecret *BinlogServerKeyringSecretSelector `json:"keyringSecret,omitempty"`
 
 	// The number of seconds the MySQL client library will wait to establish a connection with a remote host
 	// +kubebuilder:default=30
@@ -732,6 +762,12 @@ type BinlogServerSpec struct {
 }
 
 func (s *BinlogServerSpec) SetDefaults() {
+	if s.KeyringSecret != nil && s.KeyringSecret.Key == "" {
+		s.KeyringSecret.Key = "keyring.json"
+	}
+	if s.Storage.Encryption != nil && s.Storage.Encryption.Cipher == "" {
+		s.Storage.Encryption.Cipher = "AES-256-CTR"
+	}
 	if s.SSLMode == "" {
 		s.SSLMode = "verify_identity"
 	}
@@ -872,6 +908,7 @@ func (s StatefulAppState) String() string {
 }
 
 const (
+	StateNew          StatefulAppState = ""
 	StateInitializing StatefulAppState = "initializing"
 	StateStopping     StatefulAppState = "stopping"
 	StatePaused       StatefulAppState = "paused"
@@ -906,14 +943,70 @@ type PerconaServerMySQLStatus struct { // INSERT ADDITIONAL STATUS FIELD - defin
 	StorageAutoscaling map[string]StorageAutoscalingStatus `json:"storageAutoscaling,omitempty"`
 }
 
+type UserSecretKeySelector struct {
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default:=password
+	Key string `json:"key"`
+}
+
+// User defines a MySQL user
+type User struct {
+	// Name of the user to be created.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Pattern="^[^`'\\\\]*$"
+	Name string `json:"name"`
+	// PasswordSecretRef is a reference to the Secret that holds this user's password.
+	// +kubebuilder:validation:Optional
+	PasswordSecretRef *UserSecretKeySelector `json:"passwordSecretRef,omitempty"`
+	// DBs is a list of databases that the user has access to. If empty, the user will have access to all databases.
+	// +kubebuilder:validation:items:Pattern="^[^`'\\\\]*$"
+	DBs []string `json:"dbs,omitempty"`
+	// Hosts is a list of hosts that the user can connect from. If empty, the user will be able to connect from any host.
+	// +kubebuilder:validation:items:Pattern="^[^`'\\\\]*$"
+	Hosts []string `json:"hosts,omitempty"`
+	// Grants is a list of grants that the user has. If empty, the user will have all privileges.
+	Grants []string `json:"grants,omitempty"`
+	// WithGrantOption grants the user the ability to grant their own privileges to other users.
+	WithGrantOption bool `json:"withGrantOption,omitempty"`
+}
+
+var invalidSecretNameChars = regexp.MustCompile(`[^a-z0-9-]+`)
+
+// DefaultCustomUserSecretName returns the name of the Secret that stores the
+// auto-generated password for a custom user.
+func (cr *PerconaServerMySQL) DefaultCustomUserSecretName(u User) string {
+	name := fmt.Sprintf("%s-user-%s", cr.GetName(), u.Name)
+	if len(validation.IsDNS1123Subdomain(name)) == 0 {
+		return name
+	}
+
+	sanitized := strings.Trim(invalidSecretNameChars.ReplaceAllString(strings.ToLower(u.Name), "-"), "-")
+	hash := FNVHash([]byte(u.Name))
+	return fmt.Sprintf("%s-user-%s-%s", cr.GetName(), sanitized, hash)
+}
+
+func (cr *PerconaServerMySQL) InternalCustomUserSecretName() string {
+	return fmt.Sprintf("%s-internal-custom-users", cr.GetName())
+}
+
 func (s *PerconaServerMySQLStatus) CompareMySQLVersion(ver string) int {
 	return v.Must(v.NewVersion(s.MySQL.Version)).Compare(v.Must(v.NewVersion(ver)))
 }
 
 const (
-	ConditionInnoDBClusterBootstrapped    string = "InnoDBClusterBootstrapped"
+	ConditionInnoDBClusterBootstrapped string = "InnoDBClusterBootstrapped"
+	ConditionClusterSetMember          string = "ClusterSetMember"
+	ConditionAwaitingExternalBootstrap string = "AwaitingExternalBootstrap"
+
+	// Deprecated, preserved only for backward compatibility
 	ConditionClusterSetReplicationRunning string = "ClusterSetReplicationRunning"
-	ConditionAwaitingExternalBootstrap    string = "AwaitingExternalBootstrap"
+)
+
+const (
+	ClusterSetMemberReasonPrimary = "Primary"
+	ClusterSetMemberReasonReplica = "Replica"
 )
 
 // PerconaServerMySQL is the Schema for the perconaservermysqls API
@@ -933,8 +1026,7 @@ type PerconaServerMySQL struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec PerconaServerMySQLSpec `json:"spec,omitempty"`
-
+	Spec   PerconaServerMySQLSpec   `json:"spec,omitempty"`
 	Status PerconaServerMySQLStatus `json:"status,omitempty"` // Make sure that the Status is updated after making changes. See the description of `(*PerconaServerMySQLReconciler) reconcileCRStatus` method for details.
 }
 
@@ -959,6 +1051,7 @@ const (
 	UserRoot           SystemUser = "root"
 	UserXtraBackup     SystemUser = "xtrabackup"
 	UserClusterSet     SystemUser = "clusterset"
+	UserConfigurator   SystemUser = "configurator"
 )
 
 // systemUsers is the canonical, ordered list of every SystemUser value.
@@ -975,6 +1068,7 @@ var systemUsers = []SystemUser{
 	UserRoot,
 	UserXtraBackup,
 	UserClusterSet,
+	UserConfigurator,
 }
 
 // knownSystemUsers is the closed set of SystemUser values. Callers that join

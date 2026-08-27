@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
 # Install
-# brew install gawk coreutils
-for command in gawk gcsplit; do
+# brew install gawk coreutils jq
+for command in gawk gcsplit jq; do
 	if ! command -v $command &>/dev/null; then
 		echo "Error: $command is not installed. Please install it: brew install $command" >&2
 		exit 1
@@ -22,12 +22,28 @@ sed_inplace() {
 	fi
 }
 
+log() {
+	echo >&2 "[olm] $*"
+}
+
+abort() {
+	echo >&2 "$@"
+	exit 1
+}
+
 DISTRIBUTION="$1"
 
 cd "${BASH_SOURCE[0]%/*}"
 
+# shellcheck disable=SC2034  # used by sourced distributions/*.sh
+repo_root="$(cd ../.. && pwd)"
 bundle_directory="bundles/${DISTRIBUTION}"
 project_directory="projects/${DISTRIBUTION}"
+
+if [ -f "distributions/${DISTRIBUTION}.sh" ]; then
+	# shellcheck source=/dev/null
+	source "distributions/${DISTRIBUTION}.sh"
+fi
 
 # The 'operators.operatorframework.io.bundle.package.v1' package name for each
 # bundle (updated for the 'redhat' bundle).
@@ -87,6 +103,7 @@ install -d \
 # - https://coreos.slack.com/team/UP1LZCC1Y
 
 export package="${package_name}"
+# shellcheck disable=SC2153  # set by Makefile / environment
 export package_channel="${PACKAGE_CHANNEL}"
 export openshift_supported_versions="${OPENSHIFT_VERSIONS}"
 
@@ -148,19 +165,18 @@ BEGIN {
 ' ../../deploy/crd.yaml
 
 while IFS= read -r f; do
+	# shellcheck disable=SC2016  # single quotes intended: $ is sed syntax, not shell
 	sed_inplace '1s/^/---\n/; ${/^---$/d;}' "$f"
 done < <(find "${bundle_directory}/manifests" -type f -name "*.crd.yaml")
 
-abort() {
-	echo >&2 "$@"
-	exit 1
-}
 dump() { yq --color-output; }
 
 # The first command render yaml correctly and the second extract data.
 
+# shellcheck disable=SC2015  # abort only intended when the length check fails
 yq eval -i '[.]' operator_deployments.yaml && yq eval 'length == 1' operator_deployments.yaml --exit-status >/dev/null || abort "too many deployments!" $'\n'"$(yq eval . operator_deployments.yaml)"
 
+# shellcheck disable=SC2015  # abort only intended when the length check fails
 yq eval -i '[.]' operator_accounts.yaml && yq eval 'length == 1' operator_accounts.yaml --exit-status >/dev/null || abort "too many service accounts!" $'\n'"$(yq eval . operator_accounts.yaml)"
 
 # Wrap roles into arrays
@@ -169,6 +185,7 @@ yq eval-all '[.]' operator_ns_roles.yaml >operator_ns_roles_arr.yaml && mv opera
 
 # Render bundle CSV and strip comments.
 export stem=$(yq -r '.projectName' "${project_directory}/PROJECT")
+# shellcheck disable=SC2153  # set by Makefile / environment
 export version="${VERSION}"
 export timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 export name="${stem}.v${VERSION}"
@@ -179,13 +196,28 @@ export deployment=$(yq eval operator_deployments.yaml)
 export account=$(yq eval '.[0] | .metadata.name' operator_accounts.yaml)
 export clusterRules=$(yq eval '[.[] | {"serviceAccountName": strenv(account), "rules": .rules}]' operator_cluster_roles.yaml)
 export nsRules=$(yq eval '[.[] | {"serviceAccountName": strenv(account), "rules": .rules}]' operator_ns_roles.yaml)
-export relatedImages=$(yq eval bundle.relatedImages.yaml)
 
-export examples=$(jq -n "[
+if [ "${DISTRIBUTION}" == "redhat" ]; then
+	redhat_images="$(build_redhat_related_images)"
+	# Rendered as YAML (not compact JSON) so `spec.relatedImages` lists each
+	# image on its own line instead of a single flow-style line.
+	export relatedImages=$(jq -c '.relatedImages' <<<"${redhat_images}" | yq -o=yaml -P '.')
+	export redhatOperatorImage=$(jq -r '.operatorImage' <<<"${redhat_images}")
+else
+	export relatedImages='[]'
+fi
+
+examples_json=$(jq -n "[
   $(yq eval -o=json ../../deploy/cr.yaml),
   $(yq eval -o=json ../../deploy/backup/backup.yaml),
   $(yq eval -o=json ../../deploy/backup/restore.yaml)
 ]")
+
+if [ "${DISTRIBUTION}" == "redhat" ]; then
+	examples_json="$(rewrite_cr_example_images "${examples_json}" "${redhat_images}")"
+fi
+
+export examples="${examples_json}"
 
 yq eval '
   .metadata.annotations["alm-examples"] = strenv(examples) |
@@ -227,7 +259,8 @@ elif [ "${DISTRIBUTION}" == "redhat" ]; then
         .metadata.annotations["features.operators.openshift.io/disconnected"] = "true" |
         .spec.relatedImages = env(relatedImages) |
         .metadata.annotations.certified = "true" |
-        .metadata.annotations["containerImage"] = "registry.connect.redhat.com/percona/percona-server-mysql-operator@sha256:<update_operator_SHA_value>" |
+        .metadata.annotations["containerImage"] = env(redhatOperatorImage) |
+        .spec.install.spec.deployments[].spec.template.spec.containers[].image = env(redhatOperatorImage) |
         .metadata.name = strenv(name_certified)' \
 		"${bundle_directory}/manifests/${file_name}.v${VERSION}.clusterserviceversion.yaml"
 fi

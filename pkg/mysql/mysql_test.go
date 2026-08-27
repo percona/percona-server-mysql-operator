@@ -80,7 +80,7 @@ func TestStatefulSet(t *testing.T) {
 		sts := StatefulSet(cluster, initImage, configHash, tlsHash, secret)
 		assert.Equal(t, int64(600), *sts.Spec.Template.Spec.TerminationGracePeriodSeconds)
 
-		cluster.Spec.MySQL.TerminationGracePeriodSeconds = ptr.To(int64(30))
+		cluster.Spec.MySQL.TerminationGracePeriodSeconds = new(int64(30))
 
 		sts = StatefulSet(cluster, initImage, configHash, tlsHash, secret)
 		assert.Equal(t, int64(30), *sts.Spec.Template.Spec.TerminationGracePeriodSeconds)
@@ -141,7 +141,7 @@ func TestStatefulSet(t *testing.T) {
 				Operator:          "Exists",
 				Value:             "value",
 				Effect:            "NoExecute",
-				TolerationSeconds: ptr.To(int64(1001)),
+				TolerationSeconds: new(int64(1001)),
 			},
 		}
 		cluster.Spec.MySQL.Tolerations = tolerations
@@ -227,7 +227,7 @@ func TestStatefulsetVolumes(t *testing.T) {
 				},
 				PodSpec: apiv1.PodSpec{
 					Size:                          3,
-					TerminationGracePeriodSeconds: ptr.To(int64(30)),
+					TerminationGracePeriodSeconds: new(int64(30)),
 				},
 			},
 			expectedStatefulSet: appsv1.StatefulSet{
@@ -236,7 +236,7 @@ func TestStatefulsetVolumes(t *testing.T) {
 					Namespace: "test-ns",
 				},
 				Spec: appsv1.StatefulSetSpec{
-					Replicas: ptr.To(int32(3)),
+					Replicas: new(int32(3)),
 					Template: corev1.PodTemplateSpec{
 						ObjectMeta: metav1.ObjectMeta{
 							Annotations: expectedAnnotations,
@@ -247,7 +247,7 @@ func TestStatefulsetVolumes(t *testing.T) {
 									Image: initImage,
 								},
 							},
-							TerminationGracePeriodSeconds: ptr.To(int64(30)),
+							TerminationGracePeriodSeconds: new(int64(30)),
 							Volumes:                       expectedVolumes(),
 						},
 					},
@@ -263,7 +263,7 @@ func TestStatefulsetVolumes(t *testing.T) {
 				},
 				PodSpec: apiv1.PodSpec{
 					Size:                          3,
-					TerminationGracePeriodSeconds: ptr.To(int64(30)),
+					TerminationGracePeriodSeconds: new(int64(30)),
 				},
 			},
 			expectedStatefulSet: appsv1.StatefulSet{
@@ -272,7 +272,7 @@ func TestStatefulsetVolumes(t *testing.T) {
 					Namespace: "test-ns",
 				},
 				Spec: appsv1.StatefulSetSpec{
-					Replicas: ptr.To(int32(3)),
+					Replicas: new(int32(3)),
 					Template: corev1.PodTemplateSpec{
 						ObjectMeta: metav1.ObjectMeta{
 							Annotations: expectedAnnotations,
@@ -283,7 +283,7 @@ func TestStatefulsetVolumes(t *testing.T) {
 									Image: initImage,
 								},
 							},
-							TerminationGracePeriodSeconds: ptr.To(int64(30)),
+							TerminationGracePeriodSeconds: new(int64(30)),
 							Volumes: append(expectedVolumes(),
 								corev1.Volume{
 									Name: "datadir",
@@ -305,7 +305,7 @@ func TestStatefulsetVolumes(t *testing.T) {
 				},
 				PodSpec: apiv1.PodSpec{
 					Size:                          3,
-					TerminationGracePeriodSeconds: ptr.To(int64(30)),
+					TerminationGracePeriodSeconds: new(int64(30)),
 				},
 			},
 			expectedStatefulSet: appsv1.StatefulSet{
@@ -314,7 +314,7 @@ func TestStatefulsetVolumes(t *testing.T) {
 					Namespace: "test-ns",
 				},
 				Spec: appsv1.StatefulSetSpec{
-					Replicas: ptr.To(int32(3)),
+					Replicas: new(int32(3)),
 					Template: corev1.PodTemplateSpec{
 						ObjectMeta: metav1.ObjectMeta{
 							Annotations: expectedAnnotations,
@@ -325,7 +325,7 @@ func TestStatefulsetVolumes(t *testing.T) {
 									Image: initImage,
 								},
 							},
-							TerminationGracePeriodSeconds: ptr.To(int64(30)),
+							TerminationGracePeriodSeconds: new(int64(30)),
 							Volumes: append(expectedVolumes(),
 								corev1.Volume{
 									Name: "datadir",
@@ -348,7 +348,7 @@ func TestStatefulsetVolumes(t *testing.T) {
 				},
 				PodSpec: apiv1.PodSpec{
 					Size:                          3,
-					TerminationGracePeriodSeconds: ptr.To(int64(30)),
+					TerminationGracePeriodSeconds: new(int64(30)),
 				},
 			},
 			expectedStatefulSet: appsv1.StatefulSet{
@@ -357,7 +357,7 @@ func TestStatefulsetVolumes(t *testing.T) {
 					Namespace: "test-ns",
 				},
 				Spec: appsv1.StatefulSetSpec{
-					Replicas: ptr.To(int32(3)),
+					Replicas: new(int32(3)),
 					Template: corev1.PodTemplateSpec{
 						ObjectMeta: metav1.ObjectMeta{
 							Annotations: expectedAnnotations,
@@ -368,7 +368,7 @@ func TestStatefulsetVolumes(t *testing.T) {
 									Image: initImage,
 								},
 							},
-							TerminationGracePeriodSeconds: ptr.To(int64(30)),
+							TerminationGracePeriodSeconds: new(int64(30)),
 							Volumes: append(expectedVolumes(),
 								corev1.Volume{
 									Name: "datadir",
@@ -468,7 +468,7 @@ func expectedVolumes() []corev1.Volume {
 										Path: "my-config.cnf",
 									},
 								},
-								Optional: ptr.To(true),
+								Optional: new(true),
 							},
 						},
 						{
@@ -482,7 +482,7 @@ func expectedVolumes() []corev1.Volume {
 										Path: "auto-config.cnf",
 									},
 								},
-								Optional: ptr.To(true),
+								Optional: new(true),
 							},
 						},
 						{
@@ -496,7 +496,7 @@ func expectedVolumes() []corev1.Volume {
 										Path: "my-secret.cnf",
 									},
 								},
-								Optional: ptr.To(true),
+								Optional: new(true),
 							},
 						},
 					},
@@ -514,7 +514,7 @@ func expectedVolumes() []corev1.Volume {
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
 					SecretName: "",
-					Optional:   ptr.To(true),
+					Optional:   new(true),
 				},
 			},
 		},
@@ -523,7 +523,7 @@ func expectedVolumes() []corev1.Volume {
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
 					SecretName: "internal-encryption-keys-ps-cluster1",
-					Optional:   ptr.To(true),
+					Optional:   new(true),
 				},
 			},
 		},

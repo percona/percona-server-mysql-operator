@@ -1395,6 +1395,9 @@ spec:
                       type: string
                     primary:
                       type: string
+                    replicationLagSeconds:
+                      format: int64
+                      type: integer
                   required:
                   - clusterRole
                   - globalStatus
@@ -3427,6 +3430,16 @@ spec:
                             type: object
                           initImage:
                             type: string
+                          keyringSecret:
+                            properties:
+                              key:
+                                default: keyring.json
+                                type: string
+                              name:
+                                type: string
+                            required:
+                            - name
+                            type: object
                           labels:
                             additionalProperties:
                               type: string
@@ -3832,6 +3845,18 @@ spec:
                             type: object
                           storage:
                             properties:
+                              encryption:
+                                properties:
+                                  cipher:
+                                    default: AES-256-CTR
+                                    enum:
+                                    - AES-128-CTR
+                                    - AES-192-CTR
+                                    - AES-256-CTR
+                                    type: string
+                                  kekId:
+                                    type: string
+                                type: object
                               s3:
                                 properties:
                                   bucket:
@@ -3930,6 +3955,9 @@ spec:
                         x-kubernetes-validations:
                         - message: binlogServer size cannot be more than 1
                           rule: '!has(self.size) || self.size <= 1'
+                        - message: binlogServer.keyringSecret is required when binlogServer.storage.encryption
+                            is set
+                          rule: '!self.?storage.?encryption.hasValue() || has(self.keyringSecret)'
                     type: object
                   date:
                     type: string
@@ -3937,6 +3965,16 @@ spec:
                     type: boolean
                   gtid:
                     type: string
+                  keyringSecret:
+                    properties:
+                      key:
+                        default: keyring.json
+                        type: string
+                      name:
+                        type: string
+                    required:
+                    - name
+                    type: object
                   type:
                     enum:
                     - gtid
@@ -5013,6 +5051,16 @@ spec:
                             type: object
                           initImage:
                             type: string
+                          keyringSecret:
+                            properties:
+                              key:
+                                default: keyring.json
+                                type: string
+                              name:
+                                type: string
+                            required:
+                            - name
+                            type: object
                           labels:
                             additionalProperties:
                               type: string
@@ -5418,6 +5466,18 @@ spec:
                             type: object
                           storage:
                             properties:
+                              encryption:
+                                properties:
+                                  cipher:
+                                    default: AES-256-CTR
+                                    enum:
+                                    - AES-128-CTR
+                                    - AES-192-CTR
+                                    - AES-256-CTR
+                                    type: string
+                                  kekId:
+                                    type: string
+                                type: object
                               s3:
                                 properties:
                                   bucket:
@@ -5516,6 +5576,9 @@ spec:
                         x-kubernetes-validations:
                         - message: binlogServer size cannot be more than 1
                           rule: '!has(self.size) || self.size <= 1'
+                        - message: binlogServer.keyringSecret is required when binlogServer.storage.encryption
+                            is set
+                          rule: '!self.?storage.?encryption.hasValue() || has(self.keyringSecret)'
                       enabled:
                         type: boolean
                     type: object
@@ -14418,6 +14481,42 @@ spec:
                   versionServiceEndpoint:
                     type: string
                 type: object
+              users:
+                items:
+                  properties:
+                    dbs:
+                      items:
+                        pattern: ^[^`'\\]*$
+                        type: string
+                      type: array
+                    grants:
+                      items:
+                        type: string
+                      type: array
+                    hosts:
+                      items:
+                        pattern: ^[^`'\\]*$
+                        type: string
+                      type: array
+                    name:
+                      pattern: ^[^`'\\]*$
+                      type: string
+                    passwordSecretRef:
+                      properties:
+                        key:
+                          default: password
+                          type: string
+                        name:
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    withGrantOption:
+                      type: boolean
+                  required:
+                  - name
+                  type: object
+                type: array
             type: object
             x-kubernetes-validations:
             - message: 'Invalid configuration: When ''mysql.clusterType'' is set to
@@ -14429,11 +14528,11 @@ spec:
                 ''async'', ''proxy.haproxy.enabled'' must be true unless ''unsafeFlags.proxy''
                 is enabled'
               rule: '!(self.mysql.clusterType == ''async'') || self.unsafeFlags.proxy
-                || self.proxy.haproxy.enabled'
+                || (has(self.proxy.haproxy) && self.proxy.haproxy.enabled)'
             - message: 'Invalid configuration: When ''mysql.clusterType'' is set to
                 ''async'', ''proxy.router.enabled'' must be disabled'
-              rule: '!(self.mysql.clusterType == ''async'') || self.proxy.router ==
-                null || !has(self.proxy.router.enabled) || !self.proxy.router.enabled'
+              rule: '!(self.mysql.clusterType == ''async'') || !has(self.proxy.router)
+                || !has(self.proxy.router.enabled) || !self.proxy.router.enabled'
             - message: 'Invalid configuration: Scaling MySQL replicas below 3 requires
                 ''unsafeFlags.mysqlSize: true'''
               rule: '!(has(self.mysql.size) && self.mysql.size < 3) || self.unsafeFlags.mysqlSize'
@@ -14448,11 +14547,13 @@ spec:
             - message: 'Invalid configuration: For ''group replication'', MySQL Router
                 or HAProxy must be enabled unless ''unsafeFlags.proxy'' is enabled'
               rule: '!(self.mysql.clusterType == ''group-replication'') || self.unsafeFlags.proxy
-                || self.proxy.router.enabled || self.proxy.haproxy.enabled'
+                || (has(self.proxy.router) && self.proxy.router.enabled) || (has(self.proxy.haproxy)
+                && self.proxy.haproxy.enabled)'
             - message: 'Invalid configuration: For ''group replication'', Router size
                 must be 2 or greater unless ''unsafeFlags.proxySize'' is enabled'
-              rule: '!(self.mysql.clusterType == ''group-replication'' && self.proxy.router.enabled
-                && has(self.proxy.router.size) && self.proxy.router.size < 2) || self.unsafeFlags.proxySize'
+              rule: '!(self.mysql.clusterType == ''group-replication'' && has(self.proxy.router)
+                && self.proxy.router.enabled && has(self.proxy.router.size) && self.proxy.router.size
+                < 2) || self.unsafeFlags.proxySize'
             - message: 'Invalid configuration: For ''group replication'', MySQL size
                 must be 3 or greater unless ''unsafeFlags.mysqlSize'' is enabled'
               rule: '!(self.mysql.clusterType == ''group-replication'' && has(self.mysql.size)
@@ -14469,8 +14570,8 @@ spec:
                 == ''SmartUpdate'') || self.orchestrator.enabled'
             - message: 'Invalid configuration: MySQL Router and HAProxy can''t be
                 enabled at the same time'
-              rule: '!(self.proxy.router != null && has(self.proxy.router.enabled)
-                && self.proxy.router.enabled && self.proxy.haproxy != null && has(self.proxy.haproxy.enabled)
+              rule: '!(has(self.proxy.router) && has(self.proxy.router.enabled) &&
+                self.proxy.router.enabled && has(self.proxy.haproxy) && has(self.proxy.haproxy.enabled)
                 && self.proxy.haproxy.enabled)'
           status:
             properties:

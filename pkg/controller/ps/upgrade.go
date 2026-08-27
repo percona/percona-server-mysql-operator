@@ -95,7 +95,6 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 	})
 
 	for _, pod := range secondaries {
-		pod := pod
 
 		log.Info("apply changes to the secondary pod", "pod", pod.Name)
 

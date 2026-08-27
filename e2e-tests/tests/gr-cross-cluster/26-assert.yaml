@@ -12,8 +12,8 @@ resourceRefs:
   name: gr-cross-cluster-single-node
   ref: singleNode
 assertAll:
-- celExpr: "singleNode.status.conditions.exists(c, c.type == \"ClusterSetReplicationRunning\" && c.status == \"True\")"
-  message: "singleNode should have ClusterSetReplicationRunning=True"
+- celExpr: "singleNode.status.conditions.exists(c, c.type == \"ClusterSetMember\" && c.status == \"True\" && c.reason == \"Replica\")"
+  message: "singleNode should have ClusterSetMember=True with reason Replica"
 
 commands:
   - script: |-
@@ -50,8 +50,10 @@ status:
   - reason: Ready
     status: "True"
     type: Ready
-  - type: ClusterSetReplicationRunning
+  - message: Cluster is a replica member of ClusterSet
+    reason: Replica
     status: "True"
+    type: ClusterSetMember
   - message: InnoDB cluster successfully bootstrapped with 1 nodes
     status: "True"
     type: InnoDBClusterBootstrapped

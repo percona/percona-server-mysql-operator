@@ -47,24 +47,26 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 	}
 
 	if reconcileErr != nil {
-		if cr.Status.State != apiv1.StateError {
-			return writeStatus(ctx, r.Client, client.ObjectKeyFromObject(cr), func(status *apiv1.PerconaServerMySQLStatus) error {
-				clusterCondition := metav1.Condition{
-					Status:  metav1.ConditionTrue,
-					Type:    apiv1.StateError.String(),
-					Message: reconcileErr.Error(),
-					Reason:  "ErrorReconcile",
-				}
-
-				meta.SetStatusCondition(&status.Conditions, clusterCondition)
-
-				status.State = apiv1.StateError
-
-				r.Recorder.Event(cr, corev1.EventTypeWarning, "ReconcileError", "Failed to reconcile cluster")
-				return nil
-			})
+		condition := meta.FindStatusCondition(cr.Status.Conditions, apiv1.StateError.String())
+		if cr.Status.State == apiv1.StateError && condition != nil && condition.Message == reconcileErr.Error() {
+			return nil
 		}
-		return nil
+		return writeStatus(ctx, r.Client, client.ObjectKeyFromObject(cr), func(status *apiv1.PerconaServerMySQLStatus) error {
+			clusterCondition := metav1.Condition{
+				Status:             metav1.ConditionTrue,
+				Type:               apiv1.StateError.String(),
+				Message:            reconcileErr.Error(),
+				Reason:             naming.ConditionReasonErrorReconcile,
+				ObservedGeneration: cr.Generation,
+			}
+
+			meta.SetStatusCondition(&status.Conditions, clusterCondition)
+
+			status.State = apiv1.StateError
+
+			r.Recorder.Event(cr, corev1.EventTypeWarning, naming.ConditionReasonErrorReconcile, "Failed to reconcile cluster")
+			return nil
+		})
 	}
 
 	log := logf.FromContext(ctx).WithName("reconcileCRStatus")
@@ -257,6 +259,10 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 			}
 		}
 
+		if err := r.setClusterSetMemberCondition(ctx, cr, status); err != nil {
+			return errors.Wrap(err, "check ClusterSet status")
+		}
+
 		if status.State != initialState {
 			log.Info("Cluster state changed", "previous", initialState, "current", status.State)
 			r.Recorder.Event(cr, corev1.EventTypeNormal, "ClusterStateChanged", fmt.Sprintf("%s -> %s", initialState, status.State))
@@ -265,6 +271,52 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 	}
 
 	return writeStatus(ctx, r.Client, client.ObjectKeyFromObject(cr), updateStatusF)
+}
+
+func (r *PerconaServerMySQLReconciler) setClusterSetMemberCondition(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQL,
+	status *apiv1.PerconaServerMySQLStatus,
+) error {
+	cond, err := r.getClusterSetMemberCondition(ctx, cr)
+	if err != nil {
+		return errors.Wrap(err, "get clusterset member condition")
+	}
+
+	if cond != nil {
+		meta.SetStatusCondition(&status.Conditions, *cond)
+		if err := k8s.SetFinalizers(ctx, r.Client, cr, naming.FinalizerClusterSetProtection); err != nil {
+			return errors.Wrap(err, "set finalizers")
+		}
+		return nil
+	}
+
+	// No condition existed before, this cluster was never a part of any ClusterSet, return early.
+	prevCond := meta.FindStatusCondition(cr.Status.Conditions, apiv1.ConditionClusterSetMember)
+	if prevCond == nil {
+		return nil
+	}
+
+	log := logf.FromContext(ctx)
+
+	meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionClusterSetMember)
+	if err := k8s.RemoveFinalizers(ctx, r.Client, cr, naming.FinalizerClusterSetProtection); err != nil {
+		return errors.Wrap(err, "remove finalizer")
+	}
+
+	// Only a former replica is left read-only and dissolved by mysqlshell on removal.
+	// A primary that simply outlived its replicas is already read-write and needs no recovery.
+	if prevCond.Reason == apiv1.ClusterSetMemberReasonPrimary {
+		return nil
+	}
+
+	log.Info("Former ClusterSet member, recovery is needed")
+	if err := k8s.AnnotateObject(ctx, r.Client, cr, map[naming.AnnotationKey]string{
+		naming.AnnotationClusterSetRecoveryNeeded: "true",
+	}); err != nil {
+		return errors.Wrap(err, "add clusterset recovery annotation")
+	}
+	return nil
 }
 
 func (r *PerconaServerMySQLReconciler) isAwaitingExtBootstrap(ctx context.Context, cr *apiv1.PerconaServerMySQL) (bool, error) {
