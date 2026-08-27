@@ -95,8 +95,8 @@ func TestReconcileMySQLConfig(t *testing.T) {
 		return fmt.Sprintf("%s-mysql-%d", crName, idx)
 	}
 
-	// newPods returns count running mysql pods. The operator waits for every pod
-	// it expects to be running before it talks to mysql, so a case that wants the
+	// newPods returns count ready mysql pods. The operator waits for every pod
+	// it expects to be ready before it talks to mysql, so a case that wants the
 	// change deferred asks for fewer than podCount.
 	newPods := func(count int) []client.Object {
 		cr := newCR("", "")
@@ -109,14 +109,19 @@ func TestReconcileMySQLConfig(t *testing.T) {
 					Namespace: cr.Namespace,
 					Labels:    mysql.MatchLabels(cr),
 				},
-				Status: corev1.PodStatus{Phase: corev1.PodRunning},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodRunning,
+					Conditions: []corev1.PodCondition{
+						{Type: corev1.ContainersReady, Status: corev1.ConditionTrue},
+					},
+				},
 			})
 		}
 		return objs
 	}
 
 	// world is what the API holds besides the CR, the ConfigMap and the
-	// statefulset: the internal secret plus the given number of running pods.
+	// statefulset: the internal secret plus the given number of ready pods.
 	world := func(running int) []client.Object {
 		return append([]client.Object{newSecret(newCR("", ""))}, newPods(running)...)
 	}
@@ -141,11 +146,12 @@ func TestReconcileMySQLConfig(t *testing.T) {
 
 	tests := []struct {
 		desc              string
-		crVersion         string // defaults to 1.3.0
-		state             apiv1.StatefulAppState
-		currentConfig     string          // my.cnf in the ConfigMap; empty means no ConfigMap at all
-		lastAppliedConfig string          // JSON string on the statefulset annotation; empty means absent
-		object            []client.Object // what the API holds besides the CR, the ConfigMap and the statefulset; nil means a healthy cluster
+		crVersion         string                 // defaults to 1.3.0
+		state             apiv1.StatefulAppState // status.state
+		mysqlState        apiv1.StatefulAppState // status.mysql.state; defaults to ready
+		currentConfig     string                 // my.cnf in the ConfigMap; empty means no ConfigMap at all
+		lastAppliedConfig string                 // JSON string on the statefulset annotation; empty means absent
+		object            []client.Object        // what the API holds besides the CR, the ConfigMap and the statefulset; nil means a healthy cluster
 
 		expectedStmts  []string // List of SET GLOBAL statements expected on all pods
 		expectRestart  bool
@@ -186,7 +192,7 @@ func TestReconcileMySQLConfig(t *testing.T) {
 		{
 			// Cluster state does not decide whether mysql can be reconfigured:
 			// a cluster sits in initializing while an unrelated component is
-			// unhealthy, and its mysql pods are running and reachable throughout.
+			// unhealthy, and its mysql pods are ready and reachable throughout.
 			desc:              "initializing cluster is reconfigured",
 			state:             apiv1.StateInitializing,
 			currentConfig:     "[mysqld]\nmax_connections=200\n",
@@ -205,25 +211,37 @@ func TestReconcileMySQLConfig(t *testing.T) {
 			expectedConfig:    `{"max_connections":"200"}`,
 		},
 		{
-			// What does decide it is whether the pods are there to talk to. A
-			// paused cluster has none, and the annotation must stay untouched too:
-			// writing it would make the change look applied and it would never be
-			// retried once the pods come back.
+			// What does decide it is whether mysql itself is there to talk to. A
+			// paused cluster has no pod at all, and the annotation must stay
+			// untouched too: writing it would make the change look applied and it
+			// would never be retried once the pods come back.
 			desc:              "paused cluster is deferred",
 			state:             apiv1.StatePaused,
+			mysqlState:        apiv1.StatePaused,
 			currentConfig:     "[mysqld]\nmax_connections=200\n",
 			lastAppliedConfig: `{"max_connections":"100"}`,
 			object:            world(0),
 			expectedConfig:    `{"max_connections":"100"}`,
 		},
 		{
-			// A partly running cluster is deferred for the same reason: applying
+			// A partly ready cluster is deferred for the same reason: applying
 			// to some pods and recording it as done would leave the rest behind.
-			desc:              "config is deferred until every pod is running",
+			desc:              "config is deferred until every pod is ready",
 			state:             apiv1.StateReady,
 			currentConfig:     "[mysqld]\nmax_connections=200\n",
 			lastAppliedConfig: `{"max_connections":"100"}`,
 			object:            world(podCount - 1),
+			expectedConfig:    `{"max_connections":"100"}`,
+		},
+		{
+			// Every pod can be ready before mysql is: the component reports ready
+			// only once the operator is done with it, so until then a reconfigure
+			// would race whatever else is still in flight.
+			desc:              "config is deferred until mysql reports ready",
+			state:             apiv1.StateInitializing,
+			mysqlState:        apiv1.StateInitializing,
+			currentConfig:     "[mysqld]\nmax_connections=200\n",
+			lastAppliedConfig: `{"max_connections":"100"}`,
 			expectedConfig:    `{"max_connections":"100"}`,
 		},
 		{
@@ -390,7 +408,12 @@ func TestReconcileMySQLConfig(t *testing.T) {
 			if crVersion == "" {
 				crVersion = "1.3.0"
 			}
+			mysqlState := tt.mysqlState
+			if mysqlState == "" {
+				mysqlState = apiv1.StateReady
+			}
 			cr := newCR(crVersion, tt.state)
+			cr.Status.MySQL.State = mysqlState
 			sts := newSTS(cr, tt.lastAppliedConfig)
 
 			objs := []client.Object{cr, sts.DeepCopy()}
@@ -402,7 +425,7 @@ func TestReconcileMySQLConfig(t *testing.T) {
 			} else {
 				objs = append(objs, world(podCount)...)
 			}
-			cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).Build()
+			cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).WithStatusSubresource(cr).Build()
 
 			// What mysql answers every statement: a case expecting a restart
 			// gets the refusal that leaves the operator no other way to apply
@@ -473,6 +496,12 @@ func TestReconcileMySQLConfig(t *testing.T) {
 				wantHash = configHash(tt.expectedConfig)
 			}
 			assert.Equal(t, wantHash, updated.Spec.Template.Annotations[naming.AnnotationConfigHash.String()], "pod template config hash")
+
+			// Whether the config is in sync is reported on the CR, but only once
+			// the reconcile got far enough to know: a run that never reached the
+			// pods leaves the condition alone.
+			updatedCR := new(apiv1.PerconaServerMySQL)
+			require.NoError(t, cl.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, updatedCR))
 		})
 	}
 }
