@@ -114,11 +114,11 @@ func (dest *BackupDestination) IsIncremental() bool {
 // Returns the destination unchanged if it's not incremental.
 func (dest *BackupDestination) IncrementalBaseDestination() BackupDestination {
 	s := dest.String()
-	idx := strings.Index(s, ".incr")
-	if idx == -1 {
+	before, _, ok := strings.Cut(s, ".incr")
+	if !ok {
 		return *dest
 	}
-	return BackupDestination(s[:idx])
+	return BackupDestination(before)
 }
 
 // IncrementalsDir returns the ".incr/" directory prefix used to list all incremental backups
@@ -127,11 +127,11 @@ func (dest *BackupDestination) IncrementalBaseDestination() BackupDestination {
 // Returns empty string if the destination is not incremental.
 func (dest *BackupDestination) IncrementalsDir() string {
 	s := dest.String()
-	idx := strings.Index(s, ".incr")
-	if idx == -1 {
+	before, _, ok := strings.Cut(s, ".incr")
+	if !ok {
 		return ""
 	}
-	return s[:idx] + ".incr/"
+	return before + ".incr/"
 }
 
 func (dest *BackupDestination) SetGCSDestination(bucket, backupName string) {
