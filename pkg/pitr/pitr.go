@@ -60,7 +60,7 @@ func RestoreJob(
 
 	pvcName := fmt.Sprintf("%s-%s-mysql-0", mysql.DataVolumeName, cluster.Name)
 
-	return &batchv1.Job{
+	job := &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "batch/v1",
 			Kind:       "Job",
@@ -166,6 +166,16 @@ func RestoreJob(
 			BackoffLimit: cluster.Spec.Backup.BackoffLimit,
 		},
 	}
+
+	binlogServer := cluster.Spec.Backup.PiTR.BinlogServer
+	if restore.Spec.PITR != nil && restore.Spec.PITR.BackupSource != nil && restore.Spec.PITR.BackupSource.BinlogServer != nil {
+		binlogServer = restore.Spec.PITR.BackupSource.BinlogServer
+	}
+	if binlogServer != nil {
+		k8s.PrepareJobWithS3CA(job, cluster, binlogServer.Storage.S3)
+	}
+
+	return job
 }
 
 func restoreContainer(

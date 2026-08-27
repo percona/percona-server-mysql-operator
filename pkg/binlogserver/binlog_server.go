@@ -97,6 +97,27 @@ func StatefulSet(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServerSpec, lab
 		annotations[string(naming.AnnotationConfigHash)] = configHash
 	}
 
+	podContainers := containers(cr, spec)
+	initContainers := []corev1.Container{
+		k8s.InitContainer(
+			cr,
+			AppName,
+			initImage,
+			nil,
+			spec.ImagePullPolicy,
+			spec.ContainerSecurityContext,
+			spec.Resources,
+			nil,
+		),
+	}
+	if s := spec.Storage.S3; s != nil && s.CABundle != nil &&
+		cr.CompareVersion("1.3.0") >= 0 {
+		initContainers[0].VolumeMounts = append(initContainers[0].VolumeMounts,
+			corev1.VolumeMount{Name: naming.S3CertsInputVolumeName, MountPath: naming.S3CertsInputMountPath, ReadOnly: true},
+			corev1.VolumeMount{Name: naming.S3CertsVolumeName, MountPath: naming.S3CertsMountPath},
+		)
+	}
+
 	return &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "apps/v1",
@@ -121,19 +142,8 @@ func StatefulSet(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServerSpec, lab
 				Spec: spec.Core(
 					labels,
 					volumes(cr, spec, configSecretName),
-					[]corev1.Container{
-						k8s.InitContainer(
-							cr,
-							AppName,
-							initImage,
-							nil,
-							spec.ImagePullPolicy,
-							spec.ContainerSecurityContext,
-							spec.Resources,
-							nil,
-						),
-					},
-					containers(spec),
+					initContainers,
+					podContainers,
 				),
 			},
 		},
@@ -231,14 +241,24 @@ func volumes(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServerSpec, configS
 		},
 	)
 
+	if s := spec.Storage.S3; s != nil && s.CABundle != nil &&
+		cr.CompareVersion("1.3.0") >= 0 {
+		selectors := []apiv1.CABundleSecretSelector{*s.CABundle}
+		vols = append(vols, k8s.S3CertVolumes(selectors)...)
+		vols = append(vols, corev1.Volume{
+			Name:         naming.S3CertsVolumeName,
+			VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+		})
+	}
+
 	return vols
 }
 
-func containers(spec *apiv1.BinlogServerSpec) []corev1.Container {
-	return []corev1.Container{binlogServerContainer(spec)}
+func containers(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServerSpec) []corev1.Container {
+	return []corev1.Container{binlogServerContainer(cr, spec)}
 }
 
-func binlogServerContainer(spec *apiv1.BinlogServerSpec) corev1.Container {
+func binlogServerContainer(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServerSpec) corev1.Container {
 	env := []corev1.EnvVar{
 		{
 			Name:  "CONFIG_PATH",
@@ -279,7 +299,7 @@ func binlogServerContainer(spec *apiv1.BinlogServerSpec) corev1.Container {
 		},
 	)
 
-	return corev1.Container{
+	container := corev1.Container{
 		Name:                     AppName,
 		Image:                    spec.Image,
 		ImagePullPolicy:          spec.ImagePullPolicy,
@@ -293,4 +313,14 @@ func binlogServerContainer(spec *apiv1.BinlogServerSpec) corev1.Container {
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 		SecurityContext:          spec.ContainerSecurityContext,
 	}
+	if s := spec.Storage.S3; s != nil && s.CABundle != nil &&
+		cr.CompareVersion("1.3.0") >= 0 {
+		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
+			Name:      naming.S3CertsVolumeName,
+			MountPath: naming.SystemCABundlePath,
+			SubPath:   "ca-bundle.crt",
+			ReadOnly:  true,
+		})
+	}
+	return container
 }

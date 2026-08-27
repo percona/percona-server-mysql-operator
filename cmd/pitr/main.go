@@ -17,6 +17,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/cmd/bootstrap/utils"
 	"github.com/percona/percona-server-mysql-operator/cmd/internal/db"
 	"github.com/percona/percona-server-mysql-operator/pkg/binlogserver"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup/storage"
 )
 
@@ -26,8 +27,10 @@ type Database interface {
 	Close() error
 }
 
-type newStorageFn func(ctx context.Context, endpoint, accessKey, secretKey, bucket, prefix, region string, verifyTLS bool) (storage.Storage, error)
-type newDatabaseFn func(ctx context.Context, params db.DBParams) (Database, error)
+type (
+	newStorageFn  func(ctx context.Context, opts *storage.S3Options) (storage.Storage, error)
+	newDatabaseFn func(ctx context.Context, params db.DBParams) (Database, error)
+)
 
 // getObjectFn fetches a single object by key and returns a streaming reader.
 type getObjectFn func(ctx context.Context, objectKey string) (io.ReadCloser, error)
@@ -55,7 +58,11 @@ func main() {
 		return db.NewDatabase(ctx, params)
 	}
 
-	if err := run(ctx, storage.NewS3, newDB, utils.GetSecret, applyBinlogs); err != nil {
+	newS3 := func(ctx context.Context, opts *storage.S3Options) (storage.Storage, error) {
+		return storage.NewClient(ctx, opts)
+	}
+
+	if err := run(ctx, newS3, newDB, utils.GetSecret, applyBinlogs); err != nil {
 		log.Fatalf("pitr failed: %v", err)
 	}
 }
@@ -117,7 +124,23 @@ func run(ctx context.Context, newS3 newStorageFn, newDB newDatabaseFn, getSecret
 	bucket := os.Getenv("S3_BUCKET")
 	verifyTLS := os.Getenv("VERIFY_TLS") != "false"
 
-	s3Client, err := newS3(ctx, endpoint, accessKey, secretKey, bucket, "", region, verifyTLS)
+	var caBundle []byte
+	if caBundlePath := os.Getenv(naming.EnvSSLCertFile); caBundlePath != "" {
+		caBundle, err = os.ReadFile(caBundlePath)
+		if err != nil {
+			return fmt.Errorf("read S3 CA bundle: %w", err)
+		}
+	}
+
+	s3Client, err := newS3(ctx, &storage.S3Options{
+		Endpoint:        endpoint,
+		AccessKeyID:     accessKey,
+		SecretAccessKey: secretKey,
+		BucketName:      bucket,
+		Region:          region,
+		VerifyTLS:       verifyTLS,
+		CABundle:        caBundle,
+	})
 	if err != nil {
 		return fmt.Errorf("create S3 client: %w", err)
 	}

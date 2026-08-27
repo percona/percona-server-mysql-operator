@@ -139,6 +139,10 @@ func backupDefaults(spec *apiv1.BackupSpec) {
 					CredentialsSecret: fmt.Sprintf("%s-s3-credentials", NameCluster),
 					Region:            "us-west-2",
 					EndpointURL:       "https://s3.amazonaws.com",
+					CABundle: &apiv1.CABundleSecretSelector{
+						Name: "minio-ca-bundle",
+						Key:  "ca.crt",
+					},
 				},
 			},
 			ConnectTimeout:     30,
@@ -210,6 +214,10 @@ func backupDefaults(spec *apiv1.BackupSpec) {
 				CredentialsSecret: fmt.Sprintf("%s-s3-credentials", NameCluster),
 				Region:            "us-west-2",
 				EndpointURL:       "https://s3.amazonaws.com",
+				CABundle: &apiv1.CABundleSecretSelector{
+					Name: "minio-ca-bundle",
+					Key:  "ca.crt",
+				},
 			},
 			Annotations: map[string]string{
 				"testName": "scheduled-backup",

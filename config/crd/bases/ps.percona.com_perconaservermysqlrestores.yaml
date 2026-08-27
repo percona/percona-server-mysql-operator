@@ -878,6 +878,16 @@ spec:
                         properties:
                           bucket:
                             type: string
+                          caBundle:
+                            properties:
+                              key:
+                                default: ca.crt
+                                type: string
+                              name:
+                                type: string
+                            required:
+                            - name
+                            type: object
                           credentialsSecret:
                             type: string
                           endpointUrl:
@@ -2373,6 +2383,16 @@ spec:
                                 properties:
                                   bucket:
                                     type: string
+                                  caBundle:
+                                    properties:
+                                      key:
+                                        default: ca.crt
+                                        type: string
+                                      name:
+                                        type: string
+                                    required:
+                                    - name
+                                    type: object
                                   credentialsSecret:
                                     type: string
                                   endpointUrl:

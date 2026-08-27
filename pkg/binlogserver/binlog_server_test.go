@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
@@ -11,6 +12,37 @@ import (
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 )
+
+func TestStatefulSetS3CABundle(t *testing.T) {
+	findVolume := func(volumes []corev1.Volume, name string) corev1.Volume {
+		for _, volume := range volumes {
+			if volume.Name == name {
+				return volume
+			}
+		}
+		return corev1.Volume{}
+	}
+
+	cr := newTestCR("cluster", "ns")
+	cr.Spec.CRVersion = "1.3.0"
+	spec := cr.Spec.Backup.PiTR.BinlogServer
+	spec.Storage.S3.CABundle = &apiv1.CABundleSecretSelector{Name: "private-ca", Key: "root.pem"}
+	sts := StatefulSet(cr, spec, MatchLabels(cr), "init-image", "", "")
+
+	container := sts.Spec.Template.Spec.Containers[0]
+	assert.Equal(t, []string{"/opt/percona/binlog-server-entrypoint.sh"}, container.Command)
+	assert.Equal(t, []string{binlogServerBinary, "pull", configMountPath + "/" + ConfigKey}, container.Args)
+	assert.Contains(t, container.VolumeMounts, corev1.VolumeMount{
+		Name: naming.S3CertsVolumeName, MountPath: naming.SystemCABundlePath, SubPath: "ca-bundle.crt", ReadOnly: true,
+	})
+	projected := findVolume(sts.Spec.Template.Spec.Volumes, naming.S3CertsInputVolumeName)
+	assert.Equal(t, "root.pem", projected.Projected.Sources[0].Secret.Items[0].Key)
+	require.Len(t, sts.Spec.Template.Spec.InitContainers, 1)
+	certsInit := sts.Spec.Template.Spec.InitContainers[0]
+	assert.Contains(t, certsInit.VolumeMounts, corev1.VolumeMount{Name: naming.S3CertsVolumeName, MountPath: naming.S3CertsMountPath})
+	assert.Contains(t, certsInit.VolumeMounts, corev1.VolumeMount{Name: naming.S3CertsInputVolumeName, MountPath: naming.S3CertsInputMountPath, ReadOnly: true})
+	assert.NotNil(t, findVolume(sts.Spec.Template.Spec.Volumes, naming.S3CertsVolumeName).EmptyDir)
+}
 
 func newTestCR(name, namespace string) *apiv1.PerconaServerMySQL {
 	return &apiv1.PerconaServerMySQL{

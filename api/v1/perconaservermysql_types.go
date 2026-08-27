@@ -426,6 +426,17 @@ type EncryptionKeySecretSelector struct {
 	Key string `json:"key,omitempty"`
 }
 
+const DefaultCABundleKey = "ca.crt"
+
+type CABundleSecretSelector struct {
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default:=ca.crt
+	Key string `json:"key,omitempty"`
+}
+
 type BackupSpec struct {
 	Enabled                  bool                          `json:"enabled,omitempty"`
 	SourcePod                string                        `json:"sourcePod,omitempty"`
@@ -586,6 +597,9 @@ type BackupStorageS3Spec struct {
 	CredentialsSecret string           `json:"credentialsSecret"`
 	Region            string           `json:"region,omitempty"`
 	EndpointURL       string           `json:"endpointUrl,omitempty"`
+	// CABundle selects a custom CA certificate bundle for TLS connections to the S3 endpoint.
+	// +optional
+	CABundle *CABundleSecretSelector `json:"caBundle,omitempty"`
 }
 
 // BucketAndPrefix returns bucket name and backup prefix from Bucket concatenated with Prefix.
@@ -1096,6 +1110,16 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 
 	if cr.Spec.Backup == nil {
 		cr.Spec.Backup = new(BackupSpec)
+	}
+	for _, storage := range cr.Spec.Backup.Storages {
+		if storage != nil && storage.S3 != nil && storage.S3.CABundle != nil && storage.S3.CABundle.Key == "" {
+			storage.S3.CABundle.Key = DefaultCABundleKey
+		}
+	}
+	if binlogServer := cr.Spec.Backup.PiTR.BinlogServer; binlogServer != nil &&
+		binlogServer.Storage.S3 != nil && binlogServer.Storage.S3.CABundle != nil &&
+		binlogServer.Storage.S3.CABundle.Key == "" {
+		binlogServer.Storage.S3.CABundle.Key = DefaultCABundleKey
 	}
 
 	if cr.Spec.Backup.Enabled {
@@ -1661,6 +1685,9 @@ func (s *BackupStorageSpec) Equals(other *BackupStorageSpec) bool {
 }
 
 func (s *BackupStorageS3Spec) equals(other *BackupStorageS3Spec) bool {
+	if s == nil || other == nil {
+		return s == other
+	}
 	if s.Bucket != other.Bucket {
 		return false
 	}
@@ -1671,6 +1698,12 @@ func (s *BackupStorageS3Spec) equals(other *BackupStorageS3Spec) bool {
 		return false
 	}
 	if s.EndpointURL != other.EndpointURL {
+		return false
+	}
+	if (s.CABundle == nil) != (other.CABundle == nil) {
+		return false
+	}
+	if s.CABundle != nil && *s.CABundle != *other.CABundle {
 		return false
 	}
 	return true

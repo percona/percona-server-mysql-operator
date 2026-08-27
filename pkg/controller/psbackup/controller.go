@@ -750,7 +750,16 @@ func (r *PerconaServerMySQLBackupReconciler) deleteBackup(ctx context.Context, c
 			return false, errors.Wrapf(err, "get job %s", nn)
 		}
 		if k8serrors.IsNotFound(err) {
-			job = xtrabackup.GetDeleteJob(cluster, cr, backupConf)
+			initImage := ""
+			if cluster.CompareVersion("1.3.0") >= 0 {
+				if s := cr.Status.Storage; s.Type == apiv1.BackupStorageS3 && s.S3 != nil && s.S3.CABundle != nil {
+					initImage, err = k8s.OperatorImage(ctx, r.Client)
+					if err != nil {
+						return false, errors.Wrap(err, "get operator image for backup deletion")
+					}
+				}
+			}
+			job = xtrabackup.GetDeleteJob(cluster, cr, backupConf, initImage)
 			if err := controllerutil.SetControllerReference(cr, job, r.Scheme); err != nil {
 				return false, errors.Wrapf(err, "set controller reference to Job %s/%s", job.Namespace, job.Name)
 			}

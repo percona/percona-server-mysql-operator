@@ -10,8 +10,36 @@ import (
 	"k8s.io/utils/ptr"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	k8sutil "github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 )
+
+func TestRestoreJobS3CABundle(t *testing.T) {
+	cluster := &apiv1.PerconaServerMySQL{
+		ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "ns"},
+		Spec: apiv1.PerconaServerMySQLSpec{
+			CRVersion:     "1.3.0",
+			SecretsName:   "users",
+			SSLSecretName: "tls",
+			Backup: &apiv1.BackupSpec{PiTR: apiv1.PiTRSpec{BinlogServer: &apiv1.BinlogServerSpec{
+				Storage: apiv1.BinlogServerStorageSpec{S3: &apiv1.BackupStorageS3Spec{
+					CABundle: &apiv1.CABundleSecretSelector{Name: "cluster-ca", Key: apiv1.DefaultCABundleKey},
+				}},
+			}}},
+		},
+	}
+	restore := &apiv1.PerconaServerMySQLRestore{ObjectMeta: metav1.ObjectMeta{Name: "restore", Namespace: "ns"}}
+	job := RestoreJob(cluster, restore, &apiv1.BackupStorageSpec{}, "init-image")
+
+	container := job.Spec.Template.Spec.Containers[0]
+	assert.Equal(t, []string{"/opt/percona/run-pitr-restore.sh"}, container.Command)
+	assert.Empty(t, container.Args)
+	selector := apiv1.CABundleSecretSelector{Name: "cluster-ca", Key: apiv1.DefaultCABundleKey}
+	assert.Contains(t, container.Env, corev1.EnvVar{Name: naming.EnvSSLCertFile, Value: k8sutil.S3CAPath(selector)})
+	assert.Contains(t, container.VolumeMounts, corev1.VolumeMount{Name: naming.S3CertsInputVolumeName, MountPath: naming.S3CertsInputMountPath, ReadOnly: true})
+	assert.Len(t, job.Spec.Template.Spec.InitContainers, 1)
+}
 
 func TestRestoreJob(t *testing.T) {
 	tests := map[string]struct {

@@ -145,7 +145,7 @@ func Job(
 		return nil, errors.Wrap(err, "xtrabackup container")
 	}
 
-	return &batchv1.Job{
+	job := &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "batch/v1",
 			Kind:       "Job",
@@ -227,7 +227,11 @@ func Job(
 				},
 			},
 		},
-	}, nil
+	}
+
+	k8s.PrepareJobWithS3CA(job, cluster, storage.S3)
+
+	return job, nil
 }
 
 func xtrabackupContainer(cluster *apiv1.PerconaServerMySQL, cr *apiv1.PerconaServerMySQLBackup, destination apiv1.BackupDestination, storage *apiv1.BackupStorageSpec) (corev1.Container, error) {
@@ -311,6 +315,9 @@ func xbcloudCloudOpts(conf *BackupConfig) []string {
 	args := []string{}
 	if !conf.VerifyTLS {
 		args = append(args, "--insecure")
+	}
+	if conf.CACert != "" {
+		args = append(args, fmt.Sprintf("--cacert=%s", conf.CACert))
 	}
 
 	switch conf.Type {
@@ -550,17 +557,19 @@ func RestoreJob(
 		})
 	}
 
+	k8s.PrepareJobWithS3CA(job, cluster, storage.S3)
+
 	return job
 }
 
-func GetDeleteJob(cluster *apiv1.PerconaServerMySQL, cr *apiv1.PerconaServerMySQLBackup, conf *BackupConfig) *batchv1.Job {
+func GetDeleteJob(cluster *apiv1.PerconaServerMySQL, cr *apiv1.PerconaServerMySQLBackup, conf *BackupConfig, initImage string) *batchv1.Job {
 	var one int32 = 1
 	t := true
 
 	storage := cr.Status.Storage
 	labels := util.SSMapMerge(cluster.GlobalLabels(), storage.Labels, cr.Labels(appName, naming.ComponentBackup))
 
-	return &batchv1.Job{
+	job := &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "batch/v1",
 			Kind:       "Job",
@@ -607,6 +616,28 @@ func GetDeleteJob(cluster *apiv1.PerconaServerMySQL, cr *apiv1.PerconaServerMySQ
 			},
 		},
 	}
+
+	if initImage != "" {
+		var initSpec *apiv1.InitContainerSpec
+		if cluster.Spec.Backup != nil {
+			initSpec = cluster.Spec.Backup.InitContainer
+		}
+		job.Spec.Template.Spec.InitContainers = []corev1.Container{
+			k8s.InitContainer(
+				cluster,
+				appName,
+				initImage,
+				initSpec,
+				corev1.PullIfNotPresent,
+				storage.ContainerSecurityContext,
+				storage.Resources,
+				nil,
+			),
+		}
+		k8s.PrepareJobWithS3CA(job, cluster, storage.S3)
+	}
+
+	return job
 }
 
 func restoreContainer(
@@ -941,6 +972,7 @@ type BackupConfig struct {
 	Destination          string                        `json:"destination"`
 	Type                 apiv1.BackupStorageType       `json:"type"`
 	VerifyTLS            bool                          `json:"verifyTLS,omitempty"`
+	CACert               string                        `json:"caCert,omitempty"`
 	ContainerOptions     *apiv1.BackupContainerOptions `json:"containerOptions,omitempty"`
 	S3                   BackupConfigS3                `json:"s3"`
 	GCS                  BackupConfigGCS               `json:"gcs"`
@@ -999,9 +1031,12 @@ func GetBackupConfig(ctx context.Context, cl client.Client, cr *apiv1.PerconaSer
 	}
 	switch storage.Type {
 	case apiv1.BackupStorageS3:
-		s3 := storage.S3
+		s3Storage := storage.S3
+		if s3Storage.CABundle != nil {
+			conf.CACert = k8s.S3CAPath(*s3Storage.CABundle)
+		}
 		if cl != nil {
-			nn.Name = s3.CredentialsSecret
+			nn.Name = s3Storage.CredentialsSecret
 			if err := cl.Get(ctx, nn, s); err != nil {
 				return nil, errors.Wrapf(err, "get secret/%s", nn.Name)
 			}
@@ -1016,10 +1051,10 @@ func GetBackupConfig(ctx context.Context, cl client.Client, cr *apiv1.PerconaSer
 			conf.S3.AccessKey = string(accessKey)
 			conf.S3.SecretKey = string(secretKey)
 		}
-		bucket, _ := s3.BucketAndPrefix()
+		bucket, _ := s3Storage.BucketAndPrefix()
 		conf.S3.Bucket = bucket
-		conf.S3.Region = s3.Region
-		conf.S3.EndpointURL = s3.EndpointURL
+		conf.S3.Region = s3Storage.Region
+		conf.S3.EndpointURL = s3Storage.EndpointURL
 		conf.Type = apiv1.BackupStorageS3
 	case apiv1.BackupStorageGCS:
 		gcs := storage.GCS

@@ -15,6 +15,7 @@ import (
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/cmd/internal/db"
 	"github.com/percona/percona-server-mysql-operator/pkg/binlogserver"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup/storage"
 )
 
@@ -35,10 +36,14 @@ func (f *fakeStorage) GetObject(_ context.Context, objectName string) (io.ReadCl
 }
 
 func (f *fakeStorage) PutObject(_ context.Context, _ string, _ io.Reader, _ int64) error { return nil }
-func (f *fakeStorage) ListObjects(_ context.Context, _ string) ([]string, error)         { return nil, nil }
-func (f *fakeStorage) DeleteObject(_ context.Context, _ string) error                    { return nil }
-func (f *fakeStorage) SetPrefix(_ string)                                                {}
-func (f *fakeStorage) GetPrefix() string                                                 { return "" }
+
+func (f *fakeStorage) ListObjects(_ context.Context, _ string) ([]string, error) { return nil, nil }
+
+func (f *fakeStorage) DeleteObject(_ context.Context, _ string) error { return nil }
+
+func (f *fakeStorage) SetPrefix(_ string) {}
+
+func (f *fakeStorage) GetPrefix() string { return "" }
 
 type fakeDB struct {
 	getGTIDExecutedResult string
@@ -84,7 +89,7 @@ func TestRun(t *testing.T) {
 			"binlogs/binlog.000001": "binlogdata1",
 			"binlogs/binlog.000002": "binlogdata2",
 		}
-		return func(_ context.Context, _, _, _, _, _, _ string, _ bool) (storage.Storage, error) {
+		return func(_ context.Context, _ *storage.S3Options) (storage.Storage, error) {
 			return fake, nil
 		}
 	}
@@ -96,6 +101,8 @@ func TestRun(t *testing.T) {
 		pitrGTID      string
 		pitrDate      string
 		pitrForce     string
+		caBundle      string
+		missingCAFile bool
 		db            *fakeDB
 		newDB         func(ctx context.Context, params db.DBParams) (Database, error)
 		newS3         func(*fakeStorage) newStorageFn
@@ -103,6 +110,7 @@ func TestRun(t *testing.T) {
 		applyErr      error
 		expectedError string
 		checkApply    func(t *testing.T, call applyCall)
+		checkS3       func(t *testing.T, opts *storage.S3Options)
 	}{
 		"missing BINLOGS_PATH": {
 			expectedError: "BINLOGS_PATH",
@@ -144,11 +152,19 @@ func TestRun(t *testing.T) {
 			pitrGTID: "uuid:1",
 			db:       &fakeDB{getGTIDExecutedResult: "uuid:1-5"},
 			newS3: func(_ *fakeStorage) newStorageFn {
-				return func(_ context.Context, _, _, _, _, _, _ string, _ bool) (storage.Storage, error) {
+				return func(_ context.Context, _ *storage.S3Options) (storage.Storage, error) {
 					return nil, errors.New("s3 unavailable")
 				}
 			},
 			expectedError: "create S3 client",
+		},
+		"missing S3 CA bundle file": {
+			entries:       defaultEntries,
+			pitrType:      "gtid",
+			pitrGTID:      "uuid:1",
+			missingCAFile: true,
+			db:            &fakeDB{getGTIDExecutedResult: "uuid:1-5"},
+			expectedError: "read S3 CA bundle",
 		},
 		"S3 download error": {
 			entries:       defaultEntries,
@@ -184,6 +200,16 @@ func TestRun(t *testing.T) {
 				assert.Contains(t, call.mysqlbinlogArgs, "--include-gtids=aaaaaaaa-0000-0000-0000-000000000001:1-10")
 				assert.NotContains(t, call.mysqlbinlogArgs, "--stop-datetime")
 				assert.NotContains(t, call.mysqlArgs, "--force")
+			},
+		},
+		"GTID mode with custom S3 CA": {
+			entries:  defaultEntries,
+			pitrType: "gtid",
+			pitrGTID: "aaaaaaaa-0000-0000-0000-000000000001:1-10",
+			caBundle: "custom CA bundle",
+			db:       &fakeDB{getGTIDExecutedResult: "aaaaaaaa-0000-0000-0000-000000000001:1-5"},
+			checkS3: func(t *testing.T, opts *storage.S3Options) {
+				assert.Equal(t, []byte("custom CA bundle"), opts.CABundle)
 			},
 		},
 		"GTID mode with force": {
@@ -264,6 +290,16 @@ func TestRun(t *testing.T) {
 			t.Setenv("PITR_DATE", tc.pitrDate)
 			t.Setenv("PITR_FORCE", tc.pitrForce)
 			t.Setenv("S3_BUCKET", bucket)
+			switch {
+			case tc.missingCAFile:
+				t.Setenv(naming.EnvSSLCertFile, t.TempDir()+"/missing-ca-bundle.crt")
+			case tc.caBundle != "":
+				caBundlePath := t.TempDir() + "/ca-bundle.crt"
+				require.NoError(t, os.WriteFile(caBundlePath, []byte(tc.caBundle), 0o600))
+				t.Setenv(naming.EnvSSLCertFile, caBundlePath)
+			default:
+				t.Setenv(naming.EnvSSLCertFile, "")
+			}
 
 			fakeDatabase := tc.db
 
@@ -280,11 +316,16 @@ func TestRun(t *testing.T) {
 			}
 
 			fake := &fakeStorage{}
-			var newS3 newStorageFn
+			var storageFactory newStorageFn
 			if tc.newS3 != nil {
-				newS3 = tc.newS3(fake)
+				storageFactory = tc.newS3(fake)
 			} else {
-				newS3 = defaultS3(fake)
+				storageFactory = defaultS3(fake)
+			}
+			var capturedS3Options *storage.S3Options
+			newS3 := func(ctx context.Context, opts *storage.S3Options) (storage.Storage, error) {
+				capturedS3Options = opts
+				return storageFactory(ctx, opts)
 			}
 
 			var captured applyCall
@@ -306,6 +347,10 @@ func TestRun(t *testing.T) {
 			require.NoError(t, err)
 			if tc.checkApply != nil {
 				tc.checkApply(t, captured)
+			}
+			if tc.checkS3 != nil {
+				require.NotNil(t, capturedS3Options)
+				tc.checkS3(t, capturedS3Options)
 			}
 		})
 	}

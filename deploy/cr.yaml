@@ -704,6 +704,9 @@ spec:
 #        storage:
 #          s3:
 #            bucket: S3-BACKUP-BUCKET-NAME-HERE
+#            caBundle:
+#              key: ca.crt
+#              name: minio-ca-bundle
 #            credentialsSecret: ps-cluster1-s3-credentials
 #            endpointUrl: https://s3.amazonaws.com
 #            prefix: PREFIX_NAME
@@ -960,6 +963,9 @@ spec:
 #        runtimeClassName: image-rc
         s3:
           bucket: S3-BACKUP-BUCKET-NAME-HERE
+#          caBundle:
+#            key: ca.crt
+#            name: minio-ca-bundle
           credentialsSecret: ps-cluster1-s3-credentials
 #          endpointUrl: https://s3.amazonaws.com
 #          prefix: PREFIX_NAME
