@@ -17,7 +17,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
@@ -447,8 +446,8 @@ func RestoreJob(
 			Annotations: util.SSMapMerge(cluster.GlobalAnnotations(), storage.Annotations),
 		},
 		Spec: batchv1.JobSpec{
-			Parallelism: ptr.To(int32(1)),
-			Completions: ptr.To(int32(1)),
+			Parallelism: new(int32(1)),
+			Completions: new(int32(1)),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      labels,
@@ -534,7 +533,7 @@ func RestoreJob(
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
 					SecretName: cluster.Spec.MySQL.VaultSecretName,
-					Optional:   ptr.To(true),
+					Optional:   new(true),
 				},
 			},
 		})

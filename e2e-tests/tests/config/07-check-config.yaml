@@ -7,17 +7,17 @@ commands:
 
       source ../../functions
 
-      echo "config-mysql-0"
-      kubectl exec -n "${NAMESPACE}" config-mysql-0 -- cat /etc/my.cnf.d/node.cnf
-      echo "config-mysql-1"
-      kubectl exec -n "${NAMESPACE}" config-mysql-1 -- cat /etc/my.cnf.d/node.cnf
-      echo "config-mysql-2"
-      kubectl exec -n "${NAMESPACE}" config-mysql-2 -- cat /etc/my.cnf.d/node.cnf
+      cluster=$(get_cluster_name)
 
-      mysql_host="-h $(get_haproxy_svc $(get_cluster_name))"
-      max_connections=$(run_mysql "SELECT @@max_connections" "${mysql_host}")
-      max_connect_errors=$(run_mysql "SELECT @@max_connect_errors" "${mysql_host}")
+      wait_for_mysql_variable "${cluster}" max_connections 250 120 || true
+      wait_for_mysql_variable "${cluster}" max_connect_errors 150 120 || true
+
+      for pod in $(get_mysql_pod_names "${cluster}"); do
+          echo "${pod}"
+          kubectl exec -n "${NAMESPACE}" "${pod}" -c mysql -- cat /etc/my.cnf.d/node.cnf
+      done
 
       kubectl create configmap -n "${NAMESPACE}" 07-check-config \
-          --from-literal=max_connections="${max_connections}" \
-          --from-literal=max_connect_errors="${max_connect_errors}"
+          --from-literal=max_connections="$(get_mysql_variable_on_pods "${cluster}" max_connections)" \
+          --from-literal=max_connect_errors="$(get_mysql_variable_on_pods "${cluster}" max_connect_errors)"
+    timeout: 420

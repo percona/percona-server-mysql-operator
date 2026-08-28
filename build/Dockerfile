@@ -107,5 +107,6 @@ COPY build/pmm-prerun.sh /opt/percona-server-mysql-operator/pmm-prerun.sh
 COPY build/binlog-server-entrypoint.sh /opt/percona-server-mysql-operator/binlog-server-entrypoint.sh
 COPY --from=go_builder /usr/local/bin/pitr /opt/percona-server-mysql-operator/pitr
 COPY build/run-pitr-restore.sh /opt/percona-server-mysql-operator/run-pitr-restore.sh
+COPY build/run-prepare-restore.sh /opt/percona-server-mysql-operator/run-prepare-restore.sh
 
 USER 2

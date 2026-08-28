@@ -2,11 +2,11 @@ package pitr
 
 import (
 	"fmt"
+	"path/filepath"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
@@ -27,6 +27,8 @@ const (
 	binlogsVolumeName = "binlogs"
 	binlogsMountPath  = "/etc/pitr"
 	BinlogsConfigKey  = "binlogs.json"
+	keyringVolumeName = "keyring"
+	keyringMountPath  = "/etc/binlog_server/keyring"
 )
 
 func JobName(restore *apiv1.PerconaServerMySQLRestore) string {
@@ -48,6 +50,21 @@ func BinlogsConfigMap(cluster *apiv1.PerconaServerMySQL, restore *apiv1.PerconaS
 			Annotations: cluster.GlobalAnnotations(),
 		},
 	}
+}
+
+func getKeyringSecretRef(
+	cluster *apiv1.PerconaServerMySQL,
+	restore *apiv1.PerconaServerMySQLRestore,
+) *apiv1.BinlogServerKeyringSecretSelector {
+	if restore.Spec.PITR != nil && restore.Spec.PITR.KeyringSecret != nil {
+		return restore.Spec.PITR.KeyringSecret
+	}
+
+	binlogSrv := cluster.Spec.Backup.PiTR.BinlogServer
+	if binlogSrv != nil && binlogSrv.KeyringSecret != nil {
+		return binlogSrv.KeyringSecret
+	}
+	return nil
 }
 
 func RestoreJob(
@@ -72,8 +89,8 @@ func RestoreJob(
 			Annotations: util.SSMapMerge(cluster.GlobalAnnotations(), restore.Annotations, storage.Annotations),
 		},
 		Spec: batchv1.JobSpec{
-			Parallelism: ptr.To(int32(1)),
-			Completions: ptr.To(int32(1)),
+			Parallelism: new(int32(1)),
+			Completions: new(int32(1)),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      labels,
@@ -175,6 +192,16 @@ func RestoreJob(
 		k8s.PrepareJobWithS3CA(job, cluster, binlogServer.Storage.S3)
 	}
 
+	if keyringSecretRef := getKeyringSecretRef(cluster, restore); keyringSecretRef != nil {
+		job.Spec.Template.Spec.Volumes = append(job.Spec.Template.Spec.Volumes, corev1.Volume{
+			Name: keyringVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: keyringSecretRef.Name,
+				},
+			},
+		})
+	}
 	return job
 }
 
@@ -269,7 +296,7 @@ func restoreContainer(
 
 	envs = append(envs, restore.GetContainerOptions(storage).GetEnv()...)
 
-	return corev1.Container{
+	c := corev1.Container{
 		Name:            appName,
 		Image:           cluster.Spec.MySQL.Image,
 		ImagePullPolicy: cluster.Spec.MySQL.ImagePullPolicy,
@@ -302,6 +329,18 @@ func restoreContainer(
 		SecurityContext:          storage.ContainerSecurityContext,
 		Resources:                storage.Resources,
 	}
+
+	if keyringSecretRef := getKeyringSecretRef(cluster, restore); keyringSecretRef != nil {
+		c.VolumeMounts = append(c.VolumeMounts, corev1.VolumeMount{
+			Name:      keyringVolumeName,
+			MountPath: keyringMountPath,
+		})
+		c.Env = append(c.Env, corev1.EnvVar{
+			Name:  "KEYRING_PATH",
+			Value: filepath.Join(keyringMountPath, keyringSecretRef.Key),
+		})
+	}
+	return c
 }
 
 func binlogsConfigMapName(restore *apiv1.PerconaServerMySQLRestore) string {

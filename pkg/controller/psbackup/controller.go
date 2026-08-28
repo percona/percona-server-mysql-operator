@@ -347,12 +347,15 @@ func (r *PerconaServerMySQLBackupReconciler) prepareStatus(
 	status *apiv1.PerconaServerMySQLBackupStatus,
 	backupSource string,
 ) error {
-	destination, err := xtrabackup.GetDestination(storage, cr, time.Now())
-	if err != nil {
-		return errors.Wrap(err, "get backup destination")
+	if status.Destination == "" {
+		destination, err := xtrabackup.GetDestination(storage, cr, time.Now())
+		if err != nil {
+			return errors.Wrap(err, "get backup destination")
+		}
+		status.Destination = destination
+
 	}
 
-	status.Destination = destination
 	status.Image = cluster.Spec.Backup.Image
 	status.Storage = storage.DeepCopy()
 	status.BackupSource = backupSource

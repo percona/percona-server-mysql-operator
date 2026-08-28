@@ -10,7 +10,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/validation"
-	"k8s.io/utils/ptr"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
@@ -31,6 +30,8 @@ const (
 	storageCredsVolumeName = "storage"
 	ConfigKey              = "config.json"
 	customConfigKey        = "custom.json"
+	keyringMountPath       = "/etc/binlog_server/keyring"
+	keyringVolumeName      = "keyring"
 )
 
 const controllerRevisionHashLength = 11
@@ -130,7 +131,7 @@ func StatefulSet(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServerSpec, lab
 			Annotations: cr.GlobalAnnotations(),
 		},
 		Spec: appsv1.StatefulSetSpec{
-			Replicas: ptr.To(int32(1)),
+			Replicas: new(int32(1)),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: labels,
 			},
@@ -251,6 +252,16 @@ func volumes(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServerSpec, configS
 		})
 	}
 
+	if spec.KeyringSecret != nil {
+		vols = append(vols, corev1.Volume{
+			Name: keyringVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: spec.KeyringSecret.Name,
+				},
+			},
+		})
+	}
 	return vols
 }
 
@@ -298,6 +309,13 @@ func binlogServerContainer(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServe
 			MountPath: BufferMountPath,
 		},
 	)
+
+	if spec.KeyringSecret != nil {
+		mounts = append(mounts, corev1.VolumeMount{
+			Name:      keyringVolumeName,
+			MountPath: keyringMountPath,
+		})
+	}
 
 	container := corev1.Container{
 		Name:                     AppName,

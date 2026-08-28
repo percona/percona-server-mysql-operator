@@ -1974,6 +1974,16 @@ spec:
                             type: object
                           initImage:
                             type: string
+                          keyringSecret:
+                            properties:
+                              key:
+                                default: keyring.json
+                                type: string
+                              name:
+                                type: string
+                            required:
+                            - name
+                            type: object
                           labels:
                             additionalProperties:
                               type: string
@@ -2379,6 +2389,18 @@ spec:
                             type: object
                           storage:
                             properties:
+                              encryption:
+                                properties:
+                                  cipher:
+                                    default: AES-256-CTR
+                                    enum:
+                                    - AES-128-CTR
+                                    - AES-192-CTR
+                                    - AES-256-CTR
+                                    type: string
+                                  kekId:
+                                    type: string
+                                type: object
                               s3:
                                 properties:
                                   bucket:
@@ -2487,6 +2509,9 @@ spec:
                         x-kubernetes-validations:
                         - message: binlogServer size cannot be more than 1
                           rule: '!has(self.size) || self.size <= 1'
+                        - message: binlogServer.keyringSecret is required when binlogServer.storage.encryption
+                            is set
+                          rule: '!self.?storage.?encryption.hasValue() || has(self.keyringSecret)'
                     type: object
                   date:
                     type: string
@@ -2494,6 +2519,16 @@ spec:
                     type: boolean
                   gtid:
                     type: string
+                  keyringSecret:
+                    properties:
+                      key:
+                        default: keyring.json
+                        type: string
+                      name:
+                        type: string
+                    required:
+                    - name
+                    type: object
                   type:
                     enum:
                     - gtid

@@ -168,7 +168,26 @@ add_encryption_options() {
 }
 
 create_default_cnf() {
-	POD_IP=$(hostname -I | awk '{print $1}')
+	# hostname -I can list a node-local RFC 3927 link-local address (the
+	# full range is 169.254.0.0/16), assigned by some CNI plugins - such as
+	# the AWS VPC CNI's IPv6-cluster egress-NAT helper, which uses
+	# 169.254.172.0/22 specifically - for outbound-only traffic, ahead of
+	# the pod's real routable address. That address is not reachable from
+	# other pods, so using it here breaks admin-address for anything that
+	# needs to reach it (e.g. haproxy's backend healthchecks). Excludes the
+	# whole 169.254.0.0/16 range by default (overridable via
+	# POD_IP_EXCLUDE_REGEX, a grep -E pattern, if a narrower exclusion is
+	# ever needed) since other CNIs may assign non-routable addresses
+	# anywhere in that range, not just AWS's specific /22. Falls back to
+	# the original unfiltered first address if every candidate gets
+	# excluded, so a host with nothing but link-local addresses doesn't
+	# leave POD_IP empty - and the `|| true` keeps that fallback from
+	# being skipped by `set -eo pipefail` above when grep finds no match.
+	POD_IP_EXCLUDE_REGEX="${POD_IP_EXCLUDE_REGEX:-^169\.254\.}"
+	POD_IP=$(hostname -I | tr ' ' '\n' | grep -v -E "$POD_IP_EXCLUDE_REGEX" | head -n1 || true)
+	if [ -z "$POD_IP" ]; then
+		POD_IP=$(hostname -I | awk '{print $1}')
+	fi
 
 	if [[ ${HOSTNAME} =~ "-xb-" ]]; then
 		FQDN=${HOSTNAME}
@@ -252,9 +271,282 @@ escape_special() {
 		| sed 's/"/\\\"/g'
 }
 
+system_user_grants() {
+	cat <<-EOSQL
+		CREATE DATABASE IF NOT EXISTS sys_operator;
+	EOSQL
+
+	cat <<-EOSQL
+		CREATE USER IF NOT EXISTS 'xtrabackup'@'localhost' IDENTIFIED BY '$(escape_special "${XTRABACKUP_PASSWORD}")' PASSWORD EXPIRE NEVER;
+		GRANT SYSTEM_USER, BACKUP_ADMIN, PROCESS, RELOAD, GROUP_REPLICATION_ADMIN, REPLICATION_SLAVE_ADMIN, LOCK TABLES, REPLICATION CLIENT ON *.* TO 'xtrabackup'@'localhost';
+		GRANT SELECT ON performance_schema.replication_group_members TO 'xtrabackup'@'localhost';
+		GRANT SELECT ON performance_schema.log_status TO 'xtrabackup'@'localhost';
+		GRANT SELECT ON performance_schema.keyring_component_status TO 'xtrabackup'@'localhost';
+		GRANT SELECT ON mysql.component TO 'xtrabackup'@'localhost';
+	EOSQL
+
+	cat <<-EOSQL
+		CREATE USER IF NOT EXISTS 'monitor'@'${MONITOR_HOST}' IDENTIFIED BY '$(escape_special "${MONITOR_PASSWORD}")' WITH MAX_USER_CONNECTIONS 100 PASSWORD EXPIRE NEVER;
+		GRANT SYSTEM_USER, SELECT, PROCESS, SUPER, REPLICATION CLIENT, RELOAD, BACKUP_ADMIN ON *.* TO 'monitor'@'${MONITOR_HOST}';
+		GRANT SELECT ON performance_schema.* TO 'monitor'@'${MONITOR_HOST}';
+		GRANT SERVICE_CONNECTION_ADMIN ON *.* TO 'monitor'@'${MONITOR_HOST}';
+	EOSQL
+
+	cat <<-EOSQL
+		CREATE USER IF NOT EXISTS 'replication'@'%' IDENTIFIED BY '$(escape_special "${REPLICATION_PASSWORD}")' PASSWORD EXPIRE NEVER;
+		GRANT DELETE, INSERT, UPDATE ON mysql.* TO 'replication'@'%' WITH GRANT OPTION;
+		GRANT SELECT ON performance_schema.threads to 'replication'@'%';
+		GRANT SYSTEM_USER, REPLICATION SLAVE, BACKUP_ADMIN, GROUP_REPLICATION_STREAM, CLONE_ADMIN, CONNECTION_ADMIN, CREATE USER, EXECUTE, FILE, GROUP_REPLICATION_ADMIN, PERSIST_RO_VARIABLES_ADMIN, PROCESS, RELOAD, REPLICATION CLIENT, REPLICATION_APPLIER, REPLICATION_SLAVE_ADMIN, ROLE_ADMIN, SELECT, SHUTDOWN, SYSTEM_VARIABLES_ADMIN ON *.* TO 'replication'@'%' WITH GRANT OPTION;
+	EOSQL
+
+	cat <<-EOSQL
+		CREATE USER IF NOT EXISTS 'orchestrator'@'%' IDENTIFIED BY '$(escape_special "${ORC_TOPOLOGY_PASSWORD}")' PASSWORD EXPIRE NEVER;
+		GRANT SYSTEM_USER, SUPER, PROCESS, REPLICATION SLAVE, REPLICATION CLIENT, RELOAD ON *.* TO 'orchestrator'@'%';
+		GRANT SELECT ON performance_schema.replication_group_members TO 'orchestrator'@'%';
+		GRANT SELECT ON mysql.slave_master_info TO 'orchestrator'@'%';
+		GRANT SELECT ON sys_operator.* TO 'orchestrator'@'%';
+	EOSQL
+
+	cat <<-EOSQL
+		CREATE USER IF NOT EXISTS 'heartbeat'@'localhost' IDENTIFIED BY '$(escape_special "${HEARTBEAT_PASSWORD}")' PASSWORD EXPIRE NEVER;
+		GRANT SYSTEM_USER, REPLICATION CLIENT ON *.* TO 'heartbeat'@'localhost';
+		GRANT SELECT, CREATE, DELETE, UPDATE, INSERT ON sys_operator.heartbeat TO 'heartbeat'@'localhost';
+	EOSQL
+
+	CLUSTERSET_PASSWORD="${CLUSTERSET_PASSWORD:-$(pwmake 128)}"
+	cat <<-EOSQL
+		CREATE USER IF NOT EXISTS 'clusterset'@'%' IDENTIFIED BY '$(escape_special "${CLUSTERSET_PASSWORD}")' PASSWORD EXPIRE NEVER;
+
+		GRANT SELECT, RELOAD, SHUTDOWN, PROCESS, FILE, REPLICATION SLAVE, REPLICATION CLIENT, CREATE USER, EXECUTE ON *.* TO 'clusterset'@'%' WITH GRANT OPTION ;
+		GRANT BACKUP_ADMIN, CLONE_ADMIN, CONNECTION_ADMIN, GROUP_REPLICATION_ADMIN, REPLICATION_SLAVE_ADMIN, REPLICATION_APPLIER, PERSIST_RO_VARIABLES_ADMIN, ROLE_ADMIN, SESSION_VARIABLES_ADMIN, SYSTEM_VARIABLES_ADMIN ON *.* TO 'clusterset'@'%' WITH GRANT OPTION ;
+		GRANT INSERT, UPDATE, DELETE ON mysql.* TO 'clusterset'@'%' WITH GRANT OPTION ;
+		GRANT ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, CREATE TEMPORARY TABLES, CREATE VIEW, DELETE, DROP, EVENT, EXECUTE, INDEX, INSERT, LOCK TABLES, REFERENCES, SHOW VIEW, TRIGGER, UPDATE ON mysql_innodb_cluster_metadata.* TO 'clusterset'@'%' WITH GRANT OPTION ;
+		GRANT ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, CREATE TEMPORARY TABLES, CREATE VIEW, DELETE, DROP, EVENT, EXECUTE, INDEX, INSERT, LOCK TABLES, REFERENCES, SHOW VIEW, TRIGGER, UPDATE ON mysql_innodb_cluster_metadata_bkp.* TO 'clusterset'@'%' WITH GRANT OPTION ;
+		GRANT ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, CREATE TEMPORARY TABLES, CREATE VIEW, DELETE, DROP, EVENT, EXECUTE, INDEX, INSERT, LOCK TABLES, REFERENCES, SHOW VIEW, TRIGGER, UPDATE ON mysql_innodb_cluster_metadata_previous.* TO 'clusterset'@'%' WITH GRANT OPTION ;
+	EOSQL
+
+	CONFIGURATOR_PASSWORD="${CONFIGURATOR_PASSWORD:-$(pwmake 128)}"
+	cat <<-EOSQL
+		CREATE USER IF NOT EXISTS 'configurator'@'%' IDENTIFIED BY '$(escape_special "${CONFIGURATOR_PASSWORD}")' PASSWORD EXPIRE NEVER;
+
+		GRANT SYSTEM_VARIABLES_ADMIN, SYSTEM_USER ON *.* TO 'configurator'@'%';
+		GRANT SELECT ON performance_schema.global_variables TO 'configurator'@'%';
+	EOSQL
+}
+
+install_component() {
+	local component="$1"
+	local installed
+
+	installed=$(echo "SELECT COUNT(1) FROM mysql.component WHERE component_urn = '$(escape_special "${component}")';" | "${mysql[@]}" -N)
+
+	if [ "${installed}" -eq 0 ]; then
+		echo "INSTALL COMPONENT '$(escape_special "${component}")';" | "${mysql[@]}"
+	fi
+}
+
+ensure_system_users() {
+	"${mysql[@]}" <<-EOSQL
+		SET @@SESSION.SQL_LOG_BIN=0;
+		$(system_user_grants)
+		FLUSH PRIVILEGES ;
+	EOSQL
+}
+
+in_full_cluster_crash() {
+	if [[ -f /var/lib/mysql/full-cluster-crash ]]; then
+		echo "/var/lib/mysql/full-cluster-crash is detected, skipping system user setup"
+		return 0
+	fi
+
+	return 1
+}
+
+initialize_datadir() {
+	file_env 'MYSQL_ROOT_PASSWORD' '' 'root'
+	{ set +x; } 2>/dev/null
+	if [ -z "$MYSQL_ROOT_PASSWORD" ] && [ -z "$MYSQL_ALLOW_EMPTY_PASSWORD" ] && [ -z "$MYSQL_RANDOM_ROOT_PASSWORD" ]; then
+		echo >&2 'error: database is uninitialized and password option is not specified '
+		echo >&2 '  You need to specify one of MYSQL_ROOT_PASSWORD, MYSQL_ALLOW_EMPTY_PASSWORD and MYSQL_RANDOM_ROOT_PASSWORD'
+		exit 1
+	fi
+	set -x
+
+	mkdir -p "$DATADIR"
+	find "$DATADIR" -mindepth 1 -prune -o -exec rm -rfv {} \+ 1>/dev/null
+
+	echo 'Initializing database'
+	# we initialize database into $TMPDIR because "--initialize-insecure" option does not work if directory is not empty
+	# in some cases storage driver creates unremovable artifacts (see K8SPXC-286), so $DATADIR cleanup is not possible
+	"$@" --initialize-insecure --datadir="$TMPDIR"
+	mv "$TMPDIR"/* "$DATADIR/"
+	rm -rfv "$TMPDIR"
+	echo 'Database initialized'
+}
+
+seed_new_datadir() {
+	if [ -z "$MYSQL_INITDB_SKIP_TZINFO" ]; then
+		(
+			echo "SET @@SESSION.SQL_LOG_BIN = off;"
+			# sed is for https://bugs.mysql.com/bug.php?id=20545
+			mysql_tzinfo_to_sql /usr/share/zoneinfo | sed 's/Local time zone must be set--see zic manual page/FCTY/'
+		) | "${mysql[@]}" mysql
+	fi
+
+	{ set +x; } 2>/dev/null
+	if [ -n "$INIT_ROCKSDB" ]; then
+		ps-admin --docker --enable-rocksdb -u root -p "$MYSQL_ROOT_PASSWORD"
+	fi
+
+	if [ -n "$MYSQL_RANDOM_ROOT_PASSWORD" ]; then
+		MYSQL_ROOT_PASSWORD="$(pwmake 128)"
+		echo "GENERATED ROOT PASSWORD: $MYSQL_ROOT_PASSWORD"
+	fi
+
+	# default root to listen for connections from anywhere
+	file_env 'MYSQL_ROOT_HOST' '%'
+
+	# 'localhost' cannot work here, so reject it with an explanation rather than
+	# letting it surface as an opaque MySQL error further down. The operator
+	# account is created at this same host and the controller connects to it
+	# over TCP from another pod, so a localhost-only operator is unreachable.
+	# The REVOKE below also names a bare "root", which MySQL resolves to
+	# root@'%' -- an account that would never have been created.
+	if [ "${MYSQL_ROOT_HOST}" = 'localhost' ]; then
+		echo >&2 "error: MYSQL_ROOT_HOST is set to 'localhost', which this operator does not support."
+		echo >&2 "  The operator account is created at the same host and must be reachable over TCP."
+		exit 1
+	fi
+
+	file_env 'OPERATOR_ADMIN_PASSWORD' '' 'operator'
+
+	"${mysql[@]}" <<-EOSQL
+		-- What's done in this file shouldn't be replicated
+		--  or products like mysql-fabric won't work
+		SET @@SESSION.SQL_LOG_BIN=0;
+
+		DELETE FROM mysql.user WHERE user NOT IN ('mysql.sys', 'mysqlxsys', 'root', 'mysql.infoschema', 'mysql.session') OR host NOT IN ('localhost') ;
+		ALTER USER 'root'@'localhost' IDENTIFIED BY '$(escape_special "${MYSQL_ROOT_PASSWORD}")' ;
+		GRANT ALL ON *.* TO 'root'@'localhost' WITH GRANT OPTION ;
+		CREATE USER 'root'@'${MYSQL_ROOT_HOST}' IDENTIFIED BY '$(escape_special "${MYSQL_ROOT_PASSWORD}")' PASSWORD EXPIRE NEVER;
+		GRANT ALL ON *.* TO 'root'@'${MYSQL_ROOT_HOST}' WITH GRANT OPTION ;
+		/*!80016 REVOKE SYSTEM_USER ON *.* FROM root */;
+
+		CREATE USER 'operator'@'${MYSQL_ROOT_HOST}' IDENTIFIED BY '$(escape_special "${OPERATOR_ADMIN_PASSWORD}")' PASSWORD EXPIRE NEVER;
+		GRANT ALL ON *.* TO 'operator'@'${MYSQL_ROOT_HOST}' WITH GRANT OPTION ;
+
+		DROP DATABASE IF EXISTS test;
+		FLUSH PRIVILEGES ;
+	EOSQL
+
+	# root has a password now, so every later connection needs it
+	if [ -n "$MYSQL_ROOT_PASSWORD" ]; then
+		mysql+=(-p"${MYSQL_ROOT_PASSWORD}")
+	fi
+	set -x
+}
+
+finish_new_datadir() {
+	local f
+
+	file_env 'MYSQL_DATABASE'
+	if [ "$MYSQL_DATABASE" ]; then
+		echo "CREATE DATABASE IF NOT EXISTS \`$MYSQL_DATABASE\` ;" | "${mysql[@]}"
+		mysql+=("$MYSQL_DATABASE")
+	fi
+
+	file_env 'MYSQL_USER'
+	file_env 'MYSQL_PASSWORD'
+	{ set +x; } 2>/dev/null
+	if [ "$MYSQL_USER" ] && [ "$MYSQL_PASSWORD" ]; then
+		echo "CREATE USER '$MYSQL_USER'@'%' IDENTIFIED BY '$MYSQL_PASSWORD' ;" | "${mysql[@]}"
+
+		if [ "$MYSQL_DATABASE" ]; then
+			echo "GRANT ALL ON \`$MYSQL_DATABASE\`.* TO '$MYSQL_USER'@'%' ;" | "${mysql[@]}"
+		fi
+
+		echo 'FLUSH PRIVILEGES ;' | "${mysql[@]}"
+	fi
+	set -x
+
+	echo
+	ls /docker-entrypoint-initdb.d/ >/dev/null
+	for f in /docker-entrypoint-initdb.d/*; do
+		process_init_file "$f" "${mysql[@]}"
+	done
+
+	{ set +x; } 2>/dev/null
+	if [ -n "$MYSQL_ONETIME_PASSWORD" ]; then
+		"${mysql[@]}" <<-EOSQL
+			ALTER USER 'root'@'%' PASSWORD EXPIRE;
+		EOSQL
+	fi
+	set -x
+}
+
+stop_temp_mysqld() {
+	if ! kill -s TERM "$pid" || ! wait "$pid"; then
+		echo >&2 'Failed to stop temporary MySQL instance.'
+		exit 1
+	fi
+
+	trap "exit" SIGTERM
+}
+
+start_temp_mysqld() {
+	SOCKET="$(_get_config 'socket' "$@")"
+	"$@" --skip-networking --persisted_globals_load=OFF --socket="${SOCKET}" &
+	pid="$!"
+}
+
+stop_temp_mysqld_and_exit() {
+	kill -s TERM "$pid" 2>/dev/null || true
+	wait "$pid" || true
+	exit
+}
+
+wait_for_mysqld() {
+	local what="$1"
+	local i
+
+	for i in {120..0}; do
+		if echo 'SELECT 1' | "${mysql[@]}" &>/dev/null; then
+			return
+		fi
+		if ! kill -0 "$pid" 2>/dev/null; then
+			echo >&2 "mysqld exited during startup."
+			wait "$pid" || true
+			break
+		fi
+		echo "${what} in progress..."
+		sleep 1
+	done
+
+	echo 'SELECT 1' | "${mysql[@]}" >/dev/null || true
+	echo >&2 "${what} failed."
+	exit 1
+}
+
+cr_version_updated() {
+	[[ ! -f /var/lib/mysql/cr-version ]] || [[ $(</var/lib/mysql/cr-version) != "${CR_VERSION}" ]]
+}
+
+recovery_file='/var/lib/mysql/sleep-forever'
+if [ -f "${recovery_file}" ]; then
+	set +o xtrace
+	echo "The $recovery_file file is detected, node is going to infinity loop"
+	echo "If you want to exit from infinity loop you need to remove $recovery_file file"
+	for (( ; ; )); do
+		if [ ! -f "${recovery_file}" ]; then
+			exit 0
+		fi
+		sleep 3
+	done
+fi
+
 MYSQL_VERSION=$(mysqld -V | awk '{print $3}' | awk -F'.' '{print $1"."$2}')
 
-if [[ "$MYSQL_VERSION" != '8.0' ]] && [[ "${MYSQL_VERSION}" != '8.4' ]] && [[ "${MYSQL_VERSION}" != '9.7' ]]; then
+if [[ $MYSQL_VERSION != '8.0' ]] && [[ ${MYSQL_VERSION} != '8.4' ]] && [[ ${MYSQL_VERSION} != '9.7' ]]; then
 	echo "Percona Distribution for MySQL Operator does not support $MYSQL_VERSION"
 	exit 1
 fi
@@ -271,194 +563,75 @@ if [ "$1" = 'mysqld' ] && [ -z "$wantHelp" ]; then
 
 	create_default_cnf
 
+	file_env 'MONITOR_HOST' 'localhost'
+	file_env 'MONITOR_PASSWORD' 'monitor' 'monitor'
+	file_env 'XTRABACKUP_PASSWORD' '' 'xtrabackup'
+	file_env 'REPLICATION_PASSWORD' '' 'replication'
+	file_env 'ORC_TOPOLOGY_PASSWORD' '' 'orchestrator'
+	file_env 'HEARTBEAT_PASSWORD' '' 'heartbeat'
+	file_env 'CLUSTERSET_PASSWORD' '' 'clusterset'
+	file_env 'CONFIGURATOR_PASSWORD' '' 'configurator'
+	set -x
+
+	fresh_datadir=0
 	if [ ! -d "$DATADIR/mysql" ]; then
+		fresh_datadir=1
+	fi
+
+	if [[ ${fresh_datadir} == 1 ]]; then
 		touch /var/lib/mysql/bootstrap.lock
-		file_env 'MYSQL_ROOT_PASSWORD' '' 'root'
-		{ set +x; } 2>/dev/null
-		if [ -z "$MYSQL_ROOT_PASSWORD" ] && [ -z "$MYSQL_ALLOW_EMPTY_PASSWORD" ] && [ -z "$MYSQL_RANDOM_ROOT_PASSWORD" ]; then
-			echo >&2 'error: database is uninitialized and password option is not specified '
-			echo >&2 '  You need to specify one of MYSQL_ROOT_PASSWORD, MYSQL_ALLOW_EMPTY_PASSWORD and MYSQL_RANDOM_ROOT_PASSWORD'
-			exit 1
+		initialize_datadir "$@"
+	fi
+
+	if [[ ${MYSQL_VERSION} == '8.4' || ${MYSQL_VERSION} == '9.7' ]]; then
+		# if vault secret file exists we assume we need to turn on encryption
+		if [[ -f ${KEYRING_VAULT_PATH} ]]; then
+			install_keyring_component
+			add_encryption_options
+		else
+			uninstall_keyring_component
 		fi
+	fi
+
+	if [ "${fresh_datadir}" = 1 ] || (! in_full_cluster_crash && cr_version_updated); then
+		touch /var/lib/mysql/bootstrap.lock
+
+		start_temp_mysqld "$@" \
+			--read_only=OFF --super_read_only=OFF \
+			--skip-replica-start \
+			--loose-group_replication_start_on_boot=OFF \
+			--innodb_buffer_pool_dump_at_shutdown=OFF \
+			--innodb_buffer_pool_load_at_startup=OFF
+
+		trap stop_temp_mysqld_and_exit SIGTERM
+
+		if [ "${fresh_datadir}" = 1 ]; then
+			mysql=(mysql --protocol=socket -uroot -hlocalhost --socket="${SOCKET}" --password="")
+			wait_for_mysqld 'MySQL init process'
+			seed_new_datadir
+		else
+			file_env 'OPERATOR_ADMIN_PASSWORD' '' 'operator'
+			export MYSQL_PWD="${OPERATOR_ADMIN_PASSWORD}"
+			mysql=(mysql --protocol=socket -uoperator -hlocalhost --socket="${SOCKET}")
+			wait_for_mysqld 'MySQL grant re-apply'
+		fi
+
+		ensure_system_users
+
+		if [ "${fresh_datadir}" = 1 ]; then
+			finish_new_datadir
+		fi
+
+		install_component "file://component_mysqlbackup"
+
+		unset MYSQL_PWD
 		set -x
 
-		mkdir -p "$DATADIR"
-		find "$DATADIR" -mindepth 1 -prune -o -exec rm -rfv {} \+ 1>/dev/null
-
-		echo 'Initializing database'
-		# we initialize database into $TMPDIR because "--initialize-insecure" option does not work if directory is not empty
-		# in some cases storage driver creates unremovable artifacts (see K8SPXC-286), so $DATADIR cleanup is not possible
-		"$@" --initialize-insecure --datadir="$TMPDIR"
-		mv "$TMPDIR"/* "$DATADIR/"
-		rm -rfv "$TMPDIR"
-		echo 'Database initialized'
-
-		SOCKET="$(_get_config 'socket' "$@")"
-		"$@" --skip-networking --socket="${SOCKET}" &
-		pid="$!"
-
-		mysql=(mysql --protocol=socket -uroot -hlocalhost --socket="${SOCKET}" --password="")
-
-		for i in {120..0}; do
-			if echo 'SELECT 1' | "${mysql[@]}" &>/dev/null; then
-				break
-			fi
-			echo 'MySQL init process in progress...'
-			sleep 1
-		done
-		if [ "$i" = 0 ]; then
-			echo >&2 'MySQL init process failed.'
-			exit 1
-		fi
-
-		if [ -z "$MYSQL_INITDB_SKIP_TZINFO" ]; then
-			(
-				echo "SET @@SESSION.SQL_LOG_BIN = off;"
-				# sed is for https://bugs.mysql.com/bug.php?id=20545
-				mysql_tzinfo_to_sql /usr/share/zoneinfo | sed 's/Local time zone must be set--see zic manual page/FCTY/'
-			) | "${mysql[@]}" mysql
-		fi
-
-		{ set +x; } 2>/dev/null
-		if [ -n "$INIT_ROCKSDB" ]; then
-			ps-admin --docker --enable-rocksdb -u root -p "$MYSQL_ROOT_PASSWORD"
-		fi
-
-		if [ -n "$MYSQL_RANDOM_ROOT_PASSWORD" ]; then
-			MYSQL_ROOT_PASSWORD="$(pwmake 128)"
-			echo "GENERATED ROOT PASSWORD: $MYSQL_ROOT_PASSWORD"
-		fi
-
-		rootCreate=
-		# default root to listen for connections from anywhere
-		file_env 'MYSQL_ROOT_HOST' '%'
-		if [ -n "$MYSQL_ROOT_HOST" ] && [ "$MYSQL_ROOT_HOST" != 'localhost' ]; then
-			# no, we don't care if read finds a terminating character in this heredoc
-			# https://unix.stackexchange.com/questions/265149/why-is-set-o-errexit-breaking-this-read-heredoc-expression/265151#265151
-			read -r -d '' rootCreate <<-EOSQL || true
-				CREATE USER 'root'@'${MYSQL_ROOT_HOST}' IDENTIFIED BY '$(escape_special "${MYSQL_ROOT_PASSWORD}")' PASSWORD EXPIRE NEVER;
-				GRANT ALL ON *.* TO 'root'@'${MYSQL_ROOT_HOST}' WITH GRANT OPTION ;
-			EOSQL
-		fi
-
-		file_env 'MONITOR_HOST' 'localhost'
-		file_env 'MONITOR_PASSWORD' 'monitor' 'monitor'
-		file_env 'XTRABACKUP_PASSWORD' '' 'xtrabackup'
-		file_env 'REPLICATION_PASSWORD' '' 'replication'
-		file_env 'ORC_TOPOLOGY_PASSWORD' '' 'orchestrator'
-		file_env 'OPERATOR_ADMIN_PASSWORD' '' 'operator'
-		file_env 'XTRABACKUP_PASSWORD' '' 'xtrabackup'
-		file_env 'HEARTBEAT_PASSWORD' '' 'heartbeat'
-		file_env 'CLUSTERSET_PASSWORD' '' 'clusterset'
-
-		read -r -d '' monitorConnectGrant <<-EOSQL || true
-			GRANT SERVICE_CONNECTION_ADMIN ON *.* TO 'monitor'@'${MONITOR_HOST}';
-		EOSQL
-
-		clustersetCreate=
-		if [ -n "$CLUSTERSET_PASSWORD" ]; then
-			read -r -d '' clustersetCreate <<-EOSQL || true
-				CREATE USER 'clusterset'@'%' IDENTIFIED BY '$(escape_special "${CLUSTERSET_PASSWORD}")' PASSWORD EXPIRE NEVER;
-				GRANT SELECT, RELOAD, SHUTDOWN, PROCESS, FILE, REPLICATION SLAVE, REPLICATION CLIENT, CREATE USER, EXECUTE ON *.* TO 'clusterset'@'%' WITH GRANT OPTION ;
-				GRANT BACKUP_ADMIN, CLONE_ADMIN, CONNECTION_ADMIN, GROUP_REPLICATION_ADMIN, REPLICATION_SLAVE_ADMIN, REPLICATION_APPLIER, PERSIST_RO_VARIABLES_ADMIN, ROLE_ADMIN, SESSION_VARIABLES_ADMIN, SYSTEM_VARIABLES_ADMIN ON *.* TO 'clusterset'@'%' WITH GRANT OPTION ;
-				GRANT INSERT, UPDATE, DELETE ON mysql.* TO 'clusterset'@'%' WITH GRANT OPTION ;
-				GRANT ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, CREATE TEMPORARY TABLES, CREATE VIEW, DELETE, DROP, EVENT, EXECUTE, INDEX, INSERT, LOCK TABLES, REFERENCES, SHOW VIEW, TRIGGER, UPDATE ON mysql_innodb_cluster_metadata.* TO 'clusterset'@'%' WITH GRANT OPTION ;
-				GRANT ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, CREATE TEMPORARY TABLES, CREATE VIEW, DELETE, DROP, EVENT, EXECUTE, INDEX, INSERT, LOCK TABLES, REFERENCES, SHOW VIEW, TRIGGER, UPDATE ON mysql_innodb_cluster_metadata_bkp.* TO 'clusterset'@'%' WITH GRANT OPTION ;
-				GRANT ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, CREATE TEMPORARY TABLES, CREATE VIEW, DELETE, DROP, EVENT, EXECUTE, INDEX, INSERT, LOCK TABLES, REFERENCES, SHOW VIEW, TRIGGER, UPDATE ON mysql_innodb_cluster_metadata_previous.* TO 'clusterset'@'%' WITH GRANT OPTION ;
-			EOSQL
-		fi
-
-		"${mysql[@]}" <<-EOSQL
-			-- What's done in this file shouldn't be replicated
-			--  or products like mysql-fabric won't work
-			SET @@SESSION.SQL_LOG_BIN=0;
-
-			DELETE FROM mysql.user WHERE user NOT IN ('mysql.sys', 'mysqlxsys', 'root', 'mysql.infoschema', 'mysql.session') OR host NOT IN ('localhost') ;
-			ALTER USER 'root'@'localhost' IDENTIFIED BY '$(escape_special "${MYSQL_ROOT_PASSWORD}")' ;
-			GRANT ALL ON *.* TO 'root'@'localhost' WITH GRANT OPTION ;
-			${rootCreate}
-			/*!80016 REVOKE SYSTEM_USER ON *.* FROM root */;
-
-			CREATE USER 'operator'@'${MYSQL_ROOT_HOST}' IDENTIFIED BY '$(escape_special "${OPERATOR_ADMIN_PASSWORD}")' PASSWORD EXPIRE NEVER;
-			GRANT ALL ON *.* TO 'operator'@'${MYSQL_ROOT_HOST}' WITH GRANT OPTION ;
-
-			${clustersetCreate}
-
-			CREATE USER 'xtrabackup'@'localhost' IDENTIFIED BY '$(escape_special "${XTRABACKUP_PASSWORD}")' PASSWORD EXPIRE NEVER;
-			GRANT SYSTEM_USER, BACKUP_ADMIN, PROCESS, RELOAD, GROUP_REPLICATION_ADMIN, REPLICATION_SLAVE_ADMIN, LOCK TABLES, REPLICATION CLIENT ON *.* TO 'xtrabackup'@'localhost';
-			GRANT SELECT ON performance_schema.replication_group_members TO 'xtrabackup'@'localhost';
-			GRANT SELECT ON performance_schema.log_status TO 'xtrabackup'@'localhost';
-			GRANT SELECT ON performance_schema.keyring_component_status TO 'xtrabackup'@'localhost';
-
-			CREATE USER 'monitor'@'${MONITOR_HOST}' IDENTIFIED BY '$(escape_special "${MONITOR_PASSWORD}")' WITH MAX_USER_CONNECTIONS 100 PASSWORD EXPIRE NEVER;
-			GRANT SYSTEM_USER, SELECT, PROCESS, SUPER, REPLICATION CLIENT, RELOAD, BACKUP_ADMIN ON *.* TO 'monitor'@'${MONITOR_HOST}';
-			GRANT SELECT ON performance_schema.* TO 'monitor'@'${MONITOR_HOST}';
-			${monitorConnectGrant}
-
-			CREATE USER 'replication'@'%' IDENTIFIED BY '$(escape_special "${REPLICATION_PASSWORD}")' PASSWORD EXPIRE NEVER;
-			GRANT DELETE, INSERT, UPDATE ON mysql.* TO 'replication'@'%' WITH GRANT OPTION;
-			GRANT SELECT ON performance_schema.threads to 'replication'@'%';
-			GRANT SYSTEM_USER, REPLICATION SLAVE, BACKUP_ADMIN, GROUP_REPLICATION_STREAM, CLONE_ADMIN, CONNECTION_ADMIN, CREATE USER, EXECUTE, FILE, GROUP_REPLICATION_ADMIN, PERSIST_RO_VARIABLES_ADMIN, PROCESS, RELOAD, REPLICATION CLIENT, REPLICATION_APPLIER, REPLICATION_SLAVE_ADMIN, ROLE_ADMIN, SELECT, SHUTDOWN, SYSTEM_VARIABLES_ADMIN ON *.* TO 'replication'@'%' WITH GRANT OPTION;
-
-			CREATE USER 'orchestrator'@'%' IDENTIFIED BY '$(escape_special "${ORC_TOPOLOGY_PASSWORD}")' PASSWORD EXPIRE NEVER;
-			GRANT SYSTEM_USER, SUPER, PROCESS, REPLICATION SLAVE, REPLICATION CLIENT, RELOAD ON *.* TO 'orchestrator'@'%';
-			GRANT SELECT ON performance_schema.replication_group_members TO 'orchestrator'@'%';
-			GRANT SELECT ON mysql.slave_master_info TO 'orchestrator'@'%';
-			GRANT SELECT ON sys_operator.* TO 'orchestrator'@'%';
-
-			CREATE DATABASE IF NOT EXISTS sys_operator;
-			CREATE USER 'heartbeat'@'localhost' IDENTIFIED BY '$(escape_special "${HEARTBEAT_PASSWORD}")' PASSWORD EXPIRE NEVER;
-			GRANT SYSTEM_USER, REPLICATION CLIENT ON *.* TO 'heartbeat'@'localhost';
-			GRANT SELECT, CREATE, DELETE, UPDATE, INSERT ON sys_operator.heartbeat TO 'heartbeat'@'localhost';
-
-			DROP DATABASE IF EXISTS test;
-			FLUSH PRIVILEGES ;
-		EOSQL
-
-		if [ -n "$MYSQL_ROOT_PASSWORD" ]; then
-			mysql+=(-p"${MYSQL_ROOT_PASSWORD}")
-		fi
-		set -x
-
-		file_env 'MYSQL_DATABASE'
-		if [ "$MYSQL_DATABASE" ]; then
-			echo "CREATE DATABASE IF NOT EXISTS \`$MYSQL_DATABASE\` ;" | "${mysql[@]}"
-			mysql+=("$MYSQL_DATABASE")
-		fi
-
-		file_env 'MYSQL_USER'
-		file_env 'MYSQL_PASSWORD'
-		{ set +x; } 2>/dev/null
-		if [ "$MYSQL_USER" ] && [ "$MYSQL_PASSWORD" ]; then
-			echo "CREATE USER '$MYSQL_USER'@'%' IDENTIFIED BY '$MYSQL_PASSWORD' ;" | "${mysql[@]}"
-
-			if [ "$MYSQL_DATABASE" ]; then
-				echo "GRANT ALL ON \`$MYSQL_DATABASE\`.* TO '$MYSQL_USER'@'%' ;" | "${mysql[@]}"
-			fi
-
-			echo 'FLUSH PRIVILEGES ;' | "${mysql[@]}"
-		fi
-		set -x
-
-		echo
-		ls /docker-entrypoint-initdb.d/ >/dev/null
-		for f in /docker-entrypoint-initdb.d/*; do
-			process_init_file "$f" "${mysql[@]}"
-		done
-
-		{ set +x; } 2>/dev/null
-		if [ -n "$MYSQL_ONETIME_PASSWORD" ]; then
-			"${mysql[@]}" <<-EOSQL
-				ALTER USER 'root'@'%' PASSWORD EXPIRE;
-			EOSQL
-		fi
-		set -x
-		if ! kill -s TERM "$pid" || ! wait "$pid"; then
-			echo >&2 'MySQL init process failed.'
-			exit 1
-		fi
-
+		stop_temp_mysqld
 		rm /var/lib/mysql/bootstrap.lock
+	fi
+
+	if [ "${fresh_datadir}" = 1 ]; then
 		echo
 		echo 'MySQL init process done. Ready for start up.'
 		echo
@@ -476,17 +649,7 @@ if [ "$1" = 'mysqld' ] && [ -z "$wantHelp" ]; then
 	fi
 fi
 
-if [[ ${MYSQL_VERSION} == '8.4' || ${MYSQL_VERSION} == '9.7' ]]; then
-  # if vault secret file exists we assume we need to turn on encryption
-  if [[ -f ${KEYRING_VAULT_PATH} ]]; then
-    install_keyring_component
-    add_encryption_options
-  else
-    uninstall_keyring_component
-  fi
-fi
-
-if [[ -f /var/lib/mysql/full-cluster-crash ]]; then
+if in_full_cluster_crash; then
 	set +o xtrace
 	node_name=$(hostname -f)
 	gtid_executed=$(</var/lib/mysql/full-cluster-crash)
@@ -506,25 +669,15 @@ if [[ -f /var/lib/mysql/full-cluster-crash ]]; then
 	ensure_read_only
 fi
 
-recovery_file='/var/lib/mysql/sleep-forever'
-if [ -f "${recovery_file}" ]; then
-	set +o xtrace
-	echo "The $recovery_file file is detected, node is going to infinity loop"
-	echo "If you want to exit from infinity loop you need to remove $recovery_file file"
-	for (( ; ; )); do
-		if [ ! -f "${recovery_file}" ]; then
-			exit 0
-		fi
-		sleep 3
-	done
-fi
-
 if [[ -n ${MYSQL_NOTIFY_SOCKET} ]]; then
 	export NOTIFY_SOCKET=${MYSQL_NOTIFY_SOCKET}
 	unlink "${NOTIFY_SOCKET}" || true
 	nohup /opt/percona/mysql-state-monitor >/var/lib/mysql/mysql-state-monitor.log 2>&1 </dev/null &
 	monitor_pid=$!
 	set +o xtrace
+	# shellcheck disable=SC2034 # loop counter unused by design; the sole other
+	# top-level read of the shared global "i" moved into wait_for_mysqld's
+	# local scope, so shellcheck no longer sees this "i" as used.
 	for i in {1..30}; do
 		[[ -S ${NOTIFY_SOCKET} ]] && break
 		if ! kill -0 "${monitor_pid}" 2>/dev/null; then
@@ -541,5 +694,7 @@ if [[ -n ${MYSQL_NOTIFY_SOCKET} ]]; then
 	echo "${NOTIFY_SOCKET} is available"
 	set -o xtrace
 fi
+
+echo "${CR_VERSION}" >/var/lib/mysql/cr-version
 
 exec "$@"

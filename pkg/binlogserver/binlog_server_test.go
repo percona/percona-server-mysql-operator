@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
@@ -105,7 +104,7 @@ func TestStatefulSet(t *testing.T) {
 			initImage: "init:latest",
 			verify: func(t *testing.T, cr *apiv1.PerconaServerMySQL) {
 				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, MatchLabels(cr), "init:latest", "", "")
-				assert.Equal(t, ptr.To(int32(1)), sts.Spec.Replicas)
+				assert.Equal(t, new(int32(1)), sts.Spec.Replicas)
 			},
 		},
 		"config hash annotation in pod template": {
@@ -249,6 +248,38 @@ func TestStatefulSet(t *testing.T) {
 					}
 				}
 				t.Error("storage volume not found")
+			},
+		},
+		"keyring volume and mount are present when a keyring secret is configured": {
+			cr: func() *apiv1.PerconaServerMySQL {
+				cr := newTestCR("cluster", "ns")
+				cr.Spec.Backup.PiTR.BinlogServer.KeyringSecret = &apiv1.BinlogServerKeyringSecretSelector{
+					Name: "binlog-keyring",
+					Key:  "keyring.json",
+				}
+				return cr
+			}(),
+			initImage: "init:latest",
+			verify: func(t *testing.T, cr *apiv1.PerconaServerMySQL) {
+				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, MatchLabels(cr), "init:latest", "", "")
+				var foundVolume bool
+				for _, v := range sts.Spec.Template.Spec.Volumes {
+					if v.Name == keyringVolumeName {
+						foundVolume = true
+						assert.Equal(t, "binlog-keyring", v.Secret.SecretName)
+					}
+				}
+				assert.True(t, foundVolume, "keyring volume not found")
+
+				container := sts.Spec.Template.Spec.Containers[0]
+				var foundMount bool
+				for _, m := range container.VolumeMounts {
+					if m.Name == keyringVolumeName {
+						foundMount = true
+						assert.Equal(t, keyringMountPath, m.MountPath)
+					}
+				}
+				assert.True(t, foundMount, "keyring volume mount not found")
 			},
 		},
 		"config volume references config secret": {

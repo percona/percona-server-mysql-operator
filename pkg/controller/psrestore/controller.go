@@ -208,6 +208,13 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	}
 
 	if restoreJobCompleted {
+		if state, err := r.reconcilePrepareJob(ctx, cr, cluster); err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "reconcile prepare job")
+		} else if state != apiv1.RestoreSucceeded {
+			status.State = state
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		}
+
 		if cr.Spec.PITR != nil {
 			pitrState, err := r.reconcilePITRJob(ctx, cr, cluster)
 			if err != nil {
@@ -549,6 +556,60 @@ func (r *PerconaServerMySQLRestoreReconciler) reconcilePITRConfig(
 	}
 
 	return nil
+}
+
+func (r *PerconaServerMySQLRestoreReconciler) reconcilePrepareJob(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQLRestore,
+	cluster *apiv1.PerconaServerMySQL,
+) (apiv1.RestoreState, error) {
+	prepareJob := &batchv1.Job{}
+	nn := types.NamespacedName{Name: xtrabackup.PrepareJobName(cr), Namespace: cr.Namespace}
+	err := r.Get(ctx, nn, prepareJob)
+	if err == nil {
+		if prepareJob.Status.Active > 0 {
+			return apiv1.RestoreRunning, nil
+		}
+
+		for _, cond := range prepareJob.Status.Conditions {
+			if cond.Status != corev1.ConditionTrue {
+				continue
+			}
+
+			switch cond.Type {
+			case batchv1.JobFailed:
+				return apiv1.RestoreFailed, nil
+			case batchv1.JobComplete:
+				return apiv1.RestoreSucceeded, nil
+			}
+		}
+
+		return apiv1.RestoreRunning, nil
+	}
+
+	if !k8serrors.IsNotFound(err) {
+		return "", errors.Wrapf(err, "get prepare job %s", nn)
+	}
+
+	bcp, err := getBackup(ctx, r.Client, cr, cluster)
+	if err != nil {
+		return "", errors.Wrap(err, "get backup")
+	}
+
+	initImage, err := k8s.InitImage(ctx, r.Client, cluster, cluster.Spec.Backup)
+	if err != nil {
+		return "", errors.Wrap(err, "get operator image")
+	}
+
+	job := xtrabackup.PrepareJob(cluster, cr, bcp.Status.Storage, initImage)
+	if err := controllerutil.SetControllerReference(cr, job, r.Scheme); err != nil {
+		return "", errors.Wrapf(err, "set controller reference to Job %s/%s", job.Namespace, job.Name)
+	}
+
+	if err := r.Create(ctx, job); err != nil {
+		return "", errors.Wrapf(err, "create prepare job %s/%s", job.Namespace, job.Name)
+	}
+	return apiv1.RestoreRunning, nil
 }
 
 func (r *PerconaServerMySQLRestoreReconciler) reconcilePITRJob(

@@ -1,0 +1,40 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster=$(get_cluster_name)
+      generation_before=$(kubectl -n "${NAMESPACE}" get sts "${cluster}-mysql" -o jsonpath='{.metadata.generation}')
+      uids_before=$(get_mysql_pod_uids "${cluster}")
+
+      kubectl -n "${NAMESPACE}" patch ps "${cluster}" \
+          --type merge \
+          -p '{"spec": {"mysql": {"configuration": "max_connections=400\n"}}}'
+
+      restarted="true"
+      wait_for_mysql_pods_restart "${cluster}" "${uids_before}" 600 || restarted="false"
+      wait_cluster_consistency_async "${cluster}" 3 3
+
+      generation_after=$(kubectl -n "${NAMESPACE}" get sts "${cluster}-mysql" -o jsonpath='{.metadata.generation}')
+      [[ ${generation_before} != "${generation_after}" ]] || restarted="false"
+
+      # table_open_cache is gone from my.cnf, so MySQL must be back to its default.
+      table_open_cache=$(get_mysql_variable_on_pods "${cluster}" table_open_cache)
+      table_open_cache_removed="true"
+      for value in ${table_open_cache}; do
+          if [[ ${value} == "5000" ]]; then
+              table_open_cache_removed="false"
+          fi
+      done
+
+      kubectl -n "${NAMESPACE}" create configmap 09-remove-dynamic-config \
+          --from-literal=restarted="${restarted}" \
+          --from-literal=table_open_cache_removed="${table_open_cache_removed}" \
+          --from-literal=max_connections="$(get_mysql_variable_on_pods "${cluster}" max_connections)" \
+          --from-literal=table_open_cache="${table_open_cache}" \
+          --from-literal=generation="${generation_before} ${generation_after}"
+    timeout: 1200

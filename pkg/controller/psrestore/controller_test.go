@@ -19,7 +19,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/utils/ptr"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -273,8 +272,8 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 						Namespace: namespace,
 					},
 					Spec: coordv1.LeaseSpec{
-						HolderIdentity:       ptr.To("running-restore|running-restore-uid"),
-						LeaseDurationSeconds: ptr.To(int32(30)),
+						HolderIdentity:       new("running-restore|running-restore-uid"),
+						LeaseDurationSeconds: new(int32(30)),
 						AcquireTime:          &metav1.MicroTime{Time: metav1.Now().Time},
 						RenewTime:            &metav1.MicroTime{Time: metav1.Now().Time},
 					},
@@ -632,6 +631,19 @@ func TestRestoreFinishesWhenClusterIsReady(t *testing.T) {
 				},
 			}
 
+			prepareJob := &batchv1.Job{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      xtrabackup.PrepareJobName(restore),
+					Namespace: namespace,
+				},
+				Status: batchv1.JobStatus{
+					Conditions: []batchv1.JobCondition{{
+						Type:   batchv1.JobComplete,
+						Status: corev1.ConditionTrue,
+					}},
+				},
+			}
+
 			leaseName := naming.RestoreLeaseName(clusterName)
 			lease := &coordv1.Lease{
 				ObjectMeta: metav1.ObjectMeta{
@@ -643,7 +655,7 @@ func TestRestoreFinishesWhenClusterIsReady(t *testing.T) {
 				},
 			}
 
-			cl := buildFakeClient(t, cluster, restore, restoreJob, lease)
+			cl := buildFakeClient(t, cluster, restore, restoreJob, prepareJob, lease)
 			r := reconciler(cl)
 			_, err := r.Reconcile(ctx, controllerruntime.Request{
 				NamespacedName: types.NamespacedName{Name: restoreName, Namespace: namespace},
