@@ -6,7 +6,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	"k8s.io/utils/ptr"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	operatorversion "github.com/percona/percona-server-mysql-operator/pkg/version"
@@ -94,13 +93,13 @@ func TestInitContainer(t *testing.T) {
 				Spec: apiv1.PerconaServerMySQLSpec{
 					InitContainer: apiv1.InitContainerSpec{
 						ContainerSecurityContext: &corev1.SecurityContext{
-							Privileged: ptr.To(true),
+							Privileged: new(true),
 						},
 					},
 				},
 			},
 			expectedSecurityContext: corev1.SecurityContext{
-				Privileged: ptr.To(true),
+				Privileged: new(true),
 			},
 			expectedResources: expectedResources,
 		},
@@ -110,13 +109,13 @@ func TestInitContainer(t *testing.T) {
 				Spec: apiv1.PerconaServerMySQLSpec{
 					InitContainer: apiv1.InitContainerSpec{
 						ContainerSecurityContext: &corev1.SecurityContext{
-							Privileged: ptr.To(true),
+							Privileged: new(true),
 						},
 					},
 				},
 			},
 			expectedSecurityContext: corev1.SecurityContext{
-				Privileged: ptr.To(true),
+				Privileged: new(true),
 			},
 			expectedResources: corev1.ResourceRequirements{
 				Limits: corev1.ResourceList{

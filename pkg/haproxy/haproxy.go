@@ -3,6 +3,7 @@ package haproxy
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -273,6 +274,10 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 			},
 		})
 	}
+
+	if cr.Spec.PMM != nil && cr.Spec.PMM.Enabled && cr.CompareVersion("1.3.0") >= 0 {
+		volumes = append(volumes, pmm.TmpVolume())
+	}
 	return volumes
 }
 
@@ -302,7 +307,7 @@ func containers(cr *apiv1.PerconaServerMySQL, secret *corev1.Secret) []corev1.Co
 			cr,
 			secret,
 			AppName,
-			"--listen-port="+strconv.Itoa(PortPMMStats),
+			pmmCustomParams(cr),
 		)
 		pmmC.Ports = append(pmmC.Ports, corev1.ContainerPort{ContainerPort: PortPMMStats})
 
@@ -488,4 +493,22 @@ func mysqlMonitContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 		SecurityContext:          spec.ContainerSecurityContext,
 	}
+}
+
+func pmmCustomParams(cr *apiv1.PerconaServerMySQL) string {
+	listenPort := "--listen-port=" + strconv.Itoa(PortPMMStats)
+
+	params := cr.PMMSpec().HAProxyParams
+
+	if cr.CompareVersion("1.3.0") < 0 || params == "" {
+		return listenPort
+	}
+
+	for param := range strings.FieldsSeq(params) {
+		if name, _, _ := strings.Cut(param, "="); name == "--listen-port" {
+			return params
+		}
+	}
+
+	return listenPort + " " + params
 }

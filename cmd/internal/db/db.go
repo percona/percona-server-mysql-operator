@@ -243,7 +243,7 @@ func (d *DB) getCloneStatus(ctx context.Context) (string, error) {
 }
 
 // getCloneStatusDetails returns detailed clone status information for debugging
-func (d *DB) getCloneStatusDetails(ctx context.Context) (map[string]interface{}, error) {
+func (d *DB) getCloneStatusDetails(ctx context.Context) (map[string]any, error) {
 	log := logf.FromContext(ctx)
 	rows, err := d.db.QueryContext(ctx, "SELECT STATE, BEGIN_TIME, END_TIME, SOURCE, DESTINATION, ERROR_NO, ERROR_MESSAGE FROM clone_status")
 	if err != nil {
@@ -256,7 +256,7 @@ func (d *DB) getCloneStatusDetails(ctx context.Context) (map[string]interface{},
 		}
 	}()
 
-	details := make(map[string]interface{})
+	details := make(map[string]any)
 	if rows.Next() {
 		var state, beginTime, endTime, source, destination, errorNo, errorMessage sql.NullString
 		if err := rows.Scan(&state, &beginTime, &endTime, &source, &destination, &errorNo, &errorMessage); err != nil {
@@ -346,6 +346,20 @@ func (d *DB) GetMemberState(ctx context.Context, host string) (db.MemberState, e
 	var state db.MemberState
 
 	err := d.db.QueryRowContext(ctx, "SELECT MEMBER_STATE FROM replication_group_members WHERE MEMBER_HOST=?", host).Scan(&state)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return db.MemberStateOffline, nil
+		}
+		return db.MemberStateError, errors.Wrap(err, "query member state")
+	}
+
+	return state, nil
+}
+
+func (d *DB) GetSelfState(ctx context.Context) (db.MemberState, error) {
+	var state db.MemberState
+
+	err := d.db.QueryRowContext(ctx, "SELECT MEMBER_STATE FROM replication_group_members WHERE MEMBER_ID = @@global.server_uuid").Scan(&state)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return db.MemberStateOffline, nil

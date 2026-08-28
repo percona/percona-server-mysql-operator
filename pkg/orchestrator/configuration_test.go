@@ -11,10 +11,10 @@ import (
 )
 
 func TestConfigMapDataUserConfiguration(t *testing.T) {
-	parse := func(t *testing.T, cr *apiv1.PerconaServerMySQL) map[string]interface{} {
+	parse := func(t *testing.T, cr *apiv1.PerconaServerMySQL) map[string]any {
 		data, err := ConfigMapData(cr)
 		require.NoError(t, err)
-		out := map[string]interface{}{}
+		out := map[string]any{}
 		require.NoError(t, json.Unmarshal([]byte(data), &out))
 		return out
 	}
@@ -56,7 +56,7 @@ func TestConfigMapDataUserConfiguration(t *testing.T) {
 		cfg := parse(t, cr)
 
 		// operator-managed values win
-		assert.NotEqual(t, []interface{}{"evil"}, cfg["RaftNodes"])
+		assert.NotEqual(t, []any{"evil"}, cfg["RaftNodes"])
 		assert.EqualValues(t, false, cfg["RaftEnabledSingleNode"])
 		assert.EqualValues(t, true, cfg["MySQLTopologyUseMutualTLS"])
 		assert.EqualValues(t, "/etc/orchestrator/ssl/tls.key", cfg["MySQLTopologySSLPrivateKeyFile"])

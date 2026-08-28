@@ -3,7 +3,6 @@ package v1
 import (
 	"testing"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -201,6 +200,37 @@ func TestCheckNSetDefaults(t *testing.T) {
 		assert.Equal(t, int32(30), bls.IdleTime)
 		assert.Equal(t, "info", bls.LogLevel)
 		assert.Equal(t, int32(100), bls.ServerID)
+	})
+	t.Run("binlog server encryption defaults are set", func(t *testing.T) {
+		cr := new(PerconaServerMySQL)
+		cr.Spec.MySQL.VolumeSpec = &VolumeSpec{
+			PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
+				Resources: corev1.VolumeResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceStorage: resource.MustParse("1G"),
+					},
+				},
+			},
+		}
+		cr.Spec.Backup = &BackupSpec{
+			PiTR: PiTRSpec{
+				BinlogServer: &BinlogServerSpec{
+					KeyringSecret: &BinlogServerKeyringSecretSelector{
+						Name: "keyring-secret",
+					},
+					Storage: BinlogServerStorageSpec{
+						Encryption: &BinlogServerStorageEncryptionSpec{},
+					},
+				},
+			},
+		}
+
+		err := cr.CheckNSetDefaults(t.Context(), nil)
+		assert.NoError(t, err)
+
+		binlogServer := cr.Spec.Backup.PiTR.BinlogServer
+		assert.Equal(t, "keyring.json", binlogServer.KeyringSecret.Key)
+		assert.Equal(t, "AES-256-CTR", binlogServer.Storage.Encryption.Cipher)
 	})
 	t.Run("binlog server explicit values are not overridden by defaults", func(t *testing.T) {
 		cr := new(PerconaServerMySQL)
@@ -419,7 +449,7 @@ func TestGetTerminationGracePeriodSeconds(t *testing.T) {
 		expected int64
 	}{
 		"custom grace period": {
-			input:    to.Ptr(int64(20)),
+			input:    new(int64(20)),
 			expected: 20,
 		},
 		"nil grace period (default used)": {

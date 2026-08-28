@@ -5,7 +5,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/utils/ptr"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/version"
@@ -125,6 +124,7 @@ func pmmDefaults(spec *apiv1.PMMSpec) {
 	spec.ServerHost = "monitoring-service"
 	spec.CustomClusterName = "cluster1-custom"
 	spec.MySQLParams = "PMM_ADMIN_CUSTOM_PARAMS"
+	spec.HAProxyParams = "PMM_ADMIN_CUSTOM_PARAMS"
 }
 
 func customUserDefaults(spec *apiv1.PerconaServerMySQLSpec) {
@@ -161,6 +161,14 @@ func backupDefaults(spec *apiv1.BackupSpec) {
 					Region:            "us-west-2",
 					EndpointURL:       "https://s3.amazonaws.com",
 				},
+				Encryption: &apiv1.BinlogServerStorageEncryptionSpec{
+					KekID:  "alpha",
+					Cipher: "AES-256-CTR",
+				},
+			},
+			KeyringSecret: &apiv1.BinlogServerKeyringSecretSelector{
+				Name: "ps-cluster1-binlog-server-keyring",
+				Key:  "keyring.json",
 			},
 			ConnectTimeout:     30,
 			ReadTimeout:        30,
@@ -180,7 +188,7 @@ func backupDefaults(spec *apiv1.BackupSpec) {
 	spec.PiTR.BinlogServer.Size = 1
 	spec.SourcePod = SourcePod
 	spec.ServiceAccountName = "some-service-account"
-	spec.BackoffLimit = ptr.To(int32(6))
+	spec.BackoffLimit = new(int32(6))
 	spec.Schedule = []apiv1.BackupSchedule{
 		{
 			Name:        "sat-night-backup",
@@ -262,7 +270,7 @@ func podSpecDefaults(spec *apiv1.PodSpec, image string, resources corev1.Resourc
 	spec.Image = image
 	spec.Resources = resources
 	spec.Configuration = configuration
-	spec.TerminationGracePeriodSeconds = ptr.To(gracePeriod)
+	spec.TerminationGracePeriodSeconds = new(gracePeriod)
 	spec.Env = env
 	spec.EnvFrom = envFrom
 
