@@ -184,6 +184,10 @@ func GetAutoConfigParams(cr *apiv1.PerconaServerMySQL, version string, cpu, memo
 		return "", errors.Wrap(err, "get mysqld params")
 	}
 
+	if err := checkStorageFits(cr, params); err != nil {
+		return "", err
+	}
+
 	userKeys, err := userConfigKeys(cr.Spec.MySQL.Configuration)
 	if err != nil {
 		return "", errors.Wrap(err, "parse user configuration")
@@ -211,6 +215,95 @@ func GetAutoConfigParams(cr *apiv1.PerconaServerMySQL, version string, cpu, memo
 		b.WriteString(params[name])
 	}
 	return b.String(), nil
+}
+
+// ErrInsufficientStorage reports that the calculated configuration needs more
+// disk than the data volume provides. The calculated values are used as they
+// come or not at all, so this rejects the whole configuration rather than
+// trimming any parameter to fit.
+var ErrInsufficientStorage = errors.New("data volume is too small for the calculated configuration")
+
+// dataVolumeSize returns the size requested for the MySQL data volume, or zero
+// when the pod uses an emptyDir or hostPath, or declares no volume at all -
+// there is no size to check against in those cases.
+func dataVolumeSize(cr *apiv1.PerconaServerMySQL) int64 {
+	vs := cr.Spec.MySQL.VolumeSpec
+	if vs == nil || vs.PersistentVolumeClaim == nil {
+		return 0
+	}
+	res := vs.PersistentVolumeClaim.Resources
+	if q, ok := res.Requests[corev1.ResourceStorage]; ok {
+		return q.Value()
+	}
+	if q, ok := res.Limits[corev1.ResourceStorage]; ok {
+		return q.Value()
+	}
+	return 0
+}
+
+// checkStorageFits rejects a calculated configuration whose redo log does not
+// fit on the data volume. mysqld preallocates the redo log in full during
+// initialization, so a configuration that doesn't fit doesn't degrade the
+// cluster - it stops it from ever starting.
+//
+// The bar is only whether the redo log fits at all. How much of what is left
+// the data needs is the user's call, not something the operator can guess.
+func checkStorageFits(cr *apiv1.PerconaServerMySQL, params map[string]string) error {
+	storage := dataVolumeSize(cr)
+	if storage == 0 {
+		return nil
+	}
+
+	redo, err := redoLogBytes(params)
+	if err != nil || redo == 0 {
+		return err
+	}
+
+	if redo < storage {
+		return nil
+	}
+
+	return errors.Wrapf(ErrInsufficientStorage,
+		"calculated redo log is %d bytes but mysql.volumeSpec.persistentVolumeClaim requests %d bytes; "+
+			"increase the volume or lower mysql.resources memory",
+		redo, storage)
+}
+
+// redoLogBytes totals the disk the calculated redo log will occupy.
+func redoLogBytes(params map[string]string) (int64, error) {
+	get := func(name string) (int64, error) {
+		v, ok := params[name]
+		if !ok {
+			return 0, nil
+		}
+		n, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			return 0, errors.Wrapf(err, "parse %s value %q", name, v)
+		}
+		return n, nil
+	}
+
+	capacity, err := get("innodb_redo_log_capacity")
+	if err != nil {
+		return 0, err
+	}
+	if capacity > 0 {
+		return capacity, nil
+	}
+
+	// Pre-8.4 spelling: total is the file size times the number of files.
+	size, err := get("innodb_log_file_size")
+	if err != nil {
+		return 0, err
+	}
+	files, err := get("innodb_log_files_in_group")
+	if err != nil {
+		return 0, err
+	}
+	if files == 0 {
+		files = 1
+	}
+	return size * files, nil
 }
 
 func autoConfigLoadType(lt apiv1.AutoConfigLoadType) int {

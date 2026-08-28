@@ -325,6 +325,18 @@ func newAutoConfigCR(clusterType apiv1.ClusterType, loadType apiv1.AutoConfigLoa
 	return cr
 }
 
+// withDataVolume declares a PVC of the given size for the MySQL data volume.
+func withDataVolume(cr *apiv1.PerconaServerMySQL, size string) *apiv1.PerconaServerMySQL {
+	cr.Spec.MySQL.VolumeSpec = &apiv1.VolumeSpec{
+		PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
+			Resources: corev1.VolumeResourceRequirements{
+				Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse(size)},
+			},
+		},
+	}
+	return cr
+}
+
 func TestGetAutoConfigParams(t *testing.T) {
 	cpu := resource.NewQuantity(4, resource.DecimalSI)    // 4 cores
 	mem := resource.NewQuantity(8<<30, resource.BinarySI) // 8Gi
@@ -380,6 +392,30 @@ func TestGetAutoConfigParams(t *testing.T) {
 			memory:       mem,
 			wantAbsent:   []string{"max_connections="},
 			wantContains: []string{"innodb_buffer_pool_size="},
+		},
+		// The redo log is preallocated in full at startup, so a calculated
+		// configuration that outgrows the data volume stops mysqld from ever
+		// starting. The calculated values are used as they come, so the whole
+		// configuration is rejected rather than any parameter trimmed to fit.
+		// At 8Gi of memory the redo log is ~4.4Gi.
+		"a data volume smaller than the redo log is rejected": {
+			cr:              withDataVolume(newAutoConfigCR(apiv1.ClusterTypeGR, apiv1.AutoConfigLoadTypeSomeWrites, "8.4.8", ""), "2Gi"),
+			cpu:             cpu,
+			memory:          mem,
+			wantErrContains: "data volume is too small",
+		},
+		"a data volume larger than the redo log is accepted": {
+			cr:           withDataVolume(newAutoConfigCR(apiv1.ClusterTypeGR, apiv1.AutoConfigLoadTypeSomeWrites, "8.4.8", ""), "8Gi"),
+			cpu:          cpu,
+			memory:       mem,
+			wantContains: []string{"innodb_redo_log_capacity="},
+		},
+		// emptyDir and hostPath have no declared size to check against.
+		"no persistent volume skips the storage check": {
+			cr:           newAutoConfigCR(apiv1.ClusterTypeGR, apiv1.AutoConfigLoadTypeSomeWrites, "8.4.8", ""),
+			cpu:          cpu,
+			memory:       mem,
+			wantContains: []string{"innodb_redo_log_capacity="},
 		},
 		"missing cpu": {
 			cr:              newAutoConfigCR(apiv1.ClusterTypeGR, apiv1.AutoConfigLoadTypeSomeWrites, "8.4.8", ""),
@@ -444,5 +480,65 @@ func TestParseMySQLVersion(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, got)
 		})
+	}
+}
+
+func TestDataVolumeSize(t *testing.T) {
+	tests := map[string]struct {
+		volumeSpec *apiv1.VolumeSpec
+		want       int64
+	}{
+		"no volume spec": {
+			volumeSpec: nil,
+			want:       0,
+		},
+		"emptyDir": {
+			volumeSpec: &apiv1.VolumeSpec{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+			want:       0,
+		},
+		"hostPath": {
+			volumeSpec: &apiv1.VolumeSpec{HostPath: &corev1.HostPathVolumeSource{Path: "/data"}},
+			want:       0,
+		},
+		"request only": {
+			volumeSpec: pvcVolumeSpec(corev1.VolumeResourceRequirements{
+				Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("2Gi")},
+			}),
+			want: 2 * 1024 * 1024 * 1024,
+		},
+		"limit only": {
+			volumeSpec: pvcVolumeSpec(corev1.VolumeResourceRequirements{
+				Limits: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("3Gi")},
+			}),
+			want: 3 * 1024 * 1024 * 1024,
+		},
+		"both set prefers request": {
+			volumeSpec: pvcVolumeSpec(corev1.VolumeResourceRequirements{
+				Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("2Gi")},
+				Limits:   corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("10Gi")},
+			}),
+			want: 2 * 1024 * 1024 * 1024,
+		},
+		"pvc without storage resources": {
+			volumeSpec: pvcVolumeSpec(corev1.VolumeResourceRequirements{
+				Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1")},
+			}),
+			want: 0,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := &apiv1.PerconaServerMySQL{}
+			cr.Spec.MySQL.VolumeSpec = tc.volumeSpec
+
+			assert.Equal(t, tc.want, dataVolumeSize(cr))
+		})
+	}
+}
+
+func pvcVolumeSpec(res corev1.VolumeResourceRequirements) *apiv1.VolumeSpec {
+	return &apiv1.VolumeSpec{
+		PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{Resources: res},
 	}
 }

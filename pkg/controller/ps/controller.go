@@ -1126,6 +1126,10 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 			params, err = autotune("autoconfig is enabled but mysql.autoconfig.version is not set")
 		default:
 			params, err = mysql.GetAutoConfigParams(cr, version, cpu, memory)
+			if errors.Is(err, mysql.ErrInsufficientStorage) {
+				r.Recorder.Event(cr, corev1.EventTypeWarning, "AutoConfigInsufficientStorage", err.Error())
+				return errors.Wrap(err, "calculate autoconfig parameters")
+			}
 			if err != nil {
 				log.Error(err, "failed to calculate autoconfig parameters")
 				params, err = autotune(err.Error())

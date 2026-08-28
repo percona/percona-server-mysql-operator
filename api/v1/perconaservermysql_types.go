@@ -39,7 +39,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/validation"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
@@ -1634,16 +1633,6 @@ func (cr *PerconaServerMySQL) Labels(name, component string) map[string]string {
 // cluster using its name and namespace.
 func (cr *PerconaServerMySQL) ClusterHint() string {
 	return fmt.Sprintf("%s.%s", cr.Name, cr.Namespace)
-}
-
-// GetClusterNameFromObject retrieves the cluster's name from the given client object's labels.
-func GetClusterNameFromObject(obj client.Object) (string, error) {
-	labels := obj.GetLabels()
-	instance, ok := labels[naming.LabelInstance]
-	if !ok {
-		return "", errors.Errorf("label %s doesn't exist", naming.LabelInstance)
-	}
-	return instance, nil
 }
 
 // FNVHash computes a hash of the provided byte slice using the FNV-1a algorithm.

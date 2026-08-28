@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -109,6 +110,37 @@ func TestReconcileMySQLAutoConfig(t *testing.T) {
 				"calculated configuration in:\n%s", config)
 		})
 	}
+
+	// The redo log the calculator sizes from memory is preallocated on the data
+	// volume at startup. A configuration that doesn't fit stops mysqld from ever
+	// starting, and the calculated values are used as they come, so there is
+	// nothing to write: the reconcile fails until the user resizes something.
+	t.Run("a data volume too small for the calculated redo log fails the reconcile", func(t *testing.T) {
+		ctx := context.Background()
+		cr := newCR(true, "8.4")
+		cr.Spec.MySQL.VolumeSpec = &apiv1.VolumeSpec{
+			PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
+				Resources: corev1.VolumeResourceRequirements{
+					Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("2Gi")},
+				},
+			},
+		}
+		r := newReconciler(t, cr)
+
+		err := r.reconcileMySQLAutoConfig(ctx, cr)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, mysql.ErrInsufficientStorage)
+		// The message has to name both knobs, since the cluster stays down until
+		// the user acts on one of them.
+		assert.Contains(t, err.Error(), "mysql.volumeSpec.persistentVolumeClaim")
+		assert.Contains(t, err.Error(), "mysql.resources memory")
+
+		// No autotune fallback was written in its place.
+		cm := new(corev1.ConfigMap)
+		nn := types.NamespacedName{Name: mysql.AutoConfigMapName(cr), Namespace: cr.Namespace}
+		assert.True(t, k8serrors.IsNotFound(r.Client.Get(ctx, nn, cm)),
+			"no ConfigMap should be written when the calculated configuration does not fit")
+	})
 
 	// The ConfigMap is rebuilt from the spec on every pass, so a wrong version
 	// costs nothing more than the fallback it caused.
