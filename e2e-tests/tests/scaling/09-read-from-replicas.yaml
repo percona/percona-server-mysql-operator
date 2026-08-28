@@ -9,11 +9,11 @@ commands:
       source ../../functions
 
       args=''
-      size=4
+      size=2
       for i in $(seq 0 $((size - 1))); do
           host=$(get_mysql_headless_fqdn $(get_cluster_name) $i)
           data=$(run_mysql "SELECT * FROM myDB.myTable" "-h ${host}")
           args="${args} --from-literal=${host}=${data}"
       done
 
-      kubectl create configmap -n "${NAMESPACE}" 07-read-from-replicas ${args}
+      kubectl create configmap -n "${NAMESPACE}" 09-read-from-replicas ${args}
