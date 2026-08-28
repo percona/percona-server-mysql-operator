@@ -369,8 +369,8 @@ func (r *PerconaServerMySQLClusterSetReconciler) bootstrapClusterSet(ctx context
 }
 
 //+kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;delete
-//+kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create;update;patch
-//+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings,verbs=get;list;watch;create;update;patch
+//+kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings,verbs=get;list;watch;create;update;patch;delete
 
 func (r *PerconaServerMySQLClusterSetReconciler) reconcileReplicas(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet) error {
 	// Add replicas to the clusterset if not added already
@@ -731,7 +731,7 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileForcedFailover(
 }
 
 // Returns the names of clusters that are in a but not in b.
-func clusterSetMemberDiff(a, b apiv1.ClusterSetClusterStatuses) []string {
+func clusterSetMemberDiff(a, b apiv1.ClusterSetStatus) []string {
 	diff := []string{}
 	for name := range a {
 		if _, ok := b[name]; !ok {
@@ -781,7 +781,7 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileStatus(ctx context.Con
 		meta.SetStatusCondition(&status.Conditions, readyCond)
 
 		// Emit an event for each newly added member
-		newlyAdded := clusterSetMemberDiff(observedStatus.Clusters.IntoAPI(), status.Clusters)
+		newlyAdded := clusterSetMemberDiff(observedStatus.Clusters, status.Clusters)
 		for _, name := range newlyAdded {
 			events = append(events, func() {
 				r.Recorder.Eventf(pcs, nil, corev1.EventTypeNormal, apiv1.EventTypeClusterSetMemberAdded,
@@ -790,7 +790,7 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileStatus(ctx context.Con
 		}
 
 		// Emit an event for each newly removed member
-		newlyRemoved := clusterSetMemberDiff(status.Clusters, observedStatus.Clusters.IntoAPI())
+		newlyRemoved := clusterSetMemberDiff(status.Clusters, observedStatus.Clusters)
 		for _, name := range newlyRemoved {
 			events = append(events, func() {
 				r.Recorder.Eventf(pcs, nil, corev1.EventTypeNormal, apiv1.EventTypeClusterSetMemberRemoved, apiv1.EventTypeClusterSetMemberRemoved, "Cluster %s removed from ClusterSet", name)
@@ -806,7 +806,7 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileStatus(ctx context.Con
 			})
 		}
 
-		status.Clusters = observedStatus.Clusters.IntoAPI()
+		status.Clusters = observedStatus.Clusters
 		status.PrimaryCluster = observedStatus.PrimaryCluster
 		status.PrimaryClusterEndpoint = observedStatus.GlobalPrimaryInstance
 		return nil
@@ -862,7 +862,7 @@ func (r *PerconaServerMySQLClusterSetReconciler) dissolveClusterSet(
 	clusters := observedStatus.Clusters
 
 	if err := pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) error {
-		status.Clusters = observedStatus.Clusters.IntoAPI()
+		status.Clusters = observedStatus.Clusters
 		status.Conditions = []metav1.Condition{}
 		meta.SetStatusCondition(&status.Conditions, metav1.Condition{
 			Type:    apiv1.ConditionClusterSetDissolving,
