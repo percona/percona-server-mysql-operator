@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -186,84 +185,34 @@ func TestStatefulSet(t *testing.T) {
 	})
 }
 
-func TestCloneTimeoutEnv(t *testing.T) {
-	const ns = "mysql-ns"
-	const initImage = "init-image"
-	const configHash = "config-hash"
-	const tlsHash = "config-hash"
-
-	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "some-secret", Namespace: ns},
-		StringData: map[string]string{},
-	}
-
-	// pt-heartbeat is only added for async clusters with orchestrator enabled;
-	// the mysqld container carries BOOTSTRAP_CLONE_TIMEOUT regardless.
-	newCluster := func(t *testing.T) *apiv1.PerconaServerMySQL {
-		t.Helper()
-		cr := readDefaultCluster(t, "cluster", ns)
-		cr.Spec.CRVersion = version.Version()
-		if err := cr.CheckNSetDefaults(t.Context(), &platform.ServerVersion{
-			Platform: platform.PlatformKubernetes,
-		}); err != nil {
-			t.Fatal(err)
-		}
-		cr.Spec.MySQL.ClusterType = apiv1.ClusterTypeAsync
-		return cr
-	}
-
-	findEnv := func(t *testing.T, sts *appsv1.StatefulSet, container, name string) (string, bool) {
-		t.Helper()
-		for _, c := range sts.Spec.Template.Spec.Containers {
-			if c.Name != container {
-				continue
+func TestHeartbeatCloneTimeoutEnvGate(t *testing.T) {
+	// Before 1.3.0 the sidecar honored CLONE_TIMEOUT_SECONDS; from 1.3.0 it waits
+	// without a timeout and the env is dropped. Older clusters must keep it so an
+	// operator-only upgrade does not change their pod template.
+	find := func(c corev1.Container, name string) (string, bool) {
+		for _, e := range c.Env {
+			if e.Name == name {
+				return e.Value, true
 			}
-			for _, e := range c.Env {
-				if e.Name == name {
-					return e.Value, true
-				}
-			}
-			return "", false
 		}
-		t.Fatalf("container %q not found", container)
 		return "", false
 	}
 
-	t.Run("default at current crVersion", func(t *testing.T) {
-		sts := StatefulSet(newCluster(t), initImage, configHash, tlsHash, secret)
-
-		v, ok := findEnv(t, sts, AppName, naming.EnvBootstrapCloneTimeout)
-		require.True(t, ok, "mysqld must set %s at crVersion >= 1.3.0", naming.EnvBootstrapCloneTimeout)
-		assert.Equal(t, "21600", v)
-
-		v, ok = findEnv(t, sts, "pt-heartbeat", "CLONE_TIMEOUT_SECONDS")
-		require.True(t, ok)
-		assert.Equal(t, "21600", v)
+	t.Run("present before 1.3.0", func(t *testing.T) {
+		cr := &apiv1.PerconaServerMySQL{}
+		cr.Spec.CRVersion = "1.2.0"
+		cr.Spec.Toolkit = &apiv1.ToolkitSpec{}
+		v, ok := find(heartbeatContainer(cr), "CLONE_TIMEOUT_SECONDS")
+		assert.True(t, ok, "CLONE_TIMEOUT_SECONDS must stay for crVersion < 1.3.0")
+		assert.Equal(t, "3600", v)
 	})
 
-	t.Run("custom spec.mysql.cloneTimeoutSeconds", func(t *testing.T) {
-		cluster := newCluster(t)
-		cluster.Spec.MySQL.CloneTimeoutSeconds = 43200
-		sts := StatefulSet(cluster, initImage, configHash, tlsHash, secret)
-
-		v, _ := findEnv(t, sts, AppName, naming.EnvBootstrapCloneTimeout)
-		assert.Equal(t, "43200", v)
-		v, _ = findEnv(t, sts, "pt-heartbeat", "CLONE_TIMEOUT_SECONDS")
-		assert.Equal(t, "43200", v)
-	})
-
-	t.Run("gated before 1.3.0 to avoid rolling restart", func(t *testing.T) {
-		cluster := newCluster(t)
-		cluster.Spec.CRVersion = "1.2.0"
-		cluster.Spec.MySQL.CloneTimeoutSeconds = 43200 // must be ignored before 1.3.0
-		sts := StatefulSet(cluster, initImage, configHash, tlsHash, secret)
-
-		_, ok := findEnv(t, sts, AppName, naming.EnvBootstrapCloneTimeout)
-		assert.False(t, ok, "mysqld must not set %s before 1.3.0", naming.EnvBootstrapCloneTimeout)
-
-		v, ok := findEnv(t, sts, "pt-heartbeat", "CLONE_TIMEOUT_SECONDS")
-		require.True(t, ok)
-		assert.Equal(t, "3600", v, "pt-heartbeat keeps the legacy value before 1.3.0")
+	t.Run("dropped from 1.3.0", func(t *testing.T) {
+		cr := &apiv1.PerconaServerMySQL{}
+		cr.Spec.CRVersion = "1.3.0"
+		cr.Spec.Toolkit = &apiv1.ToolkitSpec{}
+		_, ok := find(heartbeatContainer(cr), "CLONE_TIMEOUT_SECONDS")
+		assert.False(t, ok, "CLONE_TIMEOUT_SECONDS must be dropped for crVersion >= 1.3.0")
 	})
 }
 

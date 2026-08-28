@@ -67,7 +67,6 @@ spec:
   mysql:
     clusterType: group-replication
     autoRecovery: true
-#    cloneTimeoutSeconds: 21600
 #    vaultSecretName: ps-cluster1-vault
     size: 3
     image: perconalab/percona-server-mysql-operator:main-psmysql8.4

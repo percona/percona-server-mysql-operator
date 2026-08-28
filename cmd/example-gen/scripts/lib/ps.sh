@@ -9,7 +9,7 @@ sort_yaml() {
 	GENERAL_ORDER='"metadata", "unsafeFlags", "pause", "clusterServiceDNSSuffix", "crVersion", "enableVolumeExpansion", "storageScaling", "secretsName", "sslSecretName", "updateStrategy", "upgradeOptions", "initContainer", "ignoreAnnotations", "ignoreLabels", "tls", "mysql", "proxy", "orchestrator", "pmm", "backup", "toolkit"'
 
 	POD_SPEC_ORDER='"size", "image", "imagePullPolicy","imagePullSecrets", "runtimeClassName", "tolerations", "annotations", "labels", "nodeSelector", "priorityClassName", "schedulerName", "serviceAccountName","gracePeriod", "initContainer", "env", "envFrom", "podDisruptionBudget", "resources","startupProbe", "readinessProbe", "livenessProbe", "affinity", "topologySpreadConstraints", "containerSecurityContext", "podSecurityContext"'
-	MYSQL_ORDER='"clusterType", "autoRecovery", "cloneTimeoutSeconds", "vaultSecretName", '"$POD_SPEC_ORDER"',"exposePrimary", "expose", "volumeSpec", "configuration", "sidecars", "sidecarVolumes", "sidecarPVCs"'
+	MYSQL_ORDER='"clusterType", "autoRecovery", "vaultSecretName", '"$POD_SPEC_ORDER"',"exposePrimary", "expose", "volumeSpec", "configuration", "sidecars", "sidecarVolumes", "sidecarPVCs"'
 	HAPROXY_ORDER='"enabled", "expose", '"$POD_SPEC_ORDER"', "sidecarResources"'
 	ROUTER_ORDER='"enabled", "expose", '"$POD_SPEC_ORDER"', "ports"'
 	ORCHESTRATOR_ORDER='"enabled", "expose", '"$POD_SPEC_ORDER"
@@ -115,7 +115,6 @@ del_fields_to_comment() {
 		| yq "del(.spec.mysql.serviceAccountName)" \
 		| yq "del(.spec.mysql.imagePullSecrets)" \
 		| yq "del(.spec.mysql.initContainer)" \
-		| yq "del(.spec.mysql.cloneTimeoutSeconds)" \
 		| yq "del(.spec.mysql.vaultSecretName)" \
 		| yq "del(.spec.orchestrator.configuration)" \
 		| yq "del(.spec.mysql.env)" \

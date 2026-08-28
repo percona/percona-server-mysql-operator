@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/cmd/bootstrap/utils"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/pmm"
@@ -45,10 +46,10 @@ const (
 
 	DefaultReadTimeoutSecondsSeconds = 3600
 
-	// DefaultCloneTimeoutSeconds is the fallback for spec.mysql.cloneTimeoutSeconds:
-	// how long an InnoDB clone is allowed to run / waited for before we give up.
-	// It governs both the bootstrap clone and the pt-heartbeat clone-wait. It is
-	// generous (6h) because multi-TiB clones can run for hours.
+	// DefaultCloneTimeoutSeconds is the default for the bootstrap clone timeout
+	// (BOOTSTRAP_CLONE_TIMEOUT) when it is not set via spec.mysql.env. It is
+	// generous (6h) because multi-TiB clones can run for hours; it is a safety
+	// net that lets a genuinely hung clone abort and retry, not a tuning knob.
 	DefaultCloneTimeoutSeconds = 21600
 
 	DefaultAsyncSourceRetryCount   = 3
@@ -710,18 +711,6 @@ func mysqldContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 		},
 	}
 
-	if cr.CompareVersion("1.3.0") >= 0 {
-		// Drive the bootstrap clone timeout from the same CR field as the
-		// pt-heartbeat clone-wait. New env, gated on 1.3.0 so upgrading only the
-		// operator image does not add it to existing clusters' pod template and
-		// force a rolling restart. Set before spec.Env so an explicit
-		// spec.mysql.env BOOTSTRAP_CLONE_TIMEOUT still overrides it.
-		env = append(env, corev1.EnvVar{
-			Name:  naming.EnvBootstrapCloneTimeout,
-			Value: strconv.Itoa(int(cloneTimeoutSeconds(cr))),
-		})
-	}
-
 	env = append(env, spec.Env...)
 
 	if cr.CompareVersion("1.2.0") >= 0 {
@@ -872,17 +861,6 @@ func backupContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 	return container
 }
 
-// cloneTimeoutSeconds returns the effective InnoDB clone timeout from
-// spec.mysql.cloneTimeoutSeconds, falling back to the default. It is the single
-// source for both the bootstrap clone (BOOTSTRAP_CLONE_TIMEOUT) and the
-// pt-heartbeat clone-wait (CLONE_TIMEOUT_SECONDS).
-func cloneTimeoutSeconds(cr *apiv1.PerconaServerMySQL) uint32 {
-	if t := cr.Spec.MySQL.CloneTimeoutSeconds; t != 0 {
-		return t
-	}
-	return DefaultCloneTimeoutSeconds
-}
-
 func heartbeatContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 	env := []corev1.EnvVar{
 		{
@@ -893,19 +871,18 @@ func heartbeatContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 		},
 	}
 
-	if cr.CompareVersion("1.3.0") >= 0 {
+	// Before 1.3.0 the sidecar honored a clone-wait timeout via CLONE_TIMEOUT_SECONDS.
+	// From 1.3.0 it waits without a timeout and ignores this env, so it is dropped.
+	// Keep emitting it for older clusters (same value main produces) so upgrading
+	// only the operator image does not change the pod template and roll them.
+	if cr.CompareVersion("1.3.0") < 0 && cr.CompareVersion("1.0.0") >= 0 {
+		t, err := utils.GetCloneTimeout()
+		if err != nil || t == 0 {
+			t = 3600
+		}
 		env = append(env, corev1.EnvVar{
 			Name:  "CLONE_TIMEOUT_SECONDS",
-			Value: strconv.Itoa(int(cloneTimeoutSeconds(cr))),
-		})
-	} else if cr.CompareVersion("1.0.0") >= 0 {
-		// Keep the pre-1.3.0 value (3600) so upgrading only the operator image
-		// does not change the pod template and force a rolling restart of
-		// existing clusters. They pick up spec.mysql.cloneTimeoutSeconds when
-		// moved to crVersion 1.3.0.
-		env = append(env, corev1.EnvVar{
-			Name:  "CLONE_TIMEOUT_SECONDS",
-			Value: "3600",
+			Value: strconv.Itoa(int(t)),
 		})
 	}
 

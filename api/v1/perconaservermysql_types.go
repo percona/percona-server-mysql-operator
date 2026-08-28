@@ -255,17 +255,6 @@ type MySQLSpec struct {
 	Expose        ServiceExposeTogglable `json:"expose,omitempty"`
 	AutoRecovery  bool                   `json:"autoRecovery,omitempty"`
 
-	// CloneTimeoutSeconds is the maximum time, in seconds, that the pt-heartbeat
-	// sidecar waits for an in-progress InnoDB clone to finish (and the
-	// sys_operator schema to appear) before giving up and exiting rather than
-	// starting against an incomplete datadir. Clones of very large datasets
-	// (multi-TiB) can take many hours, so raise this if a fresh replica may need
-	// longer to receive its clone. It is independent of the bootstrap clone
-	// timeout and is not scaled by the dataset size.
-	// +kubebuilder:default=21600
-	// +optional
-	CloneTimeoutSeconds uint32 `json:"cloneTimeoutSeconds,omitempty"`
-
 	Sidecars       []corev1.Container `json:"sidecars,omitempty"`
 	SidecarVolumes []corev1.Volume    `json:"sidecarVolumes,omitempty"`
 	SidecarPVCs    []SidecarPVC       `json:"sidecarPVCs,omitempty"`
