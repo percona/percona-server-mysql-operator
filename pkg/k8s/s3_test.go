@@ -96,7 +96,7 @@ func TestPrepareJobWithS3CANoOp(t *testing.T) {
 	}
 }
 
-func TestS3CertsEntrypoint(t *testing.T) {
+func TestPrepareS3Certs(t *testing.T) {
 	tempDir := t.TempDir()
 	inputDir := filepath.Join(tempDir, "input")
 	require.NoError(t, os.Mkdir(inputDir, 0o700))
@@ -106,22 +106,18 @@ func TestS3CertsEntrypoint(t *testing.T) {
 	output := filepath.Join(tempDir, "bundle.crt")
 	systemBundle := filepath.Join(tempDir, "system-bundle.crt")
 	require.NoError(t, os.WriteFile(systemBundle, []byte("system"), 0o600))
-	marker := filepath.Join(tempDir, "executed")
-	scriptContents, err := os.ReadFile(filepath.Join("..", "..", "build", "s3-certs-entrypoint.sh"))
+	scriptContents, err := os.ReadFile(filepath.Join("..", "..", "build", "prepare-s3-certs.sh"))
 	require.NoError(t, err)
 	scriptContents = []byte(strings.ReplaceAll(string(scriptContents), naming.S3CertsInputMountPath, inputDir))
 	scriptContents = []byte(strings.ReplaceAll(string(scriptContents), naming.S3CABundlePath, output))
 	scriptContents = []byte(strings.ReplaceAll(string(scriptContents), naming.SystemCABundlePath, systemBundle))
-	script := filepath.Join(tempDir, "s3-certs-entrypoint.sh")
+	script := filepath.Join(tempDir, "prepare-s3-certs.sh")
 	require.NoError(t, os.WriteFile(script, scriptContents, 0o700))
-	cmd := exec.Command("bash", script, "sh", "-c", `printf executed >"$1"`, "sh", marker)
+	cmd := exec.Command("bash", script)
 	cmd.Env = os.Environ()
 	require.NoError(t, cmd.Run())
 
 	bundle, err := os.ReadFile(output)
 	require.NoError(t, err)
 	assert.Equal(t, "system\nfirst\nsecond\n", string(bundle))
-	markerContents, err := os.ReadFile(marker)
-	require.NoError(t, err)
-	assert.Equal(t, "executed", string(markerContents))
 }

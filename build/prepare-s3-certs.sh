@@ -17,5 +17,3 @@ for cert in "${INPUT_DIR}"/*.crt; do
 		echo >>"${OUTPUT_FILE}"
 	fi
 done
-
-exec "$@"
