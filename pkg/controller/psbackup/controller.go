@@ -271,7 +271,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	}
 
 	switch {
-	case status.State == apiv1.BackupStarting:
+	case status.State == apiv1.BackupStarting && jobFinishState == "":
 		if job.Status.Active == 0 {
 			return rr, nil
 		}
