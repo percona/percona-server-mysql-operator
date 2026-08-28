@@ -20,12 +20,30 @@ func TestGetBackupFromBackupSource(t *testing.T) {
 		namespace   = "some-namespace"
 	)
 
-	storage := &apiv1.BackupStorageSpec{
+	s3Storage := &apiv1.BackupStorageSpec{
 		Type: apiv1.BackupStorageS3,
 		S3: &apiv1.BackupStorageS3Spec{
 			Bucket:            "some-bucket",
 			CredentialsSecret: "some-secret",
 			Region:            "us-west-2",
+		},
+	}
+
+	gcsStorage := &apiv1.BackupStorageSpec{
+		Type: apiv1.BackupStorageGCS,
+		GCS: &apiv1.BackupStorageGCSSpec{
+			Bucket:            "some-bucket",
+			CredentialsSecret: "some-secret",
+			EndpointURL:       "https://storage.googleapis.com",
+		},
+	}
+
+	azureStorage := &apiv1.BackupStorageSpec{
+		Type: apiv1.BackupStorageAzure,
+		Azure: &apiv1.BackupStorageAzureSpec{
+			ContainerName:     "some-container",
+			CredentialsSecret: "some-secret",
+			EndpointURL:       "https://accountname.blob.core.windows.net",
 		},
 	}
 
@@ -44,17 +62,44 @@ func TestGetBackupFromBackupSource(t *testing.T) {
 
 	tests := []struct {
 		name         string
+		storage      *apiv1.BackupStorageSpec
 		destination  apiv1.BackupDestination
 		expectedType apiv1.BackupType
 	}{
 		{
-			name:         "full backup",
+			name:         "s3 full backup",
+			storage:      s3Storage,
 			destination:  "s3://some-bucket/some-destination",
 			expectedType: apiv1.BackupTypeFull,
 		},
 		{
-			name:         "incremental backup",
+			name:         "s3 incremental backup",
+			storage:      s3Storage,
 			destination:  "s3://some-bucket/some-destination.incr/2026-03-17T000000",
+			expectedType: apiv1.BackupTypeIncremental,
+		},
+		{
+			name:         "gcs full backup",
+			storage:      gcsStorage,
+			destination:  "gs://some-bucket/some-destination",
+			expectedType: apiv1.BackupTypeFull,
+		},
+		{
+			name:         "gcs incremental backup",
+			storage:      gcsStorage,
+			destination:  "gs://some-bucket/some-destination.incr/2026-03-17T000000",
+			expectedType: apiv1.BackupTypeIncremental,
+		},
+		{
+			name:         "azure full backup",
+			storage:      azureStorage,
+			destination:  "some-container/some-destination",
+			expectedType: apiv1.BackupTypeFull,
+		},
+		{
+			name:         "azure incremental backup",
+			storage:      azureStorage,
+			destination:  "some-container/some-destination.incr/2026-03-17T000000",
 			expectedType: apiv1.BackupTypeIncremental,
 		},
 	}
@@ -62,7 +107,7 @@ func TestGetBackupFromBackupSource(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cr := newRestore(&apiv1.RestoreBackupSource{
 				Destination: tt.destination,
-				Storage:     storage.DeepCopy(),
+				Storage:     tt.storage.DeepCopy(),
 			})
 
 			backup, err := getBackup(ctx, buildFakeClient(t), cr, &apiv1.PerconaServerMySQL{})
@@ -75,14 +120,14 @@ func TestGetBackupFromBackupSource(t *testing.T) {
 			assert.Equal(t, tt.expectedType, backup.Status.Type)
 			assert.Equal(t, apiv1.BackupSucceeded, backup.Status.State)
 			assert.Equal(t, tt.destination, backup.Status.Destination)
-			assert.Equal(t, storage, backup.Status.Storage)
+			assert.Equal(t, tt.storage, backup.Status.Storage)
 		})
 	}
 
 	t.Run("backup source is deep copied", func(t *testing.T) {
 		cr := newRestore(&apiv1.RestoreBackupSource{
 			Destination: "s3://some-bucket/some-destination",
-			Storage:     storage.DeepCopy(),
+			Storage:     s3Storage.DeepCopy(),
 		})
 
 		backup, err := getBackup(ctx, buildFakeClient(t), cr, &apiv1.PerconaServerMySQL{})
