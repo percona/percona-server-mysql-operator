@@ -58,7 +58,7 @@ func (p *DBParams) setDefaults() {
 	}
 
 	if p.CloneTimeoutSeconds == 0 {
-		p.CloneTimeoutSeconds = defs.DefaultCloneTimeoutSecondsSeconds // 1 hour for clone operations (large databases can take time)
+		p.CloneTimeoutSeconds = defs.DefaultCloneTimeoutSeconds // generous default; large databases can take hours to clone
 	}
 
 	if p.SourceRetryCount == 0 {

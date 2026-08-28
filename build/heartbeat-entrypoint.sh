@@ -18,14 +18,8 @@ until [ ! -f "$DATA_DIR/bootstrap.lock" ] && [ ! -f "$DATA_DIR/clone.lock" ] && 
 	sleep 10
 done
 
-# wait until bootstrap start clone process
-# we can get situation when ps-entrypoint removed bootstrap.lock but bootstrap has not created clone.lock yet
 if [ "$shutdown_requested" -eq 1 ]; then
 	exit 0
-fi
-sleep 10
-if [ -f /var/lib/mysql/clone.lock ]; then
-	CLONE_IN_PROGRESS='yes'
 fi
 
 MYSQL_ADMIN_PORT='33062'
@@ -34,9 +28,15 @@ MYSQL_PASSWORD=$(cat /etc/mysql/mysql-users-secret/monitor || :)
 TIMEOUT="${CLONE_TIMEOUT_SECONDS:-3600}"
 MYSQL_CMDLINE="/usr/bin/timeout 10 /usr/bin/mysql -nNE -u$MYSQL_USER"
 
-# Check clone status every 5 seconds up to TIMEOUT
+# Gate the start on authoritative DB state, not on the clone.lock file: native
+# InnoDB clone (CLONE INSTANCE) does not reliably create clone.lock, so a
+# missing lock is not proof the datadir is ready. Start pt-heartbeat only once
+# no clone is 'In Progress' and the sys_operator schema it needs is present -
+# a partial clone leaves clone_status='In Progress' with no sys_operator, which
+# otherwise crash-loops pt-heartbeat on "Unknown database 'sys_operator'".
 CHECK_INTERVAL=5
 ELAPSED=0
+READY=''
 
 while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
 	if [ "$shutdown_requested" -eq 1 ]; then
@@ -44,12 +44,16 @@ while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
 	fi
 
 	CLONE_STATUS=$(MYSQL_PWD=${MYSQL_PASSWORD} $MYSQL_CMDLINE -P$MYSQL_ADMIN_PORT -e 'SELECT STATE FROM performance_schema.clone_status;' | sed -n -e '2p' | tr -d '\n')
-	if [[ $CLONE_STATUS == "Completed" || -z $CLONE_IN_PROGRESS ]]; then
-		echo '[INFO] Clone completed, starting pt-heartbeat'
-		break
+	if [[ $CLONE_STATUS != "In Progress" ]]; then
+		HAS_SYS_OPERATOR=$(MYSQL_PWD=${MYSQL_PASSWORD} $MYSQL_CMDLINE -P$MYSQL_ADMIN_PORT -e "SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='sys_operator';" | sed -n -e '2p' | tr -d '\n')
+		if [[ $HAS_SYS_OPERATOR == "sys_operator" ]]; then
+			echo '[INFO] Clone finished and sys_operator present, starting pt-heartbeat'
+			READY='yes'
+			break
+		fi
 	fi
 
-	echo "[INFO] Waiting for MySQL initialization (${ELAPSED}s/${TIMEOUT}s)"
+	echo "[INFO] Waiting for clone to finish and sys_operator to appear (${ELAPSED}s/${TIMEOUT}s), clone_status='${CLONE_STATUS:-none}'"
 
 	# Sleep in 1-second intervals to allow signal handling
 	for ((j = 0; j < CHECK_INTERVAL; j++)); do
@@ -61,6 +65,11 @@ while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
 
 	ELAPSED=$((ELAPSED + CHECK_INTERVAL))
 done
+
+if [ -z "$READY" ]; then
+	echo "[ERROR] datadir not ready after ${TIMEOUT}s (clone still in progress or sys_operator missing); refusing to start pt-heartbeat against an incomplete datadir"
+	exit 1
+fi
 
 # If password contains commas they must be escaped with a backslash: “exam,ple” according https://docs.percona.com/percona-toolkit/pt-heartbeat.html
 ESCAPED_HEARTBEAT_PASSWORD="${HEARTBEAT_PASSWORD//,/\\,}"

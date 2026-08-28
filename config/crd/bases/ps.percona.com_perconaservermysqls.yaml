@@ -3234,6 +3234,10 @@ spec:
                         - manual
                         type: string
                     type: object
+                  cloneTimeoutSeconds:
+                    default: 21600
+                    format: int32
+                    type: integer
                   clusterType:
                     default: group-replication
                     enum:
