@@ -411,6 +411,7 @@ type PMMSpec struct {
 	Enabled                  bool                        `json:"enabled,omitempty"`
 	Image                    string                      `json:"image,omitempty"`
 	MySQLParams              string                      `json:"mysqlParams,omitempty"`
+	HAProxyParams            string                      `json:"haproxyParams,omitempty"`
 	ServerHost               string                      `json:"serverHost,omitempty"`
 	CustomClusterName        string                      `json:"customClusterName,omitempty"`
 	Resources                corev1.ResourceRequirements `json:"resources,omitempty"`

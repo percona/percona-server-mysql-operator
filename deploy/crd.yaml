@@ -11139,6 +11139,8 @@ spec:
                     type: string
                   enabled:
                     type: boolean
+                  haproxyParams:
+                    type: string
                   image:
                     type: string
                   imagePullPolicy:
