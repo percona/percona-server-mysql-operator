@@ -112,28 +112,33 @@ func TestReconcileMySQLAutoConfig(t *testing.T) {
 	}
 
 	// The redo log the calculator sizes from memory is preallocated on the data
-	// volume at startup. A configuration that doesn't fit stops mysqld from ever
-	// starting, and the calculated values are used as they come, so there is
-	// nothing to write: the reconcile fails until the user resizes something.
-	t.Run("a data volume too small for the calculated redo log fails the reconcile", func(t *testing.T) {
+	// volume at startup, and a node joining by clone needs free space for the
+	// donor's estimate on top of its own. The reconcile trims it to fit rather
+	// than leaving a cluster that cannot bootstrap.
+	t.Run("a data volume smaller than the calculated redo log trims it", func(t *testing.T) {
 		ctx := context.Background()
 		cr := newCR(true, "8.4")
-		cr.Spec.MySQL.VolumeSpec = &apiv1.VolumeSpec{
-			PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
-				Resources: corev1.VolumeResourceRequirements{
-					Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("2Gi")},
-				},
-			},
-		}
+		withDataVolume(cr, "2Gi")
+		r := newReconciler(t, cr)
+
+		require.NoError(t, r.reconcileMySQLAutoConfig(ctx, cr))
+
+		assert.Contains(t, autoConfig(t, r, cr), "innodb_redo_log_capacity=536870912")
+	})
+
+	// Trimming stops at the smallest redo log MySQL accepts, so a volume below
+	// that leaves nothing to write: the reconcile fails until the user resizes.
+	t.Run("a data volume too small for the minimum redo log fails the reconcile", func(t *testing.T) {
+		ctx := context.Background()
+		cr := newCR(true, "8.4")
+		withDataVolume(cr, "16Mi")
 		r := newReconciler(t, cr)
 
 		err := r.reconcileMySQLAutoConfig(ctx, cr)
-		require.Error(t, err)
 		assert.ErrorIs(t, err, mysql.ErrInsufficientStorage)
-		// The message has to name both knobs, since the cluster stays down until
-		// the user acts on one of them.
+		// The message has to name the knob, since the cluster stays down until
+		// the user acts on it.
 		assert.Contains(t, err.Error(), "mysql.volumeSpec.persistentVolumeClaim")
-		assert.Contains(t, err.Error(), "mysql.resources memory")
 
 		// No autotune fallback was written in its place.
 		cm := new(corev1.ConfigMap)
@@ -176,4 +181,14 @@ func TestReconcileMySQLAutoConfig(t *testing.T) {
 		assert.NotContains(t, config, removedIn84, "stale parameter survived the correction:\n%s", config)
 		assert.Contains(t, config, calculatedKey, "corrected configuration in:\n%s", config)
 	})
+}
+
+func withDataVolume(cr *apiv1.PerconaServerMySQL, size string) {
+	cr.Spec.MySQL.VolumeSpec = &apiv1.VolumeSpec{
+		PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
+			Resources: corev1.VolumeResourceRequirements{
+				Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse(size)},
+			},
+		},
+	}
 }

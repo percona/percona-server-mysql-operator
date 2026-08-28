@@ -2,6 +2,7 @@ package mysql
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -393,29 +394,35 @@ func TestGetAutoConfigParams(t *testing.T) {
 			wantAbsent:   []string{"max_connections="},
 			wantContains: []string{"innodb_buffer_pool_size="},
 		},
-		// The redo log is preallocated in full at startup, so a calculated
-		// configuration that outgrows the data volume stops mysqld from ever
-		// starting. The calculated values are used as they come, so the whole
-		// configuration is rejected rather than any parameter trimmed to fit.
-		// At 8Gi of memory the redo log is ~4.4Gi.
-		"a data volume smaller than the redo log is rejected": {
-			cr:              withDataVolume(newAutoConfigCR(apiv1.ClusterTypeGR, apiv1.AutoConfigLoadTypeSomeWrites, "8.4.8", ""), "2Gi"),
+		// The redo log is preallocated in full at startup, and a node joining by
+		// clone needs free space for the donor's estimate on top of its own, so
+		// the redo log is trimmed to a quarter of the volume. At 8Gi of memory
+		// the calculator asks for ~4.4Gi.
+		"a data volume smaller than the calculated redo log trims it": {
+			cr:           withDataVolume(newAutoConfigCR(apiv1.ClusterTypeGR, apiv1.AutoConfigLoadTypeSomeWrites, "8.4.8", ""), "2Gi"),
+			cpu:          cpu,
+			memory:       mem,
+			wantContains: []string{"innodb_redo_log_capacity=536870912"},
+		},
+		"a data volume with room keeps the calculated redo log": {
+			cr:           withDataVolume(newAutoConfigCR(apiv1.ClusterTypeGR, apiv1.AutoConfigLoadTypeSomeWrites, "8.4.8", ""), "32Gi"),
+			cpu:          cpu,
+			memory:       mem,
+			wantContains: []string{"innodb_redo_log_capacity=4714155900"},
+		},
+		// Trimming cannot go below the smallest redo log MySQL accepts.
+		"a data volume too small for the minimum redo log is rejected": {
+			cr:              withDataVolume(newAutoConfigCR(apiv1.ClusterTypeGR, apiv1.AutoConfigLoadTypeSomeWrites, "8.4.8", ""), "16Mi"),
 			cpu:             cpu,
 			memory:          mem,
 			wantErrContains: "data volume is too small",
 		},
-		"a data volume larger than the redo log is accepted": {
-			cr:           withDataVolume(newAutoConfigCR(apiv1.ClusterTypeGR, apiv1.AutoConfigLoadTypeSomeWrites, "8.4.8", ""), "8Gi"),
-			cpu:          cpu,
-			memory:       mem,
-			wantContains: []string{"innodb_redo_log_capacity="},
-		},
-		// emptyDir and hostPath have no declared size to check against.
-		"no persistent volume skips the storage check": {
+		// emptyDir and hostPath have no declared size to trim against.
+		"no persistent volume keeps the calculated redo log": {
 			cr:           newAutoConfigCR(apiv1.ClusterTypeGR, apiv1.AutoConfigLoadTypeSomeWrites, "8.4.8", ""),
 			cpu:          cpu,
 			memory:       mem,
-			wantContains: []string{"innodb_redo_log_capacity="},
+			wantContains: []string{"innodb_redo_log_capacity=4714155900"},
 		},
 		"missing cpu": {
 			cr:              newAutoConfigCR(apiv1.ClusterTypeGR, apiv1.AutoConfigLoadTypeSomeWrites, "8.4.8", ""),
@@ -540,5 +547,87 @@ func TestDataVolumeSize(t *testing.T) {
 func pvcVolumeSpec(res corev1.VolumeResourceRequirements) *apiv1.VolumeSpec {
 	return &apiv1.VolumeSpec{
 		PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{Resources: res},
+	}
+}
+
+func TestCapRedoLog(t *testing.T) {
+	tests := map[string]struct {
+		volume     string // empty => no persistent volume
+		params     map[string]string
+		wantParams map[string]string
+		wantErr    error
+	}{
+		"no persistent volume leaves the redo log alone": {
+			params:     map[string]string{"innodb_redo_log_capacity": "4294967296"},
+			wantParams: map[string]string{"innodb_redo_log_capacity": "4294967296"},
+		},
+		"no redo log in the calculated params": {
+			volume:     "8Gi",
+			params:     map[string]string{"innodb_buffer_pool_size": "1073741824"},
+			wantParams: map[string]string{"innodb_buffer_pool_size": "1073741824"},
+		},
+		"redo log within budget is untouched": {
+			volume:     "8Gi",
+			params:     map[string]string{"innodb_redo_log_capacity": "1073741824"},
+			wantParams: map[string]string{"innodb_redo_log_capacity": "1073741824"},
+		},
+		"redo log exactly at budget is untouched": {
+			volume:     "8Gi",
+			params:     map[string]string{"innodb_redo_log_capacity": "2147483648"},
+			wantParams: map[string]string{"innodb_redo_log_capacity": "2147483648"},
+		},
+		"redo log over budget is trimmed to a quarter of the volume": {
+			volume:     "8Gi",
+			params:     map[string]string{"innodb_redo_log_capacity": "4294967296"},
+			wantParams: map[string]string{"innodb_redo_log_capacity": "2147483648"},
+		},
+		"the budget is rounded down to a whole MiB": {
+			volume:     "5Gi",
+			params:     map[string]string{"innodb_redo_log_capacity": "4294967296"},
+			wantParams: map[string]string{"innodb_redo_log_capacity": "1342177280"},
+		},
+		"a volume too small for the minimum redo log is rejected": {
+			volume:  "16Mi",
+			params:  map[string]string{"innodb_redo_log_capacity": "4294967296"},
+			wantErr: ErrInsufficientStorage,
+		},
+		"pre-8.4 spelling is trimmed across the file count": {
+			volume: "8Gi",
+			params: map[string]string{
+				"innodb_log_file_size":      "2147483648",
+				"innodb_log_files_in_group": "2",
+			},
+			wantParams: map[string]string{
+				"innodb_log_file_size":      "1073741824",
+				"innodb_log_files_in_group": "2",
+			},
+		},
+		"pre-8.4 spelling without a file count assumes a single file": {
+			volume:     "8Gi",
+			params:     map[string]string{"innodb_log_file_size": "4294967296"},
+			wantParams: map[string]string{"innodb_log_file_size": "2147483648"},
+		},
+		"an unparseable redo log value is an error": {
+			volume:  "8Gi",
+			params:  map[string]string{"innodb_redo_log_capacity": "big"},
+			wantErr: strconv.ErrSyntax,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := &apiv1.PerconaServerMySQL{}
+			if tc.volume != "" {
+				withDataVolume(cr, tc.volume)
+			}
+
+			err := capRedoLog(cr, tc.params)
+			if tc.wantErr != nil {
+				require.ErrorIs(t, err, tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantParams, tc.params)
+		})
 	}
 }

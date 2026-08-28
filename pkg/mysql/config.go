@@ -184,7 +184,7 @@ func GetAutoConfigParams(cr *apiv1.PerconaServerMySQL, version string, cpu, memo
 		return "", errors.Wrap(err, "get mysqld params")
 	}
 
-	if err := checkStorageFits(cr, params); err != nil {
+	if err := capRedoLog(cr, params); err != nil {
 		return "", err
 	}
 
@@ -217,11 +217,23 @@ func GetAutoConfigParams(cr *apiv1.PerconaServerMySQL, version string, cpu, memo
 	return b.String(), nil
 }
 
-// ErrInsufficientStorage reports that the calculated configuration needs more
-// disk than the data volume provides. The calculated values are used as they
-// come or not at all, so this rejects the whole configuration rather than
-// trimming any parameter to fit.
+// ErrInsufficientStorage reports that the data volume cannot host even the
+// smallest redo log MySQL accepts, which no amount of trimming can fix.
 var ErrInsufficientStorage = errors.New("data volume is too small for the calculated configuration")
+
+const (
+	// maxRedoLogPercent bounds the share of the data volume the redo log may
+	// take. The calculator sizes the redo log from memory alone and never sees
+	// the disk, so on a small volume it produces a redo log that leaves no room
+	// for the data. A node that joins by cloning is the tight case: it
+	// preallocates its own redo log before the clone starts and then needs free
+	// space for the donor's estimate on top, so the redo log has to stay a small
+	// fraction of the volume rather than merely fit on it.
+	maxRedoLogPercent = 25
+
+	// minRedoLogBytes is the smallest innodb_redo_log_capacity MySQL accepts.
+	minRedoLogBytes = 8 * 1024 * 1024
+)
 
 // dataVolumeSize returns the size requested for the MySQL data volume, or zero
 // when the pod uses an emptyDir or hostPath, or declares no volume at all -
@@ -241,14 +253,14 @@ func dataVolumeSize(cr *apiv1.PerconaServerMySQL) int64 {
 	return 0
 }
 
-// checkStorageFits rejects a calculated configuration whose redo log does not
-// fit on the data volume. mysqld preallocates the redo log in full during
-// initialization, so a configuration that doesn't fit doesn't degrade the
-// cluster - it stops it from ever starting.
+// capRedoLog trims the calculated redo log to maxRedoLogPercent of the data
+// volume, rewriting params in place. mysqld preallocates the redo log in full
+// during initialization, so an oversized one doesn't degrade the cluster - it
+// stops the node from ever starting, or from ever cloning a donor.
 //
-// The bar is only whether the redo log fits at all. How much of what is left
-// the data needs is the user's call, not something the operator can guess.
-func checkStorageFits(cr *apiv1.PerconaServerMySQL, params map[string]string) error {
+// It returns ErrInsufficientStorage only when the volume is too small to host
+// the minimum redo log, since that is the one case trimming cannot resolve.
+func capRedoLog(cr *apiv1.PerconaServerMySQL, params map[string]string) error {
 	storage := dataVolumeSize(cr)
 	if storage == 0 {
 		return nil
@@ -259,14 +271,30 @@ func checkStorageFits(cr *apiv1.PerconaServerMySQL, params map[string]string) er
 		return err
 	}
 
-	if redo < storage {
+	budget := (storage * maxRedoLogPercent / 100) &^ (1024*1024 - 1)
+	if redo <= budget {
 		return nil
 	}
 
-	return errors.Wrapf(ErrInsufficientStorage,
-		"calculated redo log is %d bytes but mysql.volumeSpec.persistentVolumeClaim requests %d bytes; "+
-			"increase the volume or lower mysql.resources memory",
-		redo, storage)
+	if budget < minRedoLogBytes {
+		return errors.Wrapf(ErrInsufficientStorage,
+			"redo log needs at least %d bytes but mysql.volumeSpec.persistentVolumeClaim provides %d bytes for it; "+
+				"increase the volume",
+			int64(minRedoLogBytes), budget)
+	}
+
+	if _, ok := params["innodb_redo_log_capacity"]; ok {
+		params["innodb_redo_log_capacity"] = strconv.FormatInt(budget, 10)
+		return nil
+	}
+
+	// Pre-8.4 spelling: the total is split across the configured file count.
+	files, err := strconv.ParseInt(params["innodb_log_files_in_group"], 10, 64)
+	if err != nil || files <= 0 {
+		files = 1
+	}
+	params["innodb_log_file_size"] = strconv.FormatInt(budget/files, 10)
+	return nil
 }
 
 // redoLogBytes totals the disk the calculated redo log will occupy.
