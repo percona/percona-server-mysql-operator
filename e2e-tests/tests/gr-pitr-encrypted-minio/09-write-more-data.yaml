@@ -16,5 +16,12 @@ commands:
           "INSERT myDB.myTable (id) VALUES (100503)" \
           "-h $(get_router_service $(get_cluster_name))"
 
+      # seal this phase's data into its own binlog so the binlog server uploads a
+      # complete file while beta is active (avoids the rotation race that dropped
+      # the beta-encrypted binlog from the restore set)
+      run_mysql \
+          "FLUSH BINARY LOGS" \
+          "-h $(get_router_service $(get_cluster_name))"
+
       # let the binlog server checkpoint this data while beta is still in effect
       sleep 35

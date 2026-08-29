@@ -16,6 +16,12 @@ commands:
           "INSERT myDB.myTable (id) VALUES (100501)" \
           "-h $(get_router_service $(get_cluster_name))"
 
+      # seal this phase's data into its own binlog so the binlog server uploads a
+      # complete file while this encryption state is active (avoids a rotation race)
+      run_mysql \
+          "FLUSH BINARY LOGS" \
+          "-h $(get_router_service $(get_cluster_name))"
+
       # let the binlog server checkpoint this data while it is still unencrypted,
       # the next step enables encryption and restarts the pod
       sleep 35
