@@ -9,6 +9,9 @@ import (
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -50,6 +53,24 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfig(
 		return nil
 	}
 
+	writeCondition := func(synced bool, reason, message string) error {
+		nn := types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
+		return writeStatus(ctx, r.Client, nn, func(s *apiv1.PerconaServerMySQLStatus) error {
+			cond := metav1.Condition{
+				Type:               apiv1.ConditionMySQLConfigSynced,
+				Status:             metav1.ConditionTrue,
+				Reason:             reason,
+				Message:            message,
+				ObservedGeneration: cr.Generation,
+			}
+			if !synced {
+				cond.Status = metav1.ConditionFalse
+			}
+			meta.SetStatusCondition(&s.Conditions, cond)
+			return nil
+		})
+	}
+
 	confHash := fmt.Sprintf("%x", md5.Sum(confJson))
 	restartMySQL := func() error {
 		return k8s.RolloutRestart(ctx, r.Client, sts, naming.AnnotationConfigHash, confHash)
@@ -85,14 +106,18 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfig(
 		return nil
 	}
 
-	pods, err := k8s.RunningPods(ctx, r.Client, mysql.MatchLabels(cr), cr.GetNamespace())
+	pods, err := k8s.ReadyPods(ctx, r.Client, mysql.MatchLabels(cr), cr.GetNamespace())
 	if err != nil {
 		return errors.Wrap(err, "get running pods")
 	}
 
-	// We want all pods running before we exec and apply the config.
-	if cr.Spec.Pause || len(pods) < int(cr.Spec.MySQL.Size) {
+	// We want all pods ready before we exec and apply the config.
+	if cr.Spec.Pause || len(pods) < int(cr.Spec.MySQL.Size) || cr.Status.MySQL.State != apiv1.StateReady {
 		log.Info("Not all pods are running, defer applying configuration", "running", len(pods), "desired", cr.Spec.MySQL.Size)
+		if err := writeCondition(false, "PodsNotReady",
+			"Not all mysql pods are ready"); err != nil {
+			return errors.Wrap(err, "write status")
+		}
 		return nil
 	}
 
@@ -110,12 +135,18 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfig(
 	if err := writeAnnotation(); err != nil {
 		return errors.Wrap(err, "write last applied config annotation")
 	}
+
+	if err := writeCondition(true, "MySQLConfigSynced",
+		"MySQL configuration has been applied"); err != nil {
+		return errors.Wrap(err, "write status")
+	}
 	return nil
 }
 
 const (
-	readOnlyErrorString        = "ERROR 1238"
-	unknownVariableErrorString = "ERROR 1193"
+	readOnlyErrorString                = "ERROR 1238"
+	unknownVariableErrorString         = "ERROR 1193"
+	groupReplicationRunningErrorString = "ERROR 3093"
 )
 
 func isReadOnlyVariableError(err error) bool {
@@ -124,6 +155,10 @@ func isReadOnlyVariableError(err error) bool {
 
 func isUnknownVariableError(err error) bool {
 	return strings.Contains(err.Error(), unknownVariableErrorString)
+}
+
+func isGRRunningVariableError(err error) bool {
+	return strings.Contains(err.Error(), groupReplicationRunningErrorString)
 }
 
 func setGlobalVariables(
@@ -156,7 +191,7 @@ func setGlobalVariables(
 		for k, v := range kv {
 			err := mgr.SetGlobalVariable(ctx, k, v)
 			if err != nil {
-				if isReadOnlyVariableError(err) {
+				if isReadOnlyVariableError(err) || isGRRunningVariableError(err) {
 					restartNeeded = true
 					continue
 				}

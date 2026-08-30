@@ -1,0 +1,16 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 30
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      # The claims left behind by the scale down are smaller than the requested
+      # size and have no pod, so they can never report the new size themselves.
+      # They must not keep the operator asking for the resize over and over.
+      kubectl -n "${NAMESPACE}" patch ps pvc-resize \
+          --type=merge \
+          -p='{"spec":{"mysql":{"volumeSpec":{"persistentVolumeClaim":{"resources":{"requests":{"storage":"4Gi"}}}}}}}'

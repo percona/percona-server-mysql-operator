@@ -9,7 +9,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 )
@@ -42,9 +41,9 @@ func TestClusterSetReplicaManagerJob(t *testing.T) {
 	assert.Equal(t, "test-ns", job.Namespace)
 	assert.Equal(t, expectedLabels, job.Labels)
 	assert.Equal(t, &batchv1.JobSpec{
-		BackoffLimit: ptr.To(int32(3)),
-		Parallelism:  ptr.To(int32(1)),
-		Completions:  ptr.To(int32(1)),
+		BackoffLimit: new(int32(3)),
+		Parallelism:  new(int32(1)),
+		Completions:  new(int32(1)),
 		Template: corev1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
 				Labels: expectedLabels,

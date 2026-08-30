@@ -9,7 +9,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/cmd/bootstrap/utils"
@@ -35,6 +34,7 @@ const (
 	BackupLogDir          = "/var/log/xtrabackup"
 	vaultSecretVolumeName = "vault-keyring-secret"
 	vaultSecretMountPath  = "/etc/mysql/vault-keyring-secret"
+	crVersionEnvVar       = "CR_VERSION"
 )
 
 const (
@@ -273,7 +273,7 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 										Path: "my-config.cnf",
 									},
 								},
-								Optional: ptr.To(true),
+								Optional: new(true),
 							},
 						},
 						{
@@ -287,7 +287,7 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 										Path: "auto-config.cnf",
 									},
 								},
-								Optional: ptr.To(true),
+								Optional: new(true),
 							},
 						},
 						{
@@ -301,7 +301,7 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 										Path: "my-secret.cnf",
 									},
 								},
-								Optional: ptr.To(true),
+								Optional: new(true),
 							},
 						},
 					},
@@ -729,6 +729,13 @@ func mysqldContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 		env = append(env, corev1.EnvVar{
 			Name:  naming.EnvBackupsEnabled,
 			Value: strconv.FormatBool(backupsEnabled),
+		})
+	}
+
+	if cr.CompareVersion("1.3.0") >= 0 {
+		env = append(env, corev1.EnvVar{
+			Name:  crVersionEnvVar,
+			Value: cr.Spec.CRVersion,
 		})
 	}
 

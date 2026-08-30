@@ -36,9 +36,10 @@ const (
 type MemberState string
 
 const (
-	MemberStateOnline  MemberState = "ONLINE"
-	MemberStateOffline MemberState = "OFFLINE"
-	MemberStateError   MemberState = "ERROR"
+	MemberStateOnline     MemberState = "ONLINE"
+	MemberStateOffline    MemberState = "OFFLINE"
+	MemberStateError      MemberState = "ERROR"
+	MemberStateRecovering MemberState = "RECOVERING"
 )
 
 type ReplicationDBManager struct {
@@ -49,7 +50,7 @@ func NewReplicationManager(pod *corev1.Pod, cliCmd clientcmd.Client, user apiv1.
 	return &ReplicationDBManager{db: newDB(pod, cliCmd, user, pass, host)}
 }
 
-func (m *ReplicationDBManager) query(ctx context.Context, query string, out interface{}) error {
+func (m *ReplicationDBManager) query(ctx context.Context, query string, out any) error {
 	var errb, outb bytes.Buffer
 	err := m.db.exec(ctx, query, &outb, &errb)
 	if err != nil {

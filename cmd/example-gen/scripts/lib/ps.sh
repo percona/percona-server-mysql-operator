@@ -14,9 +14,9 @@ sort_yaml() {
 	ROUTER_ORDER='"enabled", "expose", '"$POD_SPEC_ORDER"', "ports"'
 	ORCHESTRATOR_ORDER='"enabled", "expose", '"$POD_SPEC_ORDER"
 
-	PMM_ORDER='"enabled","image","imagePullPolicy","serverHost","customClusterName","mysqlParams","containerSecurityContext", "resources", "readinessProbes", "livenessProbes"'
+	PMM_ORDER='"enabled","image","imagePullPolicy","serverHost","customClusterName","mysqlParams","haproxyParams","containerSecurityContext", "resources", "readinessProbes", "livenessProbes"'
 	BINLOG_SERVER_ORDER='"enabled","binlogServer"'
-	BINLOG_SERVER_SPEC_ORDER='"size","image","imagePullPolicy","imagePullSecrets","serverId","storage","connectTimeout","readTimeout","writeTimeout","idleTime"'
+	BINLOG_SERVER_SPEC_ORDER='"size","image","imagePullPolicy","imagePullSecrets","serverId","storage","keyringSecret","connectTimeout","readTimeout","writeTimeout","idleTime"'
 	BACKUP_ORDER='"enabled","pitr","sourcePod","image","imagePullPolicy","imagePullSecrets","schedule","backoffLimit", "serviceAccountName", "initContainer", "containerSecurityContext", "resources","storages"'
 	TOOLKIT_ORDER='"image","imagePullPolicy","imagePullSecrets","env","envFrom","resources","containerSecurityContext", "startupProbe", "readinessProbe", "livenessProbe"'
 
@@ -213,6 +213,7 @@ del_fields_to_comment() {
 		| yq "del(.spec.orchestrator.podSecurityContext)" \
 		| yq "del(.spec.pmm.customClusterName)" \
 		| yq "del(.spec.pmm.mysqlParams)" \
+		| yq "del(.spec.pmm.haproxyParams)" \
 		| yq "del(.spec.pmm.readinessProbes)" \
 		| yq "del(.spec.pmm.livenessProbes)" \
 		| yq "del(.spec.pmm.containerSecurityContext)" \
