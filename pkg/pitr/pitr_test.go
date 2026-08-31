@@ -679,6 +679,82 @@ func TestRestoreJob(t *testing.T) {
 				assert.Len(t, job.Spec.Template.Spec.InitContainers, 1)
 			},
 		},
+		"vault secret is mounted when data at rest encryption is configured": {
+			cluster: &apiv1.PerconaServerMySQL{
+				ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "ns"},
+				Spec: apiv1.PerconaServerMySQLSpec{
+					SecretsName:   "secrets",
+					SSLSecretName: "ssl",
+					Backup: &apiv1.BackupSpec{
+						PiTR: apiv1.PiTRSpec{
+							BinlogServer: &apiv1.BinlogServerSpec{},
+						},
+					},
+					MySQL: apiv1.MySQLSpec{
+						VaultSecretName: "cluster-vault",
+					},
+				},
+			},
+			restore: &apiv1.PerconaServerMySQLRestore{
+				ObjectMeta: metav1.ObjectMeta{Name: "restore", Namespace: "ns"},
+			},
+			storage:   &apiv1.BackupStorageSpec{},
+			initImage: "init:latest",
+			verify: func(t *testing.T, job *batchv1.Job) {
+				var foundVolume bool
+				for _, v := range job.Spec.Template.Spec.Volumes {
+					if v.Name == vaultSecretVolumeName {
+						foundVolume = true
+						assert.Equal(t, "cluster-vault", v.Secret.SecretName)
+						assert.NotNil(t, v.Secret.Optional)
+						assert.True(t, *v.Secret.Optional)
+						break
+					}
+				}
+				assert.True(t, foundVolume, "vault secret volume not found")
+
+				container := job.Spec.Template.Spec.Containers[0]
+				mountPaths := map[string]string{}
+				for _, m := range container.VolumeMounts {
+					mountPaths[m.Name] = m.MountPath
+				}
+				assert.Equal(t, vaultSecretMountPath, mountPaths[vaultSecretVolumeName])
+
+				envMap := envToMap(container.Env)
+				assert.Equal(t, vaultSecretMountPath+"/keyring_vault.cnf", envMap["KEYRING_VAULT_PATH"])
+			},
+		},
+		"vault secret is not mounted when unset": {
+			cluster: &apiv1.PerconaServerMySQL{
+				ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "ns"},
+				Spec: apiv1.PerconaServerMySQLSpec{
+					SecretsName:   "secrets",
+					SSLSecretName: "ssl",
+					Backup: &apiv1.BackupSpec{
+						PiTR: apiv1.PiTRSpec{
+							BinlogServer: &apiv1.BinlogServerSpec{},
+						},
+					},
+					MySQL: apiv1.MySQLSpec{},
+				},
+			},
+			restore: &apiv1.PerconaServerMySQLRestore{
+				ObjectMeta: metav1.ObjectMeta{Name: "restore", Namespace: "ns"},
+			},
+			storage:   &apiv1.BackupStorageSpec{},
+			initImage: "init:latest",
+			verify: func(t *testing.T, job *batchv1.Job) {
+				for _, v := range job.Spec.Template.Spec.Volumes {
+					assert.NotEqual(t, vaultSecretVolumeName, v.Name)
+				}
+
+				container := job.Spec.Template.Spec.Containers[0]
+				for _, m := range container.VolumeMounts {
+					assert.NotEqual(t, vaultSecretVolumeName, m.Name)
+				}
+				assert.NotContains(t, envToMap(container.Env), "KEYRING_VAULT_PATH")
+			},
+		},
 	}
 
 	for name, tt := range tests {
