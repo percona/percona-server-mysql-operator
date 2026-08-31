@@ -76,7 +76,7 @@ func TestStatefulset(t *testing.T) {
 		sts := StatefulSet(cluster, initImage, configHash, tlsHash, secret)
 		assert.Equal(t, int64(600), *sts.Spec.Template.Spec.TerminationGracePeriodSeconds)
 
-		cluster.Spec.Proxy.HAProxy.TerminationGracePeriodSeconds = ptr.To(int64(30))
+		cluster.Spec.Proxy.HAProxy.TerminationGracePeriodSeconds = new(int64(30))
 
 		sts = StatefulSet(cluster, initImage, configHash, tlsHash, secret)
 		assert.Equal(t, int64(30), *sts.Spec.Template.Spec.TerminationGracePeriodSeconds)
@@ -137,7 +137,7 @@ func TestStatefulset(t *testing.T) {
 				Operator:          "Exists",
 				Value:             "value",
 				Effect:            "NoExecute",
-				TolerationSeconds: ptr.To(int64(1001)),
+				TolerationSeconds: new(int64(1001)),
 			},
 		}
 		cluster.Spec.Proxy.HAProxy.Tolerations = tolerations
@@ -506,6 +506,50 @@ func TestService(t *testing.T) {
 			}
 
 			assert.Equal(t, cr.Spec.Proxy.HAProxy.Expose.InternalTrafficPolicy, service.Spec.InternalTrafficPolicy)
+		})
+	}
+}
+
+func TestPMMCustomParams(t *testing.T) {
+	const ns = "haproxy-ns"
+
+	tests := []struct {
+		name          string
+		crVersion     string
+		haproxyParams string
+		expected      string
+	}{
+		{
+			name:     "no params configured",
+			expected: "--listen-port=8404",
+		},
+		{
+			name:          "params are appended to the default",
+			haproxyParams: "--custom-labels=env=prod --skip-connection-check",
+			expected:      "--listen-port=8404 --custom-labels=env=prod --skip-connection-check",
+		},
+		{
+			name:          "user listen-port replaces the default",
+			haproxyParams: "--listen-port=9404",
+			expected:      "--listen-port=9404",
+		},
+		{
+			name:          "params are ignored before 1.3.0",
+			crVersion:     "1.2.0",
+			haproxyParams: "--listen-port=9404",
+			expected:      "--listen-port=8404",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cr := readDefaultCluster(t, "cluster", ns)
+			if tt.crVersion != "" {
+				cr.Spec.CRVersion = tt.crVersion
+			}
+			cr.Spec.PMM.HAProxyParams = tt.haproxyParams
+
+			assert.Equal(t, tt.expected, pmmCustomParams(cr))
 		})
 	}
 }

@@ -2,6 +2,7 @@ package innodbcluster
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/pkg/errors"
 )
@@ -17,6 +18,13 @@ const (
 	ClusterStatusOKNoTolerancePartial ClusterStatus = "OK_NO_TOLERANCE_PARTIAL"
 	ClusterStatusOffline              ClusterStatus = "OFFLINE"
 )
+
+func (s ClusterStatus) IsOnline() bool {
+	return s == ClusterStatusOK ||
+		s == ClusterStatusOKPartial ||
+		s == ClusterStatusOKNoTolerance ||
+		s == ClusterStatusOKNoTolerancePartial
+}
 
 type MemberState string
 
@@ -55,7 +63,8 @@ type ReplicaSetStatus struct {
 }
 
 func (s Status) String() string {
-	status := fmt.Sprintf(`
+	var status strings.Builder
+	fmt.Fprintf(&status, `
 ClusterName: %s
 Status: %s
 StatusText: %s
@@ -72,7 +81,7 @@ Topology:
 
 	i := 0
 	for _, member := range s.DefaultReplicaSet.Topology {
-		status += fmt.Sprintf(`
+		fmt.Fprintf(&status, `
 	Member %d
 	Address: %s
 	State: %s
@@ -82,7 +91,7 @@ Topology:
 		i++
 	}
 
-	return status
+	return status.String()
 }
 
 type ReplicaGtidState string

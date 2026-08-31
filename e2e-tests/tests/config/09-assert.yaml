@@ -1,21 +1,23 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 60
+timeout: 120
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: 09-check-retry-vars-1
+  name: 09-remove-dynamic-config
 data:
-  retry_values: |2-
-                    Connect_Retry: 70
-               Source_Retry_Count: 4
+  restarted: "true"
+  table_open_cache_removed: "true"
+  max_connections: "400 400 400"
 ---
-apiVersion: v1
-kind: ConfigMap
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
 metadata:
-  name: 09-check-retry-vars-2
-data:
-  retry_values: |2-
-                    Connect_Retry: 70
-               Source_Retry_Count: 4
+  name: config
+status:
+  mysql:
+    ready: 3
+    size: 3
+    state: ready
+  state: ready

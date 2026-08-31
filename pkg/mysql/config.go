@@ -1,15 +1,23 @@
 package mysql
 
 import (
+	"context"
+	"fmt"
+	"io"
 	"strconv"
 	"strings"
 
 	"github.com/flosch/pongo2"
 	"github.com/pkg/errors"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/pkg/config"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
 
@@ -98,4 +106,118 @@ func GetAutoTuneParams(cr *apiv1.PerconaServerMySQL, q *resource.Quantity) (stri
 	}
 
 	return autotuneParams, nil
+}
+
+func GetConfig(
+	ctx context.Context,
+	cl client.Reader,
+	cr *apiv1.PerconaServerMySQL,
+) (config.Section, error) {
+	configurable := Configurable(*cr)
+	cmName := configurable.GetConfigMapName()
+	nn := types.NamespacedName{Name: cmName, Namespace: cr.Namespace}
+	parts := make([]string, 0, 2)
+
+	cm := &corev1.ConfigMap{}
+	if err := cl.Get(ctx, nn, cm); client.IgnoreNotFound(err) != nil {
+		return config.EmptySection, errors.Wrap(err, "get configmap")
+	} else if err == nil {
+		parts = append(parts, readConfig(cm, configurable))
+	}
+
+	secret := &corev1.Secret{}
+	if err := cl.Get(ctx, nn, secret); client.IgnoreNotFound(err) != nil {
+		return config.EmptySection, errors.Wrap(err, "get secret")
+	} else if err == nil {
+		parts = append(parts, readConfig(secret, configurable))
+	}
+
+	if len(parts) == 0 {
+		return config.EmptySection, nil
+	}
+
+	merged := strings.Join(parts, "\n")
+	section, err := config.ParseSection(io.NopCloser(strings.NewReader(merged)), "mysqld")
+	if err != nil {
+		return config.EmptySection, errors.Wrap(err, "parse config section")
+	}
+
+	result := config.Section{Section: *section}
+	return result, nil
+}
+
+func readConfig(object client.Object, cfg Configurable) string {
+	switch obj := object.(type) {
+	case *corev1.ConfigMap:
+		return obj.Data[cfg.GetConfigMapKey()]
+	case *corev1.Secret:
+		return string(obj.Data[cfg.GetConfigMapKey()])
+	default:
+		return ""
+	}
+}
+
+func GetLastAppliedConfig(
+	sts *appsv1.StatefulSet,
+) (config.Section, error) {
+	val, ok := sts.GetAnnotations()[naming.AnnotationLastAppliedConfig.String()]
+	if !ok {
+		return config.EmptySection, nil
+	}
+
+	result, err := config.NewSection(config.NewSectionOpts{})
+	if err != nil {
+		return config.EmptySection, errors.Wrap(err, "create section")
+	}
+
+	if err := result.FromJSON(io.NopCloser(strings.NewReader(val)), "mysqld"); err != nil {
+		return config.EmptySection, errors.Wrap(err, "parse section from JSON")
+	}
+	return *result, nil
+}
+
+func FormatConfigValue(value string) string {
+	value = strings.TrimSpace(value)
+
+	if _, err := strconv.ParseFloat(value, 64); err == nil {
+		return value
+	}
+
+	if expanded, ok := expandByteSuffix(value); ok {
+		return expanded
+	}
+
+	switch strings.ToLower(value) {
+	case "true", "on":
+		return "ON"
+	case "false", "off":
+		return "OFF"
+	}
+
+	return QuoteLiteral(value)
+}
+
+// QuoteLiteral renders value as a single SQL string literal, escaped so no part
+// of it can be parsed as SQL. Quotes are doubled rather than backslash-escaped
+// because doubling is the only form that holds under NO_BACKSLASH_ESCAPES too,
+// and sql_mode is itself one of the variables we set.
+func QuoteLiteral(value string) string {
+	escaped := strings.ReplaceAll(value, `\`, `\\`)
+	escaped = strings.ReplaceAll(escaped, `'`, `''`)
+	return fmt.Sprintf("'%s'", escaped)
+}
+
+func expandByteSuffix(value string) (string, bool) {
+	// Quantity parses a bare "Gi" as zero, so require a leading digit rather
+	// than turning a mangled value into a silent 0.
+	if value == "" || value[0] < '0' || value[0] > '9' {
+		return "", false
+	}
+
+	q, err := resource.ParseQuantity(strings.ToUpper(value) + "i")
+	if err != nil {
+		return "", false
+	}
+
+	return strconv.FormatInt(q.Value(), 10), true
 }

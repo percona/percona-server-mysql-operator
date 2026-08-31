@@ -669,6 +669,7 @@ spec:
     serverHost: monitoring-service
 #    customClusterName: cluster1-custom
 #    mysqlParams: PMM_ADMIN_CUSTOM_PARAMS
+#    haproxyParams: PMM_ADMIN_CUSTOM_PARAMS
 #    containerSecurityContext:
 #      privileged: false
 #      runAsGroup: 1001
@@ -702,12 +703,18 @@ spec:
 #          - name: my-secret-1
 #          - name: my-secret-2
 #        storage:
+#          encryption:
+#            cipher: AES-256-CTR
+#            kekId: alpha
 #          s3:
 #            bucket: S3-BACKUP-BUCKET-NAME-HERE
 #            credentialsSecret: ps-cluster1-s3-credentials
 #            endpointUrl: https://s3.amazonaws.com
 #            prefix: PREFIX_NAME
 #            region: us-west-2
+#        keyringSecret:
+#          key: keyring.json
+#          name: ps-cluster1-binlog-server-keyring
 #        connectTimeout: 30
 #        readTimeout: 30
 #        writeTimeout: 30
@@ -1032,3 +1039,23 @@ spec:
 #      periodSeconds: 5
 #      successThreshold: 1
 #      timeoutSeconds: 3
+#  users:
+#    - dbs:
+#        - mydb
+#      grants:
+#        - SELECT
+#        - INSERT
+#      hosts: []
+#      name: alice
+#      passwordSecretRef:
+#        key: password
+#        name: alice-secret
+#      withGrantOption: false
+#    - dbs:
+#        - mydb
+#      grants:
+#        - SELECT
+#        - INSERT
+#      hosts: []
+#      name: bob
+#      withGrantOption: true

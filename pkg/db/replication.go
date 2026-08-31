@@ -36,9 +36,10 @@ const (
 type MemberState string
 
 const (
-	MemberStateOnline  MemberState = "ONLINE"
-	MemberStateOffline MemberState = "OFFLINE"
-	MemberStateError   MemberState = "ERROR"
+	MemberStateOnline     MemberState = "ONLINE"
+	MemberStateOffline    MemberState = "OFFLINE"
+	MemberStateError      MemberState = "ERROR"
+	MemberStateRecovering MemberState = "RECOVERING"
 )
 
 type ReplicationDBManager struct {
@@ -49,7 +50,7 @@ func NewReplicationManager(pod *corev1.Pod, cliCmd clientcmd.Client, user apiv1.
 	return &ReplicationDBManager{db: newDB(pod, cliCmd, user, pass, host)}
 }
 
-func (m *ReplicationDBManager) query(ctx context.Context, query string, out interface{}) error {
+func (m *ReplicationDBManager) query(ctx context.Context, query string, out any) error {
 	var errb, outb bytes.Buffer
 	err := m.db.exec(ctx, query, &outb, &errb)
 	if err != nil {
@@ -236,4 +237,48 @@ func (m *ReplicationDBManager) GetClusterSetReplicationRunning(ctx context.Conte
 	}
 
 	return rows[0].IsRunning, nil
+}
+
+func (m *ReplicationDBManager) StopReplication(ctx context.Context) error {
+	var errb, outb bytes.Buffer
+	err := m.db.exec(ctx, "STOP REPLICA", &outb, &errb)
+	if err != nil {
+		return errors.Wrap(err, "exec STOP REPLICA")
+	}
+	return nil
+}
+
+func (m *ReplicationDBManager) ResetReplication(ctx context.Context) error {
+	var errb, outb bytes.Buffer
+	err := m.db.exec(ctx, "RESET REPLICA ALL", &outb, &errb)
+	if err != nil {
+		return errors.Wrap(err, "exec RESET REPLICA ALL")
+	}
+	return nil
+}
+
+// ResetGroupReplicationPersistedVars removes every group_replication_* system
+// variable persisted in mysqld-auto.cnf.
+func (m *ReplicationDBManager) ResetGroupReplicationPersistedVars(ctx context.Context) error {
+	rows := []*struct {
+		Name string `csv:"name"`
+	}{}
+
+	err := m.query(ctx, "SELECT VARIABLE_NAME as name FROM performance_schema.persisted_variables WHERE VARIABLE_NAME LIKE 'group_replication_%'", &rows)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		return errors.Wrap(err, "query persisted group replication variables")
+	}
+
+	for _, row := range rows {
+		var errb, outb bytes.Buffer
+		// Variable names come from performance_schema and are valid identifiers.
+		if err := m.db.exec(ctx, fmt.Sprintf("RESET PERSIST IF EXISTS %s", row.Name), &outb, &errb); err != nil {
+			return errors.Wrapf(err, "exec RESET PERSIST IF EXISTS %s", row.Name)
+		}
+	}
+
+	return nil
 }

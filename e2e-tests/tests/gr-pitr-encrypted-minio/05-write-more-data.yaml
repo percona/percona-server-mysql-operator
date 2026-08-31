@@ -1,0 +1,21 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      # phase 1: no keyring, no encryption
+      check_binlog_server_config \
+          'has("keyring") | not' \
+          '.storage | has("encryption") | not'
+
+      run_mysql \
+          "INSERT myDB.myTable (id) VALUES (100501)" \
+          "-h $(get_router_service $(get_cluster_name))"
+
+      # let the binlog server checkpoint this data while it is still unencrypted,
+      # the next step enables encryption and restarts the pod
+      sleep 35

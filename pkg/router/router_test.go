@@ -119,7 +119,7 @@ func TestDeployment(t *testing.T) {
 				Operator:          "Exideployment",
 				Value:             "value",
 				Effect:            "NoExecute",
-				TolerationSeconds: ptr.To(int64(1001)),
+				TolerationSeconds: new(int64(1001)),
 			},
 		}
 		cluster.Spec.Proxy.Router.Tolerations = tolerations
