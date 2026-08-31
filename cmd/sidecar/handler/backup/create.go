@@ -238,8 +238,9 @@ func xtrabackupArgs(user, pass string, conf *xb.BackupConfig) []string {
 	}
 	if conf != nil && conf.ContainerOptions != nil {
 		customArgs := conf.ContainerOptions.Args.Xtrabackup
-		// kubebuilder validation guarantees that --defaults-file is the first custom argument if specified.
-		// XtraBackup requires it to be the first option: https://docs.percona.com/percona-xtrabackup/8.0/xtrabackup-option-reference.html#defaults-file
+		// kubebuilder validation guarantees that --defaults-file is the first custom argument.
+		// https://docs.percona.com/percona-xtrabackup/8.0/xtrabackup-option-reference.html#defaults-file
+		// We should move it to the beginning of args. Other custom arguments should be appended after the generated arguments.
 		end := 0
 		if len(customArgs) > 0 {
 			switch {
