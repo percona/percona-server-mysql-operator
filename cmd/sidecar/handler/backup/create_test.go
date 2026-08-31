@@ -59,7 +59,7 @@ func TestXtrabackupArgs(t *testing.T) {
 				append(defaultArgs, "--compress", "--parallel=2")...,
 			),
 		},
-		"defaults file with separate value is first": {
+		"defaults file with separate value is not promoted": {
 			conf: &xb.BackupConfig{
 				ContainerOptions: &apiv1.BackupContainerOptions{
 					Args: apiv1.BackupContainerArgs{
@@ -67,10 +67,7 @@ func TestXtrabackupArgs(t *testing.T) {
 					},
 				},
 			},
-			want: append(
-				[]string{"--defaults-file", "/etc/my.cnf"},
-				append(defaultArgs, "--compress", "--parallel=2")...,
-			),
+			want: append(defaultArgs, "--defaults-file", "/etc/my.cnf", "--compress", "--parallel=2"),
 		},
 		"defaults file without value is not promoted": {
 			conf: &xb.BackupConfig{
@@ -138,13 +135,13 @@ func TestXtrabackupArgs(t *testing.T) {
 				EncryptionKeyFile: "/etc/mysql/encryption-key",
 				ContainerOptions: &apiv1.BackupContainerOptions{
 					Args: apiv1.BackupContainerArgs{
-						Xtrabackup: []string{"--defaults-file", "/etc/my.cnf", "--encrypt=AES192", "--parallel=2"},
+						Xtrabackup: []string{"--defaults-file=/etc/my.cnf", "--encrypt=AES192", "--parallel=2"},
 					},
 				},
 				IncrementalLsn: "123:456",
 			},
 			want: append(
-				[]string{"--defaults-file", "/etc/my.cnf"},
+				[]string{"--defaults-file=/etc/my.cnf"},
 				append(
 					defaultArgs,
 					"--encrypt-key-file=/etc/mysql/encryption-key",

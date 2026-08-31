@@ -556,7 +556,7 @@ type BackupContainerArgs struct {
 	// XtraBackup requires --defaults-file to precede every other option.
 	// +kubebuilder:validation:MaxItems=100
 	// +kubebuilder:validation:items:MaxLength=1024
-	// +kubebuilder:validation:XValidation:rule="!self.exists(arg, arg == '--defaults-file' || arg.startsWith('--defaults-file=')) || self[0] == '--defaults-file' || self[0].startsWith('--defaults-file=')",message="--defaults-file must be the first xtrabackup argument"
+	// +kubebuilder:validation:XValidation:rule="!self.exists(arg, arg == '--defaults-file' || arg.startsWith('--defaults-file=')) || (self[0].startsWith('--defaults-file=') && self[0] != '--defaults-file=')",message="--defaults-file must use --defaults-file=<path> syntax and be the first xtrabackup argument"
 	Xtrabackup []string `json:"xtrabackup,omitempty"`
 	Xbcloud    []string `json:"xbcloud,omitempty"`
 	Xbstream   []string `json:"xbstream,omitempty"`

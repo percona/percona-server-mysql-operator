@@ -598,10 +598,11 @@ var _ = Describe("CR validations", Ordered, func() {
 			})
 		})
 
-		When("--defaults-file is the first argument", func() {
-			It("should allow creating the backup", func() {
+		When("--defaults-file uses a separate value", func() {
+			It("should reject the backup", func() {
 				backup := newBackup("defaults-file-first", []string{"--defaults-file", "/etc/my.cnf", "--parallel=4"})
-				Expect(k8sClient.Create(ctx, backup)).To(Succeed())
+				err := k8sClient.Create(ctx, backup)
+				Expect(err).To(MatchError(ContainSubstring("--defaults-file must use --defaults-file=<path> syntax and be the first xtrabackup argument")))
 			})
 		})
 
@@ -612,11 +613,19 @@ var _ = Describe("CR validations", Ordered, func() {
 			})
 		})
 
+		When("--defaults-file has an empty value", func() {
+			It("should reject the backup", func() {
+				backup := newBackup("defaults-file-empty-value", []string{"--defaults-file="})
+				err := k8sClient.Create(ctx, backup)
+				Expect(err).To(MatchError(ContainSubstring("--defaults-file must use --defaults-file=<path> syntax and be the first xtrabackup argument")))
+			})
+		})
+
 		When("--defaults-file follows another argument", func() {
 			It("should reject the backup", func() {
 				backup := newBackup("defaults-file-late", []string{"--parallel=4", "--defaults-file", "/etc/my.cnf"})
 				err := k8sClient.Create(ctx, backup)
-				Expect(err).To(MatchError(ContainSubstring("--defaults-file must be the first xtrabackup argument")))
+				Expect(err).To(MatchError(ContainSubstring("--defaults-file must use --defaults-file=<path> syntax and be the first xtrabackup argument")))
 			})
 		})
 
@@ -624,7 +633,7 @@ var _ = Describe("CR validations", Ordered, func() {
 			It("should reject the backup", func() {
 				backup := newBackup("defaults-file-equals-late", []string{"--parallel=4", "--defaults-file=/etc/my.cnf"})
 				err := k8sClient.Create(ctx, backup)
-				Expect(err).To(MatchError(ContainSubstring("--defaults-file must be the first xtrabackup argument")))
+				Expect(err).To(MatchError(ContainSubstring("--defaults-file must use --defaults-file=<path> syntax and be the first xtrabackup argument")))
 			})
 		})
 	})
