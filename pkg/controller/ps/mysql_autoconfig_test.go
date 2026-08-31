@@ -1,7 +1,6 @@
 package ps
 
 import (
-	"context"
 	"strings"
 	"testing"
 
@@ -53,7 +52,7 @@ func TestReconcileMySQLAutoConfig(t *testing.T) {
 		t.Helper()
 		cm := new(corev1.ConfigMap)
 		nn := types.NamespacedName{Name: mysql.AutoConfigMapName(cr), Namespace: cr.Namespace}
-		require.NoError(t, r.Client.Get(context.Background(), nn, cm))
+		require.NoError(t, r.Get(t.Context(), nn, cm))
 		return cm.Data[mysql.CustomConfigKey]
 	}
 
@@ -102,7 +101,7 @@ func TestReconcileMySQLAutoConfig(t *testing.T) {
 			cr := newCR(tt.enabled, tt.version)
 			r := newReconciler(t, cr)
 
-			require.NoError(t, r.reconcileMySQLAutoConfig(context.Background(), cr))
+			require.NoError(t, r.reconcileMySQLAutoConfig(t.Context(), cr))
 
 			config := autoConfig(t, r, cr)
 			assert.Contains(t, config, "innodb_buffer_pool_size=", "both paths size the buffer pool")
@@ -111,12 +110,8 @@ func TestReconcileMySQLAutoConfig(t *testing.T) {
 		})
 	}
 
-	// The redo log the calculator sizes from memory is preallocated on the data
-	// volume at startup, and a node joining by clone needs free space for the
-	// donor's estimate on top of its own. The reconcile trims it to fit rather
-	// than leaving a cluster that cannot bootstrap.
 	t.Run("a data volume smaller than the calculated redo log trims it", func(t *testing.T) {
-		ctx := context.Background()
+		ctx := t.Context()
 		cr := newCR(true, "8.4")
 		withDataVolume(cr, "2Gi")
 		r := newReconciler(t, cr)
@@ -126,10 +121,8 @@ func TestReconcileMySQLAutoConfig(t *testing.T) {
 		assert.Contains(t, autoConfig(t, r, cr), "innodb_redo_log_capacity=536870912")
 	})
 
-	// Trimming stops at the smallest redo log MySQL accepts, so a volume below
-	// that leaves nothing to write: the reconcile fails until the user resizes.
 	t.Run("a data volume too small for the minimum redo log fails the reconcile", func(t *testing.T) {
-		ctx := context.Background()
+		ctx := t.Context()
 		cr := newCR(true, "8.4")
 		withDataVolume(cr, "16Mi")
 		r := newReconciler(t, cr)
@@ -143,14 +136,12 @@ func TestReconcileMySQLAutoConfig(t *testing.T) {
 		// No autotune fallback was written in its place.
 		cm := new(corev1.ConfigMap)
 		nn := types.NamespacedName{Name: mysql.AutoConfigMapName(cr), Namespace: cr.Namespace}
-		assert.True(t, k8serrors.IsNotFound(r.Client.Get(ctx, nn, cm)),
+		assert.True(t, k8serrors.IsNotFound(r.Get(ctx, nn, cm)),
 			"no ConfigMap should be written when the calculated configuration does not fit")
 	})
 
-	// The ConfigMap is rebuilt from the spec on every pass, so a wrong version
-	// costs nothing more than the fallback it caused.
 	t.Run("correcting the version restores the calculated configuration", func(t *testing.T) {
-		ctx := context.Background()
+		ctx := t.Context()
 		cr := newCR(true, "5.7")
 		r := newReconciler(t, cr)
 
@@ -163,7 +154,7 @@ func TestReconcileMySQLAutoConfig(t *testing.T) {
 	})
 
 	t.Run("correcting the version leaves no parameter of the wrong one behind", func(t *testing.T) {
-		ctx := context.Background()
+		ctx := t.Context()
 		// Removed in MySQL 8.4, still emitted for 8.0 — and emitted bare, so
 		// mysqld would refuse to boot on it.
 		const removedIn84 = "innodb_log_file_size="

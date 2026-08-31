@@ -207,7 +207,7 @@ spec:
 #          - ReadWriteOnce
         resources:
           requests:
-            storage: 5Gi
+            storage: 4Gi
 #        storageClassName: standard
 #    configuration: |-
 #      max_connections=250
@@ -1002,7 +1002,7 @@ spec:
 #              - ReadWriteOnce
 #            resources:
 #              requests:
-#                storage: 2Gi
+#                storage: 4Gi
 #            storageClassName: standard
 #    encryptionKeySecret:
 #      key: encryptionKey

@@ -459,7 +459,7 @@ func dropAliasedKeys(section *ini.Section) {
 }
 
 func withMySQLdSection(part string) string {
-	for _, line := range strings.Split(part, "\n") {
+	for line := range strings.SplitSeq(part, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
 			continue

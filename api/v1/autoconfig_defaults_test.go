@@ -18,17 +18,17 @@ func TestCheckNSetDefaultsAutoConfig(t *testing.T) {
 			wantLoadType: "",
 		},
 		"explicitly disabled keeps loadType unset": {
-			enabled:      ptr(false),
+			enabled:      new(false),
 			wantEnabled:  false,
 			wantLoadType: "",
 		},
 		"explicitly enabled without loadType gets default": {
-			enabled:      ptr(true),
+			enabled:      new(true),
 			wantEnabled:  true,
 			wantLoadType: AutoConfigLoadTypeSomeWrites,
 		},
 		"explicitly enabled with custom loadType is preserved": {
-			enabled:      ptr(true),
+			enabled:      new(true),
 			loadType:     AutoConfigLoadTypeHeavyWrites,
 			wantEnabled:  true,
 			wantLoadType: AutoConfigLoadTypeHeavyWrites,
@@ -51,5 +51,3 @@ func TestCheckNSetDefaultsAutoConfig(t *testing.T) {
 		})
 	}
 }
-
-func ptr(b bool) *bool { return &b }

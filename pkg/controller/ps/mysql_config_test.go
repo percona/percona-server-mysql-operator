@@ -158,9 +158,9 @@ func TestReconcileMySQLConfig(t *testing.T) {
 		state             apiv1.StatefulAppState // status.state
 		mysqlState        apiv1.StatefulAppState // status.mysql.state; defaults to ready
 		currentConfig     string
-		autoConfig        string    // my.cnf in the ConfigMap; empty means no ConfigMap at all
-		lastAppliedConfig string                 // JSON string on the statefulset annotation; empty means absent
-		object            []client.Object        // what the API holds besides the CR, the ConfigMap and the statefulset; nil means a healthy cluster
+		autoConfig        string            // my.cnf in the ConfigMap; empty means no ConfigMap at all
+		lastAppliedConfig string            // JSON string on the statefulset annotation; empty means absent
+		object            []client.Object   // what the API holds besides the CR, the ConfigMap and the statefulset; nil means a healthy cluster
 		stmtErrs          map[string]string // stderr mysql answers a given statement with; drives the case on its own
 
 		expectedStmts  []string // List of SET GLOBAL statements expected on all pods
