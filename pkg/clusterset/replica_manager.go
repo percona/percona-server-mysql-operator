@@ -7,6 +7,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
@@ -20,7 +21,15 @@ const (
 	CmdAddReplica    = "add-replica"
 	CmdRemoveReplica = "remove-replica"
 	CmdSetPrimary    = "set-primary"
+	CmdRejoinCluster = "rejoin-cluster"
 )
+
+func ClusterSetManagerJobKey(pcs *apiv1.PerconaServerMySQLClusterSet, clusterName, cmd string) types.NamespacedName {
+	return types.NamespacedName{
+		Name:      fmt.Sprintf("%s-%s-%s", pcs.Name, clusterName, cmd),
+		Namespace: pcs.Namespace,
+	}
+}
 
 func ClusterSetManagerJob(
 	pcs *apiv1.PerconaServerMySQLClusterSet,
@@ -35,10 +44,12 @@ func ClusterSetManagerJob(
 
 	args = append([]string{cmd}, args...)
 
+	key := ClusterSetManagerJobKey(pcs, cluster.InnoDBClusterName, cmd)
+
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-%s-%s", pcs.Name, cluster.InnoDBClusterName, cmd),
-			Namespace: pcs.Namespace,
+			Name:      key.Name,
+			Namespace: key.Namespace,
 			Labels:    labels,
 		},
 		Spec: batchv1.JobSpec{

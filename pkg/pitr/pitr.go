@@ -7,7 +7,6 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
@@ -30,6 +29,9 @@ const (
 	BinlogsConfigKey  = "binlogs.json"
 	keyringVolumeName = "keyring"
 	keyringMountPath  = "/etc/binlog_server/keyring"
+
+	vaultSecretVolumeName = "vault-keyring-secret"
+	vaultSecretMountPath  = "/etc/mysql/vault-keyring-secret"
 )
 
 func JobName(restore *apiv1.PerconaServerMySQLRestore) string {
@@ -90,8 +92,8 @@ func RestoreJob(
 			Annotations: util.SSMapMerge(cluster.GlobalAnnotations(), restore.Annotations, storage.Annotations),
 		},
 		Spec: batchv1.JobSpec{
-			Parallelism: ptr.To(int32(1)),
-			Completions: ptr.To(int32(1)),
+			Parallelism: new(int32(1)),
+			Completions: new(int32(1)),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      labels,
@@ -195,6 +197,21 @@ func RestoreJob(
 			},
 		})
 	}
+
+	// mysqld replays the binlogs on the restored datadir, so it needs the same
+	// vault keyring the cluster runs with to open its encrypted tablespaces.
+	if cluster.Spec.MySQL.VaultSecretName != "" {
+		job.Spec.Template.Spec.Volumes = append(job.Spec.Template.Spec.Volumes, corev1.Volume{
+			Name: vaultSecretVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: cluster.Spec.MySQL.VaultSecretName,
+					Optional:   new(true),
+				},
+			},
+		})
+	}
+
 	return job
 }
 
@@ -333,6 +350,18 @@ func restoreContainer(
 			Value: filepath.Join(keyringMountPath, keyringSecretRef.Key),
 		})
 	}
+
+	if cluster.Spec.MySQL.VaultSecretName != "" {
+		c.VolumeMounts = append(c.VolumeMounts, corev1.VolumeMount{
+			Name:      vaultSecretVolumeName,
+			MountPath: vaultSecretMountPath,
+		})
+		c.Env = append(c.Env, corev1.EnvVar{
+			Name:  "KEYRING_VAULT_PATH",
+			Value: filepath.Join(vaultSecretMountPath, "keyring_vault.cnf"),
+		})
+	}
+
 	return c
 }
 

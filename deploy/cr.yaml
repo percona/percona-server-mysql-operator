@@ -675,6 +675,7 @@ spec:
     serverHost: monitoring-service
 #    customClusterName: cluster1-custom
 #    mysqlParams: PMM_ADMIN_CUSTOM_PARAMS
+#    haproxyParams: PMM_ADMIN_CUSTOM_PARAMS
 #    containerSecurityContext:
 #      privileged: false
 #      runAsGroup: 1001

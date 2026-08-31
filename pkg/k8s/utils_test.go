@@ -11,7 +11,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -671,8 +670,8 @@ func TestEnsureObjectWithHash(t *testing.T) {
 						Kind:               "PerconaServerMySQL",
 						Name:               "test-cr",
 						UID:                "test-uid",
-						Controller:         ptr.To(true),
-						BlockOwnerDeletion: ptr.To(true),
+						Controller:         new(true),
+						BlockOwnerDeletion: new(true),
 					},
 				},
 			},
@@ -733,8 +732,8 @@ func TestEnsureObjectWithHash(t *testing.T) {
 						Kind:               "PerconaServerMySQL",
 						Name:               "test-cr",
 						UID:                "test-uid",
-						Controller:         ptr.To(true),
-						BlockOwnerDeletion: ptr.To(true),
+						Controller:         new(true),
+						BlockOwnerDeletion: new(true),
 					},
 				},
 			},

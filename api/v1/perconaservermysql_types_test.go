@@ -3,7 +3,6 @@ package v1
 import (
 	"testing"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -450,7 +449,7 @@ func TestGetTerminationGracePeriodSeconds(t *testing.T) {
 		expected int64
 	}{
 		"custom grace period": {
-			input:    to.Ptr(int64(20)),
+			input:    new(int64(20)),
 			expected: 20,
 		},
 		"nil grace period (default used)": {

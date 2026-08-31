@@ -1005,7 +1005,7 @@ func (r *PerconaServerMySQLReconciler) reconcileServicePerPod(ctx context.Contex
 
 	size := int(exposer.Size())
 	svcNames := make(map[string]struct{}, size)
-	for i := 0; i < size; i++ {
+	for i := range size {
 		svcName := exposer.Name(strconv.Itoa(i))
 		svc := exposer.Service(svcName)
 		svcNames[svc.Name] = struct{}{}
@@ -1602,7 +1602,7 @@ func (r *PerconaServerMySQLReconciler) cleanupOutdatedServices(ctx context.Conte
 	log := logf.FromContext(ctx).WithName("cleanupOutdatedServices")
 	size := int(exposer.Size())
 	svcNames := make(map[string]struct{}, size)
-	for i := 0; i < size; i++ {
+	for i := range size {
 		svcName := exposer.Name(strconv.Itoa(i))
 		svc := exposer.Service(svcName)
 		svcNames[svc.Name] = struct{}{}

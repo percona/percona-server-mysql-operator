@@ -226,6 +226,7 @@ const (
 	EventTypeClusterSetUnhealthy             string = "ClusterSetHealthDegraded"
 	EventTypeClusterSetMemberAdded           string = "ClusterSetMemberAdded"
 	EventTypeClusterSetMemberRemoved         string = "ClusterSetMemberRemoved"
+	EventTypeClusterSetMemberRejoined        string = "ClusterSetMemberRejoined"
 )
 
 const (
@@ -234,27 +235,32 @@ const (
 	ConditionClusterSetPrimarySwitchOverInProg string = "SwitchoverInProgress"
 	ConditionReplicaManagementFailure          string = "ReplicaManagementFailure"
 	ConditionClusterSetDissolving              string = "ClusterSetDissolving"
+	ConditionClusterSetRejoinInProgress        string = "RejoinClusterInProgress"
 	ConditionClusterSetReady                   string = "Ready"
 	ConditionClusterSetErrorReconcile          string = "ErrorReconcile"
 )
 
-type ClusterSetStatus map[string]ClusterSetClusterStatus
+type ClusterSetClusterStatuses map[string]ClusterSetClusterStatus
+
+// Deprecated: use ClusterSetClusterStatuses.
+type ClusterSetStatus = ClusterSetClusterStatuses
 
 type PerconaServerMySQLClusterSetStatus struct {
-	PrimaryCluster         string             `json:"primaryCluster"`
-	PrimaryClusterEndpoint string             `json:"primaryClusterEndpoint"`
-	Conditions             []metav1.Condition `json:"conditions,omitempty"`
-	Clusters               ClusterSetStatus   `json:"clusters,omitempty"`
-	ObservedGeneration     int64              `json:"lastObservedGeneration,omitempty"`
-	LastObservedAt         metav1.Time        `json:"lastObservedAt,omitempty"`
+	PrimaryCluster         string                    `json:"primaryCluster"`
+	PrimaryClusterEndpoint string                    `json:"primaryClusterEndpoint"`
+	Conditions             []metav1.Condition        `json:"conditions,omitempty"`
+	Clusters               ClusterSetClusterStatuses `json:"clusters,omitempty"`
+	ObservedGeneration     int64                     `json:"lastObservedGeneration,omitempty"`
+	LastObservedAt         metav1.Time               `json:"lastObservedAt,omitempty"`
 }
 
 // ClusterSetClusterStatus is the status of a single cluster in the cluster set.
 // The shape of this object is derived from the output of `dba.getCluster().getClusterSet().status()` mysqlshell command.
 type ClusterSetClusterStatus struct {
-	ClusterRole  string `json:"clusterRole"`
-	GlobalStatus string `json:"globalStatus"`
-	Primary      string `json:"primary"`
+	ClusterRole           string `json:"clusterRole"`
+	GlobalStatus          string `json:"globalStatus"`
+	Primary               string `json:"primary"`
+	ReplicationLagSeconds *int64 `json:"replicationLagSeconds,omitempty"`
 }
 
 // +kubebuilder:object:root=true

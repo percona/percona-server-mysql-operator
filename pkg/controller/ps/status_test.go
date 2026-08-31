@@ -1457,7 +1457,7 @@ func makeFakeReadyPods(cr *apiv1.PerconaServerMySQL, amount int, podType string)
 	}
 
 	pods := make([]client.Object, 0, amount)
-	for i := 0; i < amount; i++ {
+	for i := range amount {
 		pod := fakePod.DeepCopy()
 		switch podType {
 		case "mysql":

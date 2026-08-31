@@ -69,7 +69,7 @@ type Replication struct {
 	IdleTime       int32           `json:"idle_time,omitempty"`
 	VerifyChecksum bool            `json:"verify_checksum,omitempty"`
 	Mode           ReplicationMode `json:"mode,omitempty"`
-	Rewrite        Rewrite         `json:"rewrite,omitempty"`
+	Rewrite        Rewrite         `json:"rewrite"`
 }
 
 type Storage struct {
@@ -82,11 +82,11 @@ type Storage struct {
 }
 
 type Configuration struct {
-	Logger      Logger         `json:"logger,omitempty"`
+	Logger      Logger         `json:"logger"`
 	Connection  Connection     `json:"connection"`
-	Replication Replication    `json:"replication,omitempty"`
+	Replication Replication    `json:"replication"`
 	Keyring     *KeyringConfig `json:"keyring,omitempty"`
-	Storage     Storage        `json:"storage,omitempty"`
+	Storage     Storage        `json:"storage"`
 }
 
 // KeyringConfig is the top-level keyring section. It is needed both to encrypt
@@ -210,6 +210,8 @@ func getKeyringAndEncryptionConfig(
 	kekID := spec.Storage.Encryption.KekID
 	if kekID == "" {
 		kekID = keyring.Keys[0].Id
+	} else if keyring.FindKey(kekID) == nil {
+		return nil, nil, errors.Errorf("keyring secret %q does not contain a key with ID %q", sel.Name, kekID)
 	}
 
 	return keyringCfg, &EncryptionConfig{
@@ -235,14 +237,11 @@ func getAndCheckKeyringSecret(
 		return nil, errors.Errorf("key %q not found in keyring secret %q", secretKey, secretName)
 	}
 
-	keyring, err := decodeKeyringStrict(data)
+	keyring, err := DecodeKeyring(data)
 	if err != nil {
 		return nil, errors.Wrap(err, "decode keyring")
 	}
 
-	if err := keyring.Validate(); err != nil {
-		return nil, errors.Wrap(err, "validate keyring")
-	}
 	return &keyring, nil
 }
 

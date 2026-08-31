@@ -1,0 +1,44 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 420
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: pvc-resize
+status:
+  mysql:
+    ready: 3
+    size: 3
+  state: ready
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: datadir-pvc-resize-mysql-0
+status:
+  capacity:
+    storage: 4Gi
+---
+# the volume claim template was stale, so it is expected to be updated here,
+# which the operator can only do by recreating the statefulset
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: pvc-resize-mysql
+spec:
+  volumeClaimTemplates:
+  - apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: datadir
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 4Gi
+      volumeMode: Filesystem
+status:
+  replicas: 3
+  readyReplicas: 3

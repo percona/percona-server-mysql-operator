@@ -128,6 +128,7 @@ func pmmDefaults(spec *apiv1.PMMSpec) {
 	spec.ServerHost = "monitoring-service"
 	spec.CustomClusterName = "cluster1-custom"
 	spec.MySQLParams = "PMM_ADMIN_CUSTOM_PARAMS"
+	spec.HAProxyParams = "PMM_ADMIN_CUSTOM_PARAMS"
 }
 
 func customUserDefaults(spec *apiv1.PerconaServerMySQLSpec) {

@@ -6,7 +6,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
@@ -73,7 +72,7 @@ func TestStatefulSet(t *testing.T) {
 			initImage: "init:latest",
 			verify: func(t *testing.T, cr *apiv1.PerconaServerMySQL) {
 				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, MatchLabels(cr), "init:latest", "", "")
-				assert.Equal(t, ptr.To(int32(1)), sts.Spec.Replicas)
+				assert.Equal(t, new(int32(1)), sts.Spec.Replicas)
 			},
 		},
 		"config hash annotation in pod template": {
