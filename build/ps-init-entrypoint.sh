@@ -6,6 +6,7 @@ set -o xtrace
 OPERATORDIR="/opt/percona-server-mysql-operator"
 BINDIR="/opt/percona"
 
+install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/lib/util.sh" "${BINDIR}/lib/util.sh"
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/ps-entrypoint.sh" "${BINDIR}/ps-entrypoint.sh"
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/ps-pre-stop.sh" "${BINDIR}/ps-pre-stop.sh"
 
