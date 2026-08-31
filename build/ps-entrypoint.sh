@@ -5,6 +5,10 @@ set -o xtrace
 
 trap "exit" SIGTERM
 
+LIB_PATH='/opt/percona/lib'
+# shellcheck source=build/lib/util.sh
+. ${LIB_PATH}/util.sh
+
 # if command starts with an option, prepend mysqld
 if [ "${1:0:1}" = '-' ]; then
 	set -- mysqld "$@"
@@ -140,31 +144,11 @@ CFG=/etc/my.cnf.d/node.cnf
 TLS_DIR=/etc/mysql/mysql-tls-secret
 CUSTOM_CONFIG_FILES=("/etc/mysql/config/auto-config.cnf" "/etc/mysql/config/my-config.cnf" "/etc/mysql/config/my-secret.cnf")
 
-install_keyring_component() {
-	echo -n '{ "components": "file://component_keyring_vault" }' >/var/lib/mysql/mysqld.my
-	cp "${KEYRING_VAULT_PATH}" /var/lib/mysql/component_keyring_vault.cnf
-}
-
-uninstall_keyring_component() {
-	if [[ -f /var/lib/mysql/mysqld.my ]]; then
-		rm /var/lib/mysql/mysqld.my
-	fi
-
-	if [[ -f /var/lib/mysql/component_keyring_vault.cnf ]]; then
-		rm /var/lib/mysql/component_keyring_vault.cnf
-	fi
-}
-
 add_encryption_options() {
-	sed -i "/\[mysqld\]/a default_table_encryption=ON" $CFG
-	sed -i "/\[mysqld\]/a table_encryption_privilege_check=ON" $CFG
-	sed -i "/\[mysqld\]/a innodb_undo_log_encrypt=ON" $CFG
-	sed -i "/\[mysqld\]/a innodb_redo_log_encrypt=ON" $CFG
-	sed -i "/\[mysqld\]/a binlog_encryption=ON" $CFG
-	sed -i "/\[mysqld\]/a binlog_rotate_encryption_master_key_at_startup=ON" $CFG
-	sed -i "/\[mysqld\]/a innodb_temp_tablespace_encrypt=ON" $CFG
-	sed -i "/\[mysqld\]/a innodb_encrypt_online_alter_logs=ON" $CFG
-	sed -i "/\[mysqld\]/a encrypt_tmp_files=ON" $CFG
+	local opt
+	while read -r opt; do
+		sed -i "/\[mysqld\]/a ${opt}" $CFG
+	done < <(mysql_encryption_options)
 }
 
 create_default_cnf() {
@@ -221,14 +205,11 @@ create_default_cnf() {
 	fi
 
 	# if vault secret file exists we assume we need to turn on encryption
-	if [[ -f ${KEYRING_VAULT_PATH} && ${MYSQL_VERSION} == '8.0' ]]; then
+	if keyring_enabled && [[ ${MYSQL_VERSION} == '8.0' ]]; then
 		sed -i "/\[mysqld\]/a early-plugin-load=keyring_vault.so" $CFG
 		sed -i "/\[mysqld\]/a keyring_vault_config=${KEYRING_VAULT_PATH}" $CFG
 
 		add_encryption_options
-
-		# this variable causes mysqld to crash in 8.4
-		sed -i "/\[mysqld\]/a innodb_parallel_dblwr_encrypt=ON" $CFG
 	fi
 
 	if [ "$MYSQL_VERSION" == '8.4' ] || [ "$MYSQL_VERSION" == '9.7' ]; then
@@ -544,7 +525,7 @@ if [ -f "${recovery_file}" ]; then
 	done
 fi
 
-MYSQL_VERSION=$(mysqld -V | awk '{print $3}' | awk -F'.' '{print $1"."$2}')
+MYSQL_VERSION=$(mysql_version)
 
 if [[ $MYSQL_VERSION != '8.0' ]] && [[ ${MYSQL_VERSION} != '8.4' ]] && [[ ${MYSQL_VERSION} != '9.7' ]]; then
 	echo "Percona Distribution for MySQL Operator does not support $MYSQL_VERSION"
@@ -585,7 +566,7 @@ if [ "$1" = 'mysqld' ] && [ -z "$wantHelp" ]; then
 
 	if [[ ${MYSQL_VERSION} == '8.4' || ${MYSQL_VERSION} == '9.7' ]]; then
 		# if vault secret file exists we assume we need to turn on encryption
-		if [[ -f ${KEYRING_VAULT_PATH} ]]; then
+		if keyring_enabled; then
 			install_keyring_component
 			add_encryption_options
 		else
