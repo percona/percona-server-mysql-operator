@@ -14777,6 +14777,7 @@ rules:
   - configmaps
   - persistentvolumeclaims
   - secrets
+  - serviceaccounts
   - services
   verbs:
   - create
@@ -14795,17 +14796,6 @@ rules:
   - create
   - delete
   - deletecollection
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - serviceaccounts
-  verbs:
-  - create
   - get
   - list
   - patch
@@ -14881,6 +14871,7 @@ rules:
   - poddisruptionbudgets/finalizers
   verbs:
   - create
+  - delete
   - get
   - list
   - patch
@@ -14916,6 +14907,7 @@ rules:
   - roles
   verbs:
   - create
+  - delete
   - get
   - list
   - patch
