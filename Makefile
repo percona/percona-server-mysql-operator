@@ -90,12 +90,16 @@ generate: controller-gen mockgen ## Generate code containing DeepCopy, DeepCopyI
 	yq eval '.rules' config/rbac/cluster/clusterrole_additional.yaml >> config/rbac/cluster/role.yaml
 	$(CONTROLLER_GEN) object:headerFile="LICENSE-HEADER" paths="./..." ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	go generate ./...
+	$(MAKE) fix
 
 fmt: ## Run go fmt against code.
 	go fmt ./...
 
 vet: ## Run go vet against code.
 	go vet ./...
+
+fix: ## Run go fix against code.
+	go fix ./...
 
 test: manifests generate fmt vet envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./...
@@ -179,8 +183,13 @@ undeploy: manifests ## Undeploy operator
 
 
 CONTROLLER_GEN = $(shell pwd)/bin/controller-gen
-controller-gen: ## Download controller-gen locally if necessary.
-	$(call go-get-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen@v0.18.0)
+CONTROLLER_GEN_VERSION = v0.21.0
+controller-gen: ## Download controller-gen locally if necessary (reinstalls on version mismatch).
+	@if [ ! -f $(CONTROLLER_GEN) ] || ! $(CONTROLLER_GEN) --version 2>/dev/null | grep -q $(CONTROLLER_GEN_VERSION); then \
+		echo "Installing controller-gen $(CONTROLLER_GEN_VERSION)" ;\
+		rm -f $(CONTROLLER_GEN) ;\
+	fi
+	$(call go-get-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_GEN_VERSION))
 
 KUSTOMIZE = $(shell pwd)/bin/kustomize
 kustomize: ## Download kustomize locally if necessary.
@@ -283,8 +292,8 @@ release: manifests
 		-e "/^  mysql:/,/^    image:/{s#image: .*#image: $(IMAGE_MYSQL84)#}" \
 		-e "/^    haproxy:/,/^      image:/{s#image: .*#image: $(IMAGE_HAPROXY)#}" \
 		-e "/^    router:/,/^      image:/{s#image: .*#image: $(IMAGE_ROUTER84)#}" \
-		-e "/^  orchestrator:/,/^      image:/{s#image: .*#image: $(IMAGE_ORCHESTRATOR)#}" \
-		-e "/^  backup:/,/^    image:/{s#image: .*#image: $(IMAGE_BACKUP84)#}" \
+		-e "/^  orchestrator:/,/^    image:/{s#image: .*#image: $(IMAGE_ORCHESTRATOR)#}" \
+		-e "/^  backup:/,/^    image:/{s#^    image: .*#    image: $(IMAGE_BACKUP84)#}" \
 		deploy/cr-minimal.yaml
 	$(SED) -i \
 		-e "/^spec:/,/^  crVersion:/{s/crVersion: .*/crVersion: $(VERSION)/}" \
@@ -292,11 +301,18 @@ release: manifests
 		-e "/^    haproxy:/,/^      image:/{s#image: .*#image: $(IMAGE_HAPROXY)#}" \
 		-e "/^    router:/,/^      image:/{s#image: .*#image: $(IMAGE_ROUTER84)#}" \
 		-e "/^  orchestrator:/,/^    image:/{s#image: .*#image: $(IMAGE_ORCHESTRATOR)#}" \
-		-e "/^  backup:/,/^    image:/{s#image: .*#image: $(IMAGE_BACKUP84)#}" \
+		-e "/^#      binlogServer:/,/^#        image:/{s|^#        image: .*|#        image: $(IMAGE_BINLOG_SERVER)|}" \
+		-e "/^  backup:/,/^    image:/{s#^    image: .*#    image: $(IMAGE_BACKUP84)#}" \
 		-e "/^  toolkit:/,/^    image:/{s#image: .*#image: $(IMAGE_TOOLKIT)#}" \
 		-e "/initContainer:/,/image:/{s#image: .*#image: $(IMAGE_OPERATOR)#}" \
 		-e "/^  pmm:/,/^    image:/{s#image: .*#image: $(IMAGE_PMM_CLIENT)#}" \
 		deploy/cr.yaml
+	$(SED) -i \
+		-e "/^#      binlogServer:/,/^#        image:/{s|^#        image: .*|#        image: $(IMAGE_BINLOG_SERVER)|}" \
+		deploy/backup/restore.yaml
+	$(SED) -i \
+		-e "/^  mysqlshellRunner:/,/^    image:/{s#image: .*#image: $(IMAGE_MYSQL84)#}" \
+		deploy/clusterset.yaml
 	$(SED) -i \
 		-e "s|image: .*|image: $(IMAGE_OPERATOR)|g" \
 		config/manager/manager.yaml config/manager/cluster/manager.yaml
@@ -308,14 +324,16 @@ release: manifests
 MAJOR_VER := $(shell grep -Eo "[0-9]+\.[0-9]+\.[0-9]+" pkg/version/version.txt|cut -d'.' -f1)
 MINOR_VER := $(shell grep -Eo "[0-9]+\.[0-9]+\.[0-9]+" pkg/version/version.txt|cut -d'.' -f2)
 NEXT_VER ?= $(MAJOR_VER).$$(($(MINOR_VER) + 1)).0
-after-release: update-version manifests
+.PHONY: after-release after-release-versions
+after-release: update-version manifests after-release-versions
 	$(SED) -i \
 		-e "/^spec:/,/^  crVersion:/{s/crVersion: .*/crVersion: $(NEXT_VER)/}" \
 		-e "/^  mysql:/,/^    image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-psmysql8.4#}" \
 		-e "/^    haproxy:/,/^      image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-haproxy#}" \
 		-e "/^    router:/,/^      image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-router8.4#}" \
 		-e "/^  orchestrator:/,/^    image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-orchestrator#}" \
-		-e "/^  backup:/,/^    image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-backup8.4#}" \
+		-e "/^#      binlogServer:/,/^#        image:/{s|^#        image: .*|#        image: perconalab/percona-binlog-server:0.3.1|}" \
+		-e "/^  backup:/,/^    image:/{s#^    image: .*#    image: perconalab/percona-server-mysql-operator:main-backup8.4#}" \
 		-e "/^  toolkit:/,/^    image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-toolkit#}" \
 		-e "/initContainer:/,/image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main#}" \
 		-e "/^  pmm:/,/^    image:/{s#image: .*#image: perconalab/pmm-client:3-dev-latest#}" \
@@ -325,12 +343,32 @@ after-release: update-version manifests
 		-e "/^  mysql:/,/^    image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-psmysql8.4#}" \
 		-e "/^    haproxy:/,/^      image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-haproxy#}" \
 		-e "/^    router:/,/^      image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-router8.4#}" \
-		-e "/^  orchestrator:/,/^      image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-orchestrator#}" \
-		-e "/^  backup:/,/^    image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-backup8.4#}" \
+		-e "/^  orchestrator:/,/^    image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-orchestrator#}" \
+		-e "/^  backup:/,/^    image:/{s#^    image: .*#    image: perconalab/percona-server-mysql-operator:main-backup8.4#}" \
 		deploy/cr-minimal.yaml
+	$(SED) -i \
+		-e "/^  mysqlshellRunner:/,/^    image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-psmysql8.4#}" \
+		deploy/clusterset.yaml
 	$(SED) -i \
 		-e "s|$(IMAGE_OPERATOR)|perconalab/percona-server-mysql-operator:main|g" \
 		config/manager/manager.yaml config/manager/cluster/manager.yaml deploy/bundle.yaml deploy/cw-bundle.yaml deploy/operator.yaml deploy/cw-operator.yaml
 	$(SED) -i \
 		-e "s|$(IMAGE_OPERATOR)|perconalab/percona-server-mysql-operator:main|g" \
 		pkg/controller/ps/suite_test.go
+
+after-release-versions:
+	$(SED) -i \
+		-e "s#^IMAGE_OPERATOR=.*#IMAGE_OPERATOR=$(IMAGE_TAG_BASE):main#" \
+		-e "s#^IMAGE_MYSQL84=.*#IMAGE_MYSQL84=$(IMAGE_TAG_BASE):main-psmysql8.4#" \
+		-e "s#^IMAGE_BACKUP84=.*#IMAGE_BACKUP84=$(IMAGE_TAG_BASE):main-backup8.4#" \
+		-e "s#^IMAGE_ROUTER84=.*#IMAGE_ROUTER84=$(IMAGE_TAG_BASE):main-router8.4#" \
+		-e "s#^IMAGE_MYSQL80=.*#IMAGE_MYSQL80=$(IMAGE_TAG_BASE):main-psmysql8.0#" \
+		-e "s#^IMAGE_BACKUP80=.*#IMAGE_BACKUP80=$(IMAGE_TAG_BASE):main-backup8.0#" \
+		-e "s#^IMAGE_ROUTER80=.*#IMAGE_ROUTER80=$(IMAGE_TAG_BASE):main-router8.0#" \
+		-e "s#^IMAGE_HAPROXY=.*#IMAGE_HAPROXY=$(IMAGE_TAG_BASE):main-haproxy#" \
+		-e "s#^IMAGE_ORCHESTRATOR=.*#IMAGE_ORCHESTRATOR=$(IMAGE_TAG_BASE):main-orchestrator#" \
+		-e "s#^IMAGE_TOOLKIT=.*#IMAGE_TOOLKIT=$(IMAGE_TAG_BASE):main-toolkit#" \
+		-e "s#^IMAGE_PMM_CLIENT=.*#IMAGE_PMM_CLIENT=perconalab/pmm-client:3-dev-latest#" \
+		-e "s#^IMAGE_PMM_SERVER=.*#IMAGE_PMM_SERVER=perconalab/pmm-server:3-dev-latest#" \
+		-e "s#^IMAGE_BINLOG_SERVER=.*#IMAGE_BINLOG_SERVER=perconalab/percona-binlog-server:0.3.1#" \
+		e2e-tests/release_versions

@@ -21,9 +21,9 @@ func FromPresets(cr any) error {
 			Annotations: Annotations,
 		},
 		corev1.SecurityContext{
-			Privileged: ptr.To(false),
-			RunAsUser:  ptr.To(int64(1001)),
-			RunAsGroup: ptr.To(int64(1001)),
+			Privileged: new(false),
+			RunAsUser:  new(int64(1001)),
+			RunAsGroup: new(int64(1001)),
 		},
 		corev1.ResourceRequirements{
 			Limits: corev1.ResourceList{
@@ -48,7 +48,7 @@ func FromPresets(cr any) error {
 			},
 		},
 		apiv1.PodAffinity{
-			TopologyKey: ptr.To("kubernetes.io/hostname"),
+			TopologyKey: new("kubernetes.io/hostname"),
 			Advanced: &corev1.Affinity{
 				NodeAffinity: &corev1.NodeAffinity{
 					RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
@@ -100,7 +100,7 @@ func FromPresets(cr any) error {
 				Type: ptr.To(corev1.HostPathDirectory),
 			},
 			PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
-				StorageClassName: ptr.To("standard"),
+				StorageClassName: new("standard"),
 				AccessModes: []corev1.PersistentVolumeAccessMode{
 					corev1.ReadWriteOnce,
 				},
@@ -118,11 +118,11 @@ func FromPresets(cr any) error {
 			FailureThreshold: 3,
 		},
 		apiv1.PodDisruptionBudgetSpec{
-			MinAvailable:   ptr.To(intstr.FromInt(0)),
-			MaxUnavailable: ptr.To(intstr.FromInt(1)),
+			MinAvailable:   new(intstr.FromInt(0)),
+			MaxUnavailable: new(intstr.FromInt(1)),
 		},
 		corev1.PodSecurityContext{
-			FSGroup:            ptr.To(int64(1001)),
+			FSGroup:            new(int64(1001)),
 			SupplementalGroups: []int64{1001, 1002, 1003},
 		},
 		apiv1.UpgradeOptions{
@@ -133,7 +133,7 @@ func FromPresets(cr any) error {
 			Autoscaling: &apiv1.AutoscalingSpec{
 				TriggerThresholdPercent: 80,
 				GrowthStep:              resource.MustParse("2Gi"),
-				MaxSize:                 resource.MustParse("10Gi"),
+				MaxSize:                 new(resource.MustParse("10Gi")),
 			},
 		},
 		[]corev1.Toleration{
@@ -141,7 +141,7 @@ func FromPresets(cr any) error {
 				Key:               "node.alpha.kubernetes.io/unreachable",
 				Operator:          "Exists",
 				Effect:            "NoExecute",
-				TolerationSeconds: ptr.To(int64(6000)),
+				TolerationSeconds: new(int64(6000)),
 			},
 		},
 		[]corev1.LocalObjectReference{

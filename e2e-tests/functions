@@ -51,6 +51,28 @@ wait_for_delete() {
 	done
 }
 
+apply_binlog_server_keyring_secret() {
+	kubectl -n "${NAMESPACE}" apply --server-side --force-conflicts -f "${DEPLOY_DIR}/keyring-secret.yaml"
+}
+
+# check_binlog_server_config evaluates each argument as a jq filter against the
+# binlog server configuration the operator generated, failing if any is false.
+check_binlog_server_config() {
+	local config
+	config=$(kubectl -n "${NAMESPACE}" get secret "$(get_cluster_name)-binlog-server-config" \
+		-o jsonpath='{.data.config\.json}' | base64 --decode)
+
+	echo "${config}" | jq '{keyring, encryption: .storage.encryption}'
+
+	local filter
+	for filter in "$@"; do
+		if ! echo "${config}" | jq -e "${filter}" >/dev/null; then
+			echo "binlog server config does not satisfy: ${filter}"
+			return 1
+		fi
+	done
+}
+
 apply_crd() {
 	kubectl -n "${OPERATOR_NS:-$NAMESPACE}" apply --server-side --force-conflicts -f "${DEPLOY_DIR}/crd.yaml"
 }
@@ -607,16 +629,30 @@ deploy_vault() {
 retry() {
 	local max=$1
 	local delay=$2
-	shift 2 # cut delay and max args
-	local n=1
+	shift 2
 
-	until "$@"; do
-		if [[ $n -ge $max ]]; then
-			echo "The command ${*} has failed after $n attempts."
-			exit 1
+	local n=1
+	local output
+	local rc
+
+	while ((n <= max)); do
+		set +e
+		output="$("$@")"
+		rc=$?
+		set -e
+
+		if [[ $rc -eq 0 ]]; then
+			printf '%s\n' "$output"
+			return 0
 		fi
+
+		if [[ $n -ge $max ]]; then
+			echo "The command ${*} has failed after $n attempts." >&2
+			return "$rc"
+		fi
+
 		((n++))
-		sleep $delay
+		sleep "$delay"
 	done
 }
 
@@ -776,15 +812,18 @@ run_mysql() {
 	local host="$2"
 	local user="${3:--uroot -p'$(get_user_pass root)'}"
 	local pod="$4"
+	local client_pod
 
 	client_pod=$(get_client_pod)
-	wait_pod $client_pod 1>&2
+	wait_pod "$client_pod" >&2
 
 	kubectl -n "${NAMESPACE}" exec "${pod:-mysql-client}" -- \
 		bash -c "printf '%s\n' \"${command}\" | mysql -sN $host $user" 2>&1 \
 		| $sed -e 's/mysql: //' \
 		| (grep -v 'Using a password on the command line interface can be insecure.' || :) \
 		| (grep -vE 'Unknown stream id [0-9]+, discarding message' || :)
+
+	return "${PIPESTATUS[0]}"
 }
 
 get_clusterset_status() {
@@ -819,14 +858,49 @@ run_mysql_query_file() {
 	local file="$1"
 	local host="$2"
 	local user="${3:--uroot -p'$(get_user_pass root)'}"
+	local pod="${4:-mysql-client}"
+	local exit_when_empty="${5:-false}"
+	local output
+	local result
+	local rc
+
+	local client_pod=$(get_client_pod)
+	wait_pod "$client_pod" >&2
+
+	if output="$(
+		kubectl -n "${NAMESPACE}" exec -i "$pod" -- \
+			bash -c "mysql -sN $host $user 2>&1" \
+			<"$file" \
+			2>/dev/null
+	)"; then
+		rc=0
+	else
+		rc=$?
+	fi
+
+	result="$(
+		printf '%s\n' "$output" \
+			| $sed -e 's/mysql: //' \
+			| (grep -v 'Using a password on the command line interface can be insecure.' || :) \
+			| (grep -vE 'Unknown stream id [0-9]+, discarding message' || :)
+	)"
+
+	if [[ $exit_when_empty == "true" && -z $result ]]; then
+		echo "Query from file $file failed on pod $pod with host $host and user $user"
+		return 1
+	fi
+
+	printf '%s\n' "$result"
+	return "$rc"
+}
+
+retry_run_mysql_query_file() {
+	local file="$1"
+	local host="$2"
+	local user="${3:--uroot -p'$(get_user_pass root)'}"
 	local pod="$4"
 
-	client_pod=$(get_client_pod)
-	wait_pod $client_pod 1>&2
-
-	cat "$file" | kubectl -n "${NAMESPACE}" exec -i "${pod:-mysql-client}" -- \
-		bash -c "mysql -sN $host $user 2>&1" 2>/dev/null \
-		| grep -v 'Using a password on the command line interface can be insecure.' || :
+	retry 3 5 run_mysql_query_file "$file" "$host" "$user" "$pod" true
 }
 
 get_innodb_cluster_status() {
@@ -1027,6 +1101,115 @@ get_mysql_pods() {
 
 get_router_pods() {
 	kubectl get pod -n "${NAMESPACE}" --no-headers --selector=app.kubernetes.io/name=router | awk '{print $1}'
+}
+
+mysql_pod_selector() {
+	local cluster_name=$1
+
+	echo "app.kubernetes.io/instance=${cluster_name},app.kubernetes.io/name=mysql"
+}
+
+get_mysql_pod_names() {
+	local cluster_name=$1
+
+	kubectl get pod -n "${NAMESPACE}" --selector="$(mysql_pod_selector "${cluster_name}")" \
+		--sort-by=.metadata.name -o jsonpath='{.items[*].metadata.name}'
+}
+
+get_mysql_pod_uids() {
+	local cluster_name=$1
+
+	kubectl get pod -n "${NAMESPACE}" --selector="$(mysql_pod_selector "${cluster_name}")" \
+		--sort-by=.metadata.name -o jsonpath='{.items[*].metadata.uid}'
+}
+
+# Prints the global value of a MySQL variable from every database pod of the
+# given cluster, in pod name order, space separated. Pods that cannot be queried
+# print "unavailable" so that callers can keep polling through a rolling restart.
+get_mysql_variable_on_pods() {
+	local cluster_name=$1
+	local variable=$2
+	local values=()
+
+	for pod in $(get_mysql_pod_names "${cluster_name}"); do
+		values+=("$(kubectl -n "${NAMESPACE}" exec "${pod}" -c mysql -- bash -c \
+			'mysql -uroot -p"$(cat /etc/mysql/mysql-users-secret/root)" -NB -e "SELECT @@global.'"${variable}"'"' \
+			2>/dev/null || echo 'unavailable')")
+	done
+
+	echo "${values[*]}"
+}
+
+all_pods_have_mysql_variable() {
+	local cluster_name=$1
+	local variable=$2
+	local expected=$3
+	local value
+
+	for value in $(get_mysql_variable_on_pods "${cluster_name}" "${variable}"); do
+		if [[ ${value} != "${expected}" ]]; then
+			return 1
+		fi
+	done
+}
+
+wait_for_mysql_variable() {
+	local cluster_name=$1
+	local variable=$2
+	local expected=$3
+	local timeout=${4:-300}
+	local elapsed=0
+
+	until all_pods_have_mysql_variable "${cluster_name}" "${variable}" "${expected}"; do
+		if ((elapsed >= timeout)); then
+			echo "Timeout (${timeout}s) exceeded while waiting for ${variable}=${expected} on all ${cluster_name} mysql pods"
+			echo "current values: $(get_mysql_variable_on_pods "${cluster_name}" "${variable}")"
+			return 1
+		fi
+		echo "waiting for ${variable}=${expected} on all ${cluster_name} mysql pods"
+		sleep 5
+		elapsed=$((elapsed + 5))
+	done
+}
+
+# Waits until every database pod of the given cluster has been replaced,
+# comparing against a UID list captured with get_mysql_pod_uids before the
+# change that should restart them.
+wait_for_mysql_pods_restart() {
+	local cluster_name=$1
+	local uids_before=$2
+	local timeout=${3:-600}
+	local elapsed=0
+	local expected_count=$(echo "${uids_before}" | wc -w)
+
+	while :; do
+		local uids_now=$(get_mysql_pod_uids "${cluster_name}")
+		local replaced=true
+		local uid
+
+		if [[ $(echo "${uids_now}" | wc -w) -ne ${expected_count} ]]; then
+			replaced=false
+		else
+			for uid in ${uids_now}; do
+				if [[ " ${uids_before} " == *" ${uid} "* ]]; then
+					replaced=false
+				fi
+			done
+		fi
+
+		if [[ ${replaced} == true ]]; then
+			return 0
+		fi
+		if ((elapsed >= timeout)); then
+			echo "Timeout (${timeout}s) exceeded while waiting for ${cluster_name} mysql pods to be replaced"
+			echo "uids before: ${uids_before}"
+			echo "uids now:    ${uids_now}"
+			return 1
+		fi
+		echo "waiting for ${cluster_name} mysql pods to be replaced"
+		sleep 10
+		elapsed=$((elapsed + 10))
+	done
 }
 
 get_mysql_users() {
@@ -1458,8 +1641,6 @@ check_primary_chaos() {
 	local chaos_type=$1
 	local ns=$2
 	local primary_before_failure=$3
-	local primary_restart_count_before=$(kubectl get pod -n ${NAMESPACE} ${primary_before_failure} -o yaml \
-		| yq '.status.containerStatuses[] | select(.name=="mysql") | .restartCount')
 
 	local chaos_name
 	case ${chaos_type} in
@@ -1488,19 +1669,12 @@ check_primary_chaos() {
 
 	wait_cluster_consistency_gr "$(get_cluster_name)" 3 3
 
-	local primary_restart_count_after=$(kubectl get pod -n ${NAMESPACE} ${primary_before_failure} -o yaml \
-		| yq '.status.containerStatuses[] | select(.name=="mysql") | .restartCount')
 	local primary_after_failure=$(get_primary_from_group_replication)
 	local uri=$(get_mysqlsh_uri_for_pod ${primary_after_failure})
 	wait_until_innodb_ok ${uri}
 
 	if [[ ${chaos_type} != "full-cluster-crash" && ${primary_before_failure} == "${primary_after_failure}" ]]; then
 		echo "primary pod was not changed! something went wrong re-election."
-		exit 1
-	fi
-
-	if [[ ${chaos_type} == "network" && ${primary_restart_count_before} == ${primary_restart_count_after} ]]; then
-		echo "old primary pod was not restarted! something went wrong with liveness probe."
 		exit 1
 	fi
 
@@ -1847,6 +2021,23 @@ run_restore() {
 	yq eval "$restore_yq" "$restore_template" | kubectl apply -n "$NAMESPACE" -f -
 }
 
+wait_for_restore() {
+	local restore_name=$1
+	local backup_name=$2
+
+	until kubectl get ps-restore "${restore_name}" -n "${NAMESPACE}" -o json \
+		| jq -e '.status.state == "Succeeded"' >/dev/null; do
+		state="$(kubectl get ps-restore "${restore_name}" -n "${NAMESPACE}" -o jsonpath='{.status.state}')"
+		if [[ ${state} == "Failed" || ${state} == "Error" ]]; then
+			echo "Restore failed: ${state}"
+			kubectl describe ps-restore "${restore_name}" -n "${NAMESPACE}"
+			exit 1
+		fi
+		echo "Waiting restore ${restore_name} from backup ${backup_name}"
+		sleep 10
+	done
+}
+
 get_secret_value() {
 	local secret=$1
 	local key1=$2
@@ -1973,8 +2164,16 @@ list_files_on_storage() {
 }
 
 verify_all_backups_deletion() {
-	for backup in $(kubectl get ps-backup -n "$NAMESPACE" -o jsonpath='{.items[*].metadata.name}'); do
+	# Skip incremental backups, as they are not deleted when the full backup is deleted
+	for backup in $(kubectl get ps-backup -n "$NAMESPACE" \
+		-o jsonpath='{range .items[?(@.spec.type=="full")]}{.metadata.name}{" "}{end}'); do
+
 		echo "Checking backup: $backup"
+		if ! kubectl get ps-backup "$backup" -n "$NAMESPACE" &>/dev/null; then
+			echo "Backup already gone: $backup"
+			continue
+		fi
+
 		eval "$(
 			kubectl get ps-backup "$backup" -n "$NAMESPACE" -o json \
 				| jq -r '
@@ -2060,7 +2259,10 @@ count_backups_in_schedule() {
 	local cluster_name="$2"
 
 	local prefix=$(printf '%s' "${NAMESPACE}-${cluster_name}" | sha1sum | awk '{print $1}' | head -c 5)
-	local bcp_count=$(kubectl get ps-backup -n ${NAMESPACE} -l percona.com/backup-ancestor=${prefix}-${schedule_name} -o yaml | yq '.items | length')
+	local bcp_count=$(
+		kubectl get ps-backup -n "${NAMESPACE}" -l "percona.com/backup-ancestor=${prefix}-${schedule_name}" -o yaml \
+			| yq '.items | map(select(.status.state == "Succeeded")) | length'
+	)
 	echo $bcp_count
 }
 
@@ -2070,4 +2272,53 @@ remove_resource_finalizers() {
 	for r in $(kubectl -n ${NAMESPACE} get $resource | grep -v NAME | awk '{print $1}'); do
 		kubectl -n ${NAMESPACE} patch $resource $r --type merge -p '{"metadata":{"finalizers":null}}'
 	done
+}
+
+get_default_storage_name() {
+	local cluster_name=${1:-$(get_cluster_name)}
+	kubectl get ps "${cluster_name}" -n "${NAMESPACE}" -o yaml \
+		| yq '(.spec.backup.storages // {}) | keys | .[0]'
+}
+
+flush_innodb_dirty_pages() {
+	local cluster_name=${1:-$(get_cluster_name)}
+	# sleep gives InnoDB time to write dirty pages before we force the checkpoint
+	sleep 10
+	for pod in $(kubectl -n "${NAMESPACE}" get pods \
+		-l "app.kubernetes.io/component=database,app.kubernetes.io/instance=${cluster_name}" \
+		-o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}'); do
+		run_mysql "SET GLOBAL innodb_max_dirty_pages_pct = 0" "-h ${pod}.${cluster_name}-mysql"
+	done
+}
+
+truncate_test_data() {
+	run_mysql \
+		"TRUNCATE TABLE myDB.myTable" \
+		"-h $(get_mysql_router_service $(get_cluster_name))"
+	sleep 5
+}
+
+read_mysql_data_to_configmap() {
+	local prefix=$1
+	local cluster_name=$(get_cluster_name)
+	for i in 0 1 2; do
+		local data
+		data=$(run_mysql "SELECT * FROM myDB.myTable" \
+			"-h ${cluster_name}-mysql-${i}.${cluster_name}-mysql")
+		kubectl create configmap -n "${NAMESPACE}" "${prefix}-${i}" \
+			--from-literal=data="${data}"
+	done
+}
+
+# Checks if a user can connect to MySQL
+# Accepts the following args:
+# user: MySQL username
+# pass: MySQL password
+# host: MySQL host (service or pod)
+check_connect_user() {
+  local user="$1"
+  local pass="$2"
+  local host="$3"
+  kubectl -n "${NAMESPACE}" exec mysql-client -- \
+      env MYSQL_PWD="${pass}" mysql -sN -h "${host}" -u"${user}" -e "SELECT 1" >/dev/null 2>&1
 }

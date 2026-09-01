@@ -4,8 +4,10 @@ async-upgrade
 auto-config
 config
 config-router
+custom-users
 demand-backup
 gr-pitr-minio
+gr-pitr-encrypted-minio
 gr-pitr-one-pod
 async-pitr-minio
 demand-backup-cloud
@@ -20,6 +22,8 @@ gr-demand-backup
 gr-demand-backup-cloud
 gr-demand-backup-haproxy
 gr-demand-backup-incremental
+gr-demand-backup-incremental-compressed
+gr-demand-backup-incremental-encrypted
 gr-finalizer
 gr-haproxy
 gr-ignore-annotations

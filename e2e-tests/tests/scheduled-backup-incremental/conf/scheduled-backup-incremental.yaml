@@ -6,6 +6,11 @@ spec:
   mysql:
     clusterType: async
     size: 3
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 7Gi
 
   proxy:
     haproxy:

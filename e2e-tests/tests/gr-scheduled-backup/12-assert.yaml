@@ -1,8 +1,8 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
+timeout: 300
 commands:
-  - timeout: 150
-    script: |
+  - script: |
       storage_name=$(kubectl get ps gr-scheduled-backup -n "$NAMESPACE" -o yaml \
         | yq -r '.spec.backup.storages | keys | map(select(. != "minio")) | .[2] // ""')
 

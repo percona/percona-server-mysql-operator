@@ -1,7 +1,0 @@
-apiVersion: ps.percona.com/v1
-kind: PerconaServerMySQLRestore
-metadata:
-  name: restore-incr-2
-spec:
-  clusterName: gr-demand-backup-incremental
-  backupName: incr-2

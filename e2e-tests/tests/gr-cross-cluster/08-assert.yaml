@@ -11,10 +11,10 @@ resourceRefs:
   name: gr-cross-cluster-dc2
   ref: dc2
 assertAll:
-- celExpr: dc1.status.conditions.exists(c, c.type == "ClusterSetReplicationRunning" && c.status == "True")
-  message: "dc1 should have ClusterSetReplicationRunning=True"
-- celExpr: "!dc2.status.conditions.exists(c, c.type == \"ClusterSetReplicationRunning\")"
-  message: "dc2 should not have ClusterSetReplicationRunning condition"
+- celExpr: dc1.status.conditions.exists(c, c.type == "ClusterSetMember" && c.status == "True" && c.reason == "Replica")
+  message: "dc1 should have ClusterSetMember=True with reason Replica"
+- celExpr: dc2.status.conditions.exists(c, c.type == "ClusterSetMember" && c.status == "True" && c.reason == "Primary")
+  message: "dc2 should have ClusterSetMember=True with reason Primary"
 
 commands:
   - script: |-

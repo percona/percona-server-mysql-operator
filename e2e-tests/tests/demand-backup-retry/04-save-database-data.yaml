@@ -8,5 +8,5 @@ commands:
       source ../../functions
 
       cluster_name=$(get_cluster_name)
-      data=$(run_mysql_query_file "conf/data-query.sql" "-h $(get_haproxy_svc $(get_cluster_name))")
+      data=$(retry_run_mysql_query_file "conf/data-query.sql" "-h $(get_haproxy_svc $(get_cluster_name))")
       kubectl create configmap -n "${NAMESPACE}" 04-demand-backup-retry-data --from-literal=data="${data}"

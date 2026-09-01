@@ -6,6 +6,7 @@ set -o xtrace
 OPERATORDIR="/opt/percona-server-mysql-operator"
 BINDIR="/opt/percona"
 
+install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/lib/util.sh" "${BINDIR}/lib/util.sh"
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/ps-entrypoint.sh" "${BINDIR}/ps-entrypoint.sh"
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/ps-pre-stop.sh" "${BINDIR}/ps-pre-stop.sh"
 
@@ -44,3 +45,4 @@ install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/pmm-prerun.sh" "$
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/binlog-server-entrypoint.sh" "${BINDIR}/binlog-server-entrypoint.sh"
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/pitr" "${BINDIR}/pitr"
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/run-pitr-restore.sh" "${BINDIR}/run-pitr-restore.sh"
+install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/run-prepare-restore.sh" "${BINDIR}/run-prepare-restore.sh"

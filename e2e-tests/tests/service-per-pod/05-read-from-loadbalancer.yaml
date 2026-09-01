@@ -7,15 +7,22 @@ commands:
 
       source ../../functions
 
-      args=''
-      size=$(kubectl -n ${NAMESPACE} get ps ${test_name} -o jsonpath='{.spec.mysql.size}')
-      sleep 75
+      args=()
+      size=$(kubectl -n "${NAMESPACE}" get ps "${test_name}" -o jsonpath='{.spec.mysql.size}')
+
       for i in $(seq 0 $((size - 1))); do
-          ip=$(get_service_ip ${test_name}-mysql-$i)
-          host=$(get_mysql_headless_fqdn ${test_name} $i)
-          data=$(run_mysql "SELECT * FROM myDB.myTable" "-h ${ip}")
-          args="${args} --from-literal=${host}=${data}"
+          ip=$(get_service_ip "${test_name}-mysql-${i}")
+          host=$(get_mysql_headless_fqdn "${test_name}" "${i}")
+
+          data=$(retry 20 10 run_mysql "SELECT * FROM myDB.myTable" "-h ${ip}" | tail -n1)
+
+          if [[ "${data}" != "100500" ]]; then
+              echo "Unexpected data from ${host} through ${ip}: ${data}"
+              exit 1
+          fi
+
+          args+=(--from-literal="${host}=${data}")
       done
 
-      kubectl create configmap -n "${NAMESPACE}" 04-read-from-loadbalancer ${args}
-    timeout: 180
+      kubectl create configmap -n "${NAMESPACE}" 04-read-from-loadbalancer "${args[@]}"
+    timeout: 250

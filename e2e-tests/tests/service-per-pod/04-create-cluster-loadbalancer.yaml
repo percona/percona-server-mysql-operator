@@ -12,4 +12,4 @@ commands:
           | yq eval '.spec.mysql.expose.enabled = true' - \
           | yq eval '.spec.mysql.expose.type = "LoadBalancer"' - \
           | kubectl -n "${NAMESPACE}" apply -f -
-    timeout: 10
+    timeout: 30

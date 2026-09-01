@@ -65,7 +65,7 @@ func TestReconciler_reconcileStatus(t *testing.T) {
 				return baseClusterSet.DeepCopy()
 			},
 			observedStatus: clusterset.Status{
-				Clusters: apiv1.ClusterSetStatus{
+				Clusters: clusterset.ClusterStatuses{
 					"dc1": {
 						ClusterRole: clusterset.ClusterRolePrimary,
 					},
@@ -105,7 +105,7 @@ func TestReconciler_reconcileStatus(t *testing.T) {
 			clusterSet: func() *apiv1.PerconaServerMySQLClusterSet {
 				clusterSet := baseClusterSet.DeepCopy()
 				clusterSet.Status.PrimaryCluster = "dc1"
-				clusterSet.Status.Clusters = apiv1.ClusterSetStatus{
+				clusterSet.Status.Clusters = apiv1.ClusterSetClusterStatuses{
 					"dc1": {
 						ClusterRole: clusterset.ClusterRolePrimary,
 					},
@@ -122,7 +122,7 @@ func TestReconciler_reconcileStatus(t *testing.T) {
 				return clusterSet
 			},
 			observedStatus: clusterset.Status{
-				Clusters: apiv1.ClusterSetStatus{
+				Clusters: clusterset.ClusterStatuses{
 					"dc1": {
 						ClusterRole: clusterset.ClusterRolePrimary,
 					},
@@ -159,7 +159,7 @@ func TestReconciler_reconcileStatus(t *testing.T) {
 			clusterSet: func() *apiv1.PerconaServerMySQLClusterSet {
 				clusterSet := baseClusterSet.DeepCopy()
 				clusterSet.Status.PrimaryCluster = "dc1"
-				clusterSet.Status.Clusters = apiv1.ClusterSetStatus{
+				clusterSet.Status.Clusters = apiv1.ClusterSetClusterStatuses{
 					"dc1": {
 						ClusterRole: clusterset.ClusterRolePrimary,
 					},
@@ -173,7 +173,7 @@ func TestReconciler_reconcileStatus(t *testing.T) {
 				return clusterSet
 			},
 			observedStatus: clusterset.Status{
-				Clusters: apiv1.ClusterSetStatus{
+				Clusters: clusterset.ClusterStatuses{
 					"dc1": {
 						ClusterRole: clusterset.ClusterRolePrimary,
 					},
@@ -209,7 +209,7 @@ func TestReconciler_reconcileStatus(t *testing.T) {
 			clusterSet: func() *apiv1.PerconaServerMySQLClusterSet {
 				clusterSet := baseClusterSet.DeepCopy()
 				clusterSet.Status.PrimaryCluster = "dc1"
-				clusterSet.Status.Clusters = apiv1.ClusterSetStatus{
+				clusterSet.Status.Clusters = apiv1.ClusterSetClusterStatuses{
 					"dc1": {
 						ClusterRole: clusterset.ClusterRoleReplica,
 					},
@@ -220,7 +220,7 @@ func TestReconciler_reconcileStatus(t *testing.T) {
 				return clusterSet
 			},
 			observedStatus: clusterset.Status{
-				Clusters: apiv1.ClusterSetStatus{
+				Clusters: clusterset.ClusterStatuses{
 					"dc1": {
 						ClusterRole: clusterset.ClusterRoleReplica,
 					},
@@ -250,6 +250,66 @@ func TestReconciler_reconcileStatus(t *testing.T) {
 				assert.NotNil(t, cond)
 				assert.Equal(t, metav1.ConditionTrue, cond.Status)
 				assert.Equal(t, "ClusterSetHealthy", cond.Reason)
+			},
+		},
+		{
+			desc: "replication lag is reported for replica clusters",
+			clusterSet: func() *apiv1.PerconaServerMySQLClusterSet {
+				clusterSet := baseClusterSet.DeepCopy()
+				clusterSet.Status.PrimaryCluster = "dc1"
+				clusterSet.Status.Clusters = apiv1.ClusterSetClusterStatuses{
+					"dc1": {
+						ClusterRole: clusterset.ClusterRolePrimary,
+					},
+					"dc2": {
+						ClusterRole: clusterset.ClusterRoleReplica,
+					},
+				}
+				return clusterSet
+			},
+			observedStatus: clusterset.Status{
+				Clusters: clusterset.ClusterStatuses{
+					"dc1": {
+						ClusterRole:  clusterset.ClusterRolePrimary,
+						GlobalStatus: "OK",
+						Primary:      "dc1-mysql-0.test-cluster-set.svc.cluster.local:3306",
+						Topology: map[string]clusterset.TopologyStatus{
+							"dc1-mysql-0.test-cluster-set.svc.cluster.local:3306": {
+								Status:      "ONLINE",
+								MemberRole:  clusterset.ClusterRolePrimary,
+								MemberState: "ONLINE",
+							},
+						},
+					},
+					"dc2": {
+						ClusterRole:  clusterset.ClusterRoleReplica,
+						GlobalStatus: "OK",
+						Primary:      "dc2-mysql-0.test-cluster-set.svc.cluster.local:3306",
+						Topology: map[string]clusterset.TopologyStatus{
+							"dc2-mysql-0.test-cluster-set.svc.cluster.local:3306": {
+								Status:                            "ONLINE",
+								MemberRole:                        clusterset.ClusterRolePrimary,
+								MemberState:                       "ONLINE",
+								ReplicationLagFromImmediateSource: "00:00:04",
+								ReplicationLagFromOriginalSource:  "00:00:42.500000",
+							},
+						},
+					},
+				},
+				DomainName:            "test-cluster-set.svc.cluster.local",
+				GlobalPrimaryInstance: "dc1-mysql-primary.test-cluster-set.svc.cluster.local",
+				PrimaryCluster:        "dc1",
+				Status:                clusterset.StatusHealthy,
+				StatusText:            "Cluster set is healthy",
+			},
+			events: func(recorder *psmock.EventRecorder) {},
+			asserts: func(t *testing.T, cl client.Client) {
+				observed := &apiv1.PerconaServerMySQLClusterSet{}
+				err := cl.Get(t.Context(), client.ObjectKeyFromObject(baseClusterSet), observed)
+				require.NoError(t, err)
+
+				assert.Nil(t, observed.Status.Clusters["dc1"].ReplicationLagSeconds)
+				assert.Equal(t, new(int64(42)), observed.Status.Clusters["dc2"].ReplicationLagSeconds)
 			},
 		},
 	}
@@ -562,7 +622,7 @@ func TestReconciler_reconcileReplicas(t *testing.T) {
 			clusterSet: func() *apiv1.PerconaServerMySQLClusterSet {
 				pcs := baseClusterSet.DeepCopy()
 				pcs.Spec.PrimaryCluster = "dc1"
-				pcs.Status.Clusters = apiv1.ClusterSetStatus{
+				pcs.Status.Clusters = apiv1.ClusterSetClusterStatuses{
 					"dc1": {
 						ClusterRole: clusterset.ClusterRolePrimary,
 					},
@@ -608,7 +668,7 @@ func TestReconciler_reconcileReplicas(t *testing.T) {
 						},
 					},
 				})
-				pcs.Status.Clusters = apiv1.ClusterSetStatus{
+				pcs.Status.Clusters = apiv1.ClusterSetClusterStatuses{
 					"dc1": {
 						ClusterRole: clusterset.ClusterRolePrimary,
 					},
@@ -647,7 +707,7 @@ func TestReconciler_reconcileReplicas(t *testing.T) {
 						},
 					},
 				}
-				pcs.Status.Clusters = apiv1.ClusterSetStatus{
+				pcs.Status.Clusters = apiv1.ClusterSetClusterStatuses{
 					"dc1": {
 						ClusterRole: clusterset.ClusterRolePrimary,
 					},
@@ -711,7 +771,7 @@ func TestReconciler_reconcileErrorCondition(t *testing.T) {
 	// reconciler marks them UNKNOWN.
 	clusterSetWithStatus := func() *apiv1.PerconaServerMySQLClusterSet {
 		pcs := baseClusterSet.DeepCopy()
-		pcs.Status.Clusters = apiv1.ClusterSetStatus{
+		pcs.Status.Clusters = apiv1.ClusterSetClusterStatuses{
 			"dc1": {
 				ClusterRole:  clusterset.ClusterRolePrimary,
 				GlobalStatus: "OK",

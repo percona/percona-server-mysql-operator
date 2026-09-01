@@ -2,11 +2,11 @@ package pitr
 
 import (
 	"fmt"
+	"path/filepath"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
@@ -27,6 +27,11 @@ const (
 	binlogsVolumeName = "binlogs"
 	binlogsMountPath  = "/etc/pitr"
 	BinlogsConfigKey  = "binlogs.json"
+	keyringVolumeName = "keyring"
+	keyringMountPath  = "/etc/binlog_server/keyring"
+
+	vaultSecretVolumeName = "vault-keyring-secret"
+	vaultSecretMountPath  = "/etc/mysql/vault-keyring-secret"
 )
 
 func JobName(restore *apiv1.PerconaServerMySQLRestore) string {
@@ -50,6 +55,21 @@ func BinlogsConfigMap(cluster *apiv1.PerconaServerMySQL, restore *apiv1.PerconaS
 	}
 }
 
+func getKeyringSecretRef(
+	cluster *apiv1.PerconaServerMySQL,
+	restore *apiv1.PerconaServerMySQLRestore,
+) *apiv1.BinlogServerKeyringSecretSelector {
+	if restore.Spec.PITR != nil && restore.Spec.PITR.KeyringSecret != nil {
+		return restore.Spec.PITR.KeyringSecret
+	}
+
+	binlogSrv := cluster.Spec.Backup.PiTR.BinlogServer
+	if binlogSrv != nil && binlogSrv.KeyringSecret != nil {
+		return binlogSrv.KeyringSecret
+	}
+	return nil
+}
+
 func RestoreJob(
 	cluster *apiv1.PerconaServerMySQL,
 	restore *apiv1.PerconaServerMySQLRestore,
@@ -60,7 +80,7 @@ func RestoreJob(
 
 	pvcName := fmt.Sprintf("%s-%s-mysql-0", mysql.DataVolumeName, cluster.Name)
 
-	return &batchv1.Job{
+	job := &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "batch/v1",
 			Kind:       "Job",
@@ -72,8 +92,8 @@ func RestoreJob(
 			Annotations: util.SSMapMerge(cluster.GlobalAnnotations(), restore.Annotations, storage.Annotations),
 		},
 		Spec: batchv1.JobSpec{
-			Parallelism: ptr.To(int32(1)),
-			Completions: ptr.To(int32(1)),
+			Parallelism: new(int32(1)),
+			Completions: new(int32(1)),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      labels,
@@ -166,6 +186,33 @@ func RestoreJob(
 			BackoffLimit: cluster.Spec.Backup.BackoffLimit,
 		},
 	}
+
+	if keyringSecretRef := getKeyringSecretRef(cluster, restore); keyringSecretRef != nil {
+		job.Spec.Template.Spec.Volumes = append(job.Spec.Template.Spec.Volumes, corev1.Volume{
+			Name: keyringVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: keyringSecretRef.Name,
+				},
+			},
+		})
+	}
+
+	// mysqld replays the binlogs on the restored datadir, so it needs the same
+	// vault keyring the cluster runs with to open its encrypted tablespaces.
+	if cluster.Spec.MySQL.VaultSecretName != "" {
+		job.Spec.Template.Spec.Volumes = append(job.Spec.Template.Spec.Volumes, corev1.Volume{
+			Name: vaultSecretVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: cluster.Spec.MySQL.VaultSecretName,
+					Optional:   new(true),
+				},
+			},
+		})
+	}
+
+	return job
 }
 
 func restoreContainer(
@@ -259,7 +306,7 @@ func restoreContainer(
 
 	envs = append(envs, restore.GetContainerOptions(storage).GetEnv()...)
 
-	return corev1.Container{
+	c := corev1.Container{
 		Name:            appName,
 		Image:           cluster.Spec.MySQL.Image,
 		ImagePullPolicy: cluster.Spec.MySQL.ImagePullPolicy,
@@ -292,6 +339,30 @@ func restoreContainer(
 		SecurityContext:          storage.ContainerSecurityContext,
 		Resources:                storage.Resources,
 	}
+
+	if keyringSecretRef := getKeyringSecretRef(cluster, restore); keyringSecretRef != nil {
+		c.VolumeMounts = append(c.VolumeMounts, corev1.VolumeMount{
+			Name:      keyringVolumeName,
+			MountPath: keyringMountPath,
+		})
+		c.Env = append(c.Env, corev1.EnvVar{
+			Name:  "KEYRING_PATH",
+			Value: filepath.Join(keyringMountPath, keyringSecretRef.Key),
+		})
+	}
+
+	if cluster.Spec.MySQL.VaultSecretName != "" {
+		c.VolumeMounts = append(c.VolumeMounts, corev1.VolumeMount{
+			Name:      vaultSecretVolumeName,
+			MountPath: vaultSecretMountPath,
+		})
+		c.Env = append(c.Env, corev1.EnvVar{
+			Name:  "KEYRING_VAULT_PATH",
+			Value: filepath.Join(vaultSecretMountPath, "keyring_vault.cnf"),
+		})
+	}
+
+	return c
 }
 
 func binlogsConfigMapName(restore *apiv1.PerconaServerMySQLRestore) string {

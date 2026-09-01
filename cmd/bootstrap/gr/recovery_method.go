@@ -218,7 +218,7 @@ func countGTIDs(gtidSet string) (uint64, error) {
 	}
 
 	var total uint64
-	for _, uuidSet := range strings.Split(gtidSet, ",") {
+	for uuidSet := range strings.SplitSeq(gtidSet, ",") {
 		uuidSet = strings.TrimSpace(uuidSet)
 		if uuidSet == "" {
 			continue

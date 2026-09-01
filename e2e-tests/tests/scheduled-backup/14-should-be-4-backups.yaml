@@ -8,8 +8,10 @@ commands:
       source ../../functions
 
       sleep 30
-      jobs_count=$(kubectl get job -n ${NAMESPACE} -o yaml | yq '.items | length')
+
       bcp_count=$(kubectl get ps-backup -n ${NAMESPACE} -o yaml | yq '.items | length')
+      jobs_count=$(kubectl get job -n ${NAMESPACE} -o yaml \
+        | yq '[.items[] | select(.metadata.ownerReferences[]?.kind == "PerconaServerMySQLBackup")] | length')
 
       expected_jobs=4
       expected_backups=4

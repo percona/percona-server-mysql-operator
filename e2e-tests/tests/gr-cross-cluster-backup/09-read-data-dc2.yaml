@@ -12,10 +12,10 @@ commands:
       mysql_user="-uroot -p'$(get_user_pass root test-secrets)'"
 
       for i in 0 1 2; do
-          data=$(run_mysql "SELECT * FROM myDB.myTable" "-h ${cluster_name}-mysql-${i}.${cluster_name}-mysql" "${mysql_user}")
+          data=$(retry 3 5 run_mysql "SELECT * FROM myDB.myTable" "-h ${cluster_name}-mysql-${i}.${cluster_name}-mysql" "${mysql_user}")
           kubectl create configmap -n "${NAMESPACE}" 09-read-data-dc2-${i} --from-literal=data="${data}"
       done
       
-      data=$(run_mysql "SELECT * FROM myDB.myTable" "-h $(get_haproxy_svc gr-cross-cluster-backup-dc2)" "${mysql_user}")
+      data=$(retry 3 5 run_mysql "SELECT * FROM myDB.myTable" "-h $(get_haproxy_svc gr-cross-cluster-backup-dc2)" "${mysql_user}")
       kubectl create configmap -n "${NAMESPACE}" 09-read-data-dc2-haproxy --from-literal=data="${data}"
       

@@ -1,0 +1,36 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster=$(get_cluster_name)
+      generation_before=$(kubectl -n "${NAMESPACE}" get sts "${cluster}-mysql" -o jsonpath='{.metadata.generation}')
+      uids_before=$(get_mysql_pod_uids "${cluster}")
+
+      kubectl -n "${NAMESPACE}" patch ps "${cluster}" \
+          --type merge \
+          -p '{"spec": {"mysql": {"configuration": "max_connections=400\ntable_open_cache=5000\n"}}}'
+
+      wait_for_mysql_variable "${cluster}" max_connections 400 120 || true
+      wait_for_mysql_variable "${cluster}" table_open_cache 5000 60 || true
+
+      # Let a few reconcile loops pass to be sure no restart is triggered late.
+      sleep 15
+
+      generation_after=$(kubectl -n "${NAMESPACE}" get sts "${cluster}-mysql" -o jsonpath='{.metadata.generation}')
+      uids_after=$(get_mysql_pod_uids "${cluster}")
+
+      restarted="false"
+      [[ ${uids_before} == "${uids_after}" ]] || restarted="true"
+      [[ ${generation_before} == "${generation_after}" ]] || restarted="true"
+
+      kubectl -n "${NAMESPACE}" create configmap 08-change-dynamic-config \
+          --from-literal=restarted="${restarted}" \
+          --from-literal=max_connections="$(get_mysql_variable_on_pods "${cluster}" max_connections)" \
+          --from-literal=table_open_cache="$(get_mysql_variable_on_pods "${cluster}" table_open_cache)" \
+          --from-literal=generation="${generation_before} ${generation_after}"
+    timeout: 420

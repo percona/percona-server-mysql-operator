@@ -70,7 +70,7 @@ func autoscalingCR(t *testing.T) *apiv1.PerconaServerMySQL {
 					Enabled:                 true,
 					TriggerThresholdPercent: 80,
 					GrowthStep:              resource.MustParse("2Gi"),
-					MaxSize:                 resource.MustParse("10Gi"),
+					MaxSize:                 new(resource.MustParse("10Gi")),
 				},
 			},
 		},
@@ -257,7 +257,7 @@ func TestShouldTriggerResize(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			cr := autoscalingCR(t)
 			if tt.maxSize != "" {
-				cr.Spec.StorageScaling.Autoscaling.MaxSize = resource.MustParse(tt.maxSize)
+				cr.Spec.StorageScaling.Autoscaling.MaxSize = new(resource.MustParse(tt.maxSize))
 			}
 
 			pvc := autoscalingPVC(cr, "0", tt.capacity)
@@ -302,7 +302,7 @@ func TestCalculateNewSize(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			cr := autoscalingCR(t)
 			cr.Spec.StorageScaling.Autoscaling.GrowthStep = resource.MustParse(tt.growthStep)
-			cr.Spec.StorageScaling.Autoscaling.MaxSize = resource.MustParse(tt.maxSize)
+			cr.Spec.StorageScaling.Autoscaling.MaxSize = new(resource.MustParse(tt.maxSize))
 
 			pvc := autoscalingPVC(cr, "0", tt.capacity)
 

@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.18.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   name: perconaservermysqls.ps.percona.com
 spec:
   group: ps.percona.com
@@ -1043,6 +1043,16 @@ spec:
                             type: object
                           initImage:
                             type: string
+                          keyringSecret:
+                            properties:
+                              key:
+                                default: keyring.json
+                                type: string
+                              name:
+                                type: string
+                            required:
+                            - name
+                            type: object
                           labels:
                             additionalProperties:
                               type: string
@@ -1448,6 +1458,18 @@ spec:
                             type: object
                           storage:
                             properties:
+                              encryption:
+                                properties:
+                                  cipher:
+                                    default: AES-256-CTR
+                                    enum:
+                                    - AES-128-CTR
+                                    - AES-192-CTR
+                                    - AES-256-CTR
+                                    type: string
+                                  kekId:
+                                    type: string
+                                type: object
                               s3:
                                 properties:
                                   bucket:
@@ -1546,6 +1568,9 @@ spec:
                         x-kubernetes-validations:
                         - message: binlogServer size cannot be more than 1
                           rule: '!has(self.size) || self.size <= 1'
+                        - message: binlogServer.keyringSecret is required when binlogServer.storage.encryption
+                            is set
+                          rule: '!self.?storage.?encryption.hasValue() || has(self.keyringSecret)'
                       enabled:
                         type: boolean
                     type: object
@@ -7106,6 +7131,8 @@ spec:
                     type: string
                   enabled:
                     type: boolean
+                  haproxyParams:
+                    type: string
                   image:
                     type: string
                   imagePullPolicy:
@@ -10448,22 +10475,58 @@ spec:
                   versionServiceEndpoint:
                     type: string
                 type: object
+              users:
+                items:
+                  properties:
+                    dbs:
+                      items:
+                        pattern: ^[^`'\\]*$
+                        type: string
+                      type: array
+                    grants:
+                      items:
+                        type: string
+                      type: array
+                    hosts:
+                      items:
+                        pattern: ^[^`'\\]*$
+                        type: string
+                      type: array
+                    name:
+                      pattern: ^[^`'\\]*$
+                      type: string
+                    passwordSecretRef:
+                      properties:
+                        key:
+                          default: password
+                          type: string
+                        name:
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    withGrantOption:
+                      type: boolean
+                  required:
+                  - name
+                  type: object
+                type: array
             type: object
             x-kubernetes-validations:
             - message: 'Invalid configuration: When ''mysql.clusterType'' is set to
                 ''async'', ''orchestrator.enabled'' must be true unless ''unsafeFlags.orchestrator''
                 is enabled'
               rule: '!(self.mysql.clusterType == ''async'') || self.unsafeFlags.orchestrator
-                || self.orchestrator.enabled'
+                || (has(self.orchestrator) && self.orchestrator.enabled)'
             - message: 'Invalid configuration: When ''mysql.clusterType'' is set to
                 ''async'', ''proxy.haproxy.enabled'' must be true unless ''unsafeFlags.proxy''
                 is enabled'
               rule: '!(self.mysql.clusterType == ''async'') || self.unsafeFlags.proxy
-                || self.proxy.haproxy.enabled'
+                || (has(self.proxy) && has(self.proxy.haproxy) && self.proxy.haproxy.enabled)'
             - message: 'Invalid configuration: When ''mysql.clusterType'' is set to
                 ''async'', ''proxy.router.enabled'' must be disabled'
-              rule: '!(self.mysql.clusterType == ''async'') || self.proxy.router ==
-                null || !has(self.proxy.router.enabled) || !self.proxy.router.enabled'
+              rule: '!(self.mysql.clusterType == ''async'') || !has(self.proxy) ||
+                !has(self.proxy.router) || !has(self.proxy.router.enabled) || !self.proxy.router.enabled'
             - message: 'Invalid configuration: Scaling MySQL replicas below 3 requires
                 ''unsafeFlags.mysqlSize: true'''
               rule: '!(has(self.mysql.size) && self.mysql.size < 3) || self.unsafeFlags.mysqlSize'
@@ -10478,11 +10541,13 @@ spec:
             - message: 'Invalid configuration: For ''group replication'', MySQL Router
                 or HAProxy must be enabled unless ''unsafeFlags.proxy'' is enabled'
               rule: '!(self.mysql.clusterType == ''group-replication'') || self.unsafeFlags.proxy
-                || self.proxy.router.enabled || self.proxy.haproxy.enabled'
+                || (has(self.proxy) && ((has(self.proxy.router) && self.proxy.router.enabled)
+                || (has(self.proxy.haproxy) && self.proxy.haproxy.enabled)))'
             - message: 'Invalid configuration: For ''group replication'', Router size
                 must be 2 or greater unless ''unsafeFlags.proxySize'' is enabled'
-              rule: '!(self.mysql.clusterType == ''group-replication'' && self.proxy.router.enabled
-                && has(self.proxy.router.size) && self.proxy.router.size < 2) || self.unsafeFlags.proxySize'
+              rule: self.unsafeFlags.proxySize || !(self.mysql.clusterType == 'group-replication'
+                && has(self.proxy) && has(self.proxy.router) && self.proxy.router.enabled
+                && has(self.proxy.router.size) && self.proxy.router.size < 2)
             - message: 'Invalid configuration: For ''group replication'', MySQL size
                 must be 3 or greater unless ''unsafeFlags.mysqlSize'' is enabled'
               rule: '!(self.mysql.clusterType == ''group-replication'' && has(self.mysql.size)
@@ -10490,17 +10555,18 @@ spec:
             - message: 'Invalid configuration: For ''async'' replication, Orchestrator
                 size must be 3 or greater and odd unless ''unsafeFlags.orchestratorSize''
                 is enabled'
-              rule: '!(self.mysql.clusterType == ''async'' && has(self.orchestrator.size)
+              rule: self.unsafeFlags.orchestratorSize || !(self.mysql.clusterType
+                == 'async' && has(self.orchestrator) && has(self.orchestrator.size)
                 && (self.orchestrator.size < 3 || self.orchestrator.size % 2 == 0)
-                && self.orchestrator.size > 0) || self.unsafeFlags.orchestratorSize'
+                && self.orchestrator.size > 0)
             - message: 'Invalid configuration: For ''async'' replication, SmartUpdate
                 requires Orchestrator to be enabled'
               rule: '!(self.mysql.clusterType == ''async'' && self.updateStrategy
-                == ''SmartUpdate'') || self.orchestrator.enabled'
+                == ''SmartUpdate'') || (has(self.orchestrator) && self.orchestrator.enabled)'
             - message: 'Invalid configuration: MySQL Router and HAProxy can''t be
                 enabled at the same time'
-              rule: '!(self.proxy.router != null && has(self.proxy.router.enabled)
-                && self.proxy.router.enabled && self.proxy.haproxy != null && has(self.proxy.haproxy.enabled)
+              rule: '!has(self.proxy) || !(has(self.proxy.router) && has(self.proxy.router.enabled)
+                && self.proxy.router.enabled && has(self.proxy.haproxy) && has(self.proxy.haproxy.enabled)
                 && self.proxy.haproxy.enabled)'
           status:
             properties:

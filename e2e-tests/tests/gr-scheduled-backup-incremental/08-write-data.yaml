@@ -1,0 +1,21 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - timeout: 120
+    script: |-
+      set -o errexit
+      set -o xtrace
+      set -o pipefail
+
+      source ../../functions
+
+      cluster_name=$(get_cluster_name)
+      yq eval "
+        .metadata.name = \"sysbench-data-second\" |
+        (.spec.template.spec.containers[].env[] | select(.name == \"MYSQL_HOST\")).value = \"${cluster_name}-router\" |
+        (.spec.template.spec.containers[].env[] | select(.name == \"MYSQL_PASSWORD\")).valueFrom.secretKeyRef.name = \"${cluster_name}-secrets\" |
+        (.spec.template.spec.containers[].env[] | select(.name == \"MYSQL_DB\")).value = \"myDB2\" |
+        (.spec.template.spec.containers[].env[] | select(.name == \"TABLE_NUMBER\")).value = \"1\" |
+        (.spec.template.spec.containers[].env[] | select(.name == \"TABLE_SIZE\")).value = \"40000\" |
+        .
+      " ../../conf/sysbench-oltp-write.yaml | kubectl apply -n "${NAMESPACE}" -f -

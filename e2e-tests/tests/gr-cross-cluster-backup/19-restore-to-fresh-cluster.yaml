@@ -1,0 +1,15 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      backup_name="replica-backup"
+      restore_name="restore-fresh"
+      cluster_name="gr-cross-cluster-backup-fresh"
+      destination=$(kubectl -n "${NAMESPACE}" get ps-backup "${backup_name}" -o jsonpath='{.status.destination}')
+
+      run_restore "${restore_name}" "" "${cluster_name}" "backup-source" "${destination}"

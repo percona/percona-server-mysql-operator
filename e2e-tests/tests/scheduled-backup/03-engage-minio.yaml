@@ -7,5 +7,5 @@ spec:
     schedule:
     - keep: 3
       name: minio
-      schedule: '*/2 * * * *'
+      schedule: '*/3 * * * *'
       storageName: minio

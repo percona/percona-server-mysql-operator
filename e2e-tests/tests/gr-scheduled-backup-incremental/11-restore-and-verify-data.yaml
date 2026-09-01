@@ -1,0 +1,64 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - timeout: 1200
+    script: |-
+      set -o errexit
+      set -o xtrace
+      set -o pipefail
+
+      source ../../functions
+
+      cluster_name=$(get_cluster_name)
+      run_restore_from_configmap() {
+        local backup_configmap=$1
+        local restore_name=$2
+
+        local backup_name
+        backup_name=$(kubectl get configmap "${backup_configmap}" -n "${NAMESPACE}" -o jsonpath='{.data.backupName}')
+
+        if [[ -z "${backup_name}" ]]; then
+          echo "No backup name found in configmap ${backup_configmap}"
+          exit 1
+        fi
+
+        run_mysql "DROP DATABASE IF EXISTS myDB; DROP DATABASE IF EXISTS myDB2" "-h $(get_router_service "${cluster_name}")"
+
+        run_restore "${restore_name}" "${backup_name}" "${cluster_name}"
+        wait_for_restore "${restore_name}" "${backup_name}"
+        wait_cluster_consistency_gr "${cluster_name}" 3 3
+      }
+
+      verify_data_configmaps() {
+        local restore_name=$1
+        shift
+
+        while [[ $# -gt 0 ]]; do
+          local expected_data_configmap=$1
+          local query_file=$2
+          local restored_data_configmap=$3
+          shift 3
+
+          local expected_data data restored_data
+          expected_data=$(kubectl get configmap "${expected_data_configmap}" -n "${NAMESPACE}" -o json | jq -c '.data')
+
+          data=$(retry_run_mysql_query_file "${query_file}" "-h $(get_router_service "${cluster_name}")")
+          kubectl create configmap -n "${NAMESPACE}" "${restored_data_configmap}" --from-literal=data="${data}" --dry-run=client -o yaml \
+            | kubectl apply -n "${NAMESPACE}" -f -
+
+          restored_data=$(kubectl get configmap "${restored_data_configmap}" -n "${NAMESPACE}" -o json | jq -c '.data')
+          if [[ "${expected_data}" != "${restored_data}" ]]; then
+            echo "Data after restore ${restore_name} is different, check configmaps ${expected_data_configmap} and ${restored_data_configmap}"
+            exit 1
+          fi
+        done
+      }
+
+      run_restore_from_configmap "06-gr-scheduled-backup-incremental-backup" "gr-scheduled-backup-incremental-restore-1"
+      verify_data_configmaps "gr-scheduled-backup-incremental-restore-1" \
+        "02-gr-scheduled-backup-incremental-data" "conf/data-query-1.sql" "11-first-restored-data"
+
+      run_restore_from_configmap "08-gr-scheduled-backup-incremental-backup" "gr-scheduled-backup-incremental-restore-2"
+      verify_data_configmaps "gr-scheduled-backup-incremental-restore-2" \
+        "02-gr-scheduled-backup-incremental-data" "conf/data-query-1.sql" "11-second-restored-data" \
+        "08-gr-scheduled-backup-incremental-data" "conf/data-query-2.sql" "11-second-additional-restored-data"

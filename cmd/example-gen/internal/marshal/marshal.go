@@ -194,9 +194,9 @@ func parseJSONTag(tag string) (name string, opts map[string]bool) {
 	if tag == "" {
 		return "", opts
 	}
-	if i := strings.IndexByte(tag, ','); i >= 0 {
-		name = tag[:i]
-		for p := range strings.SplitSeq(tag[i+1:], ",") {
+	if before, after, ok := strings.Cut(tag, ","); ok {
+		name = before
+		for p := range strings.SplitSeq(after, ",") {
 			if p != "" {
 				opts[p] = true
 			}
