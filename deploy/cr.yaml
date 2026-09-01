@@ -120,10 +120,10 @@ spec:
     resources:
       limits:
         cpu: "2"
-        memory: 2Gi
+        memory: 4Gi
       requests:
         cpu: "1"
-        memory: 1Gi
+        memory: 2Gi
 #    startupProbe:
 #      failureThreshold: 1
 #      initialDelaySeconds: 15
@@ -207,7 +207,7 @@ spec:
 #          - ReadWriteOnce
         resources:
           requests:
-            storage: 4Gi
+            storage: 10Gi
 #        storageClassName: standard
 #    configuration: |-
 #      max_connections=250
@@ -1002,7 +1002,7 @@ spec:
 #              - ReadWriteOnce
 #            resources:
 #              requests:
-#                storage: 4Gi
+#                storage: 10Gi
 #            storageClassName: standard
 #    encryptionKeySecret:
 #      key: encryptionKey
