@@ -305,15 +305,6 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 			restartReplication = true
 		case apiv1.UserOrchestrator:
 			restartOrchestrator = true && cr.Spec.MySQL.IsAsync()
-		case apiv1.UserClusterSet:
-			// The clusterset user was introduced in 1.2.0 and the entrypoint
-			// creates users only on initial datadir initialization. On clusters
-			// upgraded from older versions the user doesn't exist in MySQL yet,
-			// making the ALTER USER below fail with ERROR 1396. Create it
-			// idempotently before updating passwords.
-			if err := um.CreateClusterSetUser(ctx, mysqlUser.Password, &cr.Status); err != nil {
-				return errors.Wrap(err, "create clusterset user")
-			}
 		}
 
 		log.V(1).Info("User password changed", "user", user)
