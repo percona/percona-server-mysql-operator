@@ -5,27 +5,27 @@
       "product": "ps-operator",
       "matrix": {
         "mysql": {
-          "8.4.6-6": {
-            "image_path": "percona/percona-server:8.4.6-6.1",
-            "image_hash": "dd0c67df12f5b13eac441dfa27b04a49ac449b6946adf100bc1ecebffd8074f4",
+          "8.4.10-10": {
+            "image_path": "percona/percona-server:8.4.10-10.1",
+            "image_hash": "01cf1439241e11c5d49312db1b18ee01a5947869c1a1dec18417d88ffaeb5717",
             "status": "recommended",
             "critical": false
           },
-          "8.4.5-5": {
-            "image_path": "percona/percona-server:8.4.5-5",
-            "image_hash": "61a6811372d919316640990922188005f92d58639a2472865d59e56b2a6050a1",
+          "8.4.8-8": {
+            "image_path": "percona/percona-server:8.4.8-8.1",
+            "image_hash": "eaa4cf955f8a01a43faa6ef656bf8fb69a17c17c278a3b0514212291ca0448b1",
             "status": "available",
             "critical": false
           },
-          "8.0.28-20": {
-            "image_path": "percona/percona-server:8.0.28-20",
-            "image_hash": "7f4fc6f0323dcafa4e0efbc3318906d453e432de86f152625024db3ac38ce833",
+          "8.0.46-37": {
+            "image_path": "percona/percona-server:8.0.46-37.1",
+            "image_hash": "a4ba7d1afd325f40bc6d65b6455fb4f15388638dfa39e3b85f9755755fd9ec2d",
             "status": "recommended",
             "critical": false
           },
-          "8.0.28-19": {
-            "image_path": "percona/percona-server:8.0.28-19",
-            "image_hash": "8fdb833bede344f46714a8d21fd832c37224c3637d9117f8ae369360dfa89566",
+          "8.0.45-36": {
+            "image_path": "percona/percona-server:8.0.45-36.1",
+            "image_hash": "478d50def87caa648797a8571a5f601c9ceebe4fd5128a67ffc0131d8e1c2af7",
             "status": "available",
             "critical": false
           }
