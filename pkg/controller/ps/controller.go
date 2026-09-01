@@ -1131,7 +1131,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 				return errors.Wrap(err, "calculate autoconfig parameters")
 			}
 			if err != nil {
-				log.Error(err, "failed to calculate autoconfig parameters")
+				log.Error(err, "failed to calculate autoconfig parameters, falling back to autotune")
 				params, err = autotune(err.Error())
 			}
 		}
