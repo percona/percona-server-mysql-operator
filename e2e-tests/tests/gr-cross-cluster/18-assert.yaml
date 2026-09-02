@@ -1,0 +1,41 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 600
+commands:
+  - script: |-
+      set -o errexit
+      set -o pipefail
+      set -o xtrace
+
+      source ../../functions
+      mysql_user="-uroot -p'$(get_user_pass root test-secrets)'"
+
+      # Wait for dc2 to come back and then check ClusterSet status.
+      # dc1's replication channel should be broken (not OK).
+      for attempt in $(seq 1 60); do
+          status=$(get_clusterset_status "-h gr-cross-cluster-dc2-mysql-primary" "${mysql_user}" 2>/dev/null || true)
+          if [ -n "${status}" ]; then
+              globalStatus=$(echo "${status}" | jq -r '.clusters.grcrossclusterdc1.globalStatus // empty')
+              if [ -n "${globalStatus}" ] && [ "${globalStatus}" != "OK" ]; then
+                  echo "dc1 globalStatus: ${globalStatus} (not OK as expected)"
+                  echo "${status}" | jq .
+                  exit 0
+              fi
+          fi
+          echo "Attempt ${attempt}: waiting for dc1 to show non-OK status (current: ${globalStatus:-unknown})..."
+          sleep 10
+      done
+
+      echo "ERROR: dc1 never became non-OK in ClusterSet"
+      exit 1
+    timeout: 600
+---
+kind: PerconaServerMySQL
+apiVersion: ps.percona.com/v1
+metadata:
+  name: gr-cross-cluster-dc2
+status:
+  state: ready
+  mysql:
+    ready: 3
+
