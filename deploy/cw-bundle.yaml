@@ -1505,56 +1505,7 @@ spec:
                 type: string
               backupSource:
                 properties:
-                  backupSource:
-                    type: string
-                  completed:
-                    format: date-time
-                    type: string
-                  compressed:
-                    type: boolean
-                  conditions:
-                    items:
-                      properties:
-                        lastTransitionTime:
-                          format: date-time
-                          type: string
-                        message:
-                          maxLength: 32768
-                          type: string
-                        observedGeneration:
-                          format: int64
-                          minimum: 0
-                          type: integer
-                        reason:
-                          maxLength: 1024
-                          minLength: 1
-                          pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
-                          type: string
-                        status:
-                          enum:
-                          - "True"
-                          - "False"
-                          - Unknown
-                          type: string
-                        type:
-                          maxLength: 316
-                          pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
-                          type: string
-                      required:
-                      - lastTransitionTime
-                      - message
-                      - reason
-                      - status
-                      - type
-                      type: object
-                    type: array
                   destination:
-                    type: string
-                  image:
-                    type: string
-                  state:
-                    type: string
-                  stateDescription:
                     type: string
                   storage:
                     properties:
@@ -2546,8 +2497,6 @@ spec:
                     required:
                     - type
                     type: object
-                  type:
-                    type: string
                 type: object
               clusterName:
                 type: string
@@ -14776,6 +14725,7 @@ rules:
   - configmaps
   - persistentvolumeclaims
   - secrets
+  - serviceaccounts
   - services
   verbs:
   - create
@@ -14794,17 +14744,6 @@ rules:
   - create
   - delete
   - deletecollection
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - serviceaccounts
-  verbs:
-  - create
   - get
   - list
   - patch
@@ -14880,6 +14819,7 @@ rules:
   - poddisruptionbudgets/finalizers
   verbs:
   - create
+  - delete
   - get
   - list
   - patch
@@ -14915,6 +14855,7 @@ rules:
   - roles
   verbs:
   - create
+  - delete
   - get
   - list
   - patch
