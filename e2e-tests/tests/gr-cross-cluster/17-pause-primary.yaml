@@ -1,6 +1,6 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
-timeout: 300
+timeout: 480
 commands:
   - script: |-
       set -o errexit
@@ -10,6 +10,8 @@ commands:
       # dc1 (replica) stays running but can't replicate from dc2.
       kubectl patch -n "${NAMESPACE}" ps gr-cross-cluster-dc2 --type=merge \
         -p '{"spec":{"pause":true}}'
+
+      kubectl wait -n "${NAMESPACE}" --for='jsonpath={.status.state}=paused' ps/gr-cross-cluster-dc2 --timeout=300s
 
       # Wait long enough for the replica's replication channel to exhaust retries
       # (Connect_Retry=3s × Source_Retry_Count=10 = 30s, plus buffer for pod shutdown)
