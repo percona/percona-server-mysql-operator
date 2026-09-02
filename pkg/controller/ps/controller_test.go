@@ -1795,7 +1795,10 @@ var _ = Describe("PVC Resizing", Ordered, func() {
 		})
 
 		When("volume expansion is requested", func() {
-			newSize := resource.MustParse("10Gi")
+			// derived from the default, so a change to it can't turn the resize
+			// into a no-op
+			newSize := originalSize.DeepCopy()
+			newSize.Add(resource.MustParse("5Gi"))
 
 			It("should update the CR with larger storage size", func() {
 				Eventually(func() bool {
