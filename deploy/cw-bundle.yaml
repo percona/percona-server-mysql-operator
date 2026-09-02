@@ -2501,8 +2501,6 @@ spec:
                     required:
                     - type
                     type: object
-                  type:
-                    type: string
                 type: object
               clusterName:
                 type: string
