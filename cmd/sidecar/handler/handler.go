@@ -21,6 +21,9 @@ import (
 	xb "github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
 )
 
+// compressExtensions lists file extensions produced by xtrabackup compression algorithms.
+var compressExtensions = []string{".zst", ".lz4"}
+
 func Backup() http.Handler {
 	return new(backup.Handler)
 }
@@ -60,13 +63,28 @@ func LogsHandlerFunc(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func GetCheckpointInfoFunc(w http.ResponseWriter, req *http.Request) {
+// infoFileCandidates returns a list of possible xbcloud file names to probe
+// for a given base file. The order is: plain, compressed (.zst, .lz4),
+// encrypted (.xbcrypt), and compressed+encrypted (.zst.xbcrypt, .lz4.xbcrypt).
+func infoFileCandidates(base string) []string {
+	candidates := []string{base}
+	for _, ext := range compressExtensions {
+		candidates = append(candidates, base+ext)
+	}
+	candidates = append(candidates, base+".xbcrypt")
+	for _, ext := range compressExtensions {
+		candidates = append(candidates, base+ext+".xbcrypt")
+	}
+	return candidates
+}
+
+func GetBackupInfoFunc(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodPost {
 		http.Error(w, "method not supported", http.StatusMethodNotAllowed)
 		return
 	}
 
-	log := logf.Log.WithName("GetCheckpointInfo")
+	log := logf.Log.WithName("GetBackupInfo")
 
 	defer logClose(log, req.Body)
 	data, err := io.ReadAll(req.Body)
@@ -83,17 +101,33 @@ func GetCheckpointInfoFunc(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	info, err := fetchCheckpointInfo(req.Context(), log, &backupConf)
+	info, err := fetchXbcloudFile(req.Context(), log, &backupConf, "xtrabackup_checkpoints")
 	if err != nil {
 		log.Error(err, "failed to get checkpoint info")
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
+	// Try to get backup size from xtrabackup_info.
+	// xtrabackup applies: compress → encrypt, so we reverse: decrypt → decompress.
+	// Probe all candidate file variants and return early on first success.
+	for _, candidate := range infoFileCandidates("xtrabackup_info") {
+		backupInfo, err := fetchXbcloudFile(req.Context(), log, &backupConf, candidate)
+		if err != nil {
+			log.Info("failed to get backup info", "file", candidate, "error", err)
+			continue
+		}
+		if backupInfo.BackupSize > 0 {
+			info.BackupSize = backupInfo.BackupSize
+			info.UncompressedBackupSize = backupInfo.UncompressedBackupSize
+			break
+		}
+	}
+
 	infoB, err := json.Marshal(info)
 	if err != nil {
-		log.Error(err, "failed to marshal checkpoint info")
-		http.Error(w, "failed to marshal checkpoint info", http.StatusInternalServerError)
+		log.Error(err, "failed to marshal backup info")
+		http.Error(w, "failed to marshal backup info", http.StatusInternalServerError)
 		return
 	}
 
@@ -109,43 +143,96 @@ func logClose(log logr.Logger, closer io.Closer) {
 	}
 }
 
-func fetchCheckpointInfo(
+// fetchXbcloudFile downloads a file from cloud storage via xbcloud, pipes it
+// through xbstream (with --decompress and optional --decrypt flags) to handle
+// any compression or encryption, then parses the resulting plain text.
+func fetchXbcloudFile(
 	ctx context.Context,
 	log logr.Logger,
-	conf *xb.BackupConfig) (xb.CheckpointInfo, error) {
-	xbcloud := exec.CommandContext(ctx, "xbcloud", conf.XbcloudGetArgs("xtrabackup_checkpoints")...)
-
-	xbOut, err := xbcloud.StdoutPipe()
-	if err != nil {
-		return xb.CheckpointInfo{}, fmt.Errorf("failed to create stdout pipe: %w", err)
+	conf *xb.BackupConfig,
+	file string,
+) (xb.BackupInfo, error) {
+	originalFile := file
+	for _, ext := range append([]string{".xbcrypt"}, compressExtensions...) {
+		originalFile = strings.TrimSuffix(originalFile, ext)
 	}
-	defer logClose(log, xbOut)
 
-	xbErr, err := xbcloud.StderrPipe()
+	tmpDir, err := os.MkdirTemp("", "xb-fetch-*")
 	if err != nil {
-		return xb.CheckpointInfo{}, fmt.Errorf("failed to create stderr pipe: %w", err)
+		return xb.BackupInfo{}, fmt.Errorf("failed to create temp dir: %w", err)
 	}
-	defer logClose(log, xbErr)
+	defer os.RemoveAll(tmpDir) //nolint:errcheck
+
+	xbcloud := exec.CommandContext(ctx, "xbcloud", conf.XbcloudGetArgs(file)...)
+
+	streamArgs := []string{"-x", "--decompress"}
+	streamArgs = append(streamArgs, encryptionXbstreamArgs(conf)...)
+	streamArgs = append(streamArgs, "-C", tmpDir)
+	xbstream := exec.CommandContext(ctx, "xbstream", streamArgs...)
+
+	xbcloudOut, err := xbcloud.StdoutPipe()
+	if err != nil {
+		return xb.BackupInfo{}, fmt.Errorf("failed to create xbcloud stdout pipe: %w", err)
+	}
+	defer logClose(log, xbcloudOut)
+
+	xbcloudErr, err := xbcloud.StderrPipe()
+	if err != nil {
+		return xb.BackupInfo{}, fmt.Errorf("failed to create xbcloud stderr pipe: %w", err)
+	}
+	defer logClose(log, xbcloudErr)
+
+	xbstream.Stdin = xbcloudOut
 
 	if err := xbcloud.Start(); err != nil {
-		return xb.CheckpointInfo{}, fmt.Errorf("failed to start xbcloud: %w", err)
+		return xb.BackupInfo{}, fmt.Errorf("failed to start xbcloud: %w", err)
+	}
+
+	if err := xbstream.Start(); err != nil {
+		return xb.BackupInfo{}, fmt.Errorf("failed to start xbstream: %w", err)
 	}
 
 	var wg sync.WaitGroup
 	wg.Go(func() {
-		io.Copy(os.Stderr, xbErr) //nolint:errcheck
+		io.Copy(os.Stderr, xbcloudErr) //nolint:errcheck
 	})
 
-	var info xb.CheckpointInfo
-	if err := info.ParseFrom(xbOut); err != nil {
-		return xb.CheckpointInfo{}, fmt.Errorf("failed to read checkpoint info: %w", err)
+	if err := xbstream.Wait(); err != nil {
+		wg.Wait()
+		return xb.BackupInfo{}, fmt.Errorf("xbstream command failed: %w", err)
 	}
-
 	wg.Wait()
 
 	if err := xbcloud.Wait(); err != nil {
-		return xb.CheckpointInfo{}, fmt.Errorf("xbcloud command failed: %w", err)
+		return xb.BackupInfo{}, fmt.Errorf("xbcloud command failed: %w", err)
+	}
+
+	f, err := os.Open(filepath.Join(tmpDir, originalFile))
+	if err != nil {
+		return xb.BackupInfo{}, fmt.Errorf("failed to open extracted file: %w", err)
+	}
+	defer logClose(log, f)
+
+	var info xb.BackupInfo
+	if err := info.ParseFrom(f); err != nil {
+		return xb.BackupInfo{}, fmt.Errorf("failed to parse extracted file: %w", err)
 	}
 
 	return info, nil
+}
+
+func encryptionXbstreamArgs(conf *xb.BackupConfig) []string {
+	if conf.EncryptionKeyFile == "" {
+		return nil
+	}
+	algorithm := "AES256"
+	if conf.ContainerOptions != nil {
+		if v := conf.ContainerOptions.GetArgs().GetXtrabackupFlagValue("--encrypt"); v != "" {
+			algorithm = v
+		}
+	}
+	return []string{
+		fmt.Sprintf("--decrypt=%s", algorithm),
+		fmt.Sprintf("--encrypt-key-file=%s", conf.EncryptionKeyFile),
+	}
 }

@@ -12,6 +12,9 @@ XBCLOUD_ARGS="--curl-retriable-errors=7 --parallel=${PARALLEL} ${XBCLOUD_EXTRA_A
 if [ -n "$VERIFY_TLS" ] && [[ $VERIFY_TLS == "false" ]]; then
 	XBCLOUD_ARGS="${XBCLOUD_ARGS} --insecure"
 fi
+if [[ -n "${SSL_CERT_FILE:-}" ]]; then
+	XBCLOUD_ARGS="${XBCLOUD_ARGS} --cacert=${SSL_CERT_FILE}"
+fi
 
 download() {
 	local dest=$1
