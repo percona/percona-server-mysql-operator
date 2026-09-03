@@ -75,6 +75,7 @@ func TestConfigMapDataUserConfiguration(t *testing.T) {
 		cr := &apiv1.PerconaServerMySQL{}
 		cr.Spec.CRVersion = "1.2.0"
 		cr.Spec.Orchestrator.Configuration = `{
+			"PreFailoverProcesses": ["echo pwned"],
 			"PostFailoverProcesses": ["echo pwned"],
 			"PostMasterFailoverProcesses": ["echo pwned"],
 			"PostIntermediateMasterFailoverProcesses": ["echo pwned"],
@@ -102,7 +103,7 @@ func TestConfigMapDataUserConfiguration(t *testing.T) {
 		// write them to the ConfigMap, so a reserved user value is simply dropped
 		// and the baked default keeps winning at entrypoint merge time.
 		for _, k := range []string{
-			"PostFailoverProcesses", "PostMasterFailoverProcesses",
+			"PreFailoverProcesses", "PostFailoverProcesses", "PostMasterFailoverProcesses",
 			"PostIntermediateMasterFailoverProcesses", "PostGracefulTakeoverProcesses",
 			"DetectClusterAliasQuery", "DetectInstanceAliasQuery",
 			"ListenAddress", "MySQLTopologyCredentialsConfigFile",
