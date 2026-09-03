@@ -221,6 +221,8 @@ spec:
                 type: string
               image:
                 type: string
+              size:
+                type: string
               state:
                 type: string
               stateDescription:
@@ -1226,6 +1228,8 @@ spec:
                 - type
                 type: object
               type:
+                type: string
+              uncompressedSize:
                 type: string
             type: object
         type: object

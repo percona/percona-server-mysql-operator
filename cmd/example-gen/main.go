@@ -204,7 +204,7 @@ func printRestore() error {
 					Key:  "keyring.json",
 				},
 			},
-			BackupSource: &apiv1.PerconaServerMySQLBackupStatus{
+			BackupSource: &apiv1.RestoreBackupSource{
 				Destination: "s3://S3-BACKUP-BUCKET-NAME-HERE/backup-path",
 				Storage: &apiv1.BackupStorageSpec{
 					Type: apiv1.BackupStorageS3,

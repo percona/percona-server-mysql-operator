@@ -73,7 +73,7 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 			name: "with empty destination in backup source",
 			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQLRestore) {
 				cr.Spec.BackupName = ""
-				cr.Spec.BackupSource = &apiv1.PerconaServerMySQLBackupStatus{
+				cr.Spec.BackupSource = &apiv1.RestoreBackupSource{
 					Storage: &apiv1.BackupStorageSpec{},
 				}
 			}),
@@ -90,7 +90,7 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 			name: "with empty storage in backup source",
 			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQLRestore) {
 				cr.Spec.BackupName = ""
-				cr.Spec.BackupSource = &apiv1.PerconaServerMySQLBackupStatus{
+				cr.Spec.BackupSource = &apiv1.RestoreBackupSource{
 					Destination: "some-destination",
 				}
 			}),
@@ -899,7 +899,7 @@ func TestRestorerValidate(t *testing.T) {
 			cr: updateResource(
 				cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQLRestore) {
 					cr.Spec.BackupName = ""
-					cr.Spec.BackupSource = &apiv1.PerconaServerMySQLBackupStatus{
+					cr.Spec.BackupSource = &apiv1.RestoreBackupSource{
 						Destination: s3Bcp.Status.Destination,
 						Storage: &apiv1.BackupStorageSpec{
 							S3:   s3Bcp.Status.Storage.S3,
@@ -961,7 +961,7 @@ func TestRestorerValidate(t *testing.T) {
 			cr: updateResource(
 				cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQLRestore) {
 					cr.Spec.BackupName = ""
-					cr.Spec.BackupSource = &apiv1.PerconaServerMySQLBackupStatus{
+					cr.Spec.BackupSource = &apiv1.RestoreBackupSource{
 						Destination: gcsBcp.Status.Destination,
 						Storage: &apiv1.BackupStorageSpec{
 							GCS:  gcsBcp.Status.Storage.GCS,
@@ -1023,7 +1023,7 @@ func TestRestorerValidate(t *testing.T) {
 			cr: updateResource(
 				cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQLRestore) {
 					cr.Spec.BackupName = ""
-					cr.Spec.BackupSource = &apiv1.PerconaServerMySQLBackupStatus{
+					cr.Spec.BackupSource = &apiv1.RestoreBackupSource{
 						Destination: azureBcp.Status.Destination,
 						Storage: &apiv1.BackupStorageSpec{
 							Azure: azureBcp.Status.Storage.Azure,

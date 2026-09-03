@@ -830,7 +830,7 @@ func TestGetDestination(t *testing.T) {
 	}
 }
 
-func TestCheckpointInfoParseFrom(t *testing.T) {
+func TestBackupInfoParseFrom(t *testing.T) {
 	t.Run("full checkpoint file", func(t *testing.T) {
 		input := `backup_type = full-backuped
 from_lsn = 0
@@ -839,8 +839,9 @@ last_lsn = 18446744073709551615
 flushed_lsn = 18446744073709551615
 redo_memory = 0
 redo_frames = 0
+backup_size = 78771
 `
-		var info CheckpointInfo
+		var info BackupInfo
 		err := info.ParseFrom(strings.NewReader(input))
 		require.NoError(t, err)
 
@@ -851,6 +852,7 @@ redo_frames = 0
 		assert.Equal(t, "18446744073709551615", info.FlushedLSN)
 		assert.Equal(t, "0", info.RedoMemory)
 		assert.Equal(t, "0", info.RedoFrames)
+		assert.Equal(t, int64(78771), info.BackupSize)
 	})
 
 	t.Run("incremental checkpoint file", func(t *testing.T) {
@@ -862,7 +864,7 @@ flushed_lsn = 27660855
 redo_memory = 0
 redo_frames = 0
 `
-		var info CheckpointInfo
+		var info BackupInfo
 		err := info.ParseFrom(strings.NewReader(input))
 		require.NoError(t, err)
 
@@ -876,7 +878,7 @@ redo_frames = 0
 	t.Run("extra whitespace", func(t *testing.T) {
 		input := "  backup_type  =  full-prepared  \n  from_lsn  =  100  \n"
 
-		var info CheckpointInfo
+		var info BackupInfo
 		err := info.ParseFrom(strings.NewReader(input))
 		require.NoError(t, err)
 
@@ -887,7 +889,7 @@ redo_frames = 0
 	t.Run("lines without equals are skipped", func(t *testing.T) {
 		input := "this line has no separator\nbackup_type = full-backuped\nmalformed line\n"
 
-		var info CheckpointInfo
+		var info BackupInfo
 		err := info.ParseFrom(strings.NewReader(input))
 		require.NoError(t, err)
 
@@ -895,17 +897,17 @@ redo_frames = 0
 	})
 
 	t.Run("empty input", func(t *testing.T) {
-		var info CheckpointInfo
+		var info BackupInfo
 		err := info.ParseFrom(strings.NewReader(""))
 		require.NoError(t, err)
 
-		assert.Equal(t, CheckpointInfo{}, info)
+		assert.Equal(t, BackupInfo{}, info)
 	})
 
 	t.Run("partial fields", func(t *testing.T) {
 		input := "to_lsn = 999\nredo_frames = 42\n"
 
-		var info CheckpointInfo
+		var info BackupInfo
 		err := info.ParseFrom(strings.NewReader(input))
 		require.NoError(t, err)
 
@@ -914,5 +916,49 @@ redo_frames = 0
 		assert.Equal(t, "999", info.ToLSN)
 		assert.Equal(t, "", info.LastLSN)
 		assert.Equal(t, "42", info.RedoFrames)
+		assert.Equal(t, int64(0), info.BackupSize)
+	})
+
+	t.Run("backup_size large value", func(t *testing.T) {
+		input := "backup_type = full-backuped\nbackup_size = 5368709120\n"
+
+		var info BackupInfo
+		err := info.ParseFrom(strings.NewReader(input))
+		require.NoError(t, err)
+
+		assert.Equal(t, int64(5368709120), info.BackupSize)
+	})
+
+	t.Run("backup_size invalid value ignored", func(t *testing.T) {
+		input := "backup_size = not-a-number\nbackup_type = full-backuped\n"
+
+		var info BackupInfo
+		err := info.ParseFrom(strings.NewReader(input))
+		require.NoError(t, err)
+
+		assert.Equal(t, int64(0), info.BackupSize)
+		assert.Equal(t, "full-backuped", info.BackupType)
+	})
+
+	t.Run("uncompressed_backup_size parsed", func(t *testing.T) {
+		input := "backup_size = 50000\nuncompressed_backup_size = 200000\n"
+
+		var info BackupInfo
+		err := info.ParseFrom(strings.NewReader(input))
+		require.NoError(t, err)
+
+		assert.Equal(t, int64(50000), info.BackupSize)
+		assert.Equal(t, int64(200000), info.UncompressedBackupSize)
+	})
+
+	t.Run("uncompressed_backup_size absent defaults to zero", func(t *testing.T) {
+		input := "backup_size = 78771\n"
+
+		var info BackupInfo
+		err := info.ParseFrom(strings.NewReader(input))
+		require.NoError(t, err)
+
+		assert.Equal(t, int64(78771), info.BackupSize)
+		assert.Equal(t, int64(0), info.UncompressedBackupSize)
 	})
 }
