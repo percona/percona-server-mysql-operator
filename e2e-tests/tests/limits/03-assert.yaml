@@ -257,7 +257,7 @@ spec:
       - ReadWriteOnce
       resources:
         requests:
-          storage: 2Gi
+          storage: 10Gi
       volumeMode: Filesystem
     status:
       phase: Pending

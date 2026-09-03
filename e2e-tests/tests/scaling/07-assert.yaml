@@ -33,13 +33,13 @@ spec:
   - ReadWriteOnce
   resources:
     requests:
-      storage: 2Gi
+      storage: 10Gi
   volumeMode: Filesystem
 status:
   accessModes:
   - ReadWriteOnce
   capacity:
-    storage: 2Gi
+    storage: 10Gi
   phase: Bound
 ---
 apiVersion: v1
@@ -62,11 +62,11 @@ spec:
   - ReadWriteOnce
   resources:
     requests:
-      storage: 2Gi
+      storage: 10Gi
   volumeMode: Filesystem
 status:
   accessModes:
   - ReadWriteOnce
   capacity:
-    storage: 2Gi
+    storage: 10Gi
   phase: Bound
