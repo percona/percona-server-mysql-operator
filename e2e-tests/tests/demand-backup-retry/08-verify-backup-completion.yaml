@@ -1,12 +1,25 @@
 apiVersion: kuttl.dev/v1beta1
-kind: TestStep
-commands:
-  - timeout: 500
-    script: |-
-      set -o errexit
-      set -o xtrace
-
-      source ../../functions
-
-      kubectl wait -n ${NAMESPACE} --for=jsonpath='{.status.state}'=Succeeded \
-        perconaservermysqlbackups.ps.percona.com/demand-backup-retry --timeout=500s
+kind: TestAssert
+timeout: 600
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQLBackup
+metadata:
+  name: demand-backup-retry-deadline
+status:
+  state: Error
+  stateDescription: backup did not start before startingDeadlineSeconds expired
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQLBackup
+metadata:
+  name: demand-backup-retry
+status:
+  state: Succeeded
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: demand-backup-retry
+status:
+  state: ready

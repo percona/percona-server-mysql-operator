@@ -431,6 +431,7 @@ type EncryptionKeySecretSelector struct {
 }
 
 type BackupSpec struct {
+	AllowParallel            *bool                         `json:"allowParallel,omitempty"`
 	Enabled                  bool                          `json:"enabled,omitempty"`
 	SourcePod                string                        `json:"sourcePod,omitempty"`
 	Image                    string                        `json:"image,omitempty"`
@@ -441,8 +442,12 @@ type BackupSpec struct {
 	Resources                corev1.ResourceRequirements   `json:"resources,omitempty"`
 	Storages                 map[string]*BackupStorageSpec `json:"storages,omitempty"`
 	BackoffLimit             *int32                        `json:"backoffLimit,omitempty"`
-	PiTR                     PiTRSpec                      `json:"pitr,omitempty"`
-	Schedule                 []BackupSchedule              `json:"schedule,omitempty"`
+	// +kubebuilder:validation:Minimum=0
+	StartingDeadlineSeconds *int64 `json:"startingDeadlineSeconds,omitempty"`
+	// +kubebuilder:validation:Minimum=0
+	SuspendedDeadlineSeconds *int64           `json:"suspendedDeadlineSeconds,omitempty"`
+	PiTR                     PiTRSpec         `json:"pitr,omitempty"`
+	Schedule                 []BackupSchedule `json:"schedule,omitempty"`
 
 	// Deprecated: not supported since v0.12.0. Use initContainer instead
 	InitImage     string             `json:"initImage,omitempty"`
@@ -450,6 +455,13 @@ type BackupSpec struct {
 
 	// EncryptionKeySecret is the secret key selector for the backup encryption key.
 	EncryptionKeySecret *EncryptionKeySecretSelector `json:"encryptionKeySecret,omitempty"`
+}
+
+func (s *BackupSpec) GetAllowParallel() bool {
+	if s.AllowParallel == nil {
+		return false
+	}
+	return *s.AllowParallel
 }
 
 func (s *BackupSpec) GetEncryptionEnabled(storage *BackupStorageSpec) bool {

@@ -2,11 +2,140 @@ package v1
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+func TestPerconaServerMySQLBackup_IsStartingDeadlineExceeded(t *testing.T) {
+	now := time.Now()
+	tests := map[string]struct {
+		state           BackupState
+		clusterDeadline *int64
+		backupDeadline  *int64
+		expected        bool
+	}{
+		"deadline is not configured": {
+			expected: false,
+		},
+		"cluster deadline is exceeded": {
+			clusterDeadline: new(int64(30)),
+			expected:        true,
+		},
+		"backup deadline is not exceeded": {
+			clusterDeadline: new(int64(30)),
+			backupDeadline:  new(int64(120)),
+			expected:        false,
+		},
+		"backup deadline overrides cluster deadline": {
+			clusterDeadline: new(int64(120)),
+			backupDeadline:  new(int64(30)),
+			expected:        true,
+		},
+		"starting backup deadline is exceeded": {
+			state:           BackupStarting,
+			clusterDeadline: new(int64(30)),
+			expected:        true,
+		},
+		"running backup ignores deadline": {
+			state:           BackupRunning,
+			clusterDeadline: new(int64(30)),
+			expected:        false,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			backup := &PerconaServerMySQLBackup{
+				ObjectMeta: metav1.ObjectMeta{CreationTimestamp: metav1.NewTime(now.Add(-time.Minute))},
+				Spec:       PerconaServerMySQLBackupSpec{StartingDeadlineSeconds: tt.backupDeadline},
+				Status:     PerconaServerMySQLBackupStatus{State: tt.state},
+			}
+			cluster := &PerconaServerMySQL{Spec: PerconaServerMySQLSpec{
+				Backup: &BackupSpec{StartingDeadlineSeconds: tt.clusterDeadline},
+			}}
+
+			assert.Equal(t, tt.expected, backup.IsStartingDeadlineExceeded(cluster, now))
+		})
+	}
+}
+
+func TestPerconaServerMySQLBackup_IsSuspendedDeadlineExceeded(t *testing.T) {
+	now := time.Now()
+	tests := map[string]struct {
+		clusterDeadline *int64
+		backupDeadline  *int64
+		suspend         *bool
+		withCondition   bool
+		expected        bool
+	}{
+		"deadline is not configured": {
+			suspend:       new(true),
+			withCondition: true,
+			expected:      false,
+		},
+		"cluster deadline is exceeded": {
+			clusterDeadline: new(int64(30)),
+			suspend:         new(true),
+			withCondition:   true,
+			expected:        true,
+		},
+		"backup deadline is not exceeded": {
+			clusterDeadline: new(int64(30)),
+			backupDeadline:  new(int64(120)),
+			suspend:         new(true),
+			withCondition:   true,
+			expected:        false,
+		},
+		"backup deadline overrides cluster deadline": {
+			clusterDeadline: new(int64(120)),
+			backupDeadline:  new(int64(30)),
+			suspend:         new(true),
+			withCondition:   true,
+			expected:        true,
+		},
+		"resumed job ignores stale suspended condition": {
+			clusterDeadline: new(int64(30)),
+			suspend:         new(false),
+			withCondition:   true,
+			expected:        false,
+		},
+		"job without suspend setting": {
+			clusterDeadline: new(int64(30)),
+			withCondition:   true,
+			expected:        false,
+		},
+		"job without suspended condition": {
+			clusterDeadline: new(int64(30)),
+			suspend:         new(true),
+			expected:        false,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			backup := &PerconaServerMySQLBackup{Spec: PerconaServerMySQLBackupSpec{
+				SuspendedDeadlineSeconds: tt.backupDeadline,
+			}}
+			cluster := &PerconaServerMySQL{Spec: PerconaServerMySQLSpec{
+				Backup: &BackupSpec{SuspendedDeadlineSeconds: tt.clusterDeadline},
+			}}
+			job := &batchv1.Job{Spec: batchv1.JobSpec{Suspend: tt.suspend}}
+			if tt.withCondition {
+				job.Status.Conditions = []batchv1.JobCondition{{
+					Type:               batchv1.JobSuspended,
+					Status:             corev1.ConditionTrue,
+					LastTransitionTime: metav1.NewTime(now.Add(-time.Minute)),
+				}}
+			}
+
+			assert.Equal(t, tt.expected, backup.IsSuspendedDeadlineExceeded(cluster, job, now))
+		})
+	}
+}
 
 func TestPerconaServerMySQLBackup_GetContainerOptions(t *testing.T) {
 	tests := map[string]struct {
