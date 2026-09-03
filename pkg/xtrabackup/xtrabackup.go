@@ -1069,6 +1069,18 @@ func GetBackupConfig(ctx context.Context, cl client.Client, cr *apiv1.PerconaSer
 	default:
 		return nil, errors.New("unknown backup storage type")
 	}
+
+	if storage.EncryptionKeySecret != nil && cl != nil {
+		cluster := &apiv1.PerconaServerMySQL{}
+		clusterNN := types.NamespacedName{Name: cr.Spec.ClusterName, Namespace: cr.Namespace}
+		if err := cl.Get(ctx, clusterNN, cluster); err == nil {
+			keyFile := encryptionKeyFileName(cluster, cr)
+			if keyFile != "" {
+				conf.EncryptionKeyFile = path.Join(encryptionKeysMountPath, keyFile)
+			}
+		}
+	}
+
 	return conf, nil
 }
 
@@ -1128,17 +1140,19 @@ func GetDestination(
 	return d, nil
 }
 
-type CheckpointInfo struct {
-	BackupType string `json:"backup_type"`
-	FromLSN    string `json:"from_lsn"`
-	ToLSN      string `json:"to_lsn"`
-	LastLSN    string `json:"last_lsn"`
-	FlushedLSN string `json:"flushed_lsn"`
-	RedoMemory string `json:"redo_memory"`
-	RedoFrames string `json:"redo_frames"`
+type BackupInfo struct {
+	BackupType             string `json:"backup_type"`
+	FromLSN                string `json:"from_lsn"`
+	ToLSN                  string `json:"to_lsn"`
+	LastLSN                string `json:"last_lsn"`
+	FlushedLSN             string `json:"flushed_lsn"`
+	RedoMemory             string `json:"redo_memory"`
+	RedoFrames             string `json:"redo_frames"`
+	BackupSize             int64  `json:"backup_size"`
+	UncompressedBackupSize int64  `json:"uncompressed_backup_size"`
 }
 
-func (info *CheckpointInfo) ParseFrom(r io.Reader) error {
+func (info *BackupInfo) ParseFrom(r io.Reader) error {
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -1164,6 +1178,16 @@ func (info *CheckpointInfo) ParseFrom(r io.Reader) error {
 			info.RedoMemory = value
 		case strings.Contains(key, "redo_frames"):
 			info.RedoFrames = value
+		case strings.Contains(key, "uncompressed_backup_size"):
+			size, err := strconv.ParseInt(value, 10, 64)
+			if err == nil {
+				info.UncompressedBackupSize = size
+			}
+		case strings.Contains(key, "backup_size"):
+			size, err := strconv.ParseInt(value, 10, 64)
+			if err == nil {
+				info.BackupSize = size
+			}
 		default:
 			continue
 		}
