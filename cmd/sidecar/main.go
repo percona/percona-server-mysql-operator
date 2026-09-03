@@ -25,7 +25,8 @@ func startServer() *http.Server {
 		fmt.Fprintf(w, "OK")
 	})
 	mux.Handle("/backup/", handler.Backup())
-	mux.HandleFunc("/backup/checkpoint-info", handler.GetCheckpointInfoFunc)
+	mux.HandleFunc("/backup/checkpoint-info", handler.GetBackupInfoFunc) // Deprecated: use /backup/info instead
+	mux.HandleFunc("/backup/info", handler.GetBackupInfoFunc)
 	mux.HandleFunc("/logs/", handler.LogsHandlerFunc)
 
 	srv := &http.Server{

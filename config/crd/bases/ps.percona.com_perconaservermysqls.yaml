@@ -1474,6 +1474,16 @@ spec:
                                 properties:
                                   bucket:
                                     type: string
+                                  caBundle:
+                                    properties:
+                                      key:
+                                        default: ca.crt
+                                        type: string
+                                      name:
+                                        type: string
+                                    required:
+                                    - name
+                                    type: object
                                   credentialsSecret:
                                     type: string
                                   endpointUrl:
@@ -2432,6 +2442,16 @@ spec:
                           properties:
                             bucket:
                               type: string
+                            caBundle:
+                              properties:
+                                key:
+                                  default: ca.crt
+                                  type: string
+                                name:
+                                  type: string
+                              required:
+                              - name
+                              type: object
                             credentialsSecret:
                               type: string
                             endpointUrl:
@@ -10527,9 +10547,10 @@ spec:
                 ''async'', ''proxy.router.enabled'' must be disabled'
               rule: '!(self.mysql.clusterType == ''async'') || !has(self.proxy) ||
                 !has(self.proxy.router) || !has(self.proxy.router.enabled) || !self.proxy.router.enabled'
-            - message: 'Invalid configuration: Scaling MySQL replicas below 3 requires
-                ''unsafeFlags.mysqlSize: true'''
-              rule: '!(has(self.mysql.size) && self.mysql.size < 3) || self.unsafeFlags.mysqlSize'
+            - message: 'Invalid configuration: For ''async'' replication, MySQL size
+                must be 2 or greater unless ''unsafeFlags.mysqlSize'' is enabled'
+              rule: '!(self.mysql.clusterType == ''async'' && has(self.mysql.size)
+                && self.mysql.size < 2) || self.unsafeFlags.mysqlSize'
             - message: 'Invalid configuration: For ''group replication'', scaling
                 MySQL replicas above 9 requires ''unsafeFlags.mysqlSize: true'''
               rule: '!(self.mysql.clusterType == ''group-replication'' && has(self.mysql.size)

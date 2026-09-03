@@ -118,9 +118,9 @@ User creates PerconaServerMySQLBackup CR with type: incremental
       → Sets percona.com/base-backup-name annotation with base backup's destination name
     → getLastBackupLSN():
       → Finds latest succeeded backup (full or incremental) for same cluster
-      → Calls sidecar's /backup/checkpoint-info endpoint
-        → Sidecar fetches xtrabackup_checkpoints from storage via xbcloud get
-        → Parses and returns to_lsn
+      → Calls sidecar's /backup/info endpoint (falls back to /backup/checkpoint-info for older sidecars)
+        → Sidecar fetches xtrabackup_checkpoints and xtrabackup_info from storage via xbcloud get
+        → Parses and returns BackupInfo (to_lsn, backup_size, uncompressed_backup_size, etc.)
     → Computes destination: <base-name>.incr/<cluster>-<timestamp>-incr
     → Creates K8s Job (run-backup.sh)
       → Sets INCREMENTAL_LSN env var on the job container
@@ -163,7 +163,7 @@ User creates PerconaServerMySQLRestore CR
 
 1. **Chain structure is implicit in the storage layout.** Incremental backups for a base backup `cluster-ts-full` are stored under `cluster-ts-full.incr/<cluster>-<ts>-incr`. The chain is discoverable from the path convention alone — no separate metadata files needed. Any cluster with access to the storage bucket can reconstruct the chain by listing the `.incr/` prefix.
 
-2. **Sidecar remains stateless.** The sidecar has no persistent storage and no knowledge of previous backups. The LSN is passed explicitly via BackupConfig (`incrementalLsn` field). The sidecar also exposes a `/backup/checkpoint-info` endpoint that fetches `xtrabackup_checkpoints` from storage on demand and returns the parsed checkpoint info. No metadata file upload step.
+2. **Sidecar remains stateless.** The sidecar has no persistent storage and no knowledge of previous backups. The LSN is passed explicitly via BackupConfig (`incrementalLsn` field). The sidecar also exposes a `/backup/info` endpoint that fetches `xtrabackup_checkpoints` and `xtrabackup_info` from storage on demand and returns the parsed backup info (LSN data, backup size, etc.). No metadata file upload step.
 
 3. **Controller is the chain coordinator.** The backup controller finds the latest succeeded backup, calls the sidecar's checkpoint endpoint to retrieve its `to_lsn` from storage, and passes it to the backup job via the `INCREMENTAL_LSN` environment variable. It also computes the storage destination using the `.incr/<cluster>-<timestamp>-incr` convention and sets chain-tracking annotations.
 
@@ -207,12 +207,12 @@ New kubebuilder print column on `PerconaServerMySQLBackup`:
 
 Old sidecars ignore this field. New sidecars treat an empty `incrementalLsn` as a full backup. Note: no `backupType` field is sent in BackupConfig — the presence of `incrementalLsn` is sufficient to trigger incremental behavior.
 
-**LSN retrieval (controller → sidecar → storage).** The sidecar exposes a `/backup/checkpoint-info` endpoint. When the controller needs the `to_lsn` for creating the next incremental backup, it:
+**LSN retrieval (controller → sidecar → storage).** The sidecar exposes a `/backup/info` endpoint (and the deprecated `/backup/checkpoint-info` endpoint for backward compatibility). When the controller needs the `to_lsn` for creating the next incremental backup, it:
 
 1. Finds the last succeeded backup (full or incremental) for the cluster
-2. POSTs that backup's `BackupConfig` (with storage credentials and destination) to the sidecar's `/backup/checkpoint-info` endpoint
-3. The sidecar runs `xbcloud get` to download `xtrabackup_checkpoints` from that backup's storage location, pipes through `xbstream` extraction, and parses the checkpoint file
-4. Returns a `CheckpointInfo` struct containing `backup_type`, `from_lsn`, `to_lsn`, `last_lsn`, `flushed_lsn`, and `redo_memory`/`redo_frames`
+2. POSTs that backup's `BackupConfig` (with storage credentials and destination) to the sidecar's `/backup/info` endpoint (falling back to `/backup/checkpoint-info` if the sidecar is an older version)
+3. The sidecar runs `xbcloud get` to download `xtrabackup_checkpoints` and `xtrabackup_info` from that backup's storage location, pipes through `xbstream` extraction, and parses both files
+4. Returns a `BackupInfo` struct containing `backup_type`, `from_lsn`, `to_lsn`, `last_lsn`, `flushed_lsn`, `redo_memory`/`redo_frames`, `backup_size`, and `uncompressed_backup_size`
 5. The controller extracts `to_lsn` and passes it as `INCREMENTAL_LSN` env var to the backup job
 
 **Storage directory convention.** The chain structure is encoded in the storage paths:
@@ -297,7 +297,7 @@ daily-inc-wed     s3-us     incremental   Running     -
 
 ### 5.3 LSN Retrieval
 
-**Chosen approach:** The sidecar exposes a `/backup/checkpoint-info` endpoint. When the controller needs the `to_lsn` for the next incremental, it calls this endpoint with the previous backup's storage config and destination. The sidecar downloads `xtrabackup_checkpoints` via `xbcloud get`, parses it, and returns a `CheckpointInfo` struct. The LSN is **not** persisted in the backup CR status.
+**Chosen approach:** The sidecar exposes a `/backup/info` endpoint (with `/backup/checkpoint-info` kept as a deprecated alias for backward compatibility). When the controller needs the `to_lsn` for the next incremental, it calls this endpoint with the previous backup's storage config and destination. The sidecar downloads `xtrabackup_checkpoints` and `xtrabackup_info` via `xbcloud get`, parses them, and returns a `BackupInfo` struct (LSN data, backup size, uncompressed backup size, etc.). The LSN is **not** persisted in the backup CR status.
 
 **Why:** The checkpoints file is already uploaded as part of the backup stream. The on-demand fetch avoids adding new status fields to the CRD and keeps the CR simpler. The storage round-trip is small (a few KB file) and only happens once per incremental backup creation.
 
@@ -508,7 +508,7 @@ spec:
 
 ### 8.3 Operator Version Skew
 
-- **New operator, old sidecar:** The new `incrementalLsn` field in BackupConfig is ignored by old sidecars (standard JSON unmarshaling). Incremental backups will fail because the sidecar won't pass `--incremental-lsn` to xtrabackup. The `/backup/checkpoint-info` endpoint won't exist, so LSN retrieval will also fail.
+- **New operator, old sidecar:** The new `incrementalLsn` field in BackupConfig is ignored by old sidecars (standard JSON unmarshaling). Incremental backups will fail because the sidecar won't pass `--incremental-lsn` to xtrabackup. The `/backup/info` endpoint won't exist, so LSN retrieval will also fail.
 - **Old operator, new sidecar:** New sidecars are backward compatible — empty `incrementalLsn` means full backup. The checkpoint endpoint is additive and won't be called by old operators.
 
 ### 8.4 Legacy Backups
