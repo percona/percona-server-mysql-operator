@@ -187,6 +187,14 @@ func RestoreJob(
 		},
 	}
 
+	binlogServer := cluster.Spec.Backup.PiTR.BinlogServer
+	if restore.Spec.PITR != nil && restore.Spec.PITR.BackupSource != nil && restore.Spec.PITR.BackupSource.BinlogServer != nil {
+		binlogServer = restore.Spec.PITR.BackupSource.BinlogServer
+	}
+	if binlogServer != nil {
+		k8s.PrepareJobWithS3CA(job, cluster, binlogServer.Storage.S3)
+	}
+
 	if keyringSecretRef := getKeyringSecretRef(cluster, restore); keyringSecretRef != nil {
 		job.Spec.Template.Spec.Volumes = append(job.Spec.Template.Spec.Volumes, corev1.Volume{
 			Name: keyringVolumeName,

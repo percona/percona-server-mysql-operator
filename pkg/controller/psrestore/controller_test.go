@@ -837,6 +837,10 @@ func TestRestorerValidate(t *testing.T) {
 	cr := readDefaultRestore(t, restoreName, namespace)
 	cr.Spec.BackupName = backupName
 	s3Secret := readDefaultS3Secret(t, s3SecretName, namespace)
+	s3CASecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "minio-ca-bundle", Namespace: namespace},
+		Data:       map[string][]byte{"ca.crt": []byte("test-ca")},
+	}
 	azureSecret := readDefaultAzureSecret(t, azureSecretName, namespace)
 	gcsSecret := readDefaultGCSSecret(t, gcsSecretName, namespace)
 
@@ -1051,6 +1055,7 @@ func TestRestorerValidate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			tt.objects = append(tt.objects, s3CASecret.DeepCopy())
 			if tt.fakeStorageClientFunc == nil {
 				tt.fakeStorageClientFunc = func(ctx context.Context, opts storage.Options) (storage.Storage, error) {
 					defaultFakeClient, err := fakestorage.NewFakeClient(ctx, opts)
