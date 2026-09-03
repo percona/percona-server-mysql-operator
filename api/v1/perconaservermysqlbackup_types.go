@@ -77,16 +77,18 @@ const (
 
 // PerconaServerMySQLBackupStatus defines the observed state of PerconaServerMySQLBackup
 type PerconaServerMySQLBackupStatus struct {
-	Type         BackupType         `json:"type,omitempty"`
-	State        BackupState        `json:"state,omitempty"`
-	StateDesc    string             `json:"stateDescription,omitempty"`
-	Destination  BackupDestination  `json:"destination,omitempty"`
-	Storage      *BackupStorageSpec `json:"storage,omitempty"`
-	CompletedAt  *metav1.Time       `json:"completed,omitempty"`
-	Image        string             `json:"image,omitempty"`
-	BackupSource string             `json:"backupSource,omitempty"`
-	Compressed   bool               `json:"compressed,omitempty"`
-	Conditions   []metav1.Condition `json:"conditions,omitempty"`
+	Type             BackupType         `json:"type,omitempty"`
+	State            BackupState        `json:"state,omitempty"`
+	StateDesc        string             `json:"stateDescription,omitempty"`
+	Destination      BackupDestination  `json:"destination,omitempty"`
+	Storage          *BackupStorageSpec `json:"storage,omitempty"`
+	CompletedAt      *metav1.Time       `json:"completed,omitempty"`
+	Image            string             `json:"image,omitempty"`
+	BackupSource     string             `json:"backupSource,omitempty"`
+	Compressed       bool               `json:"compressed,omitempty"`
+	Size             string             `json:"size,omitempty"`
+	UncompressedSize string             `json:"uncompressedSize,omitempty"`
+	Conditions       []metav1.Condition `json:"conditions,omitempty"`
 }
 
 const (
@@ -313,5 +315,7 @@ func (s *PerconaServerMySQLBackupStatus) Equals(other *PerconaServerMySQLBackupS
 		s.Image == other.Image &&
 		s.BackupSource == other.BackupSource &&
 		s.Compressed == other.Compressed &&
+		s.Size == other.Size &&
+		s.UncompressedSize == other.UncompressedSize &&
 		ConditionsEqual(s.Conditions, other.Conditions)
 }
