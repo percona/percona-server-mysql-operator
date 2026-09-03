@@ -756,15 +756,42 @@ var _ = Describe("CR validations", Ordered, func() {
 			})
 		})
 
-		When("mysql replicas are set to lower than 3", Ordered, func() {
+		When("async mysql replicas are set to 2", Ordered, func() {
 			cr, err := readDefaultCR("cr-validations-8", ns)
 			Expect(err).NotTo(HaveOccurred())
 
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
 			cr.Spec.MySQL.Size = 2
+			cr.Spec.Orchestrator.Enabled = true
+			It("should create the cluster successfully", func() {
+				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+			})
+		})
+
+		When("async mysql replicas are set to 1", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-async-size-1", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
+			cr.Spec.MySQL.Size = 1
+			cr.Spec.Orchestrator.Enabled = true
 			It("the creation of the cluster should fail with error message", func() {
 				createErr := k8sClient.Create(ctx, cr)
 				Expect(createErr).To(HaveOccurred())
-				Expect(createErr.Error()).To(ContainSubstring("Scaling MySQL replicas below 3 requires 'unsafeFlags.mysqlSize: true'"))
+				Expect(createErr.Error()).To(ContainSubstring("Invalid configuration: For 'async' replication, MySQL size must be 2 or greater unless 'unsafeFlags.mysqlSize' is enabled"))
+			})
+		})
+
+		When("async mysql replicas are set to 1 with unsafe flag enabled", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-async-size-1-unsafe", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
+			cr.Spec.MySQL.Size = 1
+			cr.Spec.Orchestrator.Enabled = true
+			cr.Spec.Unsafe.MySQLSize = true
+			It("should create the cluster successfully", func() {
+				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
 			})
 		})
 
