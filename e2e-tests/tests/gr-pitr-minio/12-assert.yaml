@@ -27,5 +27,14 @@ kind: PerconaServerMySQLRestore
 apiVersion: ps.percona.com/v1
 metadata:
   name: gr-pitr-minio-restore-post-failover
+spec:
+  pitr:
+    backupSource:
+      binlogServer:
+        storage:
+          s3:
+            caBundle:
+              name: minio-pitr-restore-ca-bundle
+              key: ca.crt
 status:
   state: Succeeded

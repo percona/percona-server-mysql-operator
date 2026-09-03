@@ -23,5 +23,12 @@ kind: PerconaServerMySQLRestore
 apiVersion: ps.percona.com/v1
 metadata:
   name: gr-pitr-minio-restore-date
+spec:
+  backupSource:
+    storage:
+      s3:
+        caBundle:
+          name: minio-restore-ca-bundle
+          key: ca.crt
 status:
   state: Succeeded

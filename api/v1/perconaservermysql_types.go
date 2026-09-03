@@ -57,7 +57,7 @@ const (
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async') || self.unsafeFlags.orchestrator || (has(self.orchestrator) && self.orchestrator.enabled)",message="Invalid configuration: When 'mysql.clusterType' is set to 'async', 'orchestrator.enabled' must be true unless 'unsafeFlags.orchestrator' is enabled"
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async') || self.unsafeFlags.proxy || (has(self.proxy) && has(self.proxy.haproxy) && self.proxy.haproxy.enabled)",message="Invalid configuration: When 'mysql.clusterType' is set to 'async', 'proxy.haproxy.enabled' must be true unless 'unsafeFlags.proxy' is enabled"
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async') || !has(self.proxy) || !has(self.proxy.router) || !has(self.proxy.router.enabled) || !self.proxy.router.enabled",message="Invalid configuration: When 'mysql.clusterType' is set to 'async', 'proxy.router.enabled' must be disabled"
-// +kubebuilder:validation:XValidation:rule="!(has(self.mysql.size) && self.mysql.size < 3) || self.unsafeFlags.mysqlSize",message="Invalid configuration: Scaling MySQL replicas below 3 requires 'unsafeFlags.mysqlSize: true'"
+// +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async' && has(self.mysql.size) && self.mysql.size < 2) || self.unsafeFlags.mysqlSize",message="Invalid configuration: For 'async' replication, MySQL size must be 2 or greater unless 'unsafeFlags.mysqlSize' is enabled"
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'group-replication' && has(self.mysql.size) && self.mysql.size >= 9) || self.unsafeFlags.mysqlSize",message="Invalid configuration: For 'group replication', scaling MySQL replicas above 9 requires 'unsafeFlags.mysqlSize: true'"
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'group-replication' && has(self.mysql.size) && self.mysql.size % 2 == 0) || self.unsafeFlags.mysqlSize",message="Invalid configuration: For 'group replication', using an even number of MySQL replicas requires 'unsafeFlags.mysqlSize: true'"
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'group-replication') || self.unsafeFlags.proxy || (has(self.proxy) && ((has(self.proxy.router) && self.proxy.router.enabled) || (has(self.proxy.haproxy) && self.proxy.haproxy.enabled)))",message="Invalid configuration: For 'group replication', MySQL Router or HAProxy must be enabled unless 'unsafeFlags.proxy' is enabled"
@@ -430,6 +430,17 @@ type EncryptionKeySecretSelector struct {
 	Key string `json:"key,omitempty"`
 }
 
+const DefaultCABundleKey = "ca.crt"
+
+type CABundleSecretSelector struct {
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default:=ca.crt
+	Key string `json:"key,omitempty"`
+}
+
 type BackupSpec struct {
 	Enabled                  bool                          `json:"enabled,omitempty"`
 	SourcePod                string                        `json:"sourcePod,omitempty"`
@@ -590,6 +601,9 @@ type BackupStorageS3Spec struct {
 	CredentialsSecret string           `json:"credentialsSecret"`
 	Region            string           `json:"region,omitempty"`
 	EndpointURL       string           `json:"endpointUrl,omitempty"`
+	// CABundle selects a custom CA certificate bundle for TLS connections to the S3 endpoint.
+	// +optional
+	CABundle *CABundleSecretSelector `json:"caBundle,omitempty"`
 }
 
 // BucketAndPrefix returns bucket name and backup prefix from Bucket concatenated with Prefix.
@@ -1185,6 +1199,16 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 	if cr.Spec.Backup == nil {
 		cr.Spec.Backup = new(BackupSpec)
 	}
+	for _, storage := range cr.Spec.Backup.Storages {
+		if storage != nil && storage.S3 != nil && storage.S3.CABundle != nil && storage.S3.CABundle.Key == "" {
+			storage.S3.CABundle.Key = DefaultCABundleKey
+		}
+	}
+	if binlogServer := cr.Spec.Backup.PiTR.BinlogServer; binlogServer != nil &&
+		binlogServer.Storage.S3 != nil && binlogServer.Storage.S3.CABundle != nil &&
+		binlogServer.Storage.S3.CABundle.Key == "" {
+		binlogServer.Storage.S3.CABundle.Key = DefaultCABundleKey
+	}
 
 	if cr.Spec.Backup.Enabled {
 		if len(cr.Spec.Backup.Image) == 0 {
@@ -1749,6 +1773,9 @@ func (s *BackupStorageSpec) Equals(other *BackupStorageSpec) bool {
 }
 
 func (s *BackupStorageS3Spec) equals(other *BackupStorageS3Spec) bool {
+	if s == nil || other == nil {
+		return s == other
+	}
 	if s.Bucket != other.Bucket {
 		return false
 	}
@@ -1759,6 +1786,12 @@ func (s *BackupStorageS3Spec) equals(other *BackupStorageS3Spec) bool {
 		return false
 	}
 	if s.EndpointURL != other.EndpointURL {
+		return false
+	}
+	if (s.CABundle == nil) != (other.CABundle == nil) {
+		return false
+	}
+	if s.CABundle != nil && *s.CABundle != *other.CABundle {
 		return false
 	}
 	return true

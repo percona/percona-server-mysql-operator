@@ -221,6 +221,8 @@ spec:
                 type: string
               image:
                 type: string
+              size:
+                type: string
               state:
                 type: string
               stateDescription:
@@ -1013,6 +1015,16 @@ spec:
                     properties:
                       bucket:
                         type: string
+                      caBundle:
+                        properties:
+                          key:
+                            default: ca.crt
+                            type: string
+                          name:
+                            type: string
+                        required:
+                        - name
+                        type: object
                       credentialsSecret:
                         type: string
                       endpointUrl:
@@ -1216,6 +1228,8 @@ spec:
                 - type
                 type: object
               type:
+                type: string
+              uncompressedSize:
                 type: string
             type: object
         type: object

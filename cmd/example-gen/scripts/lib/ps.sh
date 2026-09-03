@@ -242,6 +242,7 @@ del_fields_to_comment() {
 		| yq "del(.spec.backup.storages.s3-us-west.containerOptions)" \
 		| yq "del(.spec.backup.storages.s3-us-west.volumeSpec)" \
 		| yq "del(.spec.backup.storages.s3-us-west.affinity)" \
+		| yq "del(.spec.backup.storages.s3-us-west.s3.caBundle)" \
 		| yq "del(.spec.backup.storages.s3-us-west.s3.prefix)" \
 		| yq "del(.spec.backup.storages.s3-us-west.s3.endpointUrl)" \
 		| yq "del(.spec.backup.storages.s3-us-west.schedulerName)" \
