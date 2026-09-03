@@ -188,21 +188,10 @@ func GetAutoConfigParams(cr *apiv1.PerconaServerMySQL, version string, cpu, memo
 		return "", err
 	}
 
-	userKeys, err := userConfigKeys(cr.Spec.MySQL.Configuration)
-	if err != nil {
-		return "", errors.Wrap(err, "parse user configuration")
-	}
-
 	// Sort for a stable ConfigMap payload so unchanged resources don't produce
-	// a churning config hash and needless rollout restarts. Keys are compared
-	// canonically, so a user's group_replication_x suppresses the calculator's
-	// loose_group_replication_x rather than leaving both spellings of the same
-	// variable in the merged configuration.
+	// a churning config hash and needless rollout restarts.
 	names := make([]string, 0, len(params))
 	for name := range params {
-		if _, ok := userKeys[CanonicalVariableName(name)]; ok {
-			continue
-		}
 		names = append(names, name)
 	}
 	sort.Strings(names)
@@ -369,21 +358,35 @@ func parseMySQLVersion(s string) (autoconfig.Version, error) {
 	return ver, nil
 }
 
-// userConfigKeys returns the canonical names of the variables the user set in
-// .spec.mysql.configuration.
-func userConfigKeys(configuration string) (map[string]struct{}, error) {
-	keys := make(map[string]struct{})
-	if strings.TrimSpace(configuration) == "" {
-		return keys, nil
+// HasUserConfig reports whether the user supplied a MySQL configuration of their
+// own, through mysql.configuration or by creating the ConfigMap or Secret directly.
+func HasUserConfig(
+	ctx context.Context,
+	cl client.Reader,
+	cr *apiv1.PerconaServerMySQL,
+) (bool, error) {
+	if strings.TrimSpace(cr.Spec.MySQL.Configuration) != "" {
+		return true, nil
 	}
-	section, err := config.ParseSection(io.NopCloser(strings.NewReader(configuration)), "mysqld")
-	if err != nil {
-		return nil, err
+
+	configurable := Configurable(*cr)
+	nn := types.NamespacedName{Name: configurable.GetConfigMapName(), Namespace: cr.Namespace}
+
+	cm := &corev1.ConfigMap{}
+	if err := cl.Get(ctx, nn, cm); client.IgnoreNotFound(err) != nil {
+		return false, errors.Wrap(err, "get configmap")
+	} else if err == nil && strings.TrimSpace(readConfig(cm, configurable)) != "" {
+		return true, nil
 	}
-	for _, k := range section.Keys() {
-		keys[CanonicalVariableName(k.Name())] = struct{}{}
+
+	secret := &corev1.Secret{}
+	if err := cl.Get(ctx, nn, secret); client.IgnoreNotFound(err) != nil {
+		return false, errors.Wrap(err, "get secret")
+	} else if err == nil && strings.TrimSpace(readConfig(secret, configurable)) != "" {
+		return true, nil
 	}
-	return keys, nil
+
+	return false, nil
 }
 
 func GetConfig(

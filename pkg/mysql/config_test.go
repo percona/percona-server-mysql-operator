@@ -2,6 +2,8 @@ package mysql
 
 import (
 	"context"
+	"errors"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -14,6 +16,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 )
@@ -212,6 +215,113 @@ func TestGetConfig(t *testing.T) {
 	}
 }
 
+func TestHasUserConfig(t *testing.T) {
+	const (
+		crName = "cluster1"
+		ns     = "config-ns"
+	)
+
+	newCR := func(configuration string) *apiv1.PerconaServerMySQL {
+		cr := &apiv1.PerconaServerMySQL{
+			ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: ns},
+		}
+		cr.Spec.MySQL.Configuration = configuration
+		return cr
+	}
+
+	errBoom := errors.New("boom")
+
+	failOn := func(want client.Object) interceptor.Funcs {
+		return interceptor.Funcs{
+			Get: func(ctx context.Context, cl client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+				if reflect.TypeOf(obj) == reflect.TypeOf(want) {
+					return errBoom
+				}
+				return cl.Get(ctx, key, obj, opts...)
+			},
+		}
+	}
+
+	tests := map[string]struct {
+		configuration string
+		configMap     *string
+		secret        *string
+		intercept     interceptor.Funcs
+
+		want       bool
+		wantErrMsg string
+	}{
+		"nothing set": {
+			want: false,
+		},
+		"mysql.configuration is set": {
+			configuration: "[mysqld]\nmax_connections=100\n",
+			want:          true,
+		},
+		"mysql.configuration holds only whitespace": {
+			configuration: "  \n\t\n",
+			want:          false,
+		},
+		"the configmap carries a configuration": {
+			configMap: new("[mysqld]\nmax_connections=100\n"),
+			want:      true,
+		},
+		"the secret carries a configuration": {
+			secret: new("[mysqld]\nmax_connections=100\n"),
+			want:   true,
+		},
+		"an empty configmap does not count": {
+			configMap: new(""),
+			want:      false,
+		},
+		"a whitespace-only secret does not count": {
+			secret: new("\n \n"),
+			want:   false,
+		},
+		"reading the configmap fails": {
+			intercept:  failOn(&corev1.ConfigMap{}),
+			wantErrMsg: "get configmap",
+		},
+		"reading the secret fails": {
+			intercept:  failOn(&corev1.Secret{}),
+			wantErrMsg: "get secret",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := newCR(tc.configuration)
+			cmName := ConfigMapName(cr)
+
+			objs := []client.Object{}
+			if tc.configMap != nil {
+				objs = append(objs, &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{Name: cmName, Namespace: ns},
+					Data:       map[string]string{CustomConfigKey: *tc.configMap},
+				})
+			}
+			if tc.secret != nil {
+				objs = append(objs, &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Name: cmName, Namespace: ns},
+					Data:       map[string][]byte{CustomConfigKey: []byte(*tc.secret)},
+				})
+			}
+
+			cl := fake.NewClientBuilder().WithObjects(objs...).WithInterceptorFuncs(tc.intercept).Build()
+
+			got, err := HasUserConfig(t.Context(), cl, cr)
+			if tc.wantErrMsg != "" {
+				require.ErrorIs(t, err, errBoom)
+				assert.ErrorContains(t, err, tc.wantErrMsg)
+				assert.False(t, got)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
 func TestQuoteLiteral(t *testing.T) {
 	tests := map[string]struct {
 		value string
@@ -317,11 +427,10 @@ func TestEffectiveResource(t *testing.T) {
 	}
 }
 
-func newAutoConfigCR(clusterType apiv1.ClusterType, loadType apiv1.AutoConfigLoadType, version, userConf string) *apiv1.PerconaServerMySQL {
+func newAutoConfigCR(clusterType apiv1.ClusterType, loadType apiv1.AutoConfigLoadType, version string) *apiv1.PerconaServerMySQL {
 	cr := &apiv1.PerconaServerMySQL{}
 	cr.Spec.MySQL.ClusterType = clusterType
 	cr.Spec.MySQL.AutoConfig.LoadType = loadType
-	cr.Spec.MySQL.Configuration = userConf
 	cr.Spec.MySQL.AutoConfig.Version = version
 	return cr
 }
@@ -354,7 +463,7 @@ func TestGetAutoConfigParams(t *testing.T) {
 		wantAbsent []string
 	}{
 		"group replication produces GR + innodb tuning": {
-			cr:     newAutoConfigCR(apiv1.ClusterTypeGR, apiv1.AutoConfigLoadTypeSomeWrites, "8.4.8", ""),
+			cr:     newAutoConfigCR(apiv1.ClusterTypeGR, apiv1.AutoConfigLoadTypeSomeWrites, "8.4.8"),
 			cpu:    cpu,
 			memory: mem,
 			wantContains: []string{
@@ -364,80 +473,56 @@ func TestGetAutoConfigParams(t *testing.T) {
 			},
 		},
 		"async omits group replication settings": {
-			cr:           newAutoConfigCR(apiv1.ClusterTypeAsync, apiv1.AutoConfigLoadTypeSomeWrites, "8.4.8", ""),
+			cr:           newAutoConfigCR(apiv1.ClusterTypeAsync, apiv1.AutoConfigLoadTypeSomeWrites, "8.4.8"),
 			cpu:          cpu,
 			memory:       mem,
 			wantContains: []string{"innodb_buffer_pool_size="},
 			wantAbsent:   []string{"loose_group_replication_"},
-		},
-		"user configuration overrides calculated keys": {
-			cr:           newAutoConfigCR(apiv1.ClusterTypeGR, apiv1.AutoConfigLoadTypeSomeWrites, "8.4.8", "[mysqld]\ninnodb_buffer_pool_size=1G\nmax_connections=999"),
-			cpu:          cpu,
-			memory:       mem,
-			wantAbsent:   []string{"innodb_buffer_pool_size=", "max_connections="},
-			wantContains: []string{"innodb_redo_log_capacity="},
-		},
-		// The calculator emits this one as loose_group_replication_member_expel_timeout.
-		// Both spellings name the same variable, so the user's must win outright
-		// rather than the two ending up side by side.
-		"user configuration overrides a calculated loose key": {
-			cr:           newAutoConfigCR(apiv1.ClusterTypeGR, apiv1.AutoConfigLoadTypeSomeWrites, "8.4.8", "[mysqld]\ngroup_replication_member_expel_timeout=99"),
-			cpu:          cpu,
-			memory:       mem,
-			wantAbsent:   []string{"group_replication_member_expel_timeout="},
-			wantContains: []string{"loose_group_replication_autorejoin_tries="},
-		},
-		"a loose user key overrides the calculated bare key": {
-			cr:           newAutoConfigCR(apiv1.ClusterTypeGR, apiv1.AutoConfigLoadTypeSomeWrites, "8.4.8", "[mysqld]\nloose_max_connections=999"),
-			cpu:          cpu,
-			memory:       mem,
-			wantAbsent:   []string{"max_connections="},
-			wantContains: []string{"innodb_buffer_pool_size="},
 		},
 		// The redo log is preallocated in full at startup, and a node joining by
 		// clone needs free space for the donor's estimate on top of its own, so
 		// the redo log is trimmed to a quarter of the volume. At 8Gi of memory
 		// the calculator asks for ~4.4Gi.
 		"a data volume smaller than the calculated redo log trims it": {
-			cr:           withDataVolume(newAutoConfigCR(apiv1.ClusterTypeGR, apiv1.AutoConfigLoadTypeSomeWrites, "8.4.8", ""), "2Gi"),
+			cr:           withDataVolume(newAutoConfigCR(apiv1.ClusterTypeGR, apiv1.AutoConfigLoadTypeSomeWrites, "8.4.8"), "2Gi"),
 			cpu:          cpu,
 			memory:       mem,
 			wantContains: []string{"innodb_redo_log_capacity=536870912"},
 		},
 		"a data volume with room keeps the calculated redo log": {
-			cr:           withDataVolume(newAutoConfigCR(apiv1.ClusterTypeGR, apiv1.AutoConfigLoadTypeSomeWrites, "8.4.8", ""), "32Gi"),
+			cr:           withDataVolume(newAutoConfigCR(apiv1.ClusterTypeGR, apiv1.AutoConfigLoadTypeSomeWrites, "8.4.8"), "32Gi"),
 			cpu:          cpu,
 			memory:       mem,
 			wantContains: []string{"innodb_redo_log_capacity=4714155900"},
 		},
 		// Trimming cannot go below the smallest redo log MySQL accepts.
 		"a data volume too small for the minimum redo log is rejected": {
-			cr:              withDataVolume(newAutoConfigCR(apiv1.ClusterTypeGR, apiv1.AutoConfigLoadTypeSomeWrites, "8.4.8", ""), "16Mi"),
+			cr:              withDataVolume(newAutoConfigCR(apiv1.ClusterTypeGR, apiv1.AutoConfigLoadTypeSomeWrites, "8.4.8"), "16Mi"),
 			cpu:             cpu,
 			memory:          mem,
 			wantErrContains: "data volume is too small",
 		},
 		// emptyDir and hostPath have no declared size to trim against.
 		"no persistent volume keeps the calculated redo log": {
-			cr:           newAutoConfigCR(apiv1.ClusterTypeGR, apiv1.AutoConfigLoadTypeSomeWrites, "8.4.8", ""),
+			cr:           newAutoConfigCR(apiv1.ClusterTypeGR, apiv1.AutoConfigLoadTypeSomeWrites, "8.4.8"),
 			cpu:          cpu,
 			memory:       mem,
 			wantContains: []string{"innodb_redo_log_capacity=4714155900"},
 		},
 		"missing cpu": {
-			cr:              newAutoConfigCR(apiv1.ClusterTypeGR, apiv1.AutoConfigLoadTypeSomeWrites, "8.4.8", ""),
+			cr:              newAutoConfigCR(apiv1.ClusterTypeGR, apiv1.AutoConfigLoadTypeSomeWrites, "8.4.8"),
 			cpu:             zero,
 			memory:          mem,
 			wantErrContains: "cpu is required",
 		},
 		"missing memory": {
-			cr:              newAutoConfigCR(apiv1.ClusterTypeGR, apiv1.AutoConfigLoadTypeSomeWrites, "8.4.8", ""),
+			cr:              newAutoConfigCR(apiv1.ClusterTypeGR, apiv1.AutoConfigLoadTypeSomeWrites, "8.4.8"),
 			cpu:             cpu,
 			memory:          zero,
 			wantErrContains: "memory is required",
 		},
 		"empty mysql version": {
-			cr:              newAutoConfigCR(apiv1.ClusterTypeGR, apiv1.AutoConfigLoadTypeSomeWrites, "", ""),
+			cr:              newAutoConfigCR(apiv1.ClusterTypeGR, apiv1.AutoConfigLoadTypeSomeWrites, ""),
 			cpu:             cpu,
 			memory:          mem,
 			wantErrContains: "parse mysql version",
@@ -466,22 +551,24 @@ func TestGetAutoConfigParams(t *testing.T) {
 
 func TestParseMySQLVersion(t *testing.T) {
 	tests := map[string]struct {
-		in      string
-		want    autoconfig.Version
-		wantErr bool
+		in         string
+		want       autoconfig.Version
+		wantErrMsg string
 	}{
 		"full version":     {in: "8.4.8", want: autoconfig.Version{Major: 8, Minor: 4, Patch: 8}},
 		"with suffix":      {in: "8.0.35-27", want: autoconfig.Version{Major: 8, Minor: 0, Patch: 35}},
 		"major minor only": {in: "8.4", want: autoconfig.Version{Major: 8, Minor: 4, Patch: 0}},
-		"empty":            {in: "", wantErr: true},
-		"not a version":    {in: "abc", wantErr: true},
+		"empty":            {in: "", wantErrMsg: "version is empty"},
+		"whitespace only":  {in: "   ", wantErrMsg: "version is empty"},
+		"not a version":    {in: "abc", wantErrMsg: "malformed version: abc"},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			got, err := parseMySQLVersion(tc.in)
-			if tc.wantErr {
-				require.Error(t, err)
+			if tc.wantErrMsg != "" {
+				require.EqualError(t, err, tc.wantErrMsg)
+				assert.Equal(t, autoconfig.Version{}, got)
 				return
 			}
 			require.NoError(t, err)

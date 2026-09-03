@@ -1,6 +1,8 @@
 package ps
 
 import (
+	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -12,7 +14,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
@@ -64,9 +68,10 @@ func TestReconcileMySQLAutoConfig(t *testing.T) {
 	}
 
 	tests := []struct {
-		desc    string
-		enabled bool
-		version string
+		desc     string
+		enabled  bool
+		version  string
+		userConf string
 
 		wantCalculated bool
 	}{
@@ -75,6 +80,20 @@ func TestReconcileMySQLAutoConfig(t *testing.T) {
 			enabled:        false,
 			version:        "8.4",
 			wantCalculated: false,
+		},
+		{
+			desc:           "a user configuration disables the calculator",
+			enabled:        true,
+			version:        "8.4",
+			userConf:       "[mysqld]\nsql_mode=STRICT_TRANS_TABLES\n",
+			wantCalculated: false,
+		},
+		{
+			desc:           "a blank user configuration does not disable the calculator",
+			enabled:        true,
+			version:        "8.4",
+			userConf:       "  \n\t\n",
+			wantCalculated: true,
 		},
 		{
 			desc:           "enabled with a supported version",
@@ -99,6 +118,7 @@ func TestReconcileMySQLAutoConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
 			cr := newCR(tt.enabled, tt.version)
+			cr.Spec.MySQL.Configuration = tt.userConf
 			r := newReconciler(t, cr)
 
 			require.NoError(t, r.reconcileMySQLAutoConfig(t.Context(), cr))
@@ -109,6 +129,61 @@ func TestReconcileMySQLAutoConfig(t *testing.T) {
 				"calculated configuration in:\n%s", config)
 		})
 	}
+
+	userConfigTests := map[string]func(cr *apiv1.PerconaServerMySQL) client.Object{
+		"a user configmap disables the calculator": func(cr *apiv1.PerconaServerMySQL) client.Object {
+			return &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Name: mysql.ConfigMapName(cr), Namespace: cr.Namespace},
+				Data:       map[string]string{mysql.CustomConfigKey: "[mysqld]\nsql_mode=STRICT_TRANS_TABLES\n"},
+			}
+		},
+		"a user secret disables the calculator": func(cr *apiv1.PerconaServerMySQL) client.Object {
+			return &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: mysql.ConfigMapName(cr), Namespace: cr.Namespace},
+				Data:       map[string][]byte{mysql.CustomConfigKey: []byte("[mysqld]\nsql_mode=STRICT_TRANS_TABLES\n")},
+			}
+		},
+	}
+
+	for name, userConfig := range userConfigTests {
+		t.Run(name, func(t *testing.T) {
+			cr := newCR(true, "8.4")
+			scheme := newScheme(t)
+			cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr, userConfig(cr)).Build()
+			r := &PerconaServerMySQLReconciler{Client: cl, Scheme: scheme, Recorder: record.NewFakeRecorder(100)}
+
+			require.NoError(t, r.reconcileMySQLAutoConfig(t.Context(), cr))
+
+			config := autoConfig(t, r, cr)
+			assert.Contains(t, config, "innodb_buffer_pool_size=", "autotune still sizes the buffer pool")
+			assert.NotContains(t, config, calculatedKey, "calculated configuration in:\n%s", config)
+		})
+	}
+
+	t.Run("a failure to read the user configuration fails the reconcile", func(t *testing.T) {
+		errBoom := errors.New("boom")
+
+		cr := newCR(true, "8.4")
+		scheme := newScheme(t)
+		cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr).
+			WithInterceptorFuncs(interceptor.Funcs{
+				Get: func(ctx context.Context, cl client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+					if _, ok := obj.(*corev1.ConfigMap); ok && key.Name == mysql.ConfigMapName(cr) {
+						return errBoom
+					}
+					return cl.Get(ctx, key, obj, opts...)
+				},
+			}).Build()
+		r := &PerconaServerMySQLReconciler{Client: cl, Scheme: scheme, Recorder: record.NewFakeRecorder(100)}
+
+		err := r.reconcileMySQLAutoConfig(t.Context(), cr)
+		require.ErrorIs(t, err, errBoom)
+		assert.ErrorContains(t, err, "check for a user configuration")
+
+		nn := types.NamespacedName{Name: mysql.AutoConfigMapName(cr), Namespace: cr.Namespace}
+		assert.True(t, k8serrors.IsNotFound(r.Get(t.Context(), nn, new(corev1.ConfigMap))),
+			"no configuration should be written when the user configuration cannot be read")
+	})
 
 	t.Run("a data volume smaller than the calculated redo log trims it", func(t *testing.T) {
 		ctx := t.Context()

@@ -16,11 +16,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/go-ini/ini"
 	_ "github.com/go-sql-driver/mysql"
 	v "github.com/hashicorp/go-version"
-	"github.com/percona/percona-server-mysql-operator/pkg/config"
-	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/pkg/errors"
 	"github.com/sjmudd/stopwatch"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -30,6 +27,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/cmd/bootstrap/utils"
 	database "github.com/percona/percona-server-mysql-operator/cmd/internal/db"
 	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
+	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
 
@@ -448,14 +446,9 @@ func Bootstrap(ctx context.Context) error {
 		log.Printf("WARNING: failed to clear group_replication_group_seeds: %v", err)
 	}
 
-	var myCnf *ini.Section
-	customMyCnf, err := os.Open(mysql.CustomMyCnfPath)
-	if err == nil {
-		defer customMyCnf.Close() //nolint
-		myCnf, err = config.ParseSection(customMyCnf, "mysqld")
-		if err != nil {
-			return errors.Wrapf(err, "failed to parse %s", mysql.CustomMyCnfPath)
-		}
+	myCnf, err := readMyCnf(mysql.CustomMyCnfPath, mysql.AutoConfigCnfPath)
+	if err != nil {
+		return err
 	}
 
 	configureOpts, err := getConfigureInstanceOpts(myCnf)
