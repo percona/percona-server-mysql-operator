@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	humanize "github.com/dustin/go-humanize"
 	"github.com/pkg/errors"
 	batchv1 "k8s.io/api/batch/v1"
 	coordv1 "k8s.io/api/coordination/v1"
@@ -67,6 +68,10 @@ type PerconaServerMySQLBackupReconciler struct {
 //+kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;watch
 
 const controllerName = "psbackup-controller"
+
+const backupSizeRetryTimeout = 5 * time.Minute
+
+var ErrBackupSizeUnavailable = errors.New("backup_size not found in xtrabackup_info; PXB 8.4.0-6+ is required")
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *PerconaServerMySQLBackupReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -249,6 +254,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		return rr, nil
 	}
 
+	var jobFinishState apiv1.BackupState
 	for _, cond := range job.Status.Conditions {
 		if cond.Status != corev1.ConditionTrue {
 			continue
@@ -256,16 +262,16 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 
 		switch cond.Type {
 		case batchv1.JobFailed:
-			status.State = apiv1.BackupFailed
+			jobFinishState = apiv1.BackupFailed
 		case batchv1.JobComplete:
-			status.State = apiv1.BackupSucceeded
+			jobFinishState = apiv1.BackupSucceeded
 		}
 
 		status.CompletedAt = job.Status.CompletionTime
 	}
 
-	switch status.State {
-	case apiv1.BackupStarting:
+	switch {
+	case status.State == apiv1.BackupStarting && jobFinishState == "":
 		if job.Status.Active == 0 {
 			return rr, nil
 		}
@@ -278,17 +284,19 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		if running {
 			status.State = apiv1.BackupRunning
 		}
-	case apiv1.BackupRunning:
-		if job.Status.Active > 0 {
-			// Backup is still running, check and renew downtime before it ends.
-			if err := r.renewDowntime(ctx, cr, cluster, status.BackupSource); err != nil {
-				return rr, errors.Wrap(err, "renew downtime for backup source")
-			}
-			return rr, nil
+	case status.State == apiv1.BackupRunning && job.Status.Active > 0:
+		// Backup is still running, check and renew downtime before it ends.
+		if err := r.renewDowntime(ctx, cr, cluster, status.BackupSource); err != nil {
+			return rr, errors.Wrap(err, "renew downtime for backup source")
 		}
-	case apiv1.BackupFailed, apiv1.BackupSucceeded:
+		return rr, nil
+	case jobFinishState != "":
 		log.Info("Running post finish tasks")
-		if err := r.runPostFinishTasks(ctx, cr, cluster); err != nil {
+		status.State = jobFinishState
+		if err := r.runPostFinishTasks(ctx, cr, cluster, &status); err != nil {
+			// Keep backup in the previous state so post-finish tasks are retried
+			// on the next reconcile.
+			status.State = cr.Status.State
 			return rr, errors.Wrap(err, "run post finish tasks")
 		}
 		return rr, nil
@@ -452,7 +460,7 @@ func (r *PerconaServerMySQLBackupReconciler) createBackupJob(
 	}
 
 	if cr.Spec.Type == apiv1.BackupTypeIncremental {
-		lsn, err := r.getPreviousBackupLSN(ctx, cr, backupSource, storage)
+		lsn, err := r.getPreviousBackupLSN(ctx, cr, cluster, backupSource, storage)
 		if err != nil {
 			return errors.Wrap(err, "get previous backup LSN")
 		}
@@ -582,12 +590,22 @@ func (r *PerconaServerMySQLBackupReconciler) runPostFinishTasks(
 	ctx context.Context,
 	cr *apiv1.PerconaServerMySQLBackup,
 	cluster *apiv1.PerconaServerMySQL,
+	status *apiv1.PerconaServerMySQLBackupStatus,
 ) error {
+	log := logf.FromContext(ctx)
+
+	if status.State == apiv1.BackupSucceeded && status.Size == "" {
+		if err := r.fetchAndSetBackupSize(ctx, cr, cluster, status); err != nil {
+			if status.CompletedAt != nil && time.Since(status.CompletedAt.Time) < backupSizeRetryTimeout {
+				return errors.Wrap(err, "fetch backup size")
+			}
+			log.Error(err, "Failed to get backup size after retries, giving up")
+		}
+	}
+
 	if !cluster.Spec.MySQL.IsAsync() || !cluster.Spec.Orchestrator.Enabled {
 		return nil
 	}
-
-	log := logf.FromContext(ctx)
 
 	pod, err := orchestrator.GetReadyPod(ctx, r.Client, cluster)
 	if err != nil {
@@ -602,6 +620,73 @@ func (r *PerconaServerMySQLBackupReconciler) runPostFinishTasks(
 	}
 
 	return nil
+}
+
+func (r *PerconaServerMySQLBackupReconciler) fetchAndSetBackupSize(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQLBackup,
+	cluster *apiv1.PerconaServerMySQL,
+	status *apiv1.PerconaServerMySQLBackupStatus,
+) error {
+	if cluster.CompareVersion("1.3.0") < 0 {
+		return nil
+	}
+
+	size, uncompressedSize, err := r.getBackupSize(ctx, cr, cluster)
+	if err != nil {
+		if errors.Is(err, ErrBackupSizeUnavailable) {
+			return nil
+		}
+		return err
+	}
+
+	status.Size = size
+	status.UncompressedSize = uncompressedSize
+	return nil
+}
+
+func (r *PerconaServerMySQLBackupReconciler) getBackupSize(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQLBackup,
+	cluster *apiv1.PerconaServerMySQL,
+) (string, string, error) {
+	backupConf, err := xtrabackup.GetBackupConfig(ctx, r.Client, cr)
+	if err != nil {
+		return "", "", errors.Wrap(err, "get backup config")
+	}
+
+	pod, err := mysql.GetReadyPod(ctx, r.Client, cluster)
+	if err != nil {
+		return "", "", errors.Wrap(err, "get ready mysql pod")
+	}
+	src := mysql.PodFQDN(cluster, pod)
+	sc := r.NewSidecarClient(src)
+
+	var info *xtrabackup.BackupInfo
+	if cluster.CompareVersion("1.3.0") >= 0 {
+		info, err = sc.GetBackupInfo(ctx, *backupConf)
+	} else {
+		info, err = sc.GetCheckpointInfo(ctx, *backupConf) //nolint:staticcheck
+	}
+	if err != nil {
+		return "", "", errors.Wrap(err, "get backup info")
+	}
+
+	if info.BackupSize <= 0 {
+		return "", "", ErrBackupSizeUnavailable
+	}
+
+	size := formatBytes(info.BackupSize)
+	var uncompressedSize string
+	if cr.Status.Compressed {
+		if info.UncompressedBackupSize > 0 {
+			uncompressedSize = formatBytes(info.UncompressedBackupSize)
+		}
+	} else {
+		uncompressedSize = size
+	}
+
+	return size, uncompressedSize, nil
 }
 
 func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context, cr *apiv1.PerconaServerMySQLBackup) error {
@@ -817,6 +902,7 @@ func getBackupSourcePod(ctx context.Context, cl client.Client, namespace, src st
 func (r *PerconaServerMySQLBackupReconciler) getPreviousBackupLSN(
 	ctx context.Context,
 	cr *apiv1.PerconaServerMySQLBackup,
+	cluster *apiv1.PerconaServerMySQL,
 	backupSource string,
 	storage *apiv1.BackupStorageSpec,
 ) (string, error) {
@@ -840,9 +926,15 @@ func (r *PerconaServerMySQLBackupReconciler) getPreviousBackupLSN(
 	}
 
 	sc := r.NewSidecarClient(backupSource)
-	info, err := sc.GetCheckpointInfo(ctx, *req)
+
+	var info *xtrabackup.BackupInfo
+	if cluster.CompareVersion("1.3.0") >= 0 {
+		info, err = sc.GetBackupInfo(ctx, *req)
+	} else {
+		info, err = sc.GetCheckpointInfo(ctx, *req) //nolint:staticcheck
+	}
 	if err != nil {
-		return "", errors.Wrap(err, "failed to get checkpoint info")
+		return "", errors.Wrap(err, "failed to get backup info")
 	}
 
 	if info.ToLSN == "" {
@@ -1029,4 +1121,8 @@ func (r *PerconaServerMySQLBackupReconciler) getActiveRestore(ctx context.Contex
 		return restoreName, nil
 	}
 	return "", nil
+}
+
+func formatBytes(bytes int64) string {
+	return strings.ReplaceAll(humanize.IBytes(uint64(bytes)), " ", "")
 }
