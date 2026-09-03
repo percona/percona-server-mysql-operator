@@ -72,6 +72,8 @@ spec:
           value: /var/lib/mysql/notify.sock
         - name: MYSQL_STATE_FILE
           value: /var/lib/mysql/mysql.state
+        - name: BOOTSTRAP_CLONE_STALL_TIMEOUT
+          value: "900"
         - name: BOOTSTRAP_MODE
           value: auto
         - name: KEYRING_VAULT_PATH
@@ -122,7 +124,7 @@ spec:
           initialDelaySeconds: 15
           periodSeconds: 10
           successThreshold: 1
-          timeoutSeconds: 43200
+          timeoutSeconds: 604800
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         volumeMounts:

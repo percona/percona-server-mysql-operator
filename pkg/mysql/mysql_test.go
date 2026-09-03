@@ -216,6 +216,65 @@ func TestHeartbeatCloneTimeoutEnvGate(t *testing.T) {
 	})
 }
 
+func TestCloneStallWatchdogGate(t *testing.T) {
+	const ns = "mysql-ns"
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "some-secret", Namespace: ns},
+		StringData: map[string]string{},
+	}
+
+	// A defaulted cluster (defaults run at the current crVersion), then override
+	// crVersion to exercise the gate.
+	defaulted := func(t *testing.T, crVersion string) *apiv1.PerconaServerMySQL {
+		t.Helper()
+		cr := readDefaultCluster(t, "cluster", ns)
+		cr.Spec.CRVersion = crVersion
+		if err := cr.CheckNSetDefaults(t.Context(), &platform.ServerVersion{
+			Platform: platform.PlatformKubernetes,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return cr
+	}
+
+	mysqldEnv := func(t *testing.T, cr *apiv1.PerconaServerMySQL, name string) (string, bool) {
+		t.Helper()
+		sts := StatefulSet(cr, "init-image", "cfg", "tls", secret)
+		for _, c := range sts.Spec.Template.Spec.Containers {
+			if c.Name != AppName {
+				continue
+			}
+			for _, e := range c.Env {
+				if e.Name == name {
+					return e.Value, true
+				}
+			}
+			return "", false
+		}
+		t.Fatal("mysql container not found")
+		return "", false
+	}
+
+	t.Run("clone stall env present from 1.3.0", func(t *testing.T) {
+		v, ok := mysqldEnv(t, defaulted(t, "1.3.0"), naming.EnvBootstrapCloneStallTimeout)
+		assert.True(t, ok, "BOOTSTRAP_CLONE_STALL_TIMEOUT must be set for crVersion >= 1.3.0")
+		assert.Equal(t, "900", v)
+	})
+
+	t.Run("clone stall env absent before 1.3.0", func(t *testing.T) {
+		_, ok := mysqldEnv(t, defaulted(t, "1.2.0"), naming.EnvBootstrapCloneStallTimeout)
+		assert.False(t, ok, "BOOTSTRAP_CLONE_STALL_TIMEOUT must not be set for crVersion < 1.3.0")
+	})
+
+	t.Run("startup probe backstop raised from 1.3.0", func(t *testing.T) {
+		assert.Equal(t, int32(7*24*60*60), defaulted(t, "1.3.0").Spec.MySQL.StartupProbe.TimeoutSeconds)
+	})
+
+	t.Run("startup probe backstop stays 12h before 1.3.0", func(t *testing.T) {
+		assert.Equal(t, int32(12*60*60), defaulted(t, "1.2.0").Spec.MySQL.StartupProbe.TimeoutSeconds)
+	})
+}
+
 func TestStatefulsetVolumes(t *testing.T) {
 	configHash := "123abc"
 	tlsHash := "123abc"
