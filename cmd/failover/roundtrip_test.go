@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"io"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -186,11 +187,13 @@ func TestFailoverRoundTrip(t *testing.T) {
 		require.NoError(t, err)
 
 		_, err = fetchLogsFromSource(t.Context(), newStagingDir(t), src.url, "binlog.000004", src.position, testFetchTimeout)
-
 		require.Error(t, err)
+		assert.ErrorIs(t, err, io.EOF)
+
 		after, err := os.ReadFile(relay.target)
 		require.NoError(t, err)
 		assert.Equal(t, before, after)
+
 		relay.assertUntouched(t)
 	})
 
