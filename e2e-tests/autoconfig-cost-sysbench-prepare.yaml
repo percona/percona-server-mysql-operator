@@ -1,0 +1,102 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: sysbench-prepare
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: sysbench
+          image: perconalab/percona-server-mysql-operator:sysbench
+          imagePullPolicy: Always
+          resources:
+            requests:
+              cpu: "500m"
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          env:
+            - name: MYSQL_USER
+              value: root
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ps-cluster1-secrets
+                  key: root
+            - name: MYSQL_HOST
+              value: ps-cluster1-haproxy
+            - name: TABLES
+              value: "10"
+            - name: SCALE
+              value: "8"
+          command: ["/bin/bash"]
+          args:
+            - -c
+            - |
+              set -euo pipefail
+
+              cd ./sysbench-tpcc
+
+              # tpcc_common.lua disables the binlog for its own session during
+              # prepare. On a Group Replication cluster that would load the
+              # dataset onto the primary only and leave the secondaries empty,
+              # so force it back on.
+              sed -i 's/con:query("SET SESSION sql_log_bin = 0")/con:query("SET SESSION sql_log_bin = 1")/' ./tpcc_common.lua
+
+              mysql --host="${MYSQL_HOST}" --port=3306 \
+                --user="${MYSQL_USER}" --password="${MYSQL_PASSWORD}" \
+                -e "DROP DATABASE IF EXISTS sbtest; CREATE DATABASE sbtest;"
+
+              # sysbench can exit 0 after printing FATAL (a lost connection mid-load
+              # still ends the run "successfully"), so the exit code alone is not
+              # trustworthy - scan the output and fail loudly instead.
+              set +e
+              sysbench ./tpcc.lua \
+                --db-driver=mysql \
+                --mysql-host="${MYSQL_HOST}" \
+                --mysql-user="${MYSQL_USER}" \
+                --mysql-password="${MYSQL_PASSWORD}" \
+                --mysql-db=sbtest \
+                --tables="${TABLES}" \
+                --scale="${SCALE}" \
+                --threads=4 \
+                --force_pk=1 \
+                --db-ps-mode=disable \
+                --mysql-ignore-errors=all \
+                --enable_purge=yes \
+                prepare 2>&1 | tee /tmp/prepare.log
+              rc=${PIPESTATUS[0]}
+              set -e
+
+              if [ "${rc}" -ne 0 ] || grep -qE "FATAL|ERROR [0-9]+" /tmp/prepare.log; then
+                echo "PREPARE FAILED (exit ${rc}) - see FATAL/ERROR above." >&2
+                exit 1
+              fi
+
+              # Every table set must hold the requested warehouse count. A silent
+              # short load would otherwise leave the two arms comparing different
+              # datasets. warehouse${i} is the cheapest exact witness of this:
+              # it holds exactly SCALE rows and every other table in the set is
+              # generated from it.
+              for i in $(seq 1 "${TABLES}"); do
+                n=$(mysql --host="${MYSQL_HOST}" --port=3306 \
+                      --user="${MYSQL_USER}" --password="${MYSQL_PASSWORD}" \
+                      -N -B -e "SELECT COUNT(*) FROM sbtest.warehouse${i};")
+                echo "warehouse${i}: ${n} warehouses"
+                if [ "${n}" -ne "${SCALE}" ]; then
+                  echo "PREPARE INCOMPLETE: warehouse${i} has ${n} rows, want ${SCALE}" >&2
+                  exit 1
+                fi
+              done
+
+              # Record the loaded size - both arms must match or the comparison
+              # is invalid.
+              mysql --host="${MYSQL_HOST}" --port=3306 \
+                --user="${MYSQL_USER}" --password="${MYSQL_PASSWORD}" \
+                -e "SELECT ROUND(SUM(data_length+index_length)/1024/1024/1024, 2) AS dataset_gb
+                    FROM information_schema.tables WHERE table_schema='sbtest';"
+
+              echo "PREPARE OK: ${TABLES} table sets x ${SCALE} warehouses"

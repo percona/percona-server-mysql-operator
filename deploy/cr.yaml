@@ -28,7 +28,7 @@ spec:
 #    autoscaling:
 #      enabled: false
 #      growthStep: 2Gi
-#      maxSize: 20Gi
+#      maxSize: 10Gi
 #      triggerThresholdPercent: 80
 #    enableExternalAutoscaling: false
 #    enableVolumeScaling: false
@@ -119,29 +119,32 @@ spec:
 #      minAvailable: 0
     resources:
       limits:
-        cpu: "2"
-        memory: 4Gi
+        cpu: "4"
+        memory: 8Gi
       requests:
-        cpu: "1"
-        memory: 2Gi
+        cpu: "2"
+        memory: 6Gi
 #    startupProbe:
 #      failureThreshold: 1
 #      initialDelaySeconds: 15
 #      periodSeconds: 10
 #      successThreshold: 1
 #      timeoutSeconds: 43200
-#    readinessProbe:
-#      failureThreshold: 3
-#      initialDelaySeconds: 30
-#      periodSeconds: 5
-#      successThreshold: 1
-#      timeoutSeconds: 3
-#    livenessProbe:
-#      failureThreshold: 3
-#      initialDelaySeconds: 15
-#      periodSeconds: 10
-#      successThreshold: 1
-#      timeoutSeconds: 10
+    # timeoutSeconds below comes from the autoconfig calculator for this pod's
+    # effective resources (limits 4 CPU / 8Gi, dbType groupReplication,
+    # loadType someWrites)
+    readinessProbe:
+      failureThreshold: 3
+      initialDelaySeconds: 30
+      periodSeconds: 110
+      successThreshold: 1
+      timeoutSeconds: 101
+    livenessProbe:
+      failureThreshold: 3
+      initialDelaySeconds: 15
+      periodSeconds: 110
+      successThreshold: 1
+      timeoutSeconds: 101
     affinity:
 #      advanced:
 #        nodeAffinity:
@@ -198,16 +201,10 @@ spec:
 #        - 10.0.0.0/8
 #      type: ClusterIP
     volumeSpec:
-#      emptyDir: {}
-#      hostPath:
-#        path: /data
-#        type: Directory
       persistentVolumeClaim:
-#        accessModes:
-#          - ReadWriteOnce
         resources:
           requests:
-            storage: 14Gi
+            storage: 30Gi
 #        storageClassName: standard
 #    configuration: |-
 #      max_connections=250
