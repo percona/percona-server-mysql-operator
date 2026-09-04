@@ -160,6 +160,7 @@ func TestReconcileMySQLConfig(t *testing.T) {
 		currentConfig     string
 		autoConfig        string            // my.cnf in the ConfigMap; empty means no ConfigMap at all
 		lastAppliedConfig string            // JSON string on the statefulset annotation; empty means absent
+		stashedConfig     string            // JSON string the cr carries while the statefulset is recreated
 		object            []client.Object   // what the API holds besides the CR, the ConfigMap and the statefulset; nil means a healthy cluster
 		stmtErrs          map[string]string // stderr mysql answers a given statement with; drives the case on its own
 
@@ -462,6 +463,30 @@ func TestReconcileMySQLConfig(t *testing.T) {
 			expectedError:     errors.New("get operator password"),
 			expectedConfig:    `{"max_connections":"200"}`,
 		},
+		{
+			// A statefulset recreated to resize its volume claim template comes
+			// back without the record, and re-applying a configuration mysqld
+			// already has restarts the cluster over the variables that cannot be
+			// set at runtime. The copy the cr carries stands in for it, so this
+			// case must reach mysql with nothing to say - the mock fails the test
+			// on any statement.
+			desc:           "recreated statefulset takes the applied config from the cr",
+			state:          apiv1.StateReady,
+			currentConfig:  "[mysqld]\nmax_connections=200\n",
+			stashedConfig:  `{"max_connections":"200"}`,
+			expectedConfig: `{"max_connections":"200"}`,
+		},
+		{
+			// The copy is a record of what was applied, not a licence to skip
+			// the diff: a change made while the set was being recreated still
+			// reaches mysql.
+			desc:           "config changed during the recreate is still applied",
+			state:          apiv1.StateReady,
+			currentConfig:  "[mysqld]\nmax_connections=200\n",
+			stashedConfig:  `{"max_connections":"100"}`,
+			expectedStmts:  []string{"SET GLOBAL max_connections=200"},
+			expectedConfig: `{"max_connections":"200"}`,
+		},
 	}
 
 	for _, tt := range tests {
@@ -479,6 +504,11 @@ func TestReconcileMySQLConfig(t *testing.T) {
 			}
 			cr := newCR(crVersion, tt.state)
 			cr.Status.MySQL.State = mysqlState
+			if tt.stashedConfig != "" {
+				cr.Annotations = map[string]string{
+					naming.AnnotationLastAppliedConfig.String(): tt.stashedConfig,
+				}
+			}
 			sts := newSTS(cr, tt.lastAppliedConfig)
 
 			objs := []client.Object{cr, sts.DeepCopy()}
@@ -576,6 +606,11 @@ func TestReconcileMySQLConfig(t *testing.T) {
 			// pods leaves the condition alone.
 			updatedCR := new(apiv1.PerconaServerMySQL)
 			require.NoError(t, cl.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, updatedCR))
+
+			if tt.stashedConfig != "" {
+				_, kept := updatedCR.GetAnnotations()[naming.AnnotationLastAppliedConfig.String()]
+				assert.False(t, kept, "the copy on the cr is dropped once it is back on the statefulset")
+			}
 		})
 	}
 }

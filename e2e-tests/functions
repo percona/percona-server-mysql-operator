@@ -418,11 +418,13 @@ deploy_minio_tls() {
 	openssl req -newkey rsa:2048 -nodes \
 		-keyout "${cert_dir}/private.key" -out "${cert_dir}/server.csr" \
 		-subj '/CN=minio-service'
+	printf 'subjectAltName=DNS:minio-service,DNS:minio-service.%s,DNS:minio-service.%s.svc' \
+		"${NAMESPACE}" "${NAMESPACE}" >"${cert_dir}/san.cnf"
 	openssl x509 -req -days 2 \
 		-in "${cert_dir}/server.csr" \
 		-CA "${cert_dir}/ca.crt" -CAkey "${cert_dir}/ca.key" -CAcreateserial \
 		-out "${cert_dir}/server.crt" \
-		-extfile <(printf 'subjectAltName=DNS:minio-service,DNS:minio-service.%s,DNS:minio-service.%s.svc' "${NAMESPACE}" "${NAMESPACE}")
+		-extfile "${cert_dir}/san.cnf"
 	cat "${cert_dir}/server.crt" "${cert_dir}/ca.crt" >"${cert_dir}/public.crt"
 
 	kubectl -n "${NAMESPACE}" create secret generic minio-tls \
