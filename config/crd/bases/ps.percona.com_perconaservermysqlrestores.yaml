@@ -516,8 +516,16 @@ spec:
                                 type: array
                               xtrabackup:
                                 items:
+                                  maxLength: 1024
                                   type: string
+                                maxItems: 100
                                 type: array
+                                x-kubernetes-validations:
+                                - message: --defaults-file must use --defaults-file=<path>
+                                    syntax and be the first xtrabackup argument
+                                  rule: '!self.exists(arg, arg == ''--defaults-file''
+                                    || arg.startsWith(''--defaults-file='')) || (self[0].startsWith(''--defaults-file='')
+                                    && self[0] != ''--defaults-file='')'
                             type: object
                           env:
                             items:
@@ -1061,8 +1069,16 @@ spec:
                         type: array
                       xtrabackup:
                         items:
+                          maxLength: 1024
                           type: string
+                        maxItems: 100
                         type: array
+                        x-kubernetes-validations:
+                        - message: --defaults-file must use --defaults-file=<path>
+                            syntax and be the first xtrabackup argument
+                          rule: '!self.exists(arg, arg == ''--defaults-file'' || arg.startsWith(''--defaults-file=''))
+                            || (self[0].startsWith(''--defaults-file='') && self[0]
+                            != ''--defaults-file='')'
                     type: object
                   env:
                     items:

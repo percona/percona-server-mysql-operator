@@ -229,16 +229,28 @@ func xtrabackupArgs(user, pass string, conf *xb.BackupConfig) []string {
 	if _, err := os.Stat(mysql.CustomMyCnfPath); err == nil {
 		args = append([]string{"--defaults-extra-file=" + mysql.CustomMyCnfPath}, args...)
 	}
-	if conf != nil && conf.EncryptionKeyFile != "" {
+
+	if conf == nil {
+		return args
+	}
+	if conf.EncryptionKeyFile != "" {
 		args = append(args, fmt.Sprintf("--encrypt-key-file=%s", conf.EncryptionKeyFile))
 		if conf.ContainerOptions.GetArgs().GetXtrabackupFlagValue("--encrypt") == "" {
 			args = append(args, "--encrypt=AES256")
 		}
 	}
-	if conf != nil && conf.ContainerOptions != nil {
-		args = append(args, conf.ContainerOptions.Args.Xtrabackup...)
+	if conf.ContainerOptions != nil {
+		customArgs := conf.ContainerOptions.Args.Xtrabackup
+		// kubebuilder validation guarantees that --defaults-file=<path> is the first custom argument if specified.
+		// https://docs.percona.com/percona-xtrabackup/8.0/xtrabackup-option-reference.html#defaults-file
+		// We should move it to the beginning of args. Other custom arguments should be appended after the generated arguments.
+		if len(customArgs) > 0 && strings.HasPrefix(customArgs[0], "--defaults-file=") && customArgs[0] != "--defaults-file=" {
+			args = append([]string{customArgs[0]}, args...)
+			customArgs = customArgs[1:]
+		}
+		args = append(args, customArgs...)
 	}
-	if conf != nil && conf.IncrementalLsn != "" {
+	if conf.IncrementalLsn != "" {
 		args = append(args, fmt.Sprintf("--incremental-lsn=%s", conf.IncrementalLsn))
 	}
 
