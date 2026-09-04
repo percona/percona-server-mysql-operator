@@ -45,8 +45,19 @@ const (
 	DefaultXPort     = 33060
 	SidecarHTTPPort  = 6450
 
-	DefaultReadTimeoutSecondsSeconds  = 3600
-	DefaultCloneTimeoutSecondsSeconds = 3600
+	DefaultReadTimeoutSecondsSeconds = 3600
+
+	// DefaultCloneTimeoutSeconds is the default for the bootstrap clone timeout
+	// (BOOTSTRAP_CLONE_TIMEOUT) when it is not set via spec.mysql.env. It is
+	// generous (6h) because multi-TiB clones can run for hours; it is a safety
+	// net that lets a genuinely hung clone abort and retry, not a tuning knob.
+	DefaultCloneTimeoutSeconds = 21600
+
+	// DefaultCloneStallTimeoutSeconds is the default for the bootstrap clone
+	// progress watchdog (BOOTSTRAP_CLONE_STALL_TIMEOUT): the clone is aborted
+	// only if it transfers no bytes for this long. A progressing clone runs
+	// unbounded; set the env to 0 (via spec.mysql.env) to disable the watchdog.
+	DefaultCloneStallTimeoutSeconds = 900
 
 	DefaultAsyncSourceRetryCount   = 3
 	DefaultAsyncSourceConnectRetry = 60
@@ -732,6 +743,18 @@ func mysqldContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 			Value: filepath.Join(DataMountPath, "mysql.state"),
 		},
 	}
+
+	if cr.CompareVersion("1.3.0") >= 0 {
+		// Enable the bootstrap clone progress watchdog. Set before spec.Env so a
+		// user can override the stall window, or disable it with 0, via
+		// spec.mysql.env. Gated on 1.3.0 so upgrading only the operator does not
+		// change the pod template of existing clusters.
+		env = append(env, corev1.EnvVar{
+			Name:  naming.EnvBootstrapCloneStallTimeout,
+			Value: strconv.Itoa(DefaultCloneStallTimeoutSeconds),
+		})
+	}
+
 	env = append(env, spec.Env...)
 
 	if cr.CompareVersion("1.2.0") >= 0 {
@@ -908,10 +931,14 @@ func heartbeatContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 		},
 	}
 
-	if cr.CompareVersion("1.0.0") >= 0 {
+	// Before 1.3.0 the sidecar honored a clone-wait timeout via CLONE_TIMEOUT_SECONDS.
+	// From 1.3.0 it waits without a timeout and ignores this env, so it is dropped.
+	// Keep emitting it for older clusters (same value main produces) so upgrading
+	// only the operator image does not change the pod template and roll them.
+	if cr.CompareVersion("1.3.0") < 0 && cr.CompareVersion("1.0.0") >= 0 {
 		t, err := utils.GetCloneTimeout()
-		if err != nil || t <= 0 {
-			t = DefaultCloneTimeoutSecondsSeconds
+		if err != nil || t == 0 {
+			t = 3600
 		}
 		env = append(env, corev1.EnvVar{
 			Name:  "CLONE_TIMEOUT_SECONDS",
