@@ -1,6 +1,6 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
-timeout: 150
+timeout: 1200
 commands:
   - script: |-
       set -o errexit
@@ -8,4 +8,27 @@ commands:
 
       source ../../functions
 
+      cluster=$(get_cluster_name)
+      mysql_uids_before=$(get_mysql_pod_uids "${cluster}")
+      router_uids_before=$(get_component_pod_uids "${cluster}" router)
+      not_before=$(get_mysql_cert_not_before_on_pods "${cluster}")
+
       renew_certificate "gr-tls-cert-manager-ssl"
+
+      reloaded="true"
+      wait_for_mysql_cert_reload "${cluster}" "${not_before}" 300 || reloaded="false"
+
+      # Router reads its certificates once at startup, so unlike mysqld it still
+      # has to be restarted to pick up the new ones.
+      router_recycled="true"
+      wait_for_component_pods_restart "${cluster}" router "${router_uids_before}" 600 || router_recycled="false"
+
+      # The renewed leaf is signed by the same CA, so no database pod may be
+      # replaced - not even while everything around it rolls.
+      mysql_recycled="false"
+      [[ $(get_mysql_pod_uids "${cluster}") == "${mysql_uids_before}" ]] || mysql_recycled="true"
+
+      kubectl -n "${NAMESPACE}" create configmap 06-renew-certs \
+          --from-literal=reloaded="${reloaded}" \
+          --from-literal=mysql_recycled="${mysql_recycled}" \
+          --from-literal=router_recycled="${router_recycled}"
