@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.8.0
-	github.com/Tusamarco/mysqloperatorcalculator v1.21.1-0.20260818072711-f34b26a33449
+	github.com/Tusamarco/mysqloperatorcalculator v1.21.1-0.20260904133431-f481c79f1d76
 	github.com/cert-manager/cert-manager v1.20.3
 	github.com/flosch/pongo2 v0.0.0-20200913210552-0d938eb266f3
 	github.com/go-ini/ini v1.67.0

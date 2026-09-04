@@ -18,8 +18,8 @@ github.com/Masterminds/semver/v3 v3.5.0 h1:kQceYJfbupGfZOKZQg0kou0DgAKhzDg2NZPAw
 github.com/Masterminds/semver/v3 v3.5.0/go.mod h1:4V+yj/TJE1HU9XfppCwVMZq3I84lprf4nC11bSS5beM=
 github.com/Percona-Lab/percona-version-service v0.0.0-20230324081000-27de445df239 h1:3A878XXdSJGu9JPeOQ7bPe3g7SLkghJqcMFWL8GulLA=
 github.com/Percona-Lab/percona-version-service v0.0.0-20230324081000-27de445df239/go.mod h1:2gW0U0FS5Bpl2cL9PrmeSb1Vp/5x0zmrN1o5iiiTd9k=
-github.com/Tusamarco/mysqloperatorcalculator v1.21.1-0.20260818072711-f34b26a33449 h1:3uP0vn/ruI4D/Y0C0gcT5TK58d70FF02HPjaMEkkoVI=
-github.com/Tusamarco/mysqloperatorcalculator v1.21.1-0.20260818072711-f34b26a33449/go.mod h1:LWnrvFd1IZtrjqeNQm8jdDxUq3aupIk4R0adOeXQn2M=
+github.com/Tusamarco/mysqloperatorcalculator v1.21.1-0.20260904133431-f481c79f1d76 h1:LeWVY0TcqkFdtKiL7HOS4Nn3dCmxhAx2vzV+eMbzONA=
+github.com/Tusamarco/mysqloperatorcalculator v1.21.1-0.20260904133431-f481c79f1d76/go.mod h1:LWnrvFd1IZtrjqeNQm8jdDxUq3aupIk4R0adOeXQn2M=
 github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5 h1:0CwZNZbxp69SHPdPJAN/hZIm0C4OItdklCFmMRWYpio=
 github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5/go.mod h1:wHh0iHkYZB8zMSxRWpUBQtwG5a7fFgvEO+odwuTv2gs=
 github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=
