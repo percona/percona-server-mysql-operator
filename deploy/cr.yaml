@@ -1004,9 +1004,12 @@ spec:
 #              requests:
 #                storage: 2Gi
 #            storageClassName: standard
+#    allowParallel: false
 #    encryptionKeySecret:
 #      key: encryptionKey
 #      name: my-encryption-key-secret
+#    startingDeadlineSeconds: 0
+#    suspendedDeadlineSeconds: 0
   toolkit:
     image: perconalab/percona-server-mysql-operator:main-toolkit
     imagePullPolicy: Always

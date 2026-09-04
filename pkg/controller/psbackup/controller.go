@@ -34,6 +34,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	k8sretry "k8s.io/client-go/util/retry"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -142,15 +143,9 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 
 	switch cr.Status.State {
 	case apiv1.BackupFailed, apiv1.BackupSucceeded, apiv1.BackupError:
-		if err := r.releaseLeaseIfNeeded(ctx, cr, &status); err != nil {
+		if err := r.releaseLeaseIfAcquired(ctx, cr, &status); err != nil {
 			return rr, errors.Wrap(err, "release lease")
 		}
-		return rr, nil
-	}
-
-	if ok, err := r.tryAcquireLease(ctx, cr, &status); err != nil {
-		return rr, errors.Wrap(err, "try to acquire lease")
-	} else if !ok {
 		return rr, nil
 	}
 
@@ -182,13 +177,42 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		return rr, errors.Wrapf(err, "get job %v", nn.String())
 	}
 
+	if k8serrors.IsNotFound(err) && cr.IsStartingDeadlineExceeded(cluster, time.Now()) {
+		status.State = apiv1.BackupError
+		status.StateDesc = "backup did not start before startingDeadlineSeconds expired"
+		if err := r.releaseLeaseIfAcquired(ctx, cr, &status); err != nil {
+			return rr, errors.Wrap(err, "release lease after starting deadline expired")
+		}
+		return ctrl.Result{}, nil
+	}
+	if err == nil && cr.IsSuspendedDeadlineExceeded(cluster, job, time.Now()) {
+		if err := r.Delete(ctx, job); client.IgnoreNotFound(err) != nil {
+			return rr, errors.Wrap(err, "delete backup job after suspended deadline expired")
+		}
+		status.State = apiv1.BackupFailed
+		status.StateDesc = "backup did not resume before suspendedDeadlineSeconds expired"
+		if err := r.releaseLeaseIfAcquired(ctx, cr, &status); err != nil {
+			return rr, errors.Wrap(err, "release lease after suspended deadline expired")
+		}
+		return ctrl.Result{}, nil
+	}
+
+	if cluster.Spec.Backup.GetAllowParallel() {
+		if err := r.releaseLeaseIfAcquired(ctx, cr, &status); err != nil {
+			return rr, errors.Wrap(err, "release lease")
+		}
+	} else if status.State == apiv1.BackupNew {
+		if ok, err := r.tryAcquireLease(ctx, cr, &status); err != nil {
+			return rr, errors.Wrap(err, "try to acquire lease")
+		} else if !ok {
+			return rr, nil
+		}
+	}
+
 	if k8serrors.IsNotFound(err) {
 		if err := cluster.CanBackup(); err != nil {
 			log.Info("PerconaServerMySQL is not ready for backup", "backup", cr.Name, "cluster", cluster.Name, "namespace", cluster.Namespace, "reason", err.Error())
-
-			status.State = apiv1.BackupError
-			status.StateDesc = "cluster is not ready"
-			return ctrl.Result{}, nil
+			return rr, nil
 		}
 
 		restoreName, err := r.getActiveRestore(ctx, cr)
@@ -266,8 +290,18 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		case batchv1.JobComplete:
 			jobFinishState = apiv1.BackupSucceeded
 		}
+	}
 
+	if isJobFinished(job) {
 		status.CompletedAt = job.Status.CompletionTime
+	} else {
+		suspend, err := r.handleSuspend(ctx, cr, cluster, job, &status)
+		if err != nil {
+			return rr, errors.Wrap(err, "handle backup job suspension")
+		}
+		if suspend {
+			return rr, nil
+		}
 	}
 
 	switch {
@@ -306,6 +340,65 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	}
 
 	return rr, nil
+}
+
+func isJobFinished(job *batchv1.Job) bool {
+	for _, condition := range job.Status.Conditions {
+		if condition.Status == corev1.ConditionTrue && (condition.Type == batchv1.JobComplete || condition.Type == batchv1.JobFailed) {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *PerconaServerMySQLBackupReconciler) handleSuspend(
+	ctx context.Context,
+	backup *apiv1.PerconaServerMySQLBackup,
+	cluster *apiv1.PerconaServerMySQL,
+	job *batchv1.Job,
+	status *apiv1.PerconaServerMySQLBackupStatus,
+) (bool, error) {
+	suspend := false
+	if err := cluster.CanBackup(); err != nil {
+		logf.FromContext(ctx).Info("PerconaServerMySQL became unready during backup; suspending the backup job", "backup", backup.Name, "cluster", cluster.Name, "namespace", cluster.Namespace, "reason", err.Error())
+		suspend = true
+	}
+
+	applied := false
+	err := k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
+		j := &batchv1.Job{}
+		if err := r.Get(ctx, client.ObjectKeyFromObject(job), j); err != nil {
+			return errors.Wrap(err, "get backup job")
+		}
+		if isJobFinished(j) {
+			return nil
+		}
+		if ptr.Deref(j.Spec.Suspend, false) == suspend {
+			applied = true
+			return nil
+		}
+
+		j.Spec.Suspend = new(suspend)
+
+		if err := r.Update(ctx, j); err != nil {
+			return err
+		}
+		applied = true
+		return nil
+	})
+	if err != nil {
+		return false, errors.Wrap(err, "update backup job")
+	}
+
+	if applied && suspend {
+		status.State = apiv1.BackupSuspended
+		status.StateDesc = ""
+	} else if applied && status.State == apiv1.BackupSuspended {
+		status.State = apiv1.BackupStarting
+		status.StateDesc = ""
+	}
+
+	return suspend, nil
 }
 
 func (r *PerconaServerMySQLBackupReconciler) validateStorage(ctx context.Context, storageName string, cluster *apiv1.PerconaServerMySQL, status apiv1.PerconaServerMySQLBackupStatus) error {
@@ -1089,7 +1182,7 @@ func (r *PerconaServerMySQLBackupReconciler) tryAcquireLease(
 	return acquired, nil
 }
 
-func (r *PerconaServerMySQLBackupReconciler) releaseLeaseIfNeeded(
+func (r *PerconaServerMySQLBackupReconciler) releaseLeaseIfAcquired(
 	ctx context.Context,
 	backup *apiv1.PerconaServerMySQLBackup,
 	status *apiv1.PerconaServerMySQLBackupStatus,

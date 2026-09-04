@@ -2250,11 +2250,17 @@ verify_all_backups_deletion() {
 					"secret_name=\($s.credentialsSecret // "")",
 					"endpoint=\($s.endpointUrl // "")",
 					"region=\($s.region // "")",
-					"destination=\(.status.destination // "")"
+					"destination=\(.status.destination // "")",
+					"backup_state=\(.status.state // "")"
 				'
 		)"
 
 		kubectl delete ps-backup "$backup" -n "$NAMESPACE"
+		# The delete-backup finalizer removes storage only for successful backups.
+		if [[ $backup_state != "Succeeded" ]]; then
+			echo "Skipping storage verification for backup $backup in state $backup_state"
+			continue
+		fi
 
 		local prefix="${destination#*://}"
 		prefix="${prefix#*/}"

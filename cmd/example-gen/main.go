@@ -62,7 +62,10 @@ func printCluster(ctx context.Context) error {
 		},
 		Spec: apiv1.PerconaServerMySQLSpec{
 			Backup: &apiv1.BackupSpec{
-				Image: defaults.ImageBackup,
+				AllowParallel:            new(false),
+				Image:                    defaults.ImageBackup,
+				StartingDeadlineSeconds:  new(int64(0)),
+				SuspendedDeadlineSeconds: new(int64(0)),
 			},
 			MySQL: apiv1.MySQLSpec{
 				VolumeSpec: &apiv1.VolumeSpec{
@@ -132,6 +135,8 @@ func printBackup() error {
 			IncrementalBaseBackupName: new("some-backup"),
 			StorageName:               "minio",
 			SourcePod:                 defaults.SourcePod,
+			StartingDeadlineSeconds:   new(int64(0)),
+			SuspendedDeadlineSeconds:  new(int64(0)),
 		},
 	}
 

@@ -1,0 +1,29 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      storage_name=$(kubectl get ps demand-backup -n "$NAMESPACE" -o yaml \
+        | yq '(.spec.backup.storages // {}) | keys | .[0]')
+      first_job="xb-demand-backup-sequential-1-${storage_name}"
+      second_job="xb-demand-backup-sequential-2-${storage_name}"
+
+      first_started=$(kubectl get job "$first_job" -n "$NAMESPACE" \
+        -o jsonpath='{.status.startTime}')
+      first_completed=$(kubectl get job "$first_job" -n "$NAMESPACE" \
+        -o jsonpath='{.status.completionTime}')
+      second_started=$(kubectl get job "$second_job" -n "$NAMESPACE" \
+        -o jsonpath='{.status.startTime}')
+      second_completed=$(kubectl get job "$second_job" -n "$NAMESPACE" \
+        -o jsonpath='{.status.completionTime}')
+
+      echo "$first_job ran from $first_started to $first_completed"
+      echo "$second_job ran from $second_started to $second_completed"
+
+      if [[ "$first_completed" > "$second_started" && \
+            "$second_completed" > "$first_started" ]]; then
+        echo "Sequential backup Jobs overlapped"
+        exit 1
+      fi

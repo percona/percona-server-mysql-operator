@@ -20,11 +20,14 @@ import (
 	"io"
 	"path"
 	"strings"
+	"time"
 
-	"github.com/percona/percona-server-mysql-operator/pkg/config"
+	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/percona/percona-server-mysql-operator/pkg/config"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 )
 
@@ -38,6 +41,10 @@ type PerconaServerMySQLBackupSpec struct {
 	StorageName      string                  `json:"storageName"`
 	SourcePod        string                  `json:"sourcePod,omitempty"`
 	ContainerOptions *BackupContainerOptions `json:"containerOptions,omitempty"`
+	// +kubebuilder:validation:Minimum=0
+	StartingDeadlineSeconds *int64 `json:"startingDeadlineSeconds,omitempty"`
+	// +kubebuilder:validation:Minimum=0
+	SuspendedDeadlineSeconds *int64 `json:"suspendedDeadlineSeconds,omitempty"`
 
 	// Name of the base (full) backup for incremental backups
 	// Only used for incremental backups
@@ -52,6 +59,7 @@ const (
 	BackupNew       BackupState = ""
 	BackupStarting  BackupState = "Starting"
 	BackupRunning   BackupState = "Running"
+	BackupSuspended BackupState = "Suspended"
 	BackupSucceeded BackupState = "Succeeded"
 
 	// Used for backups that failed to start at all
@@ -74,6 +82,52 @@ const (
 const (
 	ConditionBackupLeaseAcquired = "BackupLeaseAcquired"
 )
+
+func (b *PerconaServerMySQLBackup) IsStartingDeadlineExceeded(cluster *PerconaServerMySQL, now time.Time) bool {
+	if b.Status.State != BackupNew && b.Status.State != BackupStarting {
+		return false
+	}
+	if cluster == nil || cluster.Spec.Backup == nil {
+		return false
+	}
+
+	deadline := cluster.Spec.Backup.StartingDeadlineSeconds
+	if b.Spec.StartingDeadlineSeconds != nil {
+		deadline = b.Spec.StartingDeadlineSeconds
+	}
+	if deadline == nil || b.CreationTimestamp.IsZero() {
+		return false
+	}
+
+	return !now.Before(b.CreationTimestamp.Add(time.Duration(*deadline) * time.Second))
+}
+
+func (b *PerconaServerMySQLBackup) IsSuspendedDeadlineExceeded(cluster *PerconaServerMySQL, job *batchv1.Job, now time.Time) bool {
+	if cluster == nil || cluster.Spec.Backup == nil || job == nil {
+		return false
+	}
+
+	if job.Spec.Suspend == nil || !*job.Spec.Suspend {
+		return false
+	}
+
+	deadline := cluster.Spec.Backup.SuspendedDeadlineSeconds
+	if b.Spec.SuspendedDeadlineSeconds != nil {
+		deadline = b.Spec.SuspendedDeadlineSeconds
+	}
+	if deadline == nil {
+		return false
+	}
+
+	for _, condition := range job.Status.Conditions {
+		if condition.Type != batchv1.JobSuspended || condition.Status != corev1.ConditionTrue {
+			continue
+		}
+		return !now.Before(condition.LastTransitionTime.Add(time.Duration(*deadline) * time.Second))
+	}
+
+	return false
+}
 
 // PerconaServerMySQLBackupStatus defines the observed state of PerconaServerMySQLBackup
 type PerconaServerMySQLBackupStatus struct {
