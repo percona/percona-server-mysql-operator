@@ -17,7 +17,7 @@ commands:
           | yq eval '.spec.proxy.router.enabled=false' - \
           | yq eval '.spec.proxy.haproxy.enabled=true' - \
           | yq eval '.spec.enableVolumeExpansion=true' - \
-          | yq eval '.spec.mysql.volumeSpec.persistentVolumeClaim.resources.requests.storage="2Gi"' -)"
+          | yq eval '.spec.mysql.volumeSpec.persistentVolumeClaim.resources.requests.storage="10Gi"' -)"
 
       if [[ "$platform" == "eks" ]]; then
         kubectl apply -f ../../conf/eks-storage-class.yaml

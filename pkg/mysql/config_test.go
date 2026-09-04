@@ -3,6 +3,7 @@ package mysql
 import (
 	"context"
 	"errors"
+	"maps"
 	"reflect"
 	"strconv"
 	"strings"
@@ -481,13 +482,13 @@ func TestGetAutoConfigParams(t *testing.T) {
 		},
 		// The redo log is preallocated in full at startup, and a node joining by
 		// clone needs free space for the donor's estimate on top of its own, so
-		// the redo log is trimmed to a quarter of the volume. At 8Gi of memory
-		// the calculator asks for ~4.4Gi.
-		"a data volume smaller than the calculated redo log trims it": {
-			cr:           withDataVolume(newAutoConfigCR(apiv1.ClusterTypeGR, apiv1.AutoConfigLoadTypeSomeWrites, "8.4.8"), "2Gi"),
-			cpu:          cpu,
-			memory:       mem,
-			wantContains: []string{"innodb_redo_log_capacity=536870912"},
+		// a redo log over a quarter of the volume is rejected rather than
+		// resized. At 8Gi of memory the calculator asks for ~4.4Gi.
+		"a data volume too small for the calculated redo log is rejected": {
+			cr:              withDataVolume(newAutoConfigCR(apiv1.ClusterTypeGR, apiv1.AutoConfigLoadTypeSomeWrites, "8.4.8"), "2Gi"),
+			cpu:             cpu,
+			memory:          mem,
+			wantErrContains: "data volume is too small",
 		},
 		"a data volume with room keeps the calculated redo log": {
 			cr:           withDataVolume(newAutoConfigCR(apiv1.ClusterTypeGR, apiv1.AutoConfigLoadTypeSomeWrites, "8.4.8"), "32Gi"),
@@ -495,14 +496,7 @@ func TestGetAutoConfigParams(t *testing.T) {
 			memory:       mem,
 			wantContains: []string{"innodb_redo_log_capacity=4714155900"},
 		},
-		// Trimming cannot go below the smallest redo log MySQL accepts.
-		"a data volume too small for the minimum redo log is rejected": {
-			cr:              withDataVolume(newAutoConfigCR(apiv1.ClusterTypeGR, apiv1.AutoConfigLoadTypeSomeWrites, "8.4.8"), "16Mi"),
-			cpu:             cpu,
-			memory:          mem,
-			wantErrContains: "data volume is too small",
-		},
-		// emptyDir and hostPath have no declared size to trim against.
+		// emptyDir and hostPath have no declared size to check against.
 		"no persistent volume keeps the calculated redo log": {
 			cr:           newAutoConfigCR(apiv1.ClusterTypeGR, apiv1.AutoConfigLoadTypeSomeWrites, "8.4.8"),
 			cpu:          cpu,
@@ -637,62 +631,55 @@ func pvcVolumeSpec(res corev1.VolumeResourceRequirements) *apiv1.VolumeSpec {
 	}
 }
 
-func TestCapRedoLog(t *testing.T) {
+func TestCheckRedoLogFits(t *testing.T) {
 	tests := map[string]struct {
-		volume     string // empty => no persistent volume
-		params     map[string]string
-		wantParams map[string]string
-		wantErr    error
+		volume  string // empty => no persistent volume
+		params  map[string]string
+		wantErr error
 	}{
-		"no persistent volume leaves the redo log alone": {
-			params:     map[string]string{"innodb_redo_log_capacity": "4294967296"},
-			wantParams: map[string]string{"innodb_redo_log_capacity": "4294967296"},
+		"no persistent volume is not checked": {
+			params: map[string]string{"innodb_redo_log_capacity": "4294967296"},
 		},
 		"no redo log in the calculated params": {
-			volume:     "8Gi",
-			params:     map[string]string{"innodb_buffer_pool_size": "1073741824"},
-			wantParams: map[string]string{"innodb_buffer_pool_size": "1073741824"},
+			volume: "8Gi",
+			params: map[string]string{"innodb_buffer_pool_size": "1073741824"},
 		},
-		"redo log within budget is untouched": {
-			volume:     "8Gi",
-			params:     map[string]string{"innodb_redo_log_capacity": "1073741824"},
-			wantParams: map[string]string{"innodb_redo_log_capacity": "1073741824"},
+		"redo log within budget": {
+			volume: "8Gi",
+			params: map[string]string{"innodb_redo_log_capacity": "1073741824"},
 		},
-		"redo log exactly at budget is untouched": {
-			volume:     "8Gi",
-			params:     map[string]string{"innodb_redo_log_capacity": "2147483648"},
-			wantParams: map[string]string{"innodb_redo_log_capacity": "2147483648"},
+		"redo log exactly at budget": {
+			volume: "8Gi",
+			params: map[string]string{"innodb_redo_log_capacity": "2147483648"},
 		},
-		"redo log over budget is trimmed to a quarter of the volume": {
-			volume:     "8Gi",
-			params:     map[string]string{"innodb_redo_log_capacity": "4294967296"},
-			wantParams: map[string]string{"innodb_redo_log_capacity": "2147483648"},
+		"redo log over budget is rejected": {
+			volume:  "8Gi",
+			params:  map[string]string{"innodb_redo_log_capacity": "2147483649"},
+			wantErr: ErrInsufficientStorage,
 		},
-		"the budget is rounded down to a whole MiB": {
-			volume:     "5Gi",
-			params:     map[string]string{"innodb_redo_log_capacity": "4294967296"},
-			wantParams: map[string]string{"innodb_redo_log_capacity": "1342177280"},
-		},
-		"a volume too small for the minimum redo log is rejected": {
-			volume:  "16Mi",
+		"a redo log that fits the volume but not the budget is rejected": {
+			volume:  "8Gi",
 			params:  map[string]string{"innodb_redo_log_capacity": "4294967296"},
 			wantErr: ErrInsufficientStorage,
 		},
-		"pre-8.4 spelling is trimmed across the file count": {
+		"pre-8.4 spelling is totalled across the file count": {
+			volume: "8Gi",
+			params: map[string]string{
+				"innodb_log_file_size":      "1073741824",
+				"innodb_log_files_in_group": "2",
+			},
+		},
+		"pre-8.4 spelling over budget is rejected": {
 			volume: "8Gi",
 			params: map[string]string{
 				"innodb_log_file_size":      "2147483648",
 				"innodb_log_files_in_group": "2",
 			},
-			wantParams: map[string]string{
-				"innodb_log_file_size":      "1073741824",
-				"innodb_log_files_in_group": "2",
-			},
+			wantErr: ErrInsufficientStorage,
 		},
 		"pre-8.4 spelling without a file count assumes a single file": {
-			volume:     "8Gi",
-			params:     map[string]string{"innodb_log_file_size": "4294967296"},
-			wantParams: map[string]string{"innodb_log_file_size": "2147483648"},
+			volume: "8Gi",
+			params: map[string]string{"innodb_log_file_size": "2147483648"},
 		},
 		"an unparseable redo log value is an error": {
 			volume:  "8Gi",
@@ -707,14 +694,15 @@ func TestCapRedoLog(t *testing.T) {
 			if tc.volume != "" {
 				withDataVolume(cr, tc.volume)
 			}
+			before := maps.Clone(tc.params)
 
-			err := capRedoLog(cr, tc.params)
+			err := checkRedoLogFits(cr, tc.params)
 			if tc.wantErr != nil {
 				require.ErrorIs(t, err, tc.wantErr)
-				return
+			} else {
+				require.NoError(t, err)
 			}
-			require.NoError(t, err)
-			assert.Equal(t, tc.wantParams, tc.params)
+			assert.Equal(t, before, tc.params, "the calculated params must not be rewritten")
 		})
 	}
 }

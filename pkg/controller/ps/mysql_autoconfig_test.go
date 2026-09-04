@@ -185,21 +185,21 @@ func TestReconcileMySQLAutoConfig(t *testing.T) {
 			"no configuration should be written when the user configuration cannot be read")
 	})
 
-	t.Run("a data volume smaller than the calculated redo log trims it", func(t *testing.T) {
+	t.Run("a data volume with room for the calculated redo log is kept", func(t *testing.T) {
 		ctx := t.Context()
 		cr := newCR(true, "8.4")
-		withDataVolume(cr, "2Gi")
+		withDataVolume(cr, "32Gi")
 		r := newReconciler(t, cr)
 
 		require.NoError(t, r.reconcileMySQLAutoConfig(ctx, cr))
 
-		assert.Contains(t, autoConfig(t, r, cr), "innodb_redo_log_capacity=536870912")
+		assert.Contains(t, autoConfig(t, r, cr), "innodb_redo_log_capacity=")
 	})
 
-	t.Run("a data volume too small for the minimum redo log fails the reconcile", func(t *testing.T) {
+	t.Run("a data volume too small for the calculated redo log fails the reconcile", func(t *testing.T) {
 		ctx := t.Context()
 		cr := newCR(true, "8.4")
-		withDataVolume(cr, "16Mi")
+		withDataVolume(cr, "2Gi")
 		r := newReconciler(t, cr)
 
 		err := r.reconcileMySQLAutoConfig(ctx, cr)

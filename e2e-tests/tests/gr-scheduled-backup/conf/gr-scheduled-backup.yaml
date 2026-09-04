@@ -11,7 +11,7 @@ spec:
       persistentVolumeClaim:
         resources:
           requests:
-            storage: 7Gi
+            storage: 14Gi
 
   proxy:
     haproxy:

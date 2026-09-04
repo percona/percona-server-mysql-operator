@@ -28,7 +28,7 @@ spec:
 #    autoscaling:
 #      enabled: false
 #      growthStep: 2Gi
-#      maxSize: 10Gi
+#      maxSize: 20Gi
 #      triggerThresholdPercent: 80
 #    enableExternalAutoscaling: false
 #    enableVolumeScaling: false
@@ -207,7 +207,7 @@ spec:
 #          - ReadWriteOnce
         resources:
           requests:
-            storage: 10Gi
+            storage: 14Gi
 #        storageClassName: standard
 #    configuration: |-
 #      max_connections=250

@@ -2734,8 +2734,8 @@ var _ = Describe("PVC Resizing with orphaned PVCs", Ordered, func() {
 		})
 
 		cr.Spec.StorageScaling = &psv1.StorageScalingSpec{EnableVolumeScaling: true}
-		orphanSize := resource.MustParse("2Gi")
-		liveSize := resource.MustParse("3Gi")
+		orphanSize := resource.MustParse("10Gi")
+		liveSize := resource.MustParse("11Gi")
 		cr.Spec.MySQL.VolumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage] = liveSize
 
 		It("should create PerconaServerMySQL", func() {
@@ -2935,7 +2935,7 @@ var _ = Describe("PVC Resizing with orphaned PVCs", Ordered, func() {
 		// The statefulset must still be recreated when its volume claim template is
 		// stale, since that template is immutable.
 		When("the requested size no longer matches the volume template", Ordered, func() {
-			biggerSize := resource.MustParse("4Gi")
+			biggerSize := resource.MustParse("12Gi")
 			stsUID := ""
 
 			It("should request a bigger volume", func() {
@@ -3021,8 +3021,8 @@ var _ = Describe("PVC Resizing with a size that is not whole GiB", Ordered, func
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		specSize := resource.MustParse("2500Mi") // what the template holds
-		roundedSize := resource.MustParse("3Gi") // what the PVCs are resized to
+		specSize := resource.MustParse("10500Mi") // what the template holds
+		roundedSize := resource.MustParse("11Gi") // what the PVCs are resized to
 		cr.Spec.StorageScaling = &psv1.StorageScalingSpec{EnableVolumeScaling: true}
 		cr.Spec.MySQL.VolumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage] = specSize
 
@@ -3193,7 +3193,7 @@ var _ = Describe("PVC Resizing with a size that is not whole GiB", Ordered, func
 		// sign that the volume is expanded, and a resize that never finishes holds
 		// the replicas back for good.
 		When("the cluster reports no resize status", Ordered, func() {
-			lastSize := resource.MustParse("6Gi")
+			lastSize := resource.MustParse("14Gi")
 
 			It("should request a bigger volume", func() {
 				Expect(k8sClient.Get(ctx, crNamespacedName, cr)).Should(Succeed())
@@ -3261,8 +3261,8 @@ var _ = Describe("PVC Resizing with a size that is not whole GiB", Ordered, func
 		// resize that only some of them completed. It needs no expansion, and it
 		// can never shrink to match, so it has to count as done.
 		When("a claim is already bigger than the request", Ordered, func() {
-			bigger := resource.MustParse("8Gi")
-			biggest := resource.MustParse("10Gi")
+			bigger := resource.MustParse("16Gi")
+			biggest := resource.MustParse("18Gi")
 
 			It("should start a resize with one claim already past it", func() {
 				first := types.NamespacedName{Name: fmt.Sprintf("datadir-%s-0", sts.Name), Namespace: ns}
