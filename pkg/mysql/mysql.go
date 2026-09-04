@@ -3,6 +3,7 @@ package mysql
 import (
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strconv"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -156,7 +157,6 @@ func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, configHash, tlsHash st
 	if tlsHash != "" {
 		annotations[string(naming.AnnotationTLSHash)] = tlsHash
 	}
-
 	sts := &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "apps/v1",
@@ -347,6 +347,33 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 				},
 			},
 		})
+	}
+
+	if cr.Spec.Backup != nil {
+		names := make([]string, 0, len(cr.Spec.Backup.Storages))
+		for name := range cr.Spec.Backup.Storages {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+
+		selectors := make([]apiv1.CABundleSecretSelector, 0, len(names))
+		seen := make(map[apiv1.CABundleSecretSelector]struct{})
+		for _, name := range names {
+			storage := cr.Spec.Backup.Storages[name]
+			if storage == nil || storage.Type != apiv1.BackupStorageS3 ||
+				storage.S3 == nil || storage.S3.CABundle == nil {
+				continue
+			}
+			selector := *storage.S3.CABundle
+			if _, ok := seen[selector]; ok {
+				continue
+			}
+			seen[selector] = struct{}{}
+			selectors = append(selectors, selector)
+		}
+		if len(selectors) > 0 && cr.CompareVersion("1.3.0") >= 0 {
+			volumes = append(volumes, k8s.S3CertVolumes(selectors)...)
+		}
 	}
 
 	if cr.Spec.PMM != nil && cr.Spec.PMM.Enabled && cr.CompareVersion("1.3.0") >= 0 {
@@ -851,6 +878,22 @@ func backupContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 			Name:  "CLUSTER_TYPE",
 			Value: string(cr.Spec.MySQL.ClusterType),
 		})
+	}
+
+	if cr.CompareVersion("1.3.0") >= 0 {
+		for _, storage := range cr.Spec.Backup.Storages {
+			if storage == nil || storage.Type != apiv1.BackupStorageS3 ||
+				storage.S3 == nil || storage.S3.CABundle == nil {
+				continue
+			}
+
+			container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
+				Name:      naming.S3CertsInputVolumeName,
+				MountPath: naming.S3CertsInputMountPath,
+				ReadOnly:  true,
+			})
+			break
+		}
 	}
 
 	return container

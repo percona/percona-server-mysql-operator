@@ -403,6 +403,72 @@ deploy_minio() {
         /usr/bin/aws --endpoint-url http://minio-service:9000 s3 mb s3://operator-testing"
 }
 
+deploy_minio_tls() {
+	local storage="${1:-2G}"
+	local access_key
+	local secret_key
+	local cert_dir
+	access_key="$(kubectl -n "${NAMESPACE}" get secret minio-secret -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' | base64 -d)"
+	secret_key="$(kubectl -n "${NAMESPACE}" get secret minio-secret -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}' | base64 -d)"
+	cert_dir="$(mktemp -d)"
+
+	openssl req -x509 -newkey rsa:2048 -nodes -days 2 \
+		-keyout "${cert_dir}/ca.key" -out "${cert_dir}/ca.crt" \
+		-subj '/CN=minio-e2e-ca'
+	openssl req -newkey rsa:2048 -nodes \
+		-keyout "${cert_dir}/private.key" -out "${cert_dir}/server.csr" \
+		-subj '/CN=minio-service'
+	openssl x509 -req -days 2 \
+		-in "${cert_dir}/server.csr" \
+		-CA "${cert_dir}/ca.crt" -CAkey "${cert_dir}/ca.key" -CAcreateserial \
+		-out "${cert_dir}/server.crt" \
+		-extfile <(printf 'subjectAltName=DNS:minio-service,DNS:minio-service.%s,DNS:minio-service.%s.svc' "${NAMESPACE}" "${NAMESPACE}")
+	cat "${cert_dir}/server.crt" "${cert_dir}/ca.crt" >"${cert_dir}/public.crt"
+
+	kubectl -n "${NAMESPACE}" create secret generic minio-tls \
+		--from-file=private.key="${cert_dir}/private.key" \
+		--from-file=public.crt="${cert_dir}/public.crt" \
+		--dry-run=client -o yaml | kubectl apply -f -
+	kubectl -n "${NAMESPACE}" create secret generic minio-ca-bundle \
+		--from-file=ca.crt="${cert_dir}/ca.crt" \
+		--dry-run=client -o yaml | kubectl apply -f -
+	kubectl -n "${NAMESPACE}" create secret generic minio-restore-ca-bundle \
+		--from-file=ca.crt="${cert_dir}/ca.crt" \
+		--dry-run=client -o yaml | kubectl apply -f -
+	kubectl -n "${NAMESPACE}" create secret generic minio-pitr-restore-ca-bundle \
+		--from-file=ca.crt="${cert_dir}/ca.crt" \
+		--dry-run=client -o yaml | kubectl apply -f -
+	rm -r "${cert_dir}"
+
+	helm uninstall -n "${NAMESPACE}" minio-service || :
+	helm repo remove minio || :
+	helm repo add minio https://charts.min.io/
+	retry 10 60 helm install minio-service \
+		-n "${NAMESPACE}" \
+		--version "${MINIO_VER}" \
+		--set replicas=1 \
+		--set mode=standalone \
+		--set resources.requests.memory=256Mi \
+		--set rootUser=rootuser \
+		--set rootPassword=rootpass123 \
+		--set "users[0].accessKey"="$(printf '%q' "$(printf '%q' "$access_key")")" \
+		--set "users[0].secretKey"="$(printf '%q' "$(printf '%q' "$secret_key")")" \
+		--set "users[0].policy"=consoleAdmin \
+		--set service.type=ClusterIP \
+		--set configPathmc=/tmp/.minio/ \
+		--set persistence.size="$storage" \
+		--set securityContext.enabled=false \
+		--set tls.enabled=true \
+		--set tls.certSecret=minio-tls \
+		minio/minio
+	MINIO_POD=$(kubectl -n "${NAMESPACE}" get pods --selector=release=minio-service -o 'jsonpath={.items[].metadata.name}')
+	wait_pod "$MINIO_POD"
+
+	kubectl -n "${NAMESPACE}" run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
+		bash -c "AWS_ACCESS_KEY_ID='$access_key' AWS_SECRET_ACCESS_KEY='$secret_key' AWS_DEFAULT_REGION=us-east-1 \
+        /usr/bin/aws --no-verify-ssl --endpoint-url https://minio-service:9000 s3 mb s3://operator-testing"
+}
+
 prepare_vault_tls() {
 	local name=$1
 	local namespace=$2
@@ -605,7 +671,7 @@ deploy_vault() {
 	local token=$(jq -r ".root_token" <"$tmp_dir/$name")
 
 	local secret=${ROOT_REPO}/e2e-tests/conf/vault-secret.yaml
-	if [[ ${MYSQL_VERSION} == "8.4" ]]; then
+	if [[ ${MYSQL_VERSION} == "8.4" ]] || [[ ${MYSQL_VERSION} == "9.7" ]]; then
 		secret=${ROOT_REPO}/e2e-tests/conf/vault-secret-84.yaml
 	fi
 

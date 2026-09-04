@@ -9,7 +9,7 @@ commands:
       source ../../functions
 
       args=''
-      size=3
+      size=2
       for i in $(seq 0 $((size - 1))); do
           host=$(get_mysql_headless_fqdn $(get_cluster_name) $i)
           data=$(run_mysql "SELECT * FROM myDB.myTable" "-h ${host}")

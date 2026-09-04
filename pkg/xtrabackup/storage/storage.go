@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"io"
 	"net/http"
@@ -40,7 +41,7 @@ func NewClient(ctx context.Context, opts Options) (Storage, error) {
 		if !ok {
 			return nil, errors.New("invalid options type")
 		}
-		return NewS3(ctx, opts.Endpoint, opts.AccessKeyID, opts.SecretAccessKey, opts.BucketName, opts.Prefix, opts.Region, opts.VerifyTLS)
+		return newS3(ctx, opts.Endpoint, opts.AccessKeyID, opts.SecretAccessKey, opts.BucketName, opts.Prefix, opts.Region, opts.VerifyTLS, opts.CABundle)
 	case apiv1.BackupStorageGCS:
 		opts, ok := opts.(*GCSOptions)
 		if !ok {
@@ -75,6 +76,10 @@ func NewGCS(ctx context.Context, endpoint, accessKeyID, secretAccessKey, bucketN
 
 // NewS3 return new Manager, useSSL using ssl for connection with storage
 func NewS3(ctx context.Context, endpoint, accessKeyID, secretAccessKey, bucketName, prefix, region string, verifyTLS bool) (Storage, error) {
+	return newS3(ctx, endpoint, accessKeyID, secretAccessKey, bucketName, prefix, region, verifyTLS, nil)
+}
+
+func newS3(ctx context.Context, endpoint, accessKeyID, secretAccessKey, bucketName, prefix, region string, verifyTLS bool, caBundle []byte) (Storage, error) {
 	log := logf.FromContext(ctx)
 	if endpoint == "" {
 		endpoint = "https://s3.amazonaws.com"
@@ -86,10 +91,25 @@ func NewS3(ctx context.Context, endpoint, accessKeyID, secretAccessKey, bucketNa
 	}
 	useSSL := strings.Contains(endpoint, "https")
 	endpoint = strings.TrimPrefix(strings.TrimPrefix(endpoint, "https://"), "http://")
-	transport := http.DefaultTransport
-	transport.(*http.Transport).TLSClientConfig = &tls.Config{
+	transport, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		return nil, errors.New("default HTTP transport has an unexpected type")
+	}
+	transport = transport.Clone()
+	tlsConfig := &tls.Config{
 		InsecureSkipVerify: !verifyTLS,
 	}
+	if len(caBundle) > 0 {
+		rootCAs, err := x509.SystemCertPool()
+		if err != nil {
+			return nil, errors.Wrap(err, "load system CA certificates")
+		}
+		if !rootCAs.AppendCertsFromPEM(caBundle) {
+			return nil, errors.New("failed to parse S3 CA bundle")
+		}
+		tlsConfig.RootCAs = rootCAs
+	}
+	transport.TLSClientConfig = tlsConfig
 	minioClient, err := minio.New(strings.TrimRight(endpoint, "/"), &minio.Options{
 		Creds:     credentials.NewStaticV4(accessKeyID, secretAccessKey, ""),
 		Secure:    useSSL,

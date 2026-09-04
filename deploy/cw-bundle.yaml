@@ -225,6 +225,8 @@ spec:
                 type: string
               image:
                 type: string
+              size:
+                type: string
               state:
                 type: string
               stateDescription:
@@ -1017,6 +1019,16 @@ spec:
                     properties:
                       bucket:
                         type: string
+                      caBundle:
+                        properties:
+                          key:
+                            default: ca.crt
+                            type: string
+                          name:
+                            type: string
+                        required:
+                        - name
+                        type: object
                       credentialsSecret:
                         type: string
                       endpointUrl:
@@ -1220,6 +1232,8 @@ spec:
                 - type
                 type: object
               type:
+                type: string
+              uncompressedSize:
                 type: string
             type: object
         type: object
@@ -1505,56 +1519,7 @@ spec:
                 type: string
               backupSource:
                 properties:
-                  backupSource:
-                    type: string
-                  completed:
-                    format: date-time
-                    type: string
-                  compressed:
-                    type: boolean
-                  conditions:
-                    items:
-                      properties:
-                        lastTransitionTime:
-                          format: date-time
-                          type: string
-                        message:
-                          maxLength: 32768
-                          type: string
-                        observedGeneration:
-                          format: int64
-                          minimum: 0
-                          type: integer
-                        reason:
-                          maxLength: 1024
-                          minLength: 1
-                          pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
-                          type: string
-                        status:
-                          enum:
-                          - "True"
-                          - "False"
-                          - Unknown
-                          type: string
-                        type:
-                          maxLength: 316
-                          pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
-                          type: string
-                      required:
-                      - lastTransitionTime
-                      - message
-                      - reason
-                      - status
-                      - type
-                      type: object
-                    type: array
                   destination:
-                    type: string
-                  image:
-                    type: string
-                  state:
-                    type: string
-                  stateDescription:
                     type: string
                   storage:
                     properties:
@@ -2344,6 +2309,16 @@ spec:
                         properties:
                           bucket:
                             type: string
+                          caBundle:
+                            properties:
+                              key:
+                                default: ca.crt
+                                type: string
+                              name:
+                                type: string
+                            required:
+                            - name
+                            type: object
                           credentialsSecret:
                             type: string
                           endpointUrl:
@@ -2546,8 +2521,6 @@ spec:
                     required:
                     - type
                     type: object
-                  type:
-                    type: string
                 type: object
               clusterName:
                 type: string
@@ -3861,6 +3834,16 @@ spec:
                                 properties:
                                   bucket:
                                     type: string
+                                  caBundle:
+                                    properties:
+                                      key:
+                                        default: ca.crt
+                                        type: string
+                                      name:
+                                        type: string
+                                    required:
+                                    - name
+                                    type: object
                                   credentialsSecret:
                                     type: string
                                   endpointUrl:
@@ -5482,6 +5465,16 @@ spec:
                                 properties:
                                   bucket:
                                     type: string
+                                  caBundle:
+                                    properties:
+                                      key:
+                                        default: ca.crt
+                                        type: string
+                                      name:
+                                        type: string
+                                    required:
+                                    - name
+                                    type: object
                                   credentialsSecret:
                                     type: string
                                   endpointUrl:
@@ -6440,6 +6433,16 @@ spec:
                           properties:
                             bucket:
                               type: string
+                            caBundle:
+                              properties:
+                                key:
+                                  default: ca.crt
+                                  type: string
+                                name:
+                                  type: string
+                              required:
+                              - name
+                              type: object
                             credentialsSecret:
                               type: string
                             endpointUrl:
@@ -14572,9 +14575,10 @@ spec:
                 ''async'', ''proxy.router.enabled'' must be disabled'
               rule: '!(self.mysql.clusterType == ''async'') || !has(self.proxy) ||
                 !has(self.proxy.router) || !has(self.proxy.router.enabled) || !self.proxy.router.enabled'
-            - message: 'Invalid configuration: Scaling MySQL replicas below 3 requires
-                ''unsafeFlags.mysqlSize: true'''
-              rule: '!(has(self.mysql.size) && self.mysql.size < 3) || self.unsafeFlags.mysqlSize'
+            - message: 'Invalid configuration: For ''async'' replication, MySQL size
+                must be 2 or greater unless ''unsafeFlags.mysqlSize'' is enabled'
+              rule: '!(self.mysql.clusterType == ''async'' && has(self.mysql.size)
+                && self.mysql.size < 2) || self.unsafeFlags.mysqlSize'
             - message: 'Invalid configuration: For ''group replication'', scaling
                 MySQL replicas above 9 requires ''unsafeFlags.mysqlSize: true'''
               rule: '!(self.mysql.clusterType == ''group-replication'' && has(self.mysql.size)
@@ -14813,6 +14817,7 @@ rules:
   - configmaps
   - persistentvolumeclaims
   - secrets
+  - serviceaccounts
   - services
   verbs:
   - create
@@ -14831,17 +14836,6 @@ rules:
   - create
   - delete
   - deletecollection
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - serviceaccounts
-  verbs:
-  - create
   - get
   - list
   - patch
@@ -14917,6 +14911,7 @@ rules:
   - poddisruptionbudgets/finalizers
   verbs:
   - create
+  - delete
   - get
   - list
   - patch
@@ -14952,6 +14947,7 @@ rules:
   - roles
   verbs:
   - create
+  - delete
   - get
   - list
   - patch

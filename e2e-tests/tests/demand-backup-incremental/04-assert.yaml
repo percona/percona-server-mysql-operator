@@ -13,6 +13,12 @@ assertAll:
 - celExpr: bcp.status.type == "full"
   message: "Base backup should be a full backup"
 
+- celExpr: '!has(bcp.status.size) || (bcp.status.size != "" && bcp.status.size != "0B")'
+  message: "Base backup size should be populated and non-zero when available (PXB 8.4+)"
+
+- celExpr: '!has(bcp.status.uncompressedSize) || !has(bcp.status.size) || bcp.status.uncompressedSize == bcp.status.size'
+  message: "For uncompressed backups, uncompressedSize should equal size when available"
+
 commands:
   - script: |-
       set -o errexit
