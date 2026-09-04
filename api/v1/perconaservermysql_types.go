@@ -39,7 +39,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/validation"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
@@ -227,13 +226,6 @@ const (
 	ClusterTypeAsync ClusterType = "async"
 )
 
-const (
-	MinSafeProxySize = 2
-	MinSafeGRSize    = 3
-	MaxSafeGRSize    = 9
-	MinSafeAsyncSize = 2
-)
-
 // Checks if the provided ClusterType is valid.
 func (t ClusterType) isValid() bool {
 	switch t {
@@ -246,11 +238,16 @@ func (t ClusterType) isValid() bool {
 
 // +kubebuilder:validation:XValidation:rule="has(self.image) && size(self.image) > 0",message="mysql.image is required"
 // +kubebuilder:validation:XValidation:rule="has(self.size) && self.size > 0",message="mysql.size must be greater than 0"
+// +kubebuilder:validation:XValidation:rule="!(self.?autoconfig.?enabled.orValue(false)) || (has(self.resources) && ((has(self.resources.limits) && 'cpu' in self.resources.limits) || (has(self.resources.requests) && 'cpu' in self.resources.requests)) && ((has(self.resources.limits) && 'memory' in self.resources.limits) || (has(self.resources.requests) && 'memory' in self.resources.requests)))",message="mysql.resources must set cpu and memory (via limits or requests) when mysql.autoconfig.enabled is true"
+// +kubebuilder:validation:XValidation:rule="!(self.?autoconfig.?enabled.orValue(false)) || sign(quantity(has(self.resources.limits) && 'cpu' in self.resources.limits ? self.resources.limits['cpu'] : self.resources.requests['cpu'])) == 1",message="mysql.resources cpu must be greater than 0 when mysql.autoconfig.enabled is true"
+// +kubebuilder:validation:XValidation:rule="!(self.?autoconfig.?enabled.orValue(false)) || quantity(has(self.resources.limits) && 'memory' in self.resources.limits ? self.resources.limits['memory'] : self.resources.requests['memory']).compareTo(quantity('12Mi')) >= 0",message="mysql.resources memory must be at least 12Mi when mysql.autoconfig.enabled is true"
+// +kubebuilder:validation:XValidation:rule="!(self.?autoconfig.?enabled.orValue(false)) || (has(self.autoconfig.version) && size(self.autoconfig.version) > 0)",message="mysql.autoconfig.version is required when mysql.autoconfig.enabled is true"
 type MySQLSpec struct {
 	// +kubebuilder:validation:Enum=group-replication;async
 	// +kubebuilder:default=group-replication
 	ClusterType   ClusterType            `json:"clusterType,omitempty"`
 	Bootstrap     BootstrapConfig        `json:"bootstrap,omitempty"`
+	AutoConfig    AutoConfigSpec         `json:"autoconfig,omitempty"`
 	ExposePrimary ServiceExposeTogglable `json:"exposePrimary,omitempty"`
 	Expose        ServiceExposeTogglable `json:"expose,omitempty"`
 	AutoRecovery  bool                   `json:"autoRecovery,omitempty"`
@@ -264,6 +261,31 @@ type MySQLSpec struct {
 	VolumeSpec *VolumeSpec `json:"volumeSpec,omitempty"`
 
 	PodSpec `json:",inline"`
+}
+
+type AutoConfigLoadType string
+
+const (
+	AutoConfigLoadTypeMostlyReads      AutoConfigLoadType = "mostlyReads"
+	AutoConfigLoadTypeSomeWrites       AutoConfigLoadType = "someWrites"
+	AutoConfigLoadTypeEqualReadsWrites AutoConfigLoadType = "equalReadsWrites"
+	AutoConfigLoadTypeHeavyWrites      AutoConfigLoadType = "heavyWrites"
+)
+
+type AutoConfigSpec struct {
+	Enabled *bool `json:"enabled,omitempty"`
+	// +kubebuilder:validation:Enum=mostlyReads;someWrites;equalReadsWrites;heavyWrites
+	LoadType AutoConfigLoadType `json:"loadType,omitempty"`
+	// Version is the MySQL version the configuration is calculated for. It is
+	// required when autoconfig is enabled and never changes which server is
+	// deployed; it only tells the calculator which parameters exist.
+	// +kubebuilder:validation:Pattern=`^\d+\.\d+(\.\d+)?$`
+	Version string `json:"version,omitempty"`
+}
+
+// IsEnabled reports whether autoconfig is turned on.
+func (s AutoConfigSpec) IsEnabled() bool {
+	return s.Enabled != nil && *s.Enabled
 }
 
 type BootstrapMode string
@@ -1191,6 +1213,10 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 		return errors.Errorf("%s is not a valid clusterType, valid options are %s and %s", cr.Spec.MySQL.ClusterType, ClusterTypeGR, ClusterTypeAsync)
 	}
 
+	if cr.Spec.MySQL.AutoConfig.IsEnabled() && cr.Spec.MySQL.AutoConfig.LoadType == "" {
+		cr.Spec.MySQL.AutoConfig.LoadType = AutoConfigLoadTypeSomeWrites
+	}
+
 	if err := cr.validateStorageAutoscaling(); err != nil {
 		return errors.Wrap(err, "validate storage autoscaling")
 	}
@@ -1633,16 +1659,6 @@ func (cr *PerconaServerMySQL) Labels(name, component string) map[string]string {
 // cluster using its name and namespace.
 func (cr *PerconaServerMySQL) ClusterHint() string {
 	return fmt.Sprintf("%s.%s", cr.Name, cr.Namespace)
-}
-
-// GetClusterNameFromObject retrieves the cluster's name from the given client object's labels.
-func GetClusterNameFromObject(obj client.Object) (string, error) {
-	labels := obj.GetLabels()
-	instance, ok := labels[naming.LabelInstance]
-	if !ok {
-		return "", errors.Errorf("label %s doesn't exist", naming.LabelInstance)
-	}
-	return instance, nil
 }
 
 // FNVHash computes a hash of the provided byte slice using the FNV-1a algorithm.

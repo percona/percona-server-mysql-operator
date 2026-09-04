@@ -2,6 +2,7 @@ package gr
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
@@ -9,6 +10,28 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/config"
 	"github.com/pkg/errors"
 )
+
+// readMyCnf returns the [mysqld] section of the first path that exists, or nil
+// when none do.
+func readMyCnf(paths ...string) (*ini.Section, error) {
+	for _, path := range paths {
+		f, err := os.Open(path)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return nil, errors.Wrapf(err, "open %s", path)
+		}
+		defer f.Close() //nolint
+
+		section, err := config.ParseSection(f, "mysqld")
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to parse %s", path)
+		}
+		return section, nil
+	}
+	return nil, nil
+}
 
 // these are options that mysql-shell overwrites
 // without taking my.cnf into consideration

@@ -31,9 +31,9 @@ commands:
           | yq eval '.spec.proxy.haproxy.podDisruptionBudget.maxUnavailable=null' - \
           | yq eval '.spec.orchestrator.enabled=true' - \
           | yq eval '.spec.mysql.resources.limits.cpu="1000m"' - \
-          | yq eval '.spec.mysql.resources.limits.memory="4G"' - \
+          | yq eval '.spec.mysql.resources.limits.memory="2G"' - \
           | yq eval '.spec.mysql.resources.requests.cpu="400m"' - \
-          | yq eval '.spec.mysql.resources.requests.memory="2G"' - \
+          | yq eval '.spec.mysql.resources.requests.memory="1G"' - \
           | yq eval '.spec.backup.resources.limits.cpu="200m"' - \
           | yq eval '.spec.backup.resources.limits.memory="256Mi"' - \
           | yq eval '.spec.backup.resources.requests.cpu="100m"' - \

@@ -106,7 +106,7 @@ func FromPresets(cr any) error {
 				},
 				Resources: corev1.VolumeResourceRequirements{
 					Requests: corev1.ResourceList{
-						corev1.ResourceStorage: resource.MustParse("2Gi"),
+						corev1.ResourceStorage: resource.MustParse("10Gi"),
 					},
 				},
 			},

@@ -119,8 +119,10 @@ spec:
 #      minAvailable: 0
     resources:
       limits:
+        cpu: "2"
         memory: 4Gi
       requests:
+        cpu: "1"
         memory: 2Gi
 #    startupProbe:
 #      failureThreshold: 1
@@ -205,7 +207,7 @@ spec:
 #          - ReadWriteOnce
         resources:
           requests:
-            storage: 2Gi
+            storage: 10Gi
 #        storageClassName: standard
 #    configuration: |-
 #      max_connections=250
@@ -255,6 +257,10 @@ spec:
 #          resources:
 #            requests:
 #              storage: 1Gi
+    autoconfig:
+      enabled: true
+      loadType: someWrites
+      version: "8.4"
 #    bootstrap:
 #      mode: auto
   proxy:
@@ -1002,7 +1008,7 @@ spec:
 #              - ReadWriteOnce
 #            resources:
 #              requests:
-#                storage: 2Gi
+#                storage: 10Gi
 #            storageClassName: standard
 #    encryptionKeySecret:
 #      key: encryptionKey

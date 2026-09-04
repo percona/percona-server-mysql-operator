@@ -23,7 +23,7 @@ commands:
           | yq eval '.spec.storageScaling.autoscaling.enabled=true' - \
           | yq eval '.spec.storageScaling.autoscaling.triggerThresholdPercent=55' - \
           | yq eval '.spec.storageScaling.autoscaling.growthStep="2Gi"' - \
-          | yq eval '.spec.storageScaling.autoscaling.maxSize="4Gi"' - \
-          | yq eval '.spec.mysql.volumeSpec.persistentVolumeClaim.resources.requests.storage="2Gi"' -)"
+          | yq eval '.spec.storageScaling.autoscaling.maxSize="12Gi"' - \
+          | yq eval '.spec.mysql.volumeSpec.persistentVolumeClaim.resources.requests.storage="10Gi"' -)"
 
       printf '%s\n' "$cr" | kubectl -n "${NAMESPACE}" apply -f -

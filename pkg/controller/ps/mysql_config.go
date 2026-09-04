@@ -81,6 +81,26 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfig(
 		return writeAnnotation()
 	}
 
+	// A statefulset recreated to resize its immutable volume claim template is
+	// built from the cr and comes back without the record of the configuration
+	// the running mysqld already has. The cr carries a copy across that window:
+	// put it back before the diff, or every variable reads as new and the ones
+	// that cannot be set at runtime restart the cluster over a resize that needs
+	// no restart.
+	if stashed, ok := cr.GetAnnotations()[naming.AnnotationLastAppliedConfig.String()]; ok {
+		if _, onSts := sts.GetAnnotations()[naming.AnnotationLastAppliedConfig.String()]; !onSts {
+			if err := k8s.AnnotateObject(ctx, r.Client, sts, map[naming.AnnotationKey]string{
+				naming.AnnotationLastAppliedConfig: stashed,
+			}); err != nil {
+				return errors.Wrap(err, "restore last applied config")
+			}
+		}
+
+		if err := k8s.DeannotateObject(ctx, r.Client, cr, naming.AnnotationLastAppliedConfig); err != nil {
+			return errors.Wrap(err, "drop the stashed last applied config")
+		}
+	}
+
 	lastAppliedConf, err := mysql.GetLastAppliedConfig(sts)
 	if err != nil {
 		return errors.Wrap(err, "get last applied MySQL config")
@@ -184,6 +204,8 @@ func setGlobalVariables(
 		kv[k] = mysql.FormatConfigValue(key.Value())
 	}
 
+	log := logf.FromContext(ctx)
+
 	unknownVariables := map[string]struct{}{}
 	restartNeeded := false
 	for _, pod := range pods {
@@ -196,6 +218,10 @@ func setGlobalVariables(
 					continue
 				}
 				if isUnknownVariableError(err) {
+					if mysql.IsLooseVariable(k) {
+						log.V(1).Info("Skipping unknown loose variable", "variable", k, "pod", pod.Name)
+						continue
+					}
 					unknownVariables[k] = struct{}{}
 					continue
 				}
@@ -212,7 +238,6 @@ func setGlobalVariables(
 		return strings.Join(keys, ", ")
 	}
 
-	log := logf.FromContext(ctx)
 	if len(unknownVariables) > 0 {
 		err := fmt.Errorf("unknown configuration variables: [%s]", printUnknownVariables())
 		log.Error(err, "setGlobalVariables failed", "unknownVariables", printUnknownVariables())

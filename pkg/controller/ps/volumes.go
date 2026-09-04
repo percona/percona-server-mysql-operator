@@ -255,10 +255,13 @@ func (r *PerconaServerMySQLReconciler) reconcilePersistentVolumes(ctx context.Co
 		resizeSucceeded := updatedPVCs == len(pvcsToUpdate)
 		if resizeSucceeded {
 			// Recreated only to update the immutable volume claim template. The
-			// delete orphans the pods and the new set adopts them back, but its
-			// controller revision differs, which makes the smart update roll them.
+			// delete orphans the pods and the new set adopts them back.
 			if configured.Cmp(crRequest) != 0 {
 				log.Info("Deleting statefulset", "configured", configured, "requested", crRequest)
+
+				if err := r.stashAppliedConfig(ctx, cr, sts); err != nil {
+					return errors.Wrapf(err, "stash applied config of statefulset/%s", sts.Name)
+				}
 
 				if err := r.Delete(ctx, sts, client.PropagationPolicy("Orphan")); err != nil && !k8serrors.IsNotFound(err) {
 					return errors.Wrapf(err, "delete statefulset/%s", sts.Name)
@@ -359,6 +362,31 @@ func (r *PerconaServerMySQLReconciler) handlePVCResizeFailure(ctx context.Contex
 	}
 
 	return nil
+}
+
+// stashAppliedConfig copies the record of the configuration already applied to
+// the running mysqld from the statefulset onto the cr, so that it survives the
+// statefulset being deleted and rebuilt for a resize.
+//
+// The replacement set is built from the cr and comes back without the record.
+// EnsureObjectWithHash preserves the annotation when it updates a set but not
+// when it creates one, so without the copy the next configuration pass reads an
+// empty record, treats every calculated variable as new, and re-applies the lot.
+// The variables that cannot be set at runtime then restart the whole cluster
+// over a resize that needs no restart.
+func (r *PerconaServerMySQLReconciler) stashAppliedConfig(
+	ctx context.Context,
+	cr *psv1.PerconaServerMySQL,
+	sts *appsv1.StatefulSet,
+) error {
+	applied, ok := sts.GetAnnotations()[naming.AnnotationLastAppliedConfig.String()]
+	if !ok {
+		return nil
+	}
+
+	return k8s.AnnotateObject(ctx, r.Client, cr, map[naming.AnnotationKey]string{
+		naming.AnnotationLastAppliedConfig: applied,
+	})
 }
 
 func (r *PerconaServerMySQLReconciler) revertVolumeTemplate(ctx context.Context, cr *psv1.PerconaServerMySQL, originalSize resource.Quantity) error {

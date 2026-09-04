@@ -14,6 +14,7 @@ commands:
           | yq eval '.spec.upgradeOptions.apply="8.0-latest"' - \
           | yq eval '.spec.crVersion="9.9.9"' - \
           | yq eval '.spec.mysql.image="percona/percona-server:8.0.28-19"' - \
+          | yq eval '.spec.mysql.autoconfig.version="8.0.28"' - \
           | yq eval '.spec.backup.enabled=false' - \
           | yq eval '.spec.upgradeOptions.versionServiceEndpoint="http://percona-version-service:80"' - \
           | kubectl -n "${NAMESPACE}" apply -f -
