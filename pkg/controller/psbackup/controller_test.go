@@ -792,7 +792,7 @@ func TestCheckFinalizers(t *testing.T) {
 			cr := tt.cr.DeepCopy()
 			cr.Status.Storage = storage
 
-			job := xtrabackup.GetDeleteJob(new(apiv1.PerconaServerMySQL), cr, new(xtrabackup.BackupConfig))
+			job := xtrabackup.GetDeleteJob(new(apiv1.PerconaServerMySQL), cr, new(xtrabackup.BackupConfig), "")
 			cond := batchv1.JobCondition{
 				Type:   batchv1.JobComplete,
 				Status: corev1.ConditionTrue,

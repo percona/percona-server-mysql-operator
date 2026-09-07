@@ -5,7 +5,7 @@ timeout: 30
 kind: ConfigMap
 apiVersion: v1
 metadata:
-  name: 04-read-from-replicas
+  name: 09-read-from-replicas
 data:
   scaling-mysql-0.scaling-mysql: "100500"
   scaling-mysql-1.scaling-mysql: "100500"
