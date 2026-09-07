@@ -43,5 +43,10 @@ commands:
           exit 0
       fi
 
+      if [[ ${version} =~ "9.7" ]]; then
+          kubectl get -n ${NAMESPACE} cm 02-check-users -o yaml | yq .data | diff -u - 02-grants-97.txt
+          exit 0
+      fi
+
       echo "unsupported MySQL version"
       exit 1

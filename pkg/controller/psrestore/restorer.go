@@ -350,12 +350,10 @@ func (opts *restorerOptions) validateJob(ctx context.Context, job *batchv1.Job) 
 
 func getBackup(ctx context.Context, cl client.Client, cr *apiv1.PerconaServerMySQLRestore, cluster *apiv1.PerconaServerMySQL) (*apiv1.PerconaServerMySQLBackup, error) {
 	if cr.Spec.BackupSource != nil {
-		status := cr.Spec.BackupSource.DeepCopy()
-		status.State = apiv1.BackupSucceeded
-		status.CompletedAt = nil
-		status.Type = apiv1.BackupTypeFull
-		if status.Destination.IsIncremental() {
-			status.Type = apiv1.BackupTypeIncremental
+		source := cr.Spec.BackupSource.DeepCopy()
+		backupType := apiv1.BackupTypeFull
+		if source.Destination.IsIncremental() {
+			backupType = apiv1.BackupTypeIncremental
 		}
 
 		return &apiv1.PerconaServerMySQLBackup{
@@ -365,9 +363,14 @@ func getBackup(ctx context.Context, cl client.Client, cr *apiv1.PerconaServerMyS
 			},
 			Spec: apiv1.PerconaServerMySQLBackupSpec{
 				ClusterName: cr.Spec.ClusterName,
-				Type:        status.Type,
+				Type:        backupType,
 			},
-			Status: *status,
+			Status: apiv1.PerconaServerMySQLBackupStatus{
+				State:       apiv1.BackupSucceeded,
+				Type:        backupType,
+				Destination: source.Destination,
+				Storage:     source.Storage,
+			},
 		}, nil
 	}
 	if cr.Spec.BackupName == "" {

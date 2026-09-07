@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strconv"
 
+	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -18,7 +19,9 @@ import (
 type SidecarClient interface {
 	GetRunningBackupConfig(ctx context.Context) (*BackupConfig, error)
 	DeleteBackup(ctx context.Context, name string, cfg BackupConfig) error
-	GetCheckpointInfo(ctx context.Context, cfg BackupConfig) (*CheckpointInfo, error)
+	// Deprecated: Use GetBackupInfo instead. GetCheckpointInfo
+	GetCheckpointInfo(ctx context.Context, cfg BackupConfig) (*BackupInfo, error)
+	GetBackupInfo(ctx context.Context, cfg BackupConfig) (*BackupInfo, error)
 }
 
 type NewSidecarClientFunc func(srcNode string) SidecarClient
@@ -98,12 +101,21 @@ func (c *sidecarClient) DeleteBackup(ctx context.Context, name string, cfg Backu
 	return nil
 }
 
-func (c *sidecarClient) GetCheckpointInfo(ctx context.Context, cfg BackupConfig) (*CheckpointInfo, error) {
+func (c *sidecarClient) GetCheckpointInfo(ctx context.Context, cfg BackupConfig) (*BackupInfo, error) {
 	log := logf.FromContext(ctx).WithName("GetCheckpointInfo")
+	return c.getBackupInfoFromPath(ctx, log, cfg, "/backup/checkpoint-info")
+}
+
+func (c *sidecarClient) GetBackupInfo(ctx context.Context, cfg BackupConfig) (*BackupInfo, error) {
+	log := logf.FromContext(ctx).WithName("GetBackupInfo")
+	return c.getBackupInfoFromPath(ctx, log, cfg, "/backup/info")
+}
+
+func (c *sidecarClient) getBackupInfoFromPath(ctx context.Context, log logr.Logger, cfg BackupConfig, path string) (*BackupInfo, error) {
 	sidecarURL := url.URL{
 		Host:   c.srcNode + ":" + c.port(),
 		Scheme: "http",
-		Path:   "/backup/checkpoint-info",
+		Path:   path,
 	}
 	reqData, err := json.Marshal(cfg)
 	if err != nil {
@@ -116,7 +128,7 @@ func (c *sidecarClient) GetCheckpointInfo(ctx context.Context, cfg BackupConfig)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, errors.Wrap(err, "get checkpoint info")
+		return nil, errors.Wrap(err, "get backup info")
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
@@ -129,12 +141,12 @@ func (c *sidecarClient) GetCheckpointInfo(ctx context.Context, cfg BackupConfig)
 		if err != nil {
 			return nil, errors.Wrap(err, "read response body")
 		}
-		return nil, errors.Errorf("get checkpoint info failed: %s (status: %d)", string(body), resp.StatusCode)
+		return nil, errors.Errorf("get backup info failed: %s (status: %d)", string(body), resp.StatusCode)
 	}
 
-	info := new(CheckpointInfo)
+	info := new(BackupInfo)
 	if err := json.NewDecoder(resp.Body).Decode(info); err != nil {
-		return nil, errors.Wrap(err, "decode checkpoint info")
+		return nil, errors.Wrap(err, "decode backup info")
 	}
 	return info, nil
 }

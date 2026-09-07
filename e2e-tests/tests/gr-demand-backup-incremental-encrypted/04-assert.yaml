@@ -18,3 +18,7 @@ assertAll:
 
 - celExpr: has(bcp.status.storage.encryptionKeySecret) && bcp.status.storage.encryptionKeySecret.name == "test-encryption-key" && bcp.status.storage.encryptionKeySecret.key == "encryptionKey"
   message: "Encrypted base backup should have encryptionKeySecret in status"
+
+- celExpr: '!has(bcp.status.size) || (bcp.status.size != "" && bcp.status.size != "0B")'
+  message: "Encrypted base backup size should be populated and non-zero when available (PXB 8.4+)"
+

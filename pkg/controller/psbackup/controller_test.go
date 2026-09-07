@@ -809,7 +809,7 @@ func TestCheckFinalizers(t *testing.T) {
 			cr := tt.cr.DeepCopy()
 			cr.Status.Storage = storage
 
-			job := xtrabackup.GetDeleteJob(new(apiv1.PerconaServerMySQL), cr, new(xtrabackup.BackupConfig))
+			job := xtrabackup.GetDeleteJob(new(apiv1.PerconaServerMySQL), cr, new(xtrabackup.BackupConfig), "")
 			cond := batchv1.JobCondition{
 				Type:   batchv1.JobComplete,
 				Status: corev1.ConditionTrue,
@@ -1335,7 +1335,9 @@ func TestGetBackupSource(t *testing.T) {
 }
 
 type fakeSidecarClient struct {
-	destination string
+	destination            string
+	backupSize             int64
+	uncompressedBackupSize int64
 }
 
 func (f *fakeSidecarClient) GetRunningBackupConfig(ctx context.Context) (*xtrabackup.BackupConfig, error) {
@@ -1351,15 +1353,21 @@ func (f *fakeSidecarClient) DeleteBackup(ctx context.Context, name string, cfg x
 	return nil
 }
 
-func (f *fakeSidecarClient) GetCheckpointInfo(ctx context.Context, cfg xtrabackup.BackupConfig) (*xtrabackup.CheckpointInfo, error) {
-	return &xtrabackup.CheckpointInfo{
-		BackupType: "full",
-		FromLSN:    "1000",
-		ToLSN:      "2000",
-		LastLSN:    "3000",
-		FlushedLSN: "4000",
-		RedoMemory: "5000",
-		RedoFrames: "6000",
+func (f *fakeSidecarClient) GetCheckpointInfo(ctx context.Context, cfg xtrabackup.BackupConfig) (*xtrabackup.BackupInfo, error) {
+	return f.GetBackupInfo(ctx, cfg)
+}
+
+func (f *fakeSidecarClient) GetBackupInfo(ctx context.Context, cfg xtrabackup.BackupConfig) (*xtrabackup.BackupInfo, error) {
+	return &xtrabackup.BackupInfo{
+		BackupType:             "full",
+		FromLSN:                "1000",
+		ToLSN:                  "2000",
+		LastLSN:                "3000",
+		FlushedLSN:             "4000",
+		RedoMemory:             "5000",
+		RedoFrames:             "6000",
+		BackupSize:             f.backupSize,
+		UncompressedBackupSize: f.uncompressedBackupSize,
 	}, nil
 }
 
@@ -1919,8 +1927,9 @@ func TestRunPostFinishTasks(t *testing.T) {
 			}
 
 			testCR := cr.DeepCopy()
+			status := testCR.Status.DeepCopy()
 
-			err := r.runPostFinishTasks(ctx, testCR, tt.cluster)
+			err := r.runPostFinishTasks(ctx, testCR, tt.cluster, status)
 
 			if tt.wantErr {
 				require.Error(t, err)
@@ -2009,6 +2018,72 @@ func TestValidateStorage(t *testing.T) {
 				return
 			}
 			assert.Equal(t, tt.err.Error(), err.Error())
+		})
+	}
+}
+
+func TestFormatBytes(t *testing.T) {
+	tests := []struct {
+		name     string
+		bytes    int64
+		expected string
+	}{
+		{
+			name:     "zero bytes",
+			bytes:    0,
+			expected: "0B",
+		},
+		{
+			name:     "bytes less than KB",
+			bytes:    512,
+			expected: "512B",
+		},
+		{
+			name:     "exactly 1 KB",
+			bytes:    1024,
+			expected: "1.0KiB",
+		},
+		{
+			name:     "kilobytes",
+			bytes:    78771, // ~76.92KB
+			expected: "77KiB",
+		},
+		{
+			name:     "exactly 1 MB",
+			bytes:    1024 * 1024,
+			expected: "1.0MiB",
+		},
+		{
+			name:     "megabytes",
+			bytes:    5 * 1024 * 1024,
+			expected: "5.0MiB",
+		},
+		{
+			name:     "exactly 1 GB",
+			bytes:    1024 * 1024 * 1024,
+			expected: "1.0GiB",
+		},
+		{
+			name:     "gigabytes",
+			bytes:    3 * 1024 * 1024 * 1024,
+			expected: "3.0GiB",
+		},
+		{
+			name:     "exactly 1 TB",
+			bytes:    1024 * 1024 * 1024 * 1024,
+			expected: "1.0TiB",
+		},
+		{
+			name:     "terabytes",
+			bytes:    2 * 1024 * 1024 * 1024 * 1024,
+			expected: "2.0TiB",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := formatBytes(tt.bytes)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }

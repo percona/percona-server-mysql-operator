@@ -14,9 +14,73 @@ import (
 	"k8s.io/utils/ptr"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	k8sutil "github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 )
+
+func TestS3CABundleJobs(t *testing.T) {
+	selector := apiv1.CABundleSecretSelector{Name: "private-ca", Key: apiv1.DefaultCABundleKey}
+	checkContainer := func(t *testing.T, container corev1.Container, wrappedCommand string) {
+		t.Helper()
+		require.NotEmpty(t, container.Command)
+		assert.Equal(t, wrappedCommand, container.Command[0])
+		assert.Contains(t, container.Env, corev1.EnvVar{Name: naming.EnvSSLCertFile, Value: k8sutil.S3CAPath(selector)})
+		assert.Contains(t, container.VolumeMounts, corev1.VolumeMount{Name: naming.S3CertsInputVolumeName, MountPath: naming.S3CertsInputMountPath, ReadOnly: true})
+	}
+
+	cluster := readDefaultCluster(t, "cluster", "ns")
+	cluster.Spec.CRVersion = "1.3.0"
+	storage := &apiv1.BackupStorageSpec{
+		Type: apiv1.BackupStorageS3,
+		S3:   &apiv1.BackupStorageS3Spec{CABundle: &selector},
+	}
+	backup := readDefaultBackup(t, "backup", "ns")
+
+	t.Run("backup", func(t *testing.T) {
+		job, err := Job(cluster, backup, "destination", "init-image", storage)
+		require.NoError(t, err)
+		checkContainer(t, job.Spec.Template.Spec.Containers[0], "/opt/percona/run-backup.sh")
+		require.Len(t, job.Spec.Template.Spec.InitContainers, 1)
+	})
+
+	t.Run("restore", func(t *testing.T) {
+		restore := &apiv1.PerconaServerMySQLRestore{ObjectMeta: metav1.ObjectMeta{Name: "restore", Namespace: "ns"}}
+		job := RestoreJob(cluster, DestinationInfo{Base: "destination"}, restore, storage, "init-image", "pvc")
+		checkContainer(t, job.Spec.Template.Spec.Containers[0], "/opt/percona/run-restore.sh")
+		require.Len(t, job.Spec.Template.Spec.InitContainers, 1)
+	})
+
+	t.Run("delete", func(t *testing.T) {
+		backup.Status.Storage = storage
+		backup.Status.Image = "backup-image"
+		backupConfig, err := GetBackupConfig(t.Context(), nil, backup)
+		require.NoError(t, err)
+		assert.Equal(t, k8sutil.S3CAPath(selector), backupConfig.CACert)
+
+		job := GetDeleteJob(cluster, backup, backupConfig, "init-image")
+		checkContainer(t, job.Spec.Template.Spec.Containers[0], "xbcloud")
+		require.Len(t, job.Spec.Template.Spec.InitContainers, 1)
+		assert.Contains(t, job.Spec.Template.Spec.Containers[0].Command, "--cacert="+k8sutil.S3CAPath(selector))
+	})
+}
+
+func TestXbcloudArgsIncludeCACert(t *testing.T) {
+	conf := &BackupConfig{
+		Type:      apiv1.BackupStorageS3,
+		VerifyTLS: true,
+		CACert:    naming.S3CABundlePath,
+		S3: BackupConfigS3{
+			Bucket: "bucket",
+		},
+	}
+
+	assert.Contains(t, conf.XbcloudPutArgs(), "--cacert="+naming.S3CABundlePath)
+
+	assert.Contains(t, conf.XbcloudGetArgs("backup"), "--cacert="+naming.S3CABundlePath)
+
+	assert.Contains(t, conf.XbcloudDeleteArgs(), "--cacert="+naming.S3CABundlePath)
+}
 
 func TestJob(t *testing.T) {
 	const ns = "job-ns"
@@ -261,7 +325,7 @@ func TestDeleteJob(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		j := GetDeleteJob(cluster, cr, cfg)
+		j := GetDeleteJob(cluster, cr, cfg, "")
 
 		expectedLabels := map[string]string{
 			"app.kubernetes.io/component":  "backup",
@@ -300,7 +364,7 @@ func TestDeleteJob(t *testing.T) {
 		cfg, err := GetBackupConfig(ctx, nil, cr)
 		require.NoError(t, err)
 
-		j := GetDeleteJob(cluster, cr, cfg)
+		j := GetDeleteJob(cluster, cr, cfg, "")
 
 		getEnv := func() []corev1.EnvVar {
 			xbContainer := j.Spec.Template.Spec.Containers[0]
@@ -347,7 +411,7 @@ func TestDeleteJob(t *testing.T) {
 
 		cfg, err = GetBackupConfig(ctx, nil, cr)
 		require.NoError(t, err)
-		j = GetDeleteJob(cluster, cr, cfg)
+		j = GetDeleteJob(cluster, cr, cfg, "")
 
 		assert.Equal(t, []corev1.EnvVar{
 			{
@@ -376,7 +440,7 @@ func TestDeleteJob(t *testing.T) {
 
 		cfg, err = GetBackupConfig(ctx, nil, cr)
 		require.NoError(t, err)
-		j = GetDeleteJob(cluster, cr, cfg)
+		j = GetDeleteJob(cluster, cr, cfg, "")
 
 		assert.Equal(t, []corev1.EnvVar{}, getEnv())
 		assert.Equal(t, []string{"xbcloud", "delete", "--parallel=10", "--curl-retriable-errors=7", "--md5", "--storage=s3", "--s3-bucket=bucket", "--s3-region=region", "--s3-access-key=", "--s3-secret-key=", "--s3-endpoint=endpoint", "prefix/ps-cluster1-0001-01-01-00:00:00-full"}, getCmd())
@@ -580,7 +644,6 @@ func TestRestoreJob(t *testing.T) {
 			},
 		}, getEnv())
 	})
-
 }
 
 func TestGetDestination(t *testing.T) {
@@ -767,7 +830,7 @@ func TestGetDestination(t *testing.T) {
 	}
 }
 
-func TestCheckpointInfoParseFrom(t *testing.T) {
+func TestBackupInfoParseFrom(t *testing.T) {
 	t.Run("full checkpoint file", func(t *testing.T) {
 		input := `backup_type = full-backuped
 from_lsn = 0
@@ -776,8 +839,9 @@ last_lsn = 18446744073709551615
 flushed_lsn = 18446744073709551615
 redo_memory = 0
 redo_frames = 0
+backup_size = 78771
 `
-		var info CheckpointInfo
+		var info BackupInfo
 		err := info.ParseFrom(strings.NewReader(input))
 		require.NoError(t, err)
 
@@ -788,6 +852,7 @@ redo_frames = 0
 		assert.Equal(t, "18446744073709551615", info.FlushedLSN)
 		assert.Equal(t, "0", info.RedoMemory)
 		assert.Equal(t, "0", info.RedoFrames)
+		assert.Equal(t, int64(78771), info.BackupSize)
 	})
 
 	t.Run("incremental checkpoint file", func(t *testing.T) {
@@ -799,7 +864,7 @@ flushed_lsn = 27660855
 redo_memory = 0
 redo_frames = 0
 `
-		var info CheckpointInfo
+		var info BackupInfo
 		err := info.ParseFrom(strings.NewReader(input))
 		require.NoError(t, err)
 
@@ -813,7 +878,7 @@ redo_frames = 0
 	t.Run("extra whitespace", func(t *testing.T) {
 		input := "  backup_type  =  full-prepared  \n  from_lsn  =  100  \n"
 
-		var info CheckpointInfo
+		var info BackupInfo
 		err := info.ParseFrom(strings.NewReader(input))
 		require.NoError(t, err)
 
@@ -824,7 +889,7 @@ redo_frames = 0
 	t.Run("lines without equals are skipped", func(t *testing.T) {
 		input := "this line has no separator\nbackup_type = full-backuped\nmalformed line\n"
 
-		var info CheckpointInfo
+		var info BackupInfo
 		err := info.ParseFrom(strings.NewReader(input))
 		require.NoError(t, err)
 
@@ -832,17 +897,17 @@ redo_frames = 0
 	})
 
 	t.Run("empty input", func(t *testing.T) {
-		var info CheckpointInfo
+		var info BackupInfo
 		err := info.ParseFrom(strings.NewReader(""))
 		require.NoError(t, err)
 
-		assert.Equal(t, CheckpointInfo{}, info)
+		assert.Equal(t, BackupInfo{}, info)
 	})
 
 	t.Run("partial fields", func(t *testing.T) {
 		input := "to_lsn = 999\nredo_frames = 42\n"
 
-		var info CheckpointInfo
+		var info BackupInfo
 		err := info.ParseFrom(strings.NewReader(input))
 		require.NoError(t, err)
 
@@ -851,6 +916,49 @@ redo_frames = 0
 		assert.Equal(t, "999", info.ToLSN)
 		assert.Equal(t, "", info.LastLSN)
 		assert.Equal(t, "42", info.RedoFrames)
+		assert.Equal(t, int64(0), info.BackupSize)
 	})
 
+	t.Run("backup_size large value", func(t *testing.T) {
+		input := "backup_type = full-backuped\nbackup_size = 5368709120\n"
+
+		var info BackupInfo
+		err := info.ParseFrom(strings.NewReader(input))
+		require.NoError(t, err)
+
+		assert.Equal(t, int64(5368709120), info.BackupSize)
+	})
+
+	t.Run("backup_size invalid value ignored", func(t *testing.T) {
+		input := "backup_size = not-a-number\nbackup_type = full-backuped\n"
+
+		var info BackupInfo
+		err := info.ParseFrom(strings.NewReader(input))
+		require.NoError(t, err)
+
+		assert.Equal(t, int64(0), info.BackupSize)
+		assert.Equal(t, "full-backuped", info.BackupType)
+	})
+
+	t.Run("uncompressed_backup_size parsed", func(t *testing.T) {
+		input := "backup_size = 50000\nuncompressed_backup_size = 200000\n"
+
+		var info BackupInfo
+		err := info.ParseFrom(strings.NewReader(input))
+		require.NoError(t, err)
+
+		assert.Equal(t, int64(50000), info.BackupSize)
+		assert.Equal(t, int64(200000), info.UncompressedBackupSize)
+	})
+
+	t.Run("uncompressed_backup_size absent defaults to zero", func(t *testing.T) {
+		input := "backup_size = 78771\n"
+
+		var info BackupInfo
+		err := info.ParseFrom(strings.NewReader(input))
+		require.NoError(t, err)
+
+		assert.Equal(t, int64(78771), info.BackupSize)
+		assert.Equal(t, int64(0), info.UncompressedBackupSize)
+	})
 }

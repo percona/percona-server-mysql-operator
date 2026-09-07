@@ -29,6 +29,7 @@ install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/mysql-state-monit
 
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/run-backup.sh" "${BINDIR}/run-backup.sh"
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/run-restore.sh" "${BINDIR}/run-restore.sh"
+install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/prepare-s3-certs.sh" "${BINDIR}/prepare-s3-certs.sh"
 
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/haproxy-entrypoint.sh" "${BINDIR}/haproxy-entrypoint.sh"
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/haproxy_add_mysql_nodes.sh" "${BINDIR}/haproxy_add_mysql_nodes.sh"
@@ -46,3 +47,7 @@ install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/binlog-server-ent
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/pitr" "${BINDIR}/pitr"
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/run-pitr-restore.sh" "${BINDIR}/run-pitr-restore.sh"
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/run-prepare-restore.sh" "${BINDIR}/run-prepare-restore.sh"
+
+if [[ -d /etc/s3/certs-in && -d /etc/s3/certs ]]; then
+	"${BINDIR}/prepare-s3-certs.sh"
+fi
