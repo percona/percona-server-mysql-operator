@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -15,6 +16,63 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/version"
 )
+
+func TestBackupSidecarS3CABundle(t *testing.T) {
+	cr := readDefaultCluster(t, "cluster", "ns")
+	cr.Spec.CRVersion = "1.3.0"
+	cr.Spec.Backup.Storages = map[string]*apiv1.BackupStorageSpec{
+		"z-last": {
+			Type: apiv1.BackupStorageS3,
+			S3:   &apiv1.BackupStorageS3Spec{CABundle: &apiv1.CABundleSecretSelector{Name: "shared", Key: "second.crt"}},
+		},
+		"a-default": {
+			Type: apiv1.BackupStorageS3,
+			S3:   &apiv1.BackupStorageS3Spec{CABundle: &apiv1.CABundleSecretSelector{Name: "private-ca", Key: apiv1.DefaultCABundleKey}},
+		},
+		"b-duplicate": {
+			Type: apiv1.BackupStorageS3,
+			S3:   &apiv1.BackupStorageS3Spec{CABundle: &apiv1.CABundleSecretSelector{Name: "private-ca", Key: apiv1.DefaultCABundleKey}},
+		},
+		"c-shared-first": {
+			Type: apiv1.BackupStorageS3,
+			S3:   &apiv1.BackupStorageS3Spec{CABundle: &apiv1.CABundleSecretSelector{Name: "shared", Key: "first.crt"}},
+		},
+		"ignored-gcs": {Type: apiv1.BackupStorageGCS},
+	}
+	sts := StatefulSet(cr, "init-image", "", "", &corev1.Secret{})
+
+	var sidecar corev1.Container
+	for _, container := range sts.Spec.Template.Spec.Containers {
+		if container.Name == "xtrabackup" {
+			sidecar = container
+		}
+	}
+	assert.Equal(t, []string{"/opt/percona/sidecar"}, sidecar.Command)
+	assert.Empty(t, sidecar.Args)
+	for _, env := range sidecar.Env {
+		assert.NotEqual(t, naming.EnvSSLCertFile, env.Name)
+	}
+	assert.Contains(t, sidecar.VolumeMounts, corev1.VolumeMount{Name: naming.S3CertsInputVolumeName, MountPath: naming.S3CertsInputMountPath, ReadOnly: true})
+	assert.Len(t, sts.Spec.Template.Spec.InitContainers, 1)
+	caVolumes := s3CABundleVolumes(sts.Spec.Template.Spec.Volumes)
+	require.Len(t, caVolumes, 1)
+	require.NotNil(t, caVolumes[0].Projected)
+	require.Len(t, caVolumes[0].Projected.Sources, 3)
+	assert.Equal(t, "private-ca", caVolumes[0].Projected.Sources[0].Secret.Name)
+	assert.Equal(t, apiv1.DefaultCABundleKey, caVolumes[0].Projected.Sources[0].Secret.Items[0].Key)
+	assert.Equal(t, "first.crt", caVolumes[0].Projected.Sources[1].Secret.Items[0].Key)
+	assert.Equal(t, "second.crt", caVolumes[0].Projected.Sources[2].Secret.Items[0].Key)
+}
+
+func s3CABundleVolumes(volumes []corev1.Volume) []corev1.Volume {
+	result := make([]corev1.Volume, 0, 2)
+	for _, volume := range volumes {
+		if volume.Name == naming.S3CertsInputVolumeName || volume.Name == naming.S3CertsVolumeName {
+			result = append(result, volume)
+		}
+	}
+	return result
+}
 
 func TestStatefulSet(t *testing.T) {
 	const ns = "mysql-ns"
@@ -158,7 +216,6 @@ func TestStatefulSet(t *testing.T) {
 		sts := StatefulSet(cluster, initImage, configHash, tlsHash, secret)
 		assert.Equal(t, "mysql-annotation", sts.Annotations["mysql-annotation"])
 		assert.Equal(t, "mysql-annotation", sts.Spec.Template.Annotations["mysql-annotation"])
-
 	})
 
 	t.Run("env variables", func(t *testing.T) {

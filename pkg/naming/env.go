@@ -17,4 +17,6 @@ const (
 	EnvAsyncSourceConnectRetry = "ASYNC_SOURCE_CONNECT_RETRY"
 
 	EnvBackupsEnabled = "BACKUPS_ENABLED"
+
+	EnvSSLCertFile = "SSL_CERT_FILE"
 )

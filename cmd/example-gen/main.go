@@ -176,6 +176,10 @@ func printRestore() error {
 								CredentialsSecret: fmt.Sprintf("%s-s3-credentials", defaults.NameCluster),
 								Region:            "us-west-2",
 								EndpointURL:       "https://s3.amazonaws.com",
+								CABundle: &apiv1.CABundleSecretSelector{
+									Name: "minio-ca-bundle",
+									Key:  "ca.crt",
+								},
 							},
 						},
 						ServerID:       101,
@@ -210,6 +214,10 @@ func printRestore() error {
 						CredentialsSecret: fmt.Sprintf("%s-s3-credentials", defaults.NameCluster),
 						Region:            "us-west-2",
 						EndpointURL:       "https://s3.amazonaws.com",
+						CABundle: &apiv1.CABundleSecretSelector{
+							Name: "minio-ca-bundle",
+							Key:  "ca.crt",
+						},
 					},
 				},
 			},
