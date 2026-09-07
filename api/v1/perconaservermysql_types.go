@@ -238,16 +238,16 @@ func (t ClusterType) isValid() bool {
 
 // +kubebuilder:validation:XValidation:rule="has(self.image) && size(self.image) > 0",message="mysql.image is required"
 // +kubebuilder:validation:XValidation:rule="has(self.size) && self.size > 0",message="mysql.size must be greater than 0"
-// +kubebuilder:validation:XValidation:rule="!(self.?autoconfig.?enabled.orValue(false)) || (has(self.resources) && ((has(self.resources.limits) && 'cpu' in self.resources.limits) || (has(self.resources.requests) && 'cpu' in self.resources.requests)) && ((has(self.resources.limits) && 'memory' in self.resources.limits) || (has(self.resources.requests) && 'memory' in self.resources.requests)))",message="mysql.resources must set cpu and memory (via limits or requests) when mysql.autoconfig.enabled is true"
-// +kubebuilder:validation:XValidation:rule="!(self.?autoconfig.?enabled.orValue(false)) || sign(quantity(has(self.resources.limits) && 'cpu' in self.resources.limits ? self.resources.limits['cpu'] : self.resources.requests['cpu'])) == 1",message="mysql.resources cpu must be greater than 0 when mysql.autoconfig.enabled is true"
-// +kubebuilder:validation:XValidation:rule="!(self.?autoconfig.?enabled.orValue(false)) || quantity(has(self.resources.limits) && 'memory' in self.resources.limits ? self.resources.limits['memory'] : self.resources.requests['memory']).compareTo(quantity('12Mi')) >= 0",message="mysql.resources memory must be at least 12Mi when mysql.autoconfig.enabled is true"
-// +kubebuilder:validation:XValidation:rule="!(self.?autoconfig.?enabled.orValue(false)) || (has(self.autoconfig.version) && size(self.autoconfig.version) > 0)",message="mysql.autoconfig.version is required when mysql.autoconfig.enabled is true"
+// +kubebuilder:validation:XValidation:rule="!(self.?autoConfig.?enabled.orValue(false)) || (has(self.resources) && ((has(self.resources.limits) && 'cpu' in self.resources.limits) || (has(self.resources.requests) && 'cpu' in self.resources.requests)) && ((has(self.resources.limits) && 'memory' in self.resources.limits) || (has(self.resources.requests) && 'memory' in self.resources.requests)))",message="mysql.resources must set cpu and memory (via limits or requests) when mysql.autoConfig.enabled is true"
+// +kubebuilder:validation:XValidation:rule="!(self.?autoConfig.?enabled.orValue(false)) || sign(quantity(has(self.resources.limits) && 'cpu' in self.resources.limits ? self.resources.limits['cpu'] : self.resources.requests['cpu'])) == 1",message="mysql.resources cpu must be greater than 0 when mysql.autoConfig.enabled is true"
+// +kubebuilder:validation:XValidation:rule="!(self.?autoConfig.?enabled.orValue(false)) || quantity(has(self.resources.limits) && 'memory' in self.resources.limits ? self.resources.limits['memory'] : self.resources.requests['memory']).compareTo(quantity('12Mi')) >= 0",message="mysql.resources memory must be at least 12Mi when mysql.autoConfig.enabled is true"
+// +kubebuilder:validation:XValidation:rule="!(self.?autoConfig.?enabled.orValue(false)) || (has(self.autoConfig.version) && size(self.autoConfig.version) > 0)",message="mysql.autoConfig.version is required when mysql.autoConfig.enabled is true"
 type MySQLSpec struct {
 	// +kubebuilder:validation:Enum=group-replication;async
 	// +kubebuilder:default=group-replication
 	ClusterType   ClusterType            `json:"clusterType,omitempty"`
 	Bootstrap     BootstrapConfig        `json:"bootstrap,omitempty"`
-	AutoConfig    AutoConfigSpec         `json:"autoconfig,omitempty"`
+	AutoConfig    AutoConfigSpec         `json:"autoConfig,omitempty"`
 	ExposePrimary ServiceExposeTogglable `json:"exposePrimary,omitempty"`
 	Expose        ServiceExposeTogglable `json:"expose,omitempty"`
 	AutoRecovery  bool                   `json:"autoRecovery,omitempty"`

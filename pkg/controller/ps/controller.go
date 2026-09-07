@@ -1132,7 +1132,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 		case version == "":
 			// The CRD requires the version whenever autoconfig is enabled, so
 			// this only happens against an outdated CRD.
-			params, err = autotune("autoconfig is enabled but mysql.autoconfig.version is not set")
+			params, err = autotune("autoconfig is enabled but mysql.autoConfig.version is not set")
 		default:
 			params, err = mysql.GetAutoConfigParams(cr, version, cpu, memory)
 			if errors.Is(err, mysql.ErrInsufficientStorage) {

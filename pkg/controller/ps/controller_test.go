@@ -1173,7 +1173,7 @@ var _ = Describe("CR validations", Ordered, func() {
 			})
 		})
 
-		const autoConfigResourcesMsg = "mysql.resources must set cpu and memory (via limits or requests) when mysql.autoconfig.enabled is true"
+		const autoConfigResourcesMsg = "mysql.resources must set cpu and memory (via limits or requests) when mysql.autoConfig.enabled is true"
 		autoConfigEnabled := true
 		autoConfigDisabled := false
 
@@ -1268,8 +1268,8 @@ var _ = Describe("CR validations", Ordered, func() {
 			})
 		})
 
-		const autoConfigCPUMsg = "mysql.resources cpu must be greater than 0 when mysql.autoconfig.enabled is true"
-		const autoConfigMemoryMsg = "mysql.resources memory must be at least 12Mi when mysql.autoconfig.enabled is true"
+		const autoConfigCPUMsg = "mysql.resources cpu must be greater than 0 when mysql.autoConfig.enabled is true"
+		const autoConfigMemoryMsg = "mysql.resources memory must be at least 12Mi when mysql.autoConfig.enabled is true"
 
 		When("autoconfig is enabled with a zero cpu limit", Ordered, func() {
 			cr, err := readDefaultCR("cr-validations-autoconfig-zero-cpu", ns)
@@ -1382,7 +1382,7 @@ var _ = Describe("CR validations", Ordered, func() {
 			It("the creation of the cluster should fail with error message", func() {
 				createErr := k8sClient.Create(ctx, cr)
 				Expect(createErr).To(HaveOccurred())
-				Expect(createErr.Error()).To(ContainSubstring("mysql.autoconfig.version is required when mysql.autoconfig.enabled is true"))
+				Expect(createErr.Error()).To(ContainSubstring("mysql.autoConfig.version is required when mysql.autoConfig.enabled is true"))
 			})
 		})
 
@@ -1398,7 +1398,7 @@ var _ = Describe("CR validations", Ordered, func() {
 			It("the creation of the cluster should fail with error message", func() {
 				createErr := k8sClient.Create(ctx, cr)
 				Expect(createErr).To(HaveOccurred())
-				Expect(createErr.Error()).To(ContainSubstring("autoconfig.version"))
+				Expect(createErr.Error()).To(ContainSubstring("autoConfig.version"))
 			})
 		})
 

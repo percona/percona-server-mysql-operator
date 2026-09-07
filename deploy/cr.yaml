@@ -257,7 +257,7 @@ spec:
 #          resources:
 #            requests:
 #              storage: 1Gi
-    autoconfig:
+    autoConfig:
       enabled: true
       loadType: someWrites
       version: "8.4"
