@@ -107,6 +107,7 @@ func newJobFixture(t *testing.T) *jobFixture {
 			source:       "mysql-1.mysql",
 			wait:         true,
 			stagingDir:   filepath.Join(t.TempDir(), "source-logs"),
+			lockPath:     filepath.Join(t.TempDir(), "failover.lock"),
 			applyPoll:    time.Millisecond,
 			applyTimeout: time.Second,
 			fetchTimeout: testFetchTimeout,
@@ -343,6 +344,19 @@ func TestRun(t *testing.T) {
 		assert.Equal(t, wantOps, j.fake.ops)
 	})
 
+	t.Run("a splice already in progress stops this one", func(t *testing.T) {
+		j := newJobFixture(t)
+		held, err := lockSplice(j.cfg.lockPath)
+		require.NoError(t, err)
+		t.Cleanup(func() { held.Close() }) //nolint:errcheck
+
+		err = run(t.Context(), j.cfg)
+
+		require.ErrorIs(t, err, errLocked)
+		assert.Empty(t, j.fake.ops, "replication must not be touched by a losing run")
+		j.relay.assertUntouched(t)
+	})
+
 	t.Run("the applier reports a failure", func(t *testing.T) {
 		j := newJobFixture(t)
 		j.fake.statuses = []map[string]string{{
@@ -383,6 +397,7 @@ func TestProductionConfig(t *testing.T) {
 	assert.Equal(t, sourceStreamURL("mysql-1.mysql"), cfg.sourceURL("mysql-1.mysql"))
 	assert.Equal(t, "mysql-1.mysql", cfg.source)
 	assert.Equal(t, "/tmp/source-logs", cfg.stagingDir)
+	assert.Equal(t, lockPath, cfg.lockPath)
 	assert.True(t, cfg.wait)
 	assert.Equal(t, relayLogApplyPoll, cfg.applyPoll)
 	assert.Equal(t, 5*time.Minute, cfg.applyTimeout)
