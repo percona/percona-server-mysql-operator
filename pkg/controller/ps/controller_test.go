@@ -2737,6 +2737,10 @@ var _ = Describe("PVC Resizing with orphaned PVCs", Ordered, func() {
 		orphanSize := resource.MustParse("10Gi")
 		liveSize := resource.MustParse("11Gi")
 		cr.Spec.MySQL.VolumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage] = liveSize
+		// The volumes here are much smaller than the default CR's, so the memory
+		// has to come down with them to keep the calculated redo log within the
+		// share of the volume autoconfig allows.
+		shrinkMemory(cr)
 
 		It("should create PerconaServerMySQL", func() {
 			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
@@ -3025,6 +3029,7 @@ var _ = Describe("PVC Resizing with a size that is not whole GiB", Ordered, func
 		roundedSize := resource.MustParse("11Gi") // what the PVCs are resized to
 		cr.Spec.StorageScaling = &psv1.StorageScalingSpec{EnableVolumeScaling: true}
 		cr.Spec.MySQL.VolumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage] = specSize
+		shrinkMemory(cr)
 
 		It("should create PerconaServerMySQL", func() {
 			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
