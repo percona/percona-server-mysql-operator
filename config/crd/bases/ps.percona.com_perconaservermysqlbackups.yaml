@@ -1119,6 +1119,9 @@ spec:
                         properties:
                           medium:
                             type: string
+                          mode:
+                            format: int32
+                            type: integer
                           sizeLimit:
                             anyOf:
                             - type: integer

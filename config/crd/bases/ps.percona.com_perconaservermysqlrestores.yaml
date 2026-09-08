@@ -933,6 +933,9 @@ spec:
                             properties:
                               medium:
                                 type: string
+                              mode:
+                                format: int32
+                                type: integer
                               sizeLimit:
                                 anyOf:
                                 - type: integer
@@ -1952,6 +1955,8 @@ spec:
                                 type: integer
                               grpc:
                                 properties:
+                                  mode:
+                                    type: string
                                   port:
                                     format: int32
                                     type: integer
@@ -1985,6 +1990,8 @@ spec:
                                     - type: integer
                                     - type: string
                                     x-kubernetes-int-or-string: true
+                                  protocol:
+                                    type: string
                                   scheme:
                                     type: string
                                 required:
@@ -2138,6 +2145,8 @@ spec:
                                 type: integer
                               grpc:
                                 properties:
+                                  mode:
+                                    type: string
                                   port:
                                     format: int32
                                     type: integer
@@ -2171,6 +2180,8 @@ spec:
                                     - type: integer
                                     - type: string
                                     x-kubernetes-int-or-string: true
+                                  protocol:
+                                    type: string
                                   scheme:
                                     type: string
                                 required:
@@ -2270,6 +2281,8 @@ spec:
                                 type: integer
                               grpc:
                                 properties:
+                                  mode:
+                                    type: string
                                   port:
                                     format: int32
                                     type: integer
@@ -2303,6 +2316,8 @@ spec:
                                     - type: integer
                                     - type: string
                                     x-kubernetes-int-or-string: true
+                                  protocol:
+                                    type: string
                                   scheme:
                                     type: string
                                 required:
