@@ -101,6 +101,10 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfig(
 		}
 	}
 
+	if _, ok := sts.GetAnnotations()[naming.AnnotationLastAppliedConfig.String()]; !ok {
+		return writeAnnotation()
+	}
+
 	lastAppliedConf, err := mysql.GetLastAppliedConfig(sts)
 	if err != nil {
 		return errors.Wrap(err, "get last applied MySQL config")

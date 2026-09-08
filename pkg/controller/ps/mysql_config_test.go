@@ -291,16 +291,23 @@ func TestReconcileMySQLConfig(t *testing.T) {
 			expectedConfig:    `{"binlog_expire_logs_seconds":"604800","max_connections":"300"}`,
 		},
 		{
-			// Cluster upgraded from an operator that never wrote the annotation:
-			// everything in my.cnf counts as new.
-			desc:          "missing last applied annotation applies every key",
-			state:         apiv1.StateReady,
-			currentConfig: "[mysqld]\nmax_connections=200\nsql_mode=STRICT_TRANS_TABLES\n",
-			expectedStmts: []string{
-				"SET GLOBAL max_connections=200",
-				"SET GLOBAL sql_mode='STRICT_TRANS_TABLES'",
-			},
+			// No annotation means no record of what mysqld was started with, and
+			// mysqld was started with exactly what is mounted now. Recording it is
+			// the whole response: replaying it would restart the cluster over the
+			// keys that cannot be set at runtime.
+			desc:           "missing last applied annotation records config without touching mysql",
+			state:          apiv1.StateReady,
+			currentConfig:  "[mysqld]\nmax_connections=200\nsql_mode=STRICT_TRANS_TABLES\n",
 			expectedConfig: `{"max_connections":"200","sql_mode":"STRICT_TRANS_TABLES"}`,
+		},
+		{
+			// The generated configuration carries innodb_buffer_pool_chunk_size,
+			// which mysqld refuses at runtime. A cluster whose first reconcile
+			// never got to write the annotation must still not be restarted for it.
+			desc:           "missing last applied annotation does not restart over generated config",
+			state:          apiv1.StateError,
+			autoConfig:     "\ninnodb_buffer_pool_size=4294967296\ninnodb_buffer_pool_chunk_size=536870912\nmax_connections=682",
+			expectedConfig: `{"innodb_buffer_pool_chunk_size":"536870912","innodb_buffer_pool_size":"4294967296","max_connections":"682"}`,
 		},
 		{
 			// Values reach mysql as SQL: numbers stay bare, byte suffixes are
@@ -308,6 +315,9 @@ func TestReconcileMySQLConfig(t *testing.T) {
 			// embedded quotes doubled.
 			desc:  "values are formatted for sql",
 			state: apiv1.StateReady,
+			// an empty record, not a missing one: the keys have to read as
+			// changed for the case to say anything about how they are formatted
+			lastAppliedConfig: "{}",
 			currentConfig: "[mysqld]\n" +
 				"max_connections=300\n" +
 				"innodb_buffer_pool_size=2G\n" +
