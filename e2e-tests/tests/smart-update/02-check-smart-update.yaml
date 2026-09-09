@@ -8,7 +8,7 @@ commands:
       source ../../functions
 
       initial_primary=$(get_primary_from_haproxy ${test_name}-haproxy-0)
-      new_mysql_image='percona/percona-server:8.0.28-20'
+      new_mysql_image='percona/percona-server:8.4.10-10.1'
 
       # Upgrade cluster
       kubectl -n "${NAMESPACE}" patch ps "$(get_cluster_name)" \
