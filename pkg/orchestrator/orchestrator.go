@@ -209,14 +209,18 @@ func updateStrategy(cr *apiv1.PerconaServerMySQL) appsv1.StatefulSetUpdateStrate
 	switch cr.Spec.UpdateStrategy {
 	case appsv1.OnDeleteStatefulSetStrategyType:
 		return appsv1.StatefulSetUpdateStrategy{Type: appsv1.OnDeleteStatefulSetStrategyType}
-	default:
-		var zero int32 = 0
-		return appsv1.StatefulSetUpdateStrategy{
-			Type: appsv1.RollingUpdateStatefulSetStrategyType,
-			RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{
-				Partition: &zero,
-			},
+	case apiv1.SmartUpdateStatefulSetStrategyType:
+		if cr.CompareVersion("1.3.0") >= 0 {
+			return appsv1.StatefulSetUpdateStrategy{Type: appsv1.OnDeleteStatefulSetStrategyType}
 		}
+	}
+
+	var zero int32 = 0
+	return appsv1.StatefulSetUpdateStrategy{
+		Type: appsv1.RollingUpdateStatefulSetStrategyType,
+		RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{
+			Partition: &zero,
+		},
 	}
 }
 

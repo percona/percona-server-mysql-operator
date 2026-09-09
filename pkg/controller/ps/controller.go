@@ -1167,6 +1167,15 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 	if err := k8s.EnsureComponent(ctx, r.Client, &component); err != nil {
 		return errors.Wrap(err, "ensure component")
 	}
+	if cr.CompareVersion("1.3.0") >= 0 && cr.Spec.UpdateStrategy == apiv1.SmartUpdateStatefulSetStrategyType {
+		sts := new(appsv1.StatefulSet)
+		if err := r.Get(ctx, types.NamespacedName{Name: component.Name(), Namespace: cr.Namespace}, sts); err != nil {
+			return errors.Wrap(err, "get statefulset")
+		}
+		if err := r.smartUpdate(ctx, sts, cr); err != nil {
+			return errors.Wrap(err, "smart update")
+		}
+	}
 
 	raftNodes := orchestrator.RaftNodes(cr)
 	if len(existingNodes) == 0 || len(existingNodes) == len(raftNodes) {

@@ -95,6 +95,25 @@ func exec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, endpoin
 	return nil
 }
 
+const RaftStateLeader = "Leader"
+
+func RaftState(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod) (string, error) {
+	var res, errb bytes.Buffer
+	if err := exec(ctx, cliCmd, pod, "api/raft-state", &res, &errb); err != nil {
+		return "", err
+	}
+
+	var state string
+	if err := json.Unmarshal(res.Bytes(), &state); err != nil {
+		return "", errors.Wrap(err, "unmarshal raft state")
+	}
+	if state == "" {
+		return "", ErrEmptyResponse
+	}
+
+	return state, nil
+}
+
 func ClusterPrimary(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, clusterHint string) (*Instance, error) {
 	url := fmt.Sprintf("api/master/%s", clusterHint)
 
