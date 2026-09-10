@@ -364,16 +364,42 @@ func TestRun(t *testing.T) {
 		assert.Equal(t, 1, j.fake.calls, "only the pre-check; no point polling an applier that never started")
 	})
 
-	t.Run("the applier never drains the splice", func(t *testing.T) {
+	t.Run("an applier that never drains the splice is left to it", func(t *testing.T) {
 		j := newJobFixture(t)
 		j.fake.statuses = []map[string]string{applying("relay-bin.000002", 4, drainedState)}
 		j.cfg.applyTimeout = 50 * time.Millisecond
+		before, err := os.ReadFile(j.relay.target)
+		require.NoError(t, err)
 
-		err := run(t.Context(), j.cfg)
+		require.NoError(t, run(t.Context(), j.cfg),
+			"the splice landed and the applier keeps working, so the job is done")
 
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "apply relay logs")
 		assert.Equal(t, wantOps, j.fake.ops)
+
+		after, err := os.ReadFile(j.relay.target)
+		require.NoError(t, err)
+		assert.NotEqual(t, before, after, "giving up on the wait must not undo the splice")
+	})
+
+	t.Run("a job torn down mid-wait does not report success", func(t *testing.T) {
+		j := newJobFixture(t)
+		j.fake.statuses = []map[string]string{applying("relay-bin.000002", 4, busyState)}
+		j.cfg.applyTimeout = time.Hour
+
+		ctx, cancel := context.WithCancel(t.Context())
+		t.Cleanup(cancel)
+		// Call 1 is run's own pre-check, so cancel once the wait loop is polling.
+		j.fake.onCall = func(calls int) {
+			if calls >= 3 {
+				cancel()
+			}
+		}
+
+		err := run(ctx, j.cfg)
+
+		require.Error(t, err, "a cancelled job must not exit 0")
+		assert.Contains(t, err.Error(), "apply relay logs")
+		assert.ErrorIs(t, err, context.Canceled)
 	})
 
 	t.Run("a splice already in progress stops this one", func(t *testing.T) {
