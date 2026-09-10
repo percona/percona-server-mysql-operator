@@ -15,14 +15,17 @@ import (
 
 const failoverBinary = "/opt/percona/failover"
 
-// execSlack is how much longer than the failover binary this command waits
-const execSlack = 10 * time.Second
+const (
+	// execSlack is how much longer than the failover binary this command waits
+	execSlack      = 10 * time.Second
+	defaultTimeout = 6 * time.Hour
+)
 
 func runFailover(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("failover", flag.ExitOnError)
 	source := fs.String("source", "", "Hostname of the server to fetch the missing binary logs from")
 	target := fs.String("target", "", "Hostname of the server to apply the missing binary logs on. Defaults to the most up to date replica of the source")
-	timeout := fs.Duration("timeout", time.Minute, "How long fetching and applying the missing binary logs may take")
+	timeout := fs.Duration("timeout", defaultTimeout, "How long fetching and applying the missing binary logs may take")
 	failureType := fs.String("failure-type", "", "Analysis code orchestrator reported the problem as. The command only runs for the ones whose recovery promotes a replica")
 	if err := fs.Parse(args); err != nil {
 		return err
