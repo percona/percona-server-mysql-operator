@@ -941,7 +941,7 @@ func (c *recreatingClient) Delete(ctx context.Context, obj client.Object, opts .
 	recreated.Status.Conditions = []corev1.PodCondition{
 		{Type: corev1.ContainersReady, Status: corev1.ConditionTrue},
 	}
-	if err := c.WithWatch.Create(ctx, recreated); err != nil {
+	if err := c.Create(ctx, recreated); err != nil {
 		return fmt.Errorf("recreate pod %s: %w", pod.Name, err)
 	}
 

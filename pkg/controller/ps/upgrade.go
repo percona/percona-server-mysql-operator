@@ -38,7 +38,7 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 	}
 
 	currentSet := new(appsv1.StatefulSet)
-	if err := r.Client.Get(ctx, client.ObjectKeyFromObject(sts), currentSet); err != nil {
+	if err := r.Get(ctx, client.ObjectKeyFromObject(sts), currentSet); err != nil {
 		if k8serrors.IsNotFound(err) {
 			return nil
 		}
@@ -46,7 +46,7 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 	}
 
 	pods := corev1.PodList{}
-	if err := r.Client.List(ctx, &pods, &client.ListOptions{
+	if err := r.List(ctx, &pods, &client.ListOptions{
 		Namespace:     currentSet.Namespace,
 		LabelSelector: labels.SelectorFromSet(currentSet.Spec.Selector.MatchLabels),
 	}); err != nil {
@@ -244,7 +244,7 @@ func isPodInCrashLoopBackOff(pod corev1.Pod) bool {
 
 func (r *PerconaServerMySQLReconciler) isBackupRunning(ctx context.Context, cr *apiv1.PerconaServerMySQL) (bool, error) {
 	bcpList := apiv1.PerconaServerMySQLBackupList{}
-	if err := r.Client.List(ctx, &bcpList, &client.ListOptions{Namespace: cr.Namespace}); err != nil {
+	if err := r.List(ctx, &bcpList, &client.ListOptions{Namespace: cr.Namespace}); err != nil {
 		if k8serrors.IsNotFound(err) {
 			return false, nil
 		}
