@@ -37,11 +37,13 @@ const (
 )
 
 const (
-	relayLogApplyTimeout = 6 * time.Minute
+	relayLogApplyTimeout = 1 * time.Hour
 	relayLogApplyPoll    = time.Second
 	sourceFetchTimeout   = 2 * time.Minute
-	jobTimeout           = 10 * time.Minute
+	jobTimeout           = 6 * time.Hour
 )
+
+var errRelayApplyTimeout = fmt.Errorf("timeout while waiting for relay log apply")
 
 var binlogMagic = []byte{0xfe, 'b', 'i', 'n'}
 
@@ -227,6 +229,10 @@ func run(ctx context.Context, cfg failoverConfig) error {
 	}
 
 	if err := waitForRelayLogsApplied(ctx, d, relayLogs, relayLog, startPos, cfg.applyPoll, cfg.applyTimeout); err != nil {
+		if errors.Is(err, errRelayApplyTimeout) && ctx.Err() == nil {
+			log.Printf("Timed out while waiting for applier, it will continue in the server anyway")
+			return nil
+		}
 		return fmt.Errorf("apply relay logs: %w", err)
 	}
 
@@ -740,7 +746,7 @@ func waitForRelayLogsApplied(
 
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("gave up after %s at %s:%d: %w", timeout, prevLog, prevPos, ctx.Err())
+			return fmt.Errorf("gave up after %s at %s:%d: %w: %w", timeout, prevLog, prevPos, errRelayApplyTimeout, ctx.Err())
 		case <-ticker.C:
 		}
 	}

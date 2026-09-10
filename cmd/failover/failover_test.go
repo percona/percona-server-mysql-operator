@@ -1209,12 +1209,17 @@ type fakeStatuser struct {
 	cycle    bool // replay the script instead of holding the last entry
 	err      error
 	calls    int
+	onCall   func(calls int) // runs before the status is returned
 }
 
 var _ replicaStatuser = (*fakeStatuser)(nil)
 
 func (f *fakeStatuser) ShowReplicaStatus(context.Context) (map[string]string, error) {
 	f.calls++
+
+	if f.onCall != nil {
+		f.onCall(f.calls)
+	}
 
 	if f.err != nil {
 		return nil, f.err
