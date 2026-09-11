@@ -131,6 +131,11 @@ func (d *DB) StartReplication(ctx context.Context, host, replicaPass string, por
 	return errors.Wrap(err, "start replication")
 }
 
+func (d *DB) StartSQLThread(ctx context.Context) error {
+	_, err := d.db.ExecContext(ctx, "START REPLICA SQL_THREAD")
+	return errors.Wrap(err, "start SQL_THREAD")
+}
+
 func (d *DB) StopReplication(ctx context.Context) error {
 	_, err := d.db.ExecContext(ctx, "STOP REPLICA")
 	return errors.Wrap(err, "stop replication")
@@ -139,6 +144,81 @@ func (d *DB) StopReplication(ctx context.Context) error {
 func (d *DB) ResetReplication(ctx context.Context) error {
 	_, err := d.db.ExecContext(ctx, "RESET REPLICA ALL")
 	return errors.Wrap(err, "reset replication")
+}
+
+func (d *DB) FlushRelayLogs(ctx context.Context) error {
+	_, err := d.db.ExecContext(ctx, "FLUSH RELAY LOGS")
+	return errors.Wrap(err, "flush relay logs")
+}
+
+func (d *DB) ShowReplicaStatus(ctx context.Context) (map[string]string, error) {
+	rows, err := d.db.QueryContext(ctx, "SHOW REPLICA STATUS")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close() //nolint:errcheck
+
+	cols, err := rows.Columns()
+	if err != nil {
+		return nil, err
+	}
+
+	if !rows.Next() {
+		return nil, sql.ErrNoRows // not a replica
+	}
+
+	vals := make([]sql.RawBytes, len(cols))
+	ptrs := make([]any, len(cols))
+	for i := range vals {
+		ptrs[i] = &vals[i]
+	}
+	if err := rows.Scan(ptrs...); err != nil {
+		return nil, err
+	}
+
+	status := make(map[string]string, len(cols))
+	for i, c := range cols {
+		status[c] = string(vals[i])
+	}
+
+	return status, rows.Err()
+}
+
+type ReplicaPosition struct {
+	SourceHost   string
+	SourceLog    string
+	SourcePos    uint64
+	RelayLog     string
+	RelayPos     uint64
+	GTIDExecuted string
+}
+
+func (d *DB) GetSourceLogPos(ctx context.Context) (ReplicaPosition, error) {
+	var positions ReplicaPosition
+
+	status, err := d.ShowReplicaStatus(ctx)
+	if err != nil {
+		return positions, fmt.Errorf("show replica status: %w", err)
+	}
+
+	positions.SourceHost = status["Source_Host"]
+	positions.SourceLog = status["Source_Log_File"]
+	positions.RelayLog = status["Relay_Log_File"]
+	positions.GTIDExecuted = status["Executed_Gtid_Set"]
+
+	pos, err := strconv.ParseUint(status["Read_Source_Log_Pos"], 10, 64)
+	if err != nil {
+		return positions, fmt.Errorf("parse Read_Source_Log_Pos: %w", err)
+	}
+	positions.SourcePos = pos
+
+	pos, err = strconv.ParseUint(status["Relay_Log_Pos"], 10, 64)
+	if err != nil {
+		return positions, fmt.Errorf("parse Relay_Log_Pos: %w", err)
+	}
+	positions.RelayPos = pos
+
+	return positions, nil
 }
 
 func (d *DB) ReplicationStatus(ctx context.Context) (db.ReplicationStatus, string, error) {
@@ -190,6 +270,27 @@ func (d *DB) ReportHost(ctx context.Context) (string, error) {
 	var reportHost string
 	err := d.db.QueryRowContext(ctx, "select @@report_host").Scan(&reportHost)
 	return reportHost, errors.Wrap(err, "select report_host param")
+}
+
+// RelayLogPaths returns the full path prefix shared by relay log files and the
+// path of the relay log index file.
+func (d *DB) RelayLogPaths(ctx context.Context) (string, string, error) {
+	var basename, index sql.NullString
+	err := d.db.QueryRowContext(ctx, "select @@relay_log_basename, @@relay_log_index").Scan(&basename, &index)
+	if err != nil {
+		return "", "", errors.Wrap(err, "select relay log params")
+	}
+
+	if basename.String == "" {
+		return "", "", errors.New("relay_log_basename is empty")
+	}
+
+	// MySQL derives the index file from the basename unless it's set explicitly.
+	if index.String == "" {
+		return basename.String, basename.String + ".index", nil
+	}
+
+	return basename.String, index.String, nil
 }
 
 func (d *DB) Close() error {

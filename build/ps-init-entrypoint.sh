@@ -23,6 +23,7 @@ install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/router_startup_ch
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/bootstrap" "${BINDIR}/bootstrap"
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/healthcheck" "${BINDIR}/healthcheck"
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/sidecar" "${BINDIR}/sidecar"
+install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/failover" "${BINDIR}/failover"
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/peer-list" "${BINDIR}/peer-list"
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/orc-handler" "${BINDIR}/orc-handler"
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/mysql-state-monitor" "${BINDIR}/mysql-state-monitor"
