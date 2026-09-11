@@ -58,7 +58,7 @@ func (p *DBParams) setDefaults() {
 	}
 
 	if p.CloneTimeoutSeconds == 0 {
-		p.CloneTimeoutSeconds = defs.DefaultCloneTimeoutSecondsSeconds // 1 hour for clone operations (large databases can take time)
+		p.CloneTimeoutSeconds = defs.DefaultCloneTimeoutSeconds // generous default; large databases can take hours to clone
 	}
 
 	if p.SourceRetryCount == 0 {
@@ -275,21 +275,31 @@ func (d *DB) getCloneStatusDetails(ctx context.Context) (map[string]any, error) 
 	return details, nil
 }
 
-func (d *DB) Clone(ctx context.Context, donor, user, pass string, port int32, cloneTimeoutSeconds uint32) error {
+func (d *DB) Clone(ctx context.Context, donor, user, pass string, port int32, cloneTimeoutSeconds, stallTimeoutSeconds uint32) error {
 	_, err := d.db.ExecContext(ctx, "SET GLOBAL clone_valid_donor_list=?", fmt.Sprintf("%s:%d", donor, port))
 	if err != nil {
 		return errors.Wrap(err, "set clone_valid_donor_list")
 	}
 
-	// Use the original context if no timeout is specified, otherwise create a timeout context
-	var cloneCtx context.Context
-	var cancel context.CancelFunc
-
+	// cloneCtx controls how long CLONE INSTANCE may run. We make it cancelable so
+	// the stall watchdog below can stop a clone that has stopped making progress.
+	// If cloneTimeoutSeconds > 0, we also add a fixed overall deadline on top.
+	cloneCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	if cloneTimeoutSeconds > 0 {
-		cloneCtx, cancel = context.WithTimeout(ctx, time.Duration(cloneTimeoutSeconds)*time.Second)
-		defer cancel()
-	} else {
-		cloneCtx = ctx
+		var timeoutCancel context.CancelFunc
+		cloneCtx, timeoutCancel = context.WithTimeout(cloneCtx, time.Duration(cloneTimeoutSeconds)*time.Second)
+		defer timeoutCancel()
+	}
+
+	// Watch the clone's progress and abort it if it transfers no bytes for
+	// stallTimeoutSeconds. This lets a slow-but-progressing clone run as long as
+	// it needs, while a genuinely hung clone is stopped (and then retried when
+	// the container restarts) instead of hanging forever.
+	if stallTimeoutSeconds > 0 {
+		stop := make(chan struct{})
+		defer close(stop)
+		go d.watchCloneProgress(ctx, cancel, time.Duration(stallTimeoutSeconds)*time.Second, stop)
 	}
 
 	_, err = d.db.ExecContext(cloneCtx, "CLONE INSTANCE FROM ?@?:? IDENTIFIED BY ?", user, donor, port, pass)
@@ -335,6 +345,62 @@ func (d *DB) Clone(ctx context.Context, donor, user, pass string, port int32, cl
 	}
 
 	return nil
+}
+
+// cloneBytesTransferred returns the total bytes moved by the running clone
+// (data written plus bytes received over the network) from the recipient's
+// performance_schema.clone_progress. It uses a separate pooled connection, so
+// it works while the main connection is blocked in CLONE INSTANCE.
+func (d *DB) cloneBytesTransferred(ctx context.Context) (int64, error) {
+	var data, network sql.NullInt64
+	err := d.db.QueryRowContext(ctx, "SELECT COALESCE(SUM(DATA), 0), COALESCE(SUM(NETWORK), 0) FROM clone_progress").Scan(&data, &network)
+	if err != nil {
+		return 0, err
+	}
+	return data.Int64 + network.Int64, nil
+}
+
+// watchCloneProgress polls how many bytes the clone has transferred and calls
+// cancel to stop the clone if that number does not grow for the whole stall
+// duration. A failed poll - for example during the mysqld restart at the end of
+// a clone, or a transient error - is ignored and does not count as no progress.
+func (d *DB) watchCloneProgress(ctx context.Context, cancel context.CancelFunc, stall time.Duration, stop <-chan struct{}) {
+	log := logf.FromContext(ctx)
+
+	const pollInterval = 30 * time.Second
+	ticker := time.NewTicker(pollInterval)
+	defer ticker.Stop()
+
+	lastBytes := int64(-1)
+	lastProgress := time.Now()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-stop:
+			return
+		case <-ticker.C:
+			qCtx, qCancel := context.WithTimeout(ctx, 10*time.Second)
+			bytes, err := d.cloneBytesTransferred(qCtx)
+			qCancel()
+			if err != nil {
+				continue
+			}
+
+			if lastBytes < 0 || bytes > lastBytes {
+				lastBytes = bytes
+				lastProgress = time.Now()
+				continue
+			}
+
+			if time.Since(lastProgress) >= stall {
+				log.Info("clone made no progress, aborting", "stall", stall.String(), "bytesTransferred", bytes)
+				cancel()
+				return
+			}
+		}
+	}
 }
 
 func (d *DB) DumbQuery(ctx context.Context) error {

@@ -65,6 +65,26 @@ func GetCloneTimeout() (uint32, error) {
 	return uint32(cloneTimeout), nil
 }
 
+// GetCloneStallTimeout reads BOOTSTRAP_CLONE_STALL_TIMEOUT. The bool return
+// reports whether the env is set at all: the operator sets it only from
+// crVersion 1.3.0, so its presence is what switches on the progress watchdog.
+// A value of 0 means "watchdog disabled" (clone runs with no progress check).
+func GetCloneStallTimeout() (uint32, bool, error) {
+	s, ok := os.LookupEnv(naming.EnvBootstrapCloneStallTimeout)
+	if !ok {
+		return 0, false, nil
+	}
+	stall, err := strconv.Atoi(s)
+	if err != nil {
+		return 0, true, errors.Wrap(err, "failed to parse BOOTSTRAP_CLONE_STALL_TIMEOUT")
+	}
+	if stall < 0 {
+		return 0, true, errors.New("BOOTSTRAP_CLONE_STALL_TIMEOUT should be a non-negative value")
+	}
+
+	return uint32(stall), true, nil
+}
+
 func GetSourceRetryCount() (uint32, error) {
 	s, ok := os.LookupEnv(naming.EnvAsyncSourceRetryCount)
 	if !ok {

@@ -1253,7 +1253,16 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 		cr.Spec.MySQL.StartupProbe.SuccessThreshold = 1
 	}
 	if cr.Spec.MySQL.StartupProbe.TimeoutSeconds == 0 {
-		cr.Spec.MySQL.StartupProbe.TimeoutSeconds = 12 * 60 * 60
+		// The startup probe runs the bootstrap (including the clone), so its
+		// timeout caps how long a clone may take. From 1.3.0 a clone may run for
+		// as long as it keeps making progress (the stall watchdog aborts only a
+		// frozen clone), so we give it a much larger cap: 7 days. Older clusters
+		// keep the previous 12 hours.
+		if cr.Spec.CRVersion != "" && cr.CompareVersion("1.3.0") >= 0 {
+			cr.Spec.MySQL.StartupProbe.TimeoutSeconds = 7 * 24 * 60 * 60
+		} else {
+			cr.Spec.MySQL.StartupProbe.TimeoutSeconds = 12 * 60 * 60
+		}
 	}
 
 	if cr.Spec.MySQL.LivenessProbe.InitialDelaySeconds == 0 {

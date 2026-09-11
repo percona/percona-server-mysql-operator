@@ -132,6 +132,65 @@ func TestGetCloneTimeout(t *testing.T) {
 	}
 }
 
+func TestGetCloneStallTimeout(t *testing.T) {
+	tests := map[string]struct {
+		set           bool
+		envValue      string
+		expectedValue uint32
+		expectedSet   bool
+		expectedError string
+	}{
+		"unset -> not present": {
+			set:         false,
+			expectedSet: false,
+		},
+		"valid positive": {
+			set:           true,
+			envValue:      "900",
+			expectedValue: 900,
+			expectedSet:   true,
+		},
+		"zero disables but is present": {
+			set:           true,
+			envValue:      "0",
+			expectedValue: 0,
+			expectedSet:   true,
+		},
+		"negative is an error": {
+			set:           true,
+			envValue:      "-1",
+			expectedSet:   true,
+			expectedError: "BOOTSTRAP_CLONE_STALL_TIMEOUT should be a non-negative value",
+		},
+		"non-numeric is an error": {
+			set:           true,
+			envValue:      "abc",
+			expectedSet:   true,
+			expectedError: "failed to parse BOOTSTRAP_CLONE_STALL_TIMEOUT: strconv.Atoi: parsing \"abc\": invalid syntax",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			require.NoError(t, os.Unsetenv("BOOTSTRAP_CLONE_STALL_TIMEOUT"))
+			if tt.set {
+				require.NoError(t, os.Setenv("BOOTSTRAP_CLONE_STALL_TIMEOUT", tt.envValue))
+				defer func() { require.NoError(t, os.Unsetenv("BOOTSTRAP_CLONE_STALL_TIMEOUT")) }()
+			}
+
+			value, present, err := GetCloneStallTimeout()
+
+			assert.Equal(t, tt.expectedSet, present)
+			if tt.expectedError != "" {
+				assert.EqualError(t, err, tt.expectedError)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedValue, value)
+			}
+		})
+	}
+}
+
 func TestGetSourceRetryCount(t *testing.T) {
 	tests := map[string]struct {
 		envValue       string
