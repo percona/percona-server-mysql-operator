@@ -1,0 +1,10 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 10
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      kubectl patch -n "${NAMESPACE}" ps gr-cross-cluster-dc1 --type=merge -p '{"spec":{"pause":false}}'
+

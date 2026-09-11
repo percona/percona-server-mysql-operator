@@ -39,56 +39,7 @@ spec:
                 type: string
               backupSource:
                 properties:
-                  backupSource:
-                    type: string
-                  completed:
-                    format: date-time
-                    type: string
-                  compressed:
-                    type: boolean
-                  conditions:
-                    items:
-                      properties:
-                        lastTransitionTime:
-                          format: date-time
-                          type: string
-                        message:
-                          maxLength: 32768
-                          type: string
-                        observedGeneration:
-                          format: int64
-                          minimum: 0
-                          type: integer
-                        reason:
-                          maxLength: 1024
-                          minLength: 1
-                          pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
-                          type: string
-                        status:
-                          enum:
-                          - "True"
-                          - "False"
-                          - Unknown
-                          type: string
-                        type:
-                          maxLength: 316
-                          pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
-                          type: string
-                      required:
-                      - lastTransitionTime
-                      - message
-                      - reason
-                      - status
-                      - type
-                      type: object
-                    type: array
                   destination:
-                    type: string
-                  image:
-                    type: string
-                  state:
-                    type: string
-                  stateDescription:
                     type: string
                   storage:
                     properties:
@@ -886,6 +837,16 @@ spec:
                         properties:
                           bucket:
                             type: string
+                          caBundle:
+                            properties:
+                              key:
+                                default: ca.crt
+                                type: string
+                              name:
+                                type: string
+                            required:
+                            - name
+                            type: object
                           credentialsSecret:
                             type: string
                           endpointUrl:
@@ -980,6 +941,9 @@ spec:
                             properties:
                               medium:
                                 type: string
+                              mode:
+                                format: int32
+                                type: integer
                               sizeLimit:
                                 anyOf:
                                 - type: integer
@@ -1088,8 +1052,6 @@ spec:
                     required:
                     - type
                     type: object
-                  type:
-                    type: string
                 type: object
               clusterName:
                 type: string
@@ -2009,6 +1971,8 @@ spec:
                                 type: integer
                               grpc:
                                 properties:
+                                  mode:
+                                    type: string
                                   port:
                                     format: int32
                                     type: integer
@@ -2042,6 +2006,8 @@ spec:
                                     - type: integer
                                     - type: string
                                     x-kubernetes-int-or-string: true
+                                  protocol:
+                                    type: string
                                   scheme:
                                     type: string
                                 required:
@@ -2195,6 +2161,8 @@ spec:
                                 type: integer
                               grpc:
                                 properties:
+                                  mode:
+                                    type: string
                                   port:
                                     format: int32
                                     type: integer
@@ -2228,6 +2196,8 @@ spec:
                                     - type: integer
                                     - type: string
                                     x-kubernetes-int-or-string: true
+                                  protocol:
+                                    type: string
                                   scheme:
                                     type: string
                                 required:
@@ -2327,6 +2297,8 @@ spec:
                                 type: integer
                               grpc:
                                 properties:
+                                  mode:
+                                    type: string
                                   port:
                                     format: int32
                                     type: integer
@@ -2360,6 +2332,8 @@ spec:
                                     - type: integer
                                     - type: string
                                     x-kubernetes-int-or-string: true
+                                  protocol:
+                                    type: string
                                   scheme:
                                     type: string
                                 required:
@@ -2411,6 +2385,16 @@ spec:
                                 properties:
                                   bucket:
                                     type: string
+                                  caBundle:
+                                    properties:
+                                      key:
+                                        default: ca.crt
+                                        type: string
+                                      name:
+                                        type: string
+                                    required:
+                                    - name
+                                    type: object
                                   credentialsSecret:
                                     type: string
                                   endpointUrl:

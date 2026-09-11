@@ -1,0 +1,13 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 300
+---
+kind: PerconaServerMySQL
+apiVersion: ps.percona.com/v1
+metadata:
+  name: gr-cross-cluster-dc2
+status:
+  state: paused
+  mysql:
+    state: paused
+

@@ -1,0 +1,21 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 420
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      # After the switchover dc1 is a REPLICA with bootstrap.mode=auto.
+      # Patch it to manual + size 1 so we exercise the single-peer
+      # manual-mode FCC code path on unpause.
+      kubectl patch -n "${NAMESPACE}" ps gr-cross-cluster-dc1 --type=merge \
+        -p '{"spec":{"unsafeFlags":{"mysqlSize":true},"mysql":{"size":1,"bootstrap":{"mode":"manual"}}}}'
+
+      # Wait for scale-down to complete (3→1)
+      kubectl wait -n "${NAMESPACE}" --for='jsonpath={.status.state}=ready' ps/gr-cross-cluster-dc1 --timeout=300s
+      kubectl wait -n "${NAMESPACE}" --for='jsonpath={.status.mysql.ready}=1' ps/gr-cross-cluster-dc1 --timeout=300s
+
+      kubectl patch -n "${NAMESPACE}" ps gr-cross-cluster-dc1 --type=merge \
+        -p '{"spec":{"pause":true}}'
+
