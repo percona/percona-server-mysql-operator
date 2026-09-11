@@ -106,7 +106,7 @@ func FromPresets(cr any) error {
 				},
 				Resources: corev1.VolumeResourceRequirements{
 					Requests: corev1.ResourceList{
-						corev1.ResourceStorage: resource.MustParse("2Gi"),
+						corev1.ResourceStorage: resource.MustParse("28Gi"),
 					},
 				},
 			},
@@ -133,7 +133,7 @@ func FromPresets(cr any) error {
 			Autoscaling: &apiv1.AutoscalingSpec{
 				TriggerThresholdPercent: 80,
 				GrowthStep:              resource.MustParse("2Gi"),
-				MaxSize:                 new(resource.MustParse("10Gi")),
+				MaxSize:                 new(resource.MustParse("40Gi")),
 			},
 		},
 		[]corev1.Toleration{

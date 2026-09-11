@@ -13,4 +13,4 @@ commands:
       # They must not keep the operator asking for the resize over and over.
       kubectl -n "${NAMESPACE}" patch ps pvc-resize \
           --type=merge \
-          -p='{"spec":{"mysql":{"volumeSpec":{"persistentVolumeClaim":{"resources":{"requests":{"storage":"4Gi"}}}}}}}'
+          -p='{"spec":{"mysql":{"volumeSpec":{"persistentVolumeClaim":{"resources":{"requests":{"storage":"12Gi"}}}}}}}'

@@ -4,11 +4,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
 	eventsv1 "k8s.io/api/events/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 )
 
 func TestPVCOrdinal(t *testing.T) {
@@ -259,6 +267,70 @@ func TestLastSeen(t *testing.T) {
 			if got := lastSeen(tt.event); !got.Equal(tt.want) {
 				t.Fatalf("lastSeen = %s, want %s", got, tt.want)
 			}
+		})
+	}
+}
+
+func TestStashAppliedConfig(t *testing.T) {
+	const (
+		crName  = "cluster1"
+		ns      = "stash-ns"
+		applied = `{"max_connections":"200"}`
+	)
+
+	newCR := func() *apiv1.PerconaServerMySQL {
+		return &apiv1.PerconaServerMySQL{
+			ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: ns},
+		}
+	}
+
+	newSTS := func(annotations map[string]string) *appsv1.StatefulSet {
+		return &appsv1.StatefulSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:        crName + "-mysql",
+				Namespace:   ns,
+				Annotations: annotations,
+			},
+		}
+	}
+
+	tests := map[string]struct {
+		sts  *appsv1.StatefulSet
+		want string // empty means the cr must be left without the annotation
+	}{
+		"a recorded config is copied to the cr": {
+			sts:  newSTS(map[string]string{naming.AnnotationLastAppliedConfig.String(): applied}),
+			want: applied,
+		},
+		"a set with no record leaves the cr alone": {
+			sts: newSTS(map[string]string{"other": "value"}),
+		},
+		"a set with no annotations at all leaves the cr alone": {
+			sts: newSTS(nil),
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			ctx := t.Context()
+			cr := newCR()
+			cl := fake.NewClientBuilder().
+				WithScheme(newScheme(t)).
+				WithObjects(cr, tc.sts).
+				Build()
+			r := &PerconaServerMySQLReconciler{Client: cl, Scheme: cl.Scheme()}
+
+			require.NoError(t, r.stashAppliedConfig(ctx, cr, tc.sts))
+
+			updated := new(apiv1.PerconaServerMySQL)
+			require.NoError(t, cl.Get(ctx, types.NamespacedName{Name: crName, Namespace: ns}, updated))
+
+			got, ok := updated.GetAnnotations()[naming.AnnotationLastAppliedConfig.String()]
+			if tc.want == "" {
+				assert.False(t, ok, "nothing to stash must not annotate the cr")
+				return
+			}
+			assert.Equal(t, tc.want, got)
 		})
 	}
 }

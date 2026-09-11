@@ -29,7 +29,7 @@ metadata:
 status:
   phase: Bound
   capacity:
-    storage: 3Gi
+    storage: 11Gi
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -38,4 +38,4 @@ metadata:
 status:
   phase: Bound
   capacity:
-    storage: 3Gi
+    storage: 11Gi
