@@ -31,7 +31,7 @@ const (
 	mysqlshVolumeName     = "mysqlsh"
 	mysqlshMountPath      = "/.mysqlsh"
 	tlsVolumeName         = "tls"
-	tlsMountPath          = "/etc/mysql/mysql-tls-secret"
+	TLSMountPath          = "/etc/mysql/mysql-tls-secret"
 	BackupLogDir          = "/var/log/xtrabackup"
 	vaultSecretVolumeName = "vault-keyring-secret"
 	vaultSecretMountPath  = "/etc/mysql/vault-keyring-secret"
@@ -673,7 +673,7 @@ func mysqldVolumeMounts(cr *apiv1.PerconaServerMySQL) []corev1.VolumeMount {
 		},
 		{
 			Name:      tlsVolumeName,
-			MountPath: tlsMountPath,
+			MountPath: TLSMountPath,
 		},
 		{
 			Name:      configVolumeName,

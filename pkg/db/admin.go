@@ -47,6 +47,13 @@ func (m *AdminManager) SetSuperReadOnly(ctx context.Context, readonly bool) erro
 	return nil
 }
 
+// ReloadTLS makes mysqld re-read its certificate files. It only affects
+// connections opened after it returns.
+func (m *AdminManager) ReloadTLS(ctx context.Context) error {
+	var errb, outb bytes.Buffer
+	return m.db.exec(ctx, "ALTER INSTANCE RELOAD TLS", &outb, &errb)
+}
+
 var (
 	variableNameRegex = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 	loosePrefixRegex  = regexp.MustCompile(`^loose[-_]`)

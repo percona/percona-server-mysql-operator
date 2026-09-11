@@ -190,6 +190,7 @@ func EnsureObjectWithHash(
 	preserveAnnotations := []string{
 		"deployment.kubernetes.io/revision",
 		string(naming.AnnotationLastAppliedConfig),
+		string(naming.AnnotationLastReloadedTLS),
 	}
 	if annotations == nil {
 		annotations = map[string]string{}
@@ -537,17 +538,13 @@ func GetImageIDFromPod(pod *corev1.Pod, containerName string) (string, error) {
 	return pod.Status.ContainerStatuses[idx].ImageID, nil
 }
 
+// GetTLSHash returns the hash a pod template carries so that a change in the
+// TLS secret rolls it out. Orchestrator, HAProxy and Router read the
+// certificates once at startup, so any change to them means a restart.
 func GetTLSHash(ctx context.Context, cl client.Client, cr *apiv1.PerconaServerMySQL) (string, error) {
-	secret := new(corev1.Secret)
-	err := cl.Get(ctx, types.NamespacedName{
-		Name:      cr.Spec.SSLSecretName,
-		Namespace: cr.Namespace,
-	}, secret)
-	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			return "", nil
-		}
-		return "", errors.Wrap(err, "get secret")
+	secret, err := tlsSecret(ctx, cl, cr)
+	if err != nil || secret == nil {
+		return "", err
 	}
 
 	hash, err := ObjectHash(secret)
@@ -556,6 +553,44 @@ func GetTLSHash(ctx context.Context, cl client.Client, cr *apiv1.PerconaServerMy
 	}
 
 	return hash, nil
+}
+
+// GetMySQLTLSHash returns the same hash for the MySQL pod template, except that
+// starting with 1.3.0 it only covers the CA: a new leaf signed by the same CA
+// is reloaded into the running mysqld instead of restarting it.
+func GetMySQLTLSHash(ctx context.Context, cl client.Client, cr *apiv1.PerconaServerMySQL) (string, error) {
+	secret, err := tlsSecret(ctx, cl, cr)
+	if err != nil || secret == nil {
+		return "", err
+	}
+
+	// Without a CA there is nothing to tell a leaf rotation from a CA rotation.
+	if cr.CompareVersion("1.3.0") < 0 || len(secret.Data[naming.TLSCAKey]) == 0 {
+		hash, err := ObjectHash(secret)
+		if err != nil {
+			return "", errors.Wrap(err, "get secret hash")
+		}
+		return hash, nil
+	}
+
+	return fmt.Sprintf("%x", md5.Sum(secret.Data[naming.TLSCAKey])), nil
+}
+
+// tlsSecret returns nil without an error when the secret does not exist yet.
+func tlsSecret(ctx context.Context, cl client.Client, cr *apiv1.PerconaServerMySQL) (*corev1.Secret, error) {
+	secret := new(corev1.Secret)
+	err := cl.Get(ctx, types.NamespacedName{
+		Name:      cr.Spec.SSLSecretName,
+		Namespace: cr.Namespace,
+	}, secret)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, errors.Wrap(err, "get secret")
+	}
+
+	return secret, nil
 }
 
 func setCRVersion(

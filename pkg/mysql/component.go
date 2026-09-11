@@ -69,7 +69,7 @@ func (c *Component) Object(ctx context.Context, cl client.Client) (client.Object
 		configHash = ""
 	}
 
-	tlsHash, err := k8s.GetTLSHash(ctx, cl, cr)
+	tlsHash, err := k8s.GetMySQLTLSHash(ctx, cl, cr)
 	if err != nil {
 		return nil, errors.Wrapf(err, "get tls hash")
 	}

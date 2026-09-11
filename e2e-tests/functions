@@ -1182,11 +1182,19 @@ get_mysql_pod_names() {
 		--sort-by=.metadata.name -o jsonpath='{.items[*].metadata.name}'
 }
 
+get_component_pod_uids() {
+	local cluster_name=$1
+	local component=$2
+
+	kubectl get pod -n "${NAMESPACE}" \
+		--selector="app.kubernetes.io/instance=${cluster_name},app.kubernetes.io/name=${component}" \
+		--sort-by=.metadata.name -o jsonpath='{.items[*].metadata.uid}'
+}
+
 get_mysql_pod_uids() {
 	local cluster_name=$1
 
-	kubectl get pod -n "${NAMESPACE}" --selector="$(mysql_pod_selector "${cluster_name}")" \
-		--sort-by=.metadata.name -o jsonpath='{.items[*].metadata.uid}'
+	get_component_pod_uids "${cluster_name}" mysql
 }
 
 # Prints the global value of a MySQL variable from every database pod of the
@@ -1238,18 +1246,27 @@ wait_for_mysql_variable() {
 	done
 }
 
-# Waits until every database pod of the given cluster has been replaced,
-# comparing against a UID list captured with get_mysql_pod_uids before the
-# change that should restart them.
 wait_for_mysql_pods_restart() {
 	local cluster_name=$1
 	local uids_before=$2
 	local timeout=${3:-600}
+
+	wait_for_component_pods_restart "${cluster_name}" mysql "${uids_before}" "${timeout}"
+}
+
+# Waits until every pod of the given component has been replaced, comparing
+# against a UID list captured with get_component_pod_uids before the change that
+# should restart them.
+wait_for_component_pods_restart() {
+	local cluster_name=$1
+	local component=$2
+	local uids_before=$3
+	local timeout=${4:-600}
 	local elapsed=0
 	local expected_count=$(echo "${uids_before}" | wc -w)
 
 	while :; do
-		local uids_now=$(get_mysql_pod_uids "${cluster_name}")
+		local uids_now=$(get_component_pod_uids "${cluster_name}" "${component}")
 		local replaced=true
 		local uid
 
@@ -1267,14 +1284,70 @@ wait_for_mysql_pods_restart() {
 			return 0
 		fi
 		if ((elapsed >= timeout)); then
-			echo "Timeout (${timeout}s) exceeded while waiting for ${cluster_name} mysql pods to be replaced"
+			echo "Timeout (${timeout}s) exceeded while waiting for ${cluster_name} ${component} pods to be replaced"
 			echo "uids before: ${uids_before}"
 			echo "uids now:    ${uids_now}"
 			return 1
 		fi
-		echo "waiting for ${cluster_name} mysql pods to be replaced"
+		echo "waiting for ${cluster_name} ${component} pods to be replaced"
 		sleep 10
 		elapsed=$((elapsed + 10))
+	done
+}
+
+# Prints the notBefore date of the certificate mysqld currently serves from every
+# database pod, in pod name order. Spaces inside a date become underscores so
+# that every pod stays one word; unreachable pods print "unavailable".
+get_mysql_cert_not_before_on_pods() {
+	local cluster_name=$1
+	local values=()
+
+	for pod in $(get_mysql_pod_names "${cluster_name}"); do
+		values+=("$(kubectl -n "${NAMESPACE}" exec "${pod}" -c mysql -- bash -c \
+			'mysql -uroot -p"$(cat /etc/mysql/mysql-users-secret/root)" -NB -e "SHOW GLOBAL STATUS LIKE \"Ssl_server_not_before\"" | cut -f2 | tr " " "_"' \
+			2>/dev/null || echo 'unavailable')")
+	done
+
+	echo "${values[*]}"
+}
+
+# Waits until every database pod serves a certificate other than the one in the
+# list captured with get_mysql_cert_not_before_on_pods before the rotation.
+wait_for_mysql_cert_reload() {
+	local cluster_name=$1
+	local not_before_before=$2
+	local timeout=${3:-300}
+	local elapsed=0
+
+	local before=(${not_before_before})
+
+	while :; do
+		local now=($(get_mysql_cert_not_before_on_pods "${cluster_name}"))
+		local reloaded=true
+		local i
+
+		if [[ ${#now[@]} -ne ${#before[@]} ]]; then
+			reloaded=false
+		else
+			for i in "${!now[@]}"; do
+				if [[ ${now[$i]} == "unavailable" || ${now[$i]} == "${before[$i]}" ]]; then
+					reloaded=false
+				fi
+			done
+		fi
+
+		if [[ ${reloaded} == true ]]; then
+			return 0
+		fi
+		if ((elapsed >= timeout)); then
+			echo "Timeout (${timeout}s) exceeded while waiting for ${cluster_name} mysql pods to reload their certificate"
+			echo "not before, before: ${before[*]}"
+			echo "not before, now:    ${now[*]}"
+			return 1
+		fi
+		echo "waiting for ${cluster_name} mysql pods to reload their certificate"
+		sleep 5
+		elapsed=$((elapsed + 5))
 	done
 }
 

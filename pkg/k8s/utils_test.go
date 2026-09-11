@@ -770,3 +770,95 @@ func TestEnsureObjectWithHash(t *testing.T) {
 		assert.Equal(t, []byte("new-value"), got.Data["key"])
 	})
 }
+
+func TestGetTLSHash(t *testing.T) {
+	const (
+		crName    = "cluster1"
+		ns        = "tls-ns"
+		sslSecret = "cluster1-ssl"
+	)
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, corev1.AddToScheme(scheme))
+	require.NoError(t, apiv1.AddToScheme(scheme))
+
+	newCR := func(crVersion string) *apiv1.PerconaServerMySQL {
+		return &apiv1.PerconaServerMySQL{
+			ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: ns},
+			Spec: apiv1.PerconaServerMySQLSpec{
+				CRVersion:     crVersion,
+				SSLSecretName: sslSecret,
+			},
+		}
+	}
+
+	newSecret := func(ca, cert, key string) *corev1.Secret {
+		data := make(map[string][]byte)
+		if ca != "" {
+			data[naming.TLSCAKey] = []byte(ca)
+		}
+		data[naming.TLSCertKey] = []byte(cert)
+		data[naming.TLSKeyKey] = []byte(key)
+
+		return &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: sslSecret, Namespace: ns},
+			Data:       data,
+		}
+	}
+
+	hashes := func(t *testing.T, crVersion string, secret *corev1.Secret) (string, string) {
+		t.Helper()
+
+		objs := []client.Object{newCR(crVersion)}
+		if secret != nil {
+			objs = append(objs, secret)
+		}
+		cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).Build()
+
+		all, err := GetTLSHash(context.Background(), cl, newCR(crVersion))
+		require.NoError(t, err)
+		mysql, err := GetMySQLTLSHash(context.Background(), cl, newCR(crVersion))
+		require.NoError(t, err)
+
+		return all, mysql
+	}
+
+	t.Run("missing secret hashes to nothing", func(t *testing.T) {
+		all, mysql := hashes(t, "1.3.0", nil)
+
+		assert.Empty(t, all)
+		assert.Empty(t, mysql)
+	})
+
+	t.Run("a rotated leaf leaves the mysql hash alone", func(t *testing.T) {
+		allBefore, mysqlBefore := hashes(t, "1.3.0", newSecret("ca", "cert", "key"))
+		allAfter, mysqlAfter := hashes(t, "1.3.0", newSecret("ca", "new-cert", "new-key"))
+
+		assert.NotEqual(t, allBefore, allAfter, "proxies read their certificates once and must be restarted")
+		assert.Equal(t, mysqlBefore, mysqlAfter, "mysqld reloads the leaf and must not be restarted")
+	})
+
+	t.Run("a rotated CA changes every hash", func(t *testing.T) {
+		allBefore, mysqlBefore := hashes(t, "1.3.0", newSecret("ca", "cert", "key"))
+		allAfter, mysqlAfter := hashes(t, "1.3.0", newSecret("new-ca", "cert", "key"))
+
+		assert.NotEqual(t, allBefore, allAfter)
+		assert.NotEqual(t, mysqlBefore, mysqlAfter)
+	})
+
+	t.Run("a rotated leaf without a CA restarts mysql too", func(t *testing.T) {
+		allBefore, mysqlBefore := hashes(t, "1.3.0", newSecret("", "cert", "key"))
+		allAfter, mysqlAfter := hashes(t, "1.3.0", newSecret("", "new-cert", "new-key"))
+
+		assert.NotEqual(t, allBefore, allAfter)
+		assert.NotEqual(t, mysqlBefore, mysqlAfter)
+	})
+
+	t.Run("version gate skips 1.2.0", func(t *testing.T) {
+		allBefore, mysqlBefore := hashes(t, "1.2.0", newSecret("ca", "cert", "key"))
+		allAfter, mysqlAfter := hashes(t, "1.2.0", newSecret("ca", "new-cert", "new-key"))
+
+		assert.NotEqual(t, allBefore, allAfter)
+		assert.NotEqual(t, mysqlBefore, mysqlAfter)
+	})
+}
