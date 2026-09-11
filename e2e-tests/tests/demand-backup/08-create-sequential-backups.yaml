@@ -13,7 +13,7 @@ commands:
         | yq '(.spec.backup.storages // {}) | keys | .[0]')
 
       kubectl patch ps "$cluster_name" -n "$NAMESPACE" --type=merge \
-        -p '{"spec":{"backup":{"allowParallel":true}}}'
+        -p '{"spec":{"backup":{"allowParallel":false}}}'
 
-      run_backup demand-backup "$storage_name"
-      run_backup demand-backup-parallel "$storage_name"
+      run_backup demand-backup-sequential-1 "$storage_name"
+      run_backup demand-backup-sequential-2 "$storage_name"

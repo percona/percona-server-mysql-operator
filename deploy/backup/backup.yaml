@@ -21,3 +21,5 @@ spec:
 #        - --someflag=abc
 #      xtrabackup:
 #        - --someflag=abc
+#  startingDeadlineSeconds: 0
+#  suspendedDeadlineSeconds: 0

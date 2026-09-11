@@ -1,0 +1,14 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 30
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      storage_name=$(kubectl get ps demand-backup-retry -n "$NAMESPACE" -o yaml \
+        | yq '(.spec.backup.storages // {}) | keys | .[0]')
+      run_backup demand-backup-retry-suspended-deadline "$storage_name" \
+        demand-backup-retry suspended-deadline

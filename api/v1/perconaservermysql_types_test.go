@@ -12,6 +12,24 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 )
 
+func TestBackupSpecGetAllowParallel(t *testing.T) {
+	tests := map[string]struct {
+		allowParallel *bool
+		expected      bool
+	}{
+		"unset":    {expected: false},
+		"enabled":  {allowParallel: new(true), expected: true},
+		"disabled": {allowParallel: new(false), expected: false},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			spec := &BackupSpec{AllowParallel: tt.allowParallel}
+			assert.Equal(t, tt.expected, spec.GetAllowParallel())
+		})
+	}
+}
+
 func TestCheckNSetDefaults(t *testing.T) {
 	t.Run("with invalid cluster type", func(t *testing.T) {
 		cr := new(PerconaServerMySQL)

@@ -17,6 +17,7 @@ import (
 	coordv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -88,8 +89,24 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 			stateDesc: "spec.backup not found in PerconaServerMySQL CustomResource or backups are disabled",
 		},
 		{
-			name: "cluster is not ready for backup",
+			name: "backup waits while cluster is not ready",
 			cr:   cr,
+			cluster: updateResource(
+				cluster.DeepCopy(),
+				func(cr *apiv1.PerconaServerMySQL) {
+					cr.Namespace = namespace
+					cr.Status.State = apiv1.StateError
+					cr.Status.MySQL.State = apiv1.StateReady
+				},
+			),
+			state: apiv1.BackupNew,
+		},
+		{
+			name: "backup starting deadline expires while cluster is initializing",
+			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQLBackup) {
+				cr.CreationTimestamp = metav1.NewTime(time.Now().Add(-time.Minute))
+				cr.Spec.StartingDeadlineSeconds = new(int64(30))
+			}),
 			cluster: updateResource(
 				cluster.DeepCopy(),
 				func(cr *apiv1.PerconaServerMySQL) {
@@ -99,7 +116,7 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 				},
 			),
 			state:     apiv1.BackupError,
-			stateDesc: "cluster is not ready",
+			stateDesc: "backup did not start before startingDeadlineSeconds expired",
 		},
 		{
 			name: "without storage",
@@ -950,6 +967,213 @@ func TestRunningState(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestReconcileDeadlineReleasesLease(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(scheme))
+	require.NoError(t, apiv1.AddToScheme(scheme))
+
+	tests := map[string]struct {
+		initialState  apiv1.BackupState
+		expectedState apiv1.BackupState
+		expectedDesc  string
+	}{
+		"starting deadline": {
+			expectedState: apiv1.BackupError,
+			expectedDesc:  "backup did not start before startingDeadlineSeconds expired",
+		},
+		"suspended deadline": {
+			initialState:  apiv1.BackupSuspended,
+			expectedState: apiv1.BackupFailed,
+			expectedDesc:  "backup did not resume before suspendedDeadlineSeconds expired",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			const namespace = "test-ns"
+			backup, err := readDefaultCRBackup("backup1", namespace)
+			require.NoError(t, err)
+			backup.UID = "backup1-uid"
+			backup.CreationTimestamp = metav1.NewTime(time.Now().Add(-time.Minute))
+			backup.Spec.StartingDeadlineSeconds = new(int64(30))
+			backup.Spec.SuspendedDeadlineSeconds = new(int64(30))
+			backup.Status.State = tt.initialState
+			backup.Status.Conditions = []metav1.Condition{{
+				Type:   apiv1.ConditionBackupLeaseAcquired,
+				Status: metav1.ConditionTrue,
+			}}
+
+			cluster, err := readDefaultCR(backup.Spec.ClusterName, namespace)
+			require.NoError(t, err)
+
+			lease := &coordv1.Lease{
+				ObjectMeta: metav1.ObjectMeta{Name: naming.BackupLeaseName(cluster.Name), Namespace: namespace},
+				Spec: coordv1.LeaseSpec{
+					HolderIdentity: new(naming.LeaseHolderName(backup.Name, string(backup.UID))),
+				},
+			}
+			objects := []client.Object{backup, cluster, lease}
+			var job *batchv1.Job
+			if tt.initialState == apiv1.BackupSuspended {
+				jobName := xtrabackup.JobNamespacedName(backup)
+				job = &batchv1.Job{
+					ObjectMeta: metav1.ObjectMeta{Name: jobName.Name, Namespace: jobName.Namespace},
+					Spec:       batchv1.JobSpec{Suspend: new(true)},
+					Status: batchv1.JobStatus{Conditions: []batchv1.JobCondition{{
+						Type:               batchv1.JobSuspended,
+						Status:             corev1.ConditionTrue,
+						LastTransitionTime: backup.CreationTimestamp,
+					}}},
+				}
+				objects = append(objects, job)
+			}
+
+			cl := fake.NewClientBuilder().WithScheme(scheme).
+				WithObjects(objects...).
+				WithStatusSubresource(backup).
+				Build()
+			r := PerconaServerMySQLBackupReconciler{
+				Client:        cl,
+				Scheme:        scheme,
+				ServerVersion: &platform.ServerVersion{Platform: platform.PlatformKubernetes},
+			}
+
+			_, err = r.Reconcile(t.Context(), reconcile.Request{NamespacedName: client.ObjectKeyFromObject(backup)})
+			require.NoError(t, err)
+
+			actual := new(apiv1.PerconaServerMySQLBackup)
+			require.NoError(t, cl.Get(t.Context(), client.ObjectKeyFromObject(backup), actual))
+			assert.Equal(t, tt.expectedState, actual.Status.State)
+			assert.Equal(t, tt.expectedDesc, actual.Status.StateDesc)
+			assert.False(t, meta.IsStatusConditionPresentAndEqual(actual.Status.Conditions, apiv1.ConditionBackupLeaseAcquired, metav1.ConditionTrue))
+
+			if job != nil {
+				err = cl.Get(t.Context(), client.ObjectKeyFromObject(job), new(batchv1.Job))
+				assert.True(t, k8serrors.IsNotFound(err))
+			}
+			err = cl.Get(t.Context(), client.ObjectKeyFromObject(lease), new(coordv1.Lease))
+			assert.True(t, k8serrors.IsNotFound(err))
+		})
+	}
+}
+
+func TestBackupStateFollowsJobSuspension(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(scheme))
+	require.NoError(t, apiv1.AddToScheme(scheme))
+
+	const namespace = "test-ns"
+	backup, err := readDefaultCRBackup("backup1", namespace)
+	require.NoError(t, err)
+	backup.Status.State = apiv1.BackupRunning
+
+	cluster, err := readDefaultCR(backup.Spec.ClusterName, namespace)
+	require.NoError(t, err)
+	cluster.Status.State = apiv1.StateInitializing
+	cluster.Status.MySQL.State = apiv1.StateInitializing
+	cluster.Spec.MySQL.ClusterType = apiv1.ClusterTypeGR
+	cluster.Spec.Backup.Enabled = true
+
+	jobName := xtrabackup.JobNamespacedName(backup)
+	job := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{Name: jobName.Name, Namespace: jobName.Namespace},
+		Status:     batchv1.JobStatus{Active: 1},
+	}
+
+	cl := fake.NewClientBuilder().WithScheme(scheme).
+		WithObjects(backup, cluster, job).
+		WithStatusSubresource(backup, cluster, job).
+		Build()
+	r := PerconaServerMySQLBackupReconciler{
+		Client:        cl,
+		Scheme:        scheme,
+		ServerVersion: &platform.ServerVersion{Platform: platform.PlatformKubernetes},
+	}
+
+	request := reconcile.Request{NamespacedName: client.ObjectKeyFromObject(backup)}
+	_, err = r.Reconcile(t.Context(), request)
+	require.NoError(t, err)
+
+	actualBackup := new(apiv1.PerconaServerMySQLBackup)
+	require.NoError(t, cl.Get(t.Context(), client.ObjectKeyFromObject(backup), actualBackup))
+	assert.Equal(t, apiv1.BackupSuspended, actualBackup.Status.State)
+	actualJob := new(batchv1.Job)
+	require.NoError(t, cl.Get(t.Context(), client.ObjectKeyFromObject(job), actualJob))
+	require.NotNil(t, actualJob.Spec.Suspend)
+	assert.True(t, *actualJob.Spec.Suspend)
+
+	actualCluster := new(apiv1.PerconaServerMySQL)
+	require.NoError(t, cl.Get(t.Context(), client.ObjectKeyFromObject(cluster), actualCluster))
+	actualCluster.Status.State = apiv1.StateReady
+	actualCluster.Status.MySQL.State = apiv1.StateReady
+	require.NoError(t, cl.Status().Update(t.Context(), actualCluster))
+
+	_, err = r.Reconcile(t.Context(), request)
+	require.NoError(t, err)
+	require.NoError(t, cl.Get(t.Context(), client.ObjectKeyFromObject(backup), actualBackup))
+	assert.Equal(t, apiv1.BackupStarting, actualBackup.Status.State)
+	require.NoError(t, cl.Get(t.Context(), client.ObjectKeyFromObject(job), actualJob))
+	require.NotNil(t, actualJob.Spec.Suspend)
+	assert.False(t, *actualJob.Spec.Suspend)
+}
+
+func TestRunningBackupDoesNotAcquireLease(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(scheme))
+	require.NoError(t, apiv1.AddToScheme(scheme))
+
+	const namespace = "test-ns"
+	backup, err := readDefaultCRBackup("backup1", namespace)
+	require.NoError(t, err)
+	backup.Status.State = apiv1.BackupRunning
+
+	cluster, err := readDefaultCR(backup.Spec.ClusterName, namespace)
+	require.NoError(t, err)
+	cluster.Status.State = apiv1.StateReady
+	cluster.Status.MySQL.State = apiv1.StateReady
+	cluster.Spec.MySQL.ClusterType = apiv1.ClusterTypeGR
+	cluster.Spec.Backup.Enabled = true
+	cluster.Spec.Backup.AllowParallel = new(false)
+
+	jobName := xtrabackup.JobNamespacedName(backup)
+	job := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{Name: jobName.Name, Namespace: jobName.Namespace},
+		Status: batchv1.JobStatus{Conditions: []batchv1.JobCondition{{
+			Type:   batchv1.JobComplete,
+			Status: corev1.ConditionTrue,
+		}}},
+	}
+	lease := &coordv1.Lease{
+		ObjectMeta: metav1.ObjectMeta{Name: naming.BackupLeaseName(cluster.Name), Namespace: namespace},
+		Spec: coordv1.LeaseSpec{
+			HolderIdentity: new(naming.LeaseHolderName("another-backup", "another-uid")),
+		},
+	}
+
+	cl := fake.NewClientBuilder().WithScheme(scheme).
+		WithObjects(backup, cluster, job, lease).
+		WithStatusSubresource(backup, cluster, job).
+		Build()
+	r := PerconaServerMySQLBackupReconciler{
+		Client:        cl,
+		Scheme:        scheme,
+		ServerVersion: &platform.ServerVersion{Platform: platform.PlatformKubernetes},
+	}
+
+	_, err = r.Reconcile(t.Context(), reconcile.Request{NamespacedName: client.ObjectKeyFromObject(backup)})
+	require.NoError(t, err)
+
+	actual := new(apiv1.PerconaServerMySQLBackup)
+	require.NoError(t, cl.Get(t.Context(), client.ObjectKeyFromObject(backup), actual))
+	assert.Equal(t, apiv1.BackupSucceeded, actual.Status.State)
+	assert.Nil(t, meta.FindStatusCondition(actual.Status.Conditions, apiv1.ConditionBackupLeaseAcquired))
+
+	actualLease := new(coordv1.Lease)
+	require.NoError(t, cl.Get(t.Context(), client.ObjectKeyFromObject(lease), actualLease))
+	require.NotNil(t, actualLease.Spec.HolderIdentity)
+	assert.Equal(t, *lease.Spec.HolderIdentity, *actualLease.Spec.HolderIdentity)
 }
 
 func TestGetBackupSource(t *testing.T) {

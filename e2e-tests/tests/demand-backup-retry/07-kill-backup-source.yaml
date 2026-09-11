@@ -10,3 +10,9 @@ commands:
 
       pod=$(kubectl get ps-backup demand-backup-retry -n ${NAMESPACE} -o jsonpath='{.status.backupSource}' | cut -d'.' -f1)
       kubectl delete pod "$pod" -n ${NAMESPACE} --force --grace-period=0
+
+      # Create another backup while the cluster is initializing. It must expire
+      # without creating a Job, while the original Job is suspended.
+      storage_name=$(kubectl get ps demand-backup-retry -n ${NAMESPACE} -o yaml \
+        | yq '(.spec.backup.storages // {}) | keys | .[0]')
+      run_backup demand-backup-retry-deadline "$storage_name" demand-backup-retry deadline
