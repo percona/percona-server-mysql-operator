@@ -43,7 +43,7 @@ func GetVersion(ctx context.Context, cr *apiv1.PerconaServerMySQL, endpoint stri
 
 	timeout := 10 * time.Second
 	crUID := string(cr.GetUID())
-	platformStr := string(serverVersion.Platform)
+	platformStr := serverVersion.String()
 
 	apply := cr.Spec.UpgradeOptions.Apply
 	if apply == "" {

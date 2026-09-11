@@ -27,6 +27,10 @@ func (m *mockClientCmd) REST() restclient.Interface {
 	return nil
 }
 
+func (m *mockClientCmd) Host() string {
+	return ""
+}
+
 func TestGetPVCUsage(t *testing.T) {
 	tests := map[string]struct {
 		pvcName     string

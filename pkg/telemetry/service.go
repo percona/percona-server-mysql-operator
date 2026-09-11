@@ -120,7 +120,7 @@ func createReport(cr *apiv1.PerconaServerMySQL, serverVersion *platform.ServerVe
 	if serverVersion.Platform != "" {
 		metrics = append(metrics, &models.GenericReportMetric{
 			Key:   metricPlatform,
-			Value: string(serverVersion.Platform),
+			Value: serverVersion.String(),
 		})
 	}
 

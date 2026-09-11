@@ -604,6 +604,10 @@ func (f *fakeVersionClientCmd) REST() restclient.Interface {
 	return nil
 }
 
+func (f *fakeVersionClientCmd) Host() string {
+	return ""
+}
+
 func (vs *fakeVS) Apply(_ context.Context, req any) (any, error) {
 	if vs.unimplemented {
 		return nil, errors.New("unimplemented")
