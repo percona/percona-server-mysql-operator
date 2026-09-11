@@ -1169,23 +1169,26 @@ get_router_pods() {
 	kubectl get pod -n "${NAMESPACE}" --no-headers --selector=app.kubernetes.io/name=router | awk '{print $1}'
 }
 
-mysql_pod_selector() {
+pod_selector() {
 	local cluster_name=$1
+	local component=$2
 
-	echo "app.kubernetes.io/instance=${cluster_name},app.kubernetes.io/name=mysql"
+	echo "app.kubernetes.io/instance=${cluster_name},app.kubernetes.io/component=${component}"
 }
 
-get_mysql_pod_names() {
+get_pod_names() {
 	local cluster_name=$1
+	local component=$2
 
-	kubectl get pod -n "${NAMESPACE}" --selector="$(mysql_pod_selector "${cluster_name}")" \
+	kubectl get pod -n "${NAMESPACE}" --selector="$(pod_selector "${cluster_name}" "${component}")" \
 		--sort-by=.metadata.name -o jsonpath='{.items[*].metadata.name}'
 }
 
-get_mysql_pod_uids() {
+get_pod_uids() {
 	local cluster_name=$1
+	local component=$2
 
-	kubectl get pod -n "${NAMESPACE}" --selector="$(mysql_pod_selector "${cluster_name}")" \
+	kubectl get pod -n "${NAMESPACE}" --selector="$(pod_selector "${cluster_name}" "${component}")" \
 		--sort-by=.metadata.name -o jsonpath='{.items[*].metadata.uid}'
 }
 
@@ -1197,7 +1200,7 @@ get_mysql_variable_on_pods() {
 	local variable=$2
 	local values=()
 
-	for pod in $(get_mysql_pod_names "${cluster_name}"); do
+	for pod in $(get_pod_names "${cluster_name}" database); do
 		values+=("$(kubectl -n "${NAMESPACE}" exec "${pod}" -c mysql -- bash -c \
 			'mysql -uroot -p"$(cat /etc/mysql/mysql-users-secret/root)" -NB -e "SELECT @@global.'"${variable}"'"' \
 			2>/dev/null || echo 'unavailable')")
@@ -1238,18 +1241,19 @@ wait_for_mysql_variable() {
 	done
 }
 
-# Waits until every database pod of the given cluster has been replaced,
-# comparing against a UID list captured with get_mysql_pod_uids before the
-# change that should restart them.
-wait_for_mysql_pods_restart() {
+# Waits until every pod of the given cluster app has been replaced, comparing
+# against a UID list captured with get_pod_uids before the change that should
+# restart them.
+wait_for_pods_restart() {
 	local cluster_name=$1
-	local uids_before=$2
-	local timeout=${3:-600}
+	local component=$2
+	local uids_before=$3
+	local timeout=${4:-600}
 	local elapsed=0
 	local expected_count=$(echo "${uids_before}" | wc -w)
 
 	while :; do
-		local uids_now=$(get_mysql_pod_uids "${cluster_name}")
+		local uids_now=$(get_pod_uids "${cluster_name}" "${component}")
 		local replaced=true
 		local uid
 
@@ -1267,12 +1271,12 @@ wait_for_mysql_pods_restart() {
 			return 0
 		fi
 		if ((elapsed >= timeout)); then
-			echo "Timeout (${timeout}s) exceeded while waiting for ${cluster_name} mysql pods to be replaced"
+			echo "Timeout (${timeout}s) exceeded while waiting for ${cluster_name} ${component} pods to be replaced"
 			echo "uids before: ${uids_before}"
 			echo "uids now:    ${uids_now}"
 			return 1
 		fi
-		echo "waiting for ${cluster_name} mysql pods to be replaced"
+		echo "waiting for ${cluster_name} ${component} pods to be replaced"
 		sleep 10
 		elapsed=$((elapsed + 10))
 	done
@@ -2382,9 +2386,9 @@ read_mysql_data_to_configmap() {
 # pass: MySQL password
 # host: MySQL host (service or pod)
 check_connect_user() {
-  local user="$1"
-  local pass="$2"
-  local host="$3"
-  kubectl -n "${NAMESPACE}" exec mysql-client -- \
-      env MYSQL_PWD="${pass}" mysql -sN -h "${host}" -u"${user}" -e "SELECT 1" >/dev/null 2>&1
+	local user="$1"
+	local pass="$2"
+	local host="$3"
+	kubectl -n "${NAMESPACE}" exec mysql-client -- \
+		env MYSQL_PWD="${pass}" mysql -sN -h "${host}" -u"${user}" -e "SELECT 1" >/dev/null 2>&1
 }

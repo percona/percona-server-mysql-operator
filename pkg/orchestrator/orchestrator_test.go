@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
@@ -76,6 +77,27 @@ func TestStatefulSet(t *testing.T) {
 			"percona.com/last-applied-tls":   tlsHash,
 			"global-annotation":              "global-annotation-value",
 		}, sts.Spec.Template.Annotations)
+	})
+
+	t.Run("smart update strategy", func(t *testing.T) {
+		cluster := cr.DeepCopy()
+		cluster.Spec.UpdateStrategy = apiv1.SmartUpdateStatefulSetStrategyType
+
+		sts := StatefulSet(cluster, initImage, configHash, tlsHash)
+
+		assert.Equal(t, appsv1.OnDeleteStatefulSetStrategyType, sts.Spec.UpdateStrategy.Type)
+		assert.Nil(t, sts.Spec.UpdateStrategy.RollingUpdate)
+	})
+
+	t.Run("smart update strategy before 1.3.0", func(t *testing.T) {
+		cluster := cr.DeepCopy()
+		cluster.Spec.UpdateStrategy = apiv1.SmartUpdateStatefulSetStrategyType
+		cluster.Spec.CRVersion = "1.2.0"
+
+		sts := StatefulSet(cluster, initImage, configHash, tlsHash)
+
+		assert.Equal(t, appsv1.RollingUpdateStatefulSetStrategyType, sts.Spec.UpdateStrategy.Type)
+		assert.Equal(t, int32(0), *sts.Spec.UpdateStrategy.RollingUpdate.Partition)
 	})
 
 	t.Run("termination grace period seconds", func(t *testing.T) {

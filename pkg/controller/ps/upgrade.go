@@ -18,9 +18,11 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysqlsh"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 )
 
@@ -35,12 +37,8 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 		return nil
 	}
 
-	currentSet := sts
-	err := r.Client.Get(ctx, types.NamespacedName{
-		Name:      sts.Name,
-		Namespace: sts.Namespace,
-	}, currentSet)
-	if err != nil {
+	currentSet := new(appsv1.StatefulSet)
+	if err := r.Get(ctx, client.ObjectKeyFromObject(sts), currentSet); err != nil {
 		if k8serrors.IsNotFound(err) {
 			return nil
 		}
@@ -48,7 +46,7 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 	}
 
 	pods := corev1.PodList{}
-	if err := r.Client.List(ctx, &pods, &client.ListOptions{
+	if err := r.List(ctx, &pods, &client.ListOptions{
 		Namespace:     currentSet.Namespace,
 		LabelSelector: labels.SelectorFromSet(currentSet.Spec.Selector.MatchLabels),
 	}); err != nil {
@@ -61,14 +59,18 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 
 	log.Info("statefulSet was changed, run smart update")
 
-	running, err := r.isBackupRunning(ctx, cr)
-	if err != nil {
-		log.Error(err, "can't start 'SmartUpdate'")
-		return nil
-	}
-	if running {
-		log.Info("can't start/continue 'SmartUpdate': backup is running")
-		return nil
+	component := sts.Labels[naming.LabelComponent]
+
+	if component == naming.ComponentDatabase {
+		running, err := r.isBackupRunning(ctx, cr)
+		if err != nil {
+			log.Error(err, "can't start 'SmartUpdate'")
+			return nil
+		}
+		if running {
+			log.Info("can't start/continue 'SmartUpdate': backup is running")
+			return nil
+		}
 	}
 
 	if currentSet.Status.ReadyReplicas < currentSet.Status.Replicas {
@@ -81,58 +83,111 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 		return nil
 	}
 
-	primaryHost, err := r.getPrimaryHost(ctx, cr)
-	if err != nil {
-		return err
-	}
-	idx, err := getPodIndexFromHostname(primaryHost)
-	if err != nil {
-		return err
-	}
-	primPod, err := mysql.GetPod(ctx, r.Client, cr, idx)
-	if err != nil {
-		return errors.Wrap(err, "get primary pod")
-	}
-	log.Info("primary pod", "name", primPod.Name)
-
-	secondaries := slices.DeleteFunc(pods.Items, func(p corev1.Pod) bool {
-		return p.Name == primPod.Name
-	})
-
-	for _, pod := range secondaries {
-
-		log.Info("apply changes to the secondary pod", "pod", pod.Name)
-
-		if pod.Labels[controllerRevisionHash] == sts.Status.UpdateRevision {
-			log.Info("pod updated", "pod", pod.Name)
-			continue
-		}
-
-		return deletePodAndWait(ctx, r.Client, &pod, currentSet)
-	}
-
-	target, err := selectPrimaryCandidate(secondaries)
-	if err != nil {
-		return errors.Wrap(err, "select primary candidate")
-	}
-
-	if err := r.switchOverAndWait(logf.IntoContext(ctx, log), cr, primPod, target); err != nil {
-		return errors.Wrap(err, "switchover")
-	}
-
-	log.Info("apply changes to the primary pod", "pod", primPod.Name)
-	if primPod.Labels[controllerRevisionHash] != sts.Status.UpdateRevision {
-		log.Info("primary pod was deleted", "pod", primPod.Name)
-		err = deletePodAndWait(ctx, r.Client, primPod, currentSet)
+	var last *corev1.Pod
+	var err error
+	switch component {
+	case naming.ComponentDatabase:
+		last, err = r.mysqlPrimaryPod(ctx, cr)
 		if err != nil {
-			log.Info("primary pod deletion error", "pod", primPod.Name)
-			return err
+			return errors.Wrap(err, "get primary pod")
+		}
+	case naming.ComponentOrchestrator:
+		last, err = orchestratorRaftLeader(ctx, r.ClientCmd, pods.Items)
+		if err != nil {
+			return errors.Wrap(err, "get raft leader")
+		}
+		if last == nil {
+			log.Info("Can't start/continue 'SmartUpdate': the Raft leader is unknown")
+			return nil
+		}
+	default:
+		return errors.Errorf("smart update is not supported for component %q", component)
+	}
+	log.Info("pod to update last", "pod", last.Name)
+
+	pod := podToUpdate(pods.Items, last.Name, currentSet.Status.UpdateRevision)
+	if pod == nil {
+		return nil
+	}
+
+	if pod.Name == last.Name && component == naming.ComponentDatabase {
+		secondaries := slices.DeleteFunc(slices.Clone(pods.Items), func(p corev1.Pod) bool {
+			return p.Name == last.Name
+		})
+
+		target, err := selectPrimaryCandidate(secondaries)
+		if err != nil {
+			return errors.Wrap(err, "select primary candidate")
+		}
+
+		if err := r.switchOverAndWait(ctx, cr, last, target); err != nil {
+			return errors.Wrap(err, "switchover")
 		}
 	}
 
-	log.Info("primary pod updated", "pod", primPod.Name)
+	log.Info("apply changes to pod", "pod", pod.Name)
+	if err := deletePodAndWait(ctx, r.Client, pod, currentSet); err != nil {
+		return errors.Wrapf(err, "delete pod %s", pod.Name)
+	}
+
 	log.Info("smart update finished")
 	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) mysqlPrimaryPod(ctx context.Context, cr *apiv1.PerconaServerMySQL) (*corev1.Pod, error) {
+	primaryHost, err := r.getPrimaryHost(ctx, cr)
+	if err != nil {
+		return nil, errors.Wrap(err, "get primary host")
+	}
+
+	idx, err := getPodIndexFromHostname(primaryHost)
+	if err != nil {
+		return nil, errors.Wrap(err, "get pod index from hostname")
+	}
+
+	pod, err := mysql.GetPod(ctx, r.Client, cr, idx)
+	if err != nil {
+		return nil, errors.Wrap(err, "get primary pod")
+	}
+
+	return pod, nil
+}
+
+func orchestratorRaftLeader(ctx context.Context, cliCmd clientcmd.Client, pods []corev1.Pod) (*corev1.Pod, error) {
+	log := logf.FromContext(ctx).WithName("SmartUpdate").WithName("orchestratorRaftLeader")
+
+	var leader *corev1.Pod
+	for _, pod := range pods {
+		state, err := orchestrator.RaftState(ctx, cliCmd, &pod)
+		if err != nil {
+			log.V(1).Info("Failed to get Raft state", "pod", pod.Name, "error", err.Error())
+			continue
+		}
+		if state != orchestrator.RaftStateLeader {
+			continue
+		}
+		if leader != nil {
+			return nil, errors.Errorf("multiple pods report being the Raft leader: %s and %s", leader.Name, pod.Name)
+		}
+		leader = &pod
+	}
+
+	return leader, nil
+}
+
+func podToUpdate(pods []corev1.Pod, lastName, updateRevision string) *corev1.Pod {
+	var last *corev1.Pod
+	for _, pod := range pods {
+		if pod.Labels[controllerRevisionHash] == updateRevision {
+			continue
+		}
+		if pod.Name != lastName {
+			return &pod
+		}
+		last = &pod
+	}
+
+	return last
 }
 
 func stsChanged(sts *appsv1.StatefulSet, pods []corev1.Pod) bool {
@@ -189,7 +244,7 @@ func isPodInCrashLoopBackOff(pod corev1.Pod) bool {
 
 func (r *PerconaServerMySQLReconciler) isBackupRunning(ctx context.Context, cr *apiv1.PerconaServerMySQL) (bool, error) {
 	bcpList := apiv1.PerconaServerMySQLBackupList{}
-	if err := r.Client.List(ctx, &bcpList, &client.ListOptions{Namespace: cr.Namespace}); err != nil {
+	if err := r.List(ctx, &bcpList, &client.ListOptions{Namespace: cr.Namespace}); err != nil {
 		if k8serrors.IsNotFound(err) {
 			return false, nil
 		}
@@ -230,7 +285,7 @@ func (r *PerconaServerMySQLReconciler) switchOverAndWait(
 
 	switch {
 	case cr.MySQLSpec().IsAsync():
-		err := r.switchOverAsync(ctx, cr, primary, target)
+		err := r.switchOverAsync(ctx, cr, target)
 		if err != nil {
 			return errors.Wrap(err, "switchover async")
 		}
@@ -285,7 +340,7 @@ func (r *PerconaServerMySQLReconciler) switchOverAndWait(
 func (r *PerconaServerMySQLReconciler) switchOverAsync(
 	ctx context.Context,
 	cr *apiv1.PerconaServerMySQL,
-	primary *corev1.Pod, target *corev1.Pod,
+	target *corev1.Pod,
 ) error {
 	orcPod, err := getReadyOrcPod(ctx, r.Client, cr)
 	if err != nil {
