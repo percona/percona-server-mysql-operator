@@ -650,3 +650,15 @@ func (d *DB) GetGTIDExecuted(ctx context.Context) (string, error) {
 	err := d.db.QueryRowContext(ctx, "SELECT @@GTID_EXECUTED").Scan(&gtid)
 	return gtid, errors.Wrap(err, "get GTID_EXECUTED")
 }
+
+func (d *DB) GetGTIDPurged(ctx context.Context) (string, error) {
+	var gtid string
+	err := d.db.QueryRowContext(ctx, "SELECT @@GTID_PURGED").Scan(&gtid)
+	return gtid, errors.Wrap(err, "get GTID_PURGED")
+}
+
+func (d *DB) GTIDSubtract(ctx context.Context, set, other string) (string, error) {
+	var diff string
+	err := d.db.QueryRowContext(ctx, "SELECT GTID_SUBTRACT(?, ?)", set, other).Scan(&diff)
+	return diff, errors.Wrapf(err, "subtract GTID set %q from %q", other, set)
+}
