@@ -15,6 +15,7 @@ import (
 
 	"github.com/percona/percona-server-mysql-operator/cmd/internal/db"
 	"github.com/percona/percona-server-mysql-operator/cmd/internal/failover"
+	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 )
 
 type fakeDatabase struct {
@@ -109,6 +110,7 @@ func newJobFixture(t *testing.T) *jobFixture {
 			source:       "mysql-1.mysql",
 			wait:         true,
 			stagingDir:   filepath.Join(t.TempDir(), "source-logs"),
+			logDir:       t.TempDir(),
 			lockPath:     filepath.Join(t.TempDir(), "failover.lock"),
 			applyPoll:    time.Millisecond,
 			applyTimeout: time.Second,
@@ -456,6 +458,7 @@ func TestProductionConfig(t *testing.T) {
 	assert.Equal(t, sourceStreamURL("mysql-1.mysql"), cfg.sourceURL("mysql-1.mysql"))
 	assert.Equal(t, "mysql-1.mysql", cfg.source)
 	assert.Equal(t, "/tmp/source-logs", cfg.stagingDir)
+	assert.Equal(t, mysql.DataMountPath, cfg.logDir)
 	assert.Equal(t, lockPath, cfg.lockPath)
 	assert.True(t, cfg.wait)
 	assert.Equal(t, relayLogApplyPoll, cfg.applyPoll)
