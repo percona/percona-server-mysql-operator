@@ -8,8 +8,6 @@ commands:
 
       source ../../functions
 
-      platform="$(detect_k8s_platform)"
-
       cr="$(get_cr \
           | yq eval '.spec.mysql.clusterType="group-replication"' - \
           | yq eval '.spec.mysql.size=3' - \
@@ -19,7 +17,7 @@ commands:
           | yq eval '.spec.enableVolumeExpansion=true' - \
           | yq eval '.spec.mysql.volumeSpec.persistentVolumeClaim.resources.requests.storage="2Gi"' -)"
 
-      if [[ "$platform" == "eks" ]]; then
+      if [[ "${PLATFORM}" == "eks" ]]; then
         kubectl apply -f ../../conf/eks-storage-class.yaml
       fi
 
