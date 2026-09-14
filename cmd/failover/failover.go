@@ -23,6 +23,7 @@ import (
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/cmd/bootstrap/utils"
 	"github.com/percona/percona-server-mysql-operator/cmd/internal/db"
+	"github.com/percona/percona-server-mysql-operator/cmd/internal/failover"
 	"github.com/percona/percona-server-mysql-operator/cmd/sidecar/handler"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 )
@@ -33,7 +34,7 @@ const (
 	// create and must not touch.
 	stagingMarker = ".failover-staging"
 	sourceLogsDir = "/var/lib/mysql/source-logs"
-	lockPath      = "/var/lib/mysql/failover.lock"
+	lockPath      = failover.LockPath
 )
 
 const (
@@ -149,7 +150,7 @@ func run(ctx context.Context, cfg failoverConfig) error {
 		return err
 	}
 
-	lock, err := lockSplice(cfg.lockPath)
+	lock, err := failover.Lock(cfg.lockPath)
 	if err != nil {
 		return err
 	}
