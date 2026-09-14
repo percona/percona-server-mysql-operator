@@ -47,11 +47,9 @@ func ClusterSetManagerJob(
 	key := ClusterSetManagerJobKey(pcs, cluster.InnoDBClusterName, cmd)
 
 	return &batchv1.Job{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      key.Name,
-			Namespace: key.Namespace,
-			Labels:    labels,
-		},
+		Name:      key.Name,
+		Namespace: key.Namespace,
+		Labels:    labels,
 		Spec: batchv1.JobSpec{
 			BackoffLimit: new(int32(3)),
 			Parallelism:  new(int32(1)),
