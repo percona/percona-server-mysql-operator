@@ -225,6 +225,10 @@ func run(ctx context.Context, cfg failoverConfig) error {
 	}
 	log.Printf("Fetched %d binary log(s) from source", len(sourceLogs))
 
+	if err := truncateTornTail(sourceLogs); err != nil {
+		return fmt.Errorf("check fetched logs: %w", err)
+	}
+
 	relayLog, startPos, err := updateRelayLogs(sourceLogs, positions.RelayLog, relayLogs)
 	if err != nil {
 		return fmt.Errorf("update relay logs: %w", err)
