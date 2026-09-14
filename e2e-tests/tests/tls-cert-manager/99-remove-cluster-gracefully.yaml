@@ -6,7 +6,8 @@ delete:
     metadata:
       name: tls-cert-manager
 commands:
-  - script: |-
+  - timeout: 60
+    script: |-
       set -o errexit
       set -o xtrace
 
@@ -14,4 +15,3 @@ commands:
 
       destroy_cert_manager
       destroy_operator
-    timeout: 60

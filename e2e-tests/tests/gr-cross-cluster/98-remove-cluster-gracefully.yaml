@@ -1,6 +1,5 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
-timeout: 120
 delete:
 - apiVersion: ps.percona.com/v1
   kind: PerconaServerMySQL
@@ -11,11 +10,11 @@ delete:
   metadata:
     name: gr-cross-cluster-dc2
 commands:
-  - script: |-
+  - timeout: 60
+    script: |-
       set -o errexit
       set -o xtrace
 
       source ../../functions
 
       destroy_operator
-    timeout: 60

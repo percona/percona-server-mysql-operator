@@ -1,8 +1,8 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
-timeout: 10
 commands:
-  - script: |-
+  - timeout: 30
+    script: |-
       set -o errexit
       set -o xtrace
 
@@ -16,4 +16,3 @@ commands:
           | yq eval '.spec.mysql.sidecarVolumes = [{"name": "empty-vol", "emptyDir": {"medium": "Memory"}}]' - \
           | yq eval '.spec.mysql.sidecarPVCs = [{"name": "pvc-vol", "spec": {"resources": {"requests": {"storage": "1G"}}}}]' - \
           | kubectl -n "${NAMESPACE}" apply -f -
-    timeout: 30

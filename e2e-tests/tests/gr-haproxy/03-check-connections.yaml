@@ -1,7 +1,8 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
-  - script: |-
+  - timeout: 30
+    script: |-
       set -o errexit
       set -o xtrace
 
@@ -26,4 +27,3 @@ commands:
       args="${args} --from-literal=mysql_admin=${mysql_admin}"
 
       kubectl create configmap -n "${NAMESPACE}" 03-check-connections $args
-    timeout: 30

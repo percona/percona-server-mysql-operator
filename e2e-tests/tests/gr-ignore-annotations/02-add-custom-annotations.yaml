@@ -1,7 +1,8 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
-  - script: |-
+  - timeout: 100
+    script: |-
       set -o errexit
       set -o xtrace
 
@@ -18,4 +19,3 @@ commands:
           | yq eval '.metadata.annotations += {"gr-annotations-to-ignore-router": "true", "gr-annotations-not-to-ignore-router": "true" }' - \
           | yq eval '.metadata.labels += {"gr-labels-to-ignore-router": "true", "gr-labels-not-to-ignore-router": "true" }' - \
           | kubectl -n "${NAMESPACE}" apply -f -
-    timeout: 100

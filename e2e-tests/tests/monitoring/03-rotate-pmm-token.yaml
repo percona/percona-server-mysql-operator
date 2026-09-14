@@ -1,7 +1,8 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
-  - script: |-
+  - timeout: 120
+    script: |-
       set -o errexit
       set -o xtrace
 
@@ -21,5 +22,3 @@ commands:
 
       wait_for_generation "sts/monitoring-mysql" 2
       wait_for_generation "sts/monitoring-haproxy" 2
-
-    timeout: 120

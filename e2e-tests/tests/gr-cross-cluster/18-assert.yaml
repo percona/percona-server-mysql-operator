@@ -28,7 +28,6 @@ commands:
 
       echo "ERROR: dc1 never became non-OK in ClusterSet"
       exit 1
-    timeout: 600
 ---
 kind: PerconaServerMySQL
 apiVersion: ps.percona.com/v1

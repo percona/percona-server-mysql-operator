@@ -5,11 +5,11 @@ delete:
     kind: PerconaServerMySQL
     name: demand-backup-incremental
 commands:
-  - script: |-
+  - timeout: 60
+    script: |-
       set -o errexit
       set -o xtrace
 
       source ../../functions
 
       destroy_operator
-    timeout: 60

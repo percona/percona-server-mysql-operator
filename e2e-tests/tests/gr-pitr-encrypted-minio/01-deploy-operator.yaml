@@ -1,7 +1,8 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
-  - script: |-
+  - timeout: 300
+    script: |-
       set -o errexit
       set -o xtrace
 
@@ -14,4 +15,3 @@ commands:
       deploy_client
       deploy_minio
       deploy_vault
-    timeout: 300

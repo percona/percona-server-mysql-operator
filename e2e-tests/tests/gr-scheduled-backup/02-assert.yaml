@@ -2,8 +2,7 @@ apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
 timeout: 500
 commands:
-  - timeout: 500
-    script: |-
+  - script: |-
       set -o errexit
 
       source ../../functions

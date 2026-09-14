@@ -1,7 +1,8 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
-  - script: |-
+  - timeout: 180
+    script: |-
       set -o errexit
       set -o xtrace
 
@@ -12,4 +13,3 @@ commands:
           | yq eval '.spec.mysql.clusterType="async"' - \
           | yq eval 'del(.spec."*".volumeSpec)' - \
           | kubectl -n "${NAMESPACE}" apply -f -
-    timeout: 180

@@ -33,7 +33,6 @@ commands:
           .clusters.grcrossclusterbackupdc2.globalStatus == "OK" and
           (.clusters | length) == 1
       '
-    timeout: 420
 ---
 kind: PerconaServerMySQLClusterSet
 apiVersion: ps.percona.com/v1

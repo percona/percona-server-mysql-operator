@@ -6,11 +6,11 @@ delete:
     metadata:
       name: async-pitr-minio
 commands:
-  - script: |-
+  - timeout: 280
+    script: |-
       set -o errexit
       set -o xtrace
 
       source ../../functions
 
       destroy_operator
-    timeout: 280

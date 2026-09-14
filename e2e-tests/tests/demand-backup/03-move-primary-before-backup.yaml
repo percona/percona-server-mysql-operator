@@ -1,7 +1,8 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
-  - script: |-
+  - timeout: 180
+    script: |-
       set -o errexit
       set -o xtrace
 
@@ -16,4 +17,3 @@ commands:
           echo "Old (${primary_pod_from_label}) and new (${new_primary_pod_from_label}) primary are the same (the failover didn't happen)!"
           exit 1
       fi
-    timeout: 180

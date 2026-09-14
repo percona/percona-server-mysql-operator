@@ -1,6 +1,5 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
-timeout: 10
 commands:
   - script: |-
       set -o errexit
@@ -18,4 +17,4 @@ commands:
           | yq eval '.spec.proxy.haproxy.size=1' - \
           | yq eval '.spec.mysql.size=1' - \
           | yq eval '.spec.secretsName="test-secrets"' - \
-          | kubectl -n "${NAMESPACE}" apply -f -
+          | kubectl -n "${NAMESPACE}" apply -f -    timeout: 30

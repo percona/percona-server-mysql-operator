@@ -16,7 +16,6 @@ commands:
         check_backup_job_labels "$name"
         check_scheduled_backup_labels "$name"
       done
-    timeout: 60
 ---
 apiVersion: batch/v1
 kind: Job

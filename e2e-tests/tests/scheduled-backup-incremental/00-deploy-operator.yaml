@@ -1,7 +1,8 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
-  - script: |-
+  - timeout: 300
+    script: |-
       set -o errexit
       set -o xtrace
 
@@ -15,4 +16,3 @@ commands:
       if has_minio_storage; then
         deploy_minio "10Gi"
       fi
-    timeout: 300

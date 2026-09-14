@@ -1,7 +1,8 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
-  - script: |-
+  - timeout: 300
+    script: |-
       set -o errexit
       set -o xtrace
 
@@ -19,4 +20,3 @@ commands:
       kubectl create configmap binlogs-prefix \
         --from-literal=prefix=${RANDOM} \
         -n ${NAMESPACE}
-    timeout: 300

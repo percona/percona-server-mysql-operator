@@ -1,7 +1,8 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
-  - script: |-
+  - timeout: 360
+    script: |-
       set -o errexit
       set -o xtrace
 
@@ -14,4 +15,3 @@ commands:
           kubectl create cm 13-check-retry-vars-$t  -n "${NAMESPACE}" --from-literal=retry_values="$connect_retry"
           t=$((t+1))
         done
-    timeout: 360

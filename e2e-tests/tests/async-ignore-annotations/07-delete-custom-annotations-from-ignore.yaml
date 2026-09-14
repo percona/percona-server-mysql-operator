@@ -1,7 +1,8 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
-  - script: |-
+  - timeout: 30
+    script: |-
       set -o errexit
       set -o xtrace
 
@@ -14,4 +15,3 @@ commands:
       kubectl -n "${NAMESPACE}" patch ps "$(get_cluster_name)" \
           --type json \
           -p '[{"op": "replace", "path": "/spec/ignoreLabels", "value": [] }]'
-    timeout: 30

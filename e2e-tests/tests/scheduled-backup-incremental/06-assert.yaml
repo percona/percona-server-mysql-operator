@@ -31,7 +31,6 @@ commands:
 
       kubectl create configmap -n "${NAMESPACE}" 06-scheduled-backup-incremental-backup --from-literal=backupName="${backup_name}" --dry-run=client -o yaml \
         | kubectl apply -n "${NAMESPACE}" -f -
-    timeout: 600
 ---
 kind: PerconaServerMySQLBackup
 apiVersion: ps.percona.com/v1

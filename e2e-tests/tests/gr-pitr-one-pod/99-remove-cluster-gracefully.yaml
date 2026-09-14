@@ -8,7 +8,8 @@ delete:
     kind: PerconaServerMySQL
     name: gr-pitr-one-pod-restore
 commands:
-  - script: |-
+  - timeout: 180
+    script: |-
       set -o errexit
       set -o xtrace
 
@@ -16,4 +17,3 @@ commands:
 
       remove_resource_finalizers ps-backup
       destroy_operator
-    timeout: 180

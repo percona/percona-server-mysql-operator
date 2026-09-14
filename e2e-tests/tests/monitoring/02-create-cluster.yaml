@@ -1,7 +1,8 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
-  - script: |-
+  - timeout: 30
+    script: |-
       set -o errexit
       set -o xtrace
 
@@ -25,4 +26,3 @@ commands:
           | yq eval '.spec.proxy.haproxy.enabled = true' - \
           | yq eval '.spec.proxy.haproxy.expose.type = "LoadBalancer"' - \
           | kubectl -n "${NAMESPACE}" apply -f -
-    timeout: 10
