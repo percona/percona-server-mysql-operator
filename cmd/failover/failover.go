@@ -66,6 +66,7 @@ type failoverConfig struct {
 	sourceURL    func(host string) string
 	source       string
 	stagingDir   string
+	logDir       string
 	lockPath     string
 	wait         bool
 	applyPoll    time.Duration
@@ -101,6 +102,7 @@ func config(f flags) failoverConfig {
 		sourceURL:    sourceStreamURL,
 		source:       f.source,
 		stagingDir:   f.stagingDir,
+		logDir:       mysql.DataMountPath,
 		lockPath:     lockPath,
 		wait:         f.wait,
 		applyPoll:    relayLogApplyPoll,
@@ -110,22 +112,20 @@ func config(f flags) failoverConfig {
 }
 
 func main() {
-	f := parseFlags()
+	flags := parseFlags()
 
 	// Nothing else bounds the fetch, and the job runs from a failover hook that
 	// holds up the promotion for as long as it takes.
 	ctx := context.Background()
-	if f.timeout > 0 {
+	if flags.timeout > 0 {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, f.timeout)
+		ctx, cancel = context.WithTimeout(ctx, flags.timeout)
 		defer cancel()
 	}
 
-	if err := run(ctx, config(f)); err != nil {
+	if err := run(ctx, config(flags)); err != nil {
 		log.Fatalf("ERROR: %v", err)
 	}
-
-	log.Printf("DONE.")
 }
 
 func run(ctx context.Context, cfg failoverConfig) error {
@@ -155,6 +155,17 @@ func run(ctx context.Context, cfg failoverConfig) error {
 		return err
 	}
 	defer lock.Close() //nolint:errcheck
+
+	logFile := filepath.Join(cfg.logDir, fmt.Sprintf("failover.%s.log", time.Now().Format(time.RFC3339)))
+
+	if f, err := os.OpenFile(logFile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666); err != nil {
+		log.Printf("WARNING: keeping the log on stderr only: %v", err)
+	} else {
+		defer f.Close() //nolint:errcheck
+		defer log.SetOutput(os.Stderr)
+
+		log.SetOutput(io.MultiWriter(os.Stderr, f))
+	}
 
 	log.Printf("Fetching binary logs from %s", host)
 
@@ -236,6 +247,8 @@ func run(ctx context.Context, cfg failoverConfig) error {
 		}
 		return fmt.Errorf("apply relay logs: %w", err)
 	}
+
+	log.Println("DONE.")
 
 	return nil
 }
