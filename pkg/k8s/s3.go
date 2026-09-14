@@ -34,6 +34,7 @@ func S3CertVolumes(selectors []apiv1.CABundleSecretSelector) []corev1.Volume {
 
 	return []corev1.Volume{{
 		Name: naming.S3CertsInputVolumeName,
+		Projected: &corev1.ProjectedVolumeSource{
 			Sources: projections,
 		},
 	}}

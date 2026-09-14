@@ -1768,8 +1768,8 @@ func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context
 		Namespace:   cr.Namespace,
 		Labels:      cr.GlobalLabels(),
 		Annotations: cr.GlobalAnnotations(),
-	}
-	configSecret.Data = make(map[string][]byte)
+
+		Data: make(map[string][]byte)}
 
 	configBytes, err := json.Marshal(config)
 	if err != nil {

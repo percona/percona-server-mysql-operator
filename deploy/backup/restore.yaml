@@ -1,1 +1,59 @@
-
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQLRestore
+metadata:
+  name: restore1
+spec:
+  clusterName: ps-cluster1
+  backupName: backup1
+#  pitr:
+#    backupSource:
+#      binlogServer:
+#        size: 1
+#        image: perconalab/percona-binlog-server:0.3.1
+#        serverId: 101
+#        storage:
+#          s3:
+#            bucket: S3-BACKUP-BUCKET-NAME-HERE
+#            caBundle:
+#              key: ca.crt
+#              name: minio-ca-bundle
+#            credentialsSecret: ps-cluster1-s3-credentials
+#            endpointUrl: https://s3.amazonaws.com
+#            prefix: PREFIX_NAME
+#            region: us-west-2
+#        connectTimeout: 30
+#        readTimeout: 30
+#        writeTimeout: 30
+#        idleTime: 30
+#        logLevel: info
+#    date: "2024-11-18T11:10:48Z"
+#    force: false
+#    gtid: a3e5ff70-83e2-11ef-8e57-7a62caf7e1e3:1-36
+#    keyringSecret:
+#      key: keyring.json
+#      name: my-binlog-server-keyring-secret
+#    type: date
+#  containerOptions:
+#    env:
+#      - name: CUSTOM_VAR
+#        value: "false"
+#    args:
+#      xbcloud:
+#        - --someflag=abc
+#      xbstream:
+#        - --someflag=abc
+#      xtrabackup:
+#        - --someflag=abc
+#  backupSource:
+#    destination: s3://S3-BACKUP-BUCKET-NAME-HERE/backup-path
+#    storage:
+#      s3:
+#        bucket: S3-BACKUP-BUCKET-NAME-HERE
+#        caBundle:
+#          key: ca.crt
+#          name: minio-ca-bundle
+#        credentialsSecret: ps-cluster1-s3-credentials
+#        endpointUrl: https://s3.amazonaws.com
+#        prefix: PREFIX_NAME
+#        region: us-west-2
+#      type: s3
