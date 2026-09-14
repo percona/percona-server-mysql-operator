@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/percona/percona-server-mysql-operator/cmd/internal/db"
+	"github.com/percona/percona-server-mysql-operator/cmd/internal/failover"
 )
 
 type fakeDatabase struct {
@@ -158,7 +159,7 @@ func TestRun(t *testing.T) {
 		assert.Equal(t, before, after)
 		j.relay.assertUntouched(t)
 
-		released, err := lockSplice(j.cfg.lockPath)
+		released, err := failover.Lock(j.cfg.lockPath)
 		require.NoError(t, err, "the early exit must release the splice lock")
 		t.Cleanup(func() { released.Close() })
 	})
@@ -404,13 +405,13 @@ func TestRun(t *testing.T) {
 
 	t.Run("a splice already in progress stops this one", func(t *testing.T) {
 		j := newJobFixture(t)
-		held, err := lockSplice(j.cfg.lockPath)
+		held, err := failover.Lock(j.cfg.lockPath)
 		require.NoError(t, err)
 		t.Cleanup(func() { held.Close() }) //nolint:errcheck
 
 		err = run(t.Context(), j.cfg)
 
-		require.ErrorIs(t, err, errLocked)
+		require.ErrorIs(t, err, failover.ErrLocked)
 		assert.Empty(t, j.fake.ops, "replication must not be touched by a losing run")
 		j.relay.assertUntouched(t)
 	})
