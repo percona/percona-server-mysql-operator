@@ -61,9 +61,12 @@ func Bootstrap(ctx context.Context) error {
 	}
 	log.Printf("PodIP: %s", podIp)
 
-	primaryIp, err := utils.GetPodIP(primary)
-	if err != nil {
-		return errors.Wrap(err, "get primary IP")
+	primaryIp := ""
+	if primary != fqdn {
+		primaryIp, err = utils.GetPodIP(primary)
+		if err != nil {
+			return errors.Wrap(err, "get primary IP")
+		}
 	}
 	log.Printf("PrimaryIP: %s", primaryIp)
 
@@ -129,7 +132,11 @@ func Bootstrap(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "connect to database")
 	}
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Printf("ERROR: failed to close connection: %v", err)
+		}
+	}()
 
 	if err := db.StopReplication(ctx); err != nil {
 		return err
@@ -160,9 +167,20 @@ func Bootstrap(ctx context.Context) error {
 	}
 
 	cloneLock := filepath.Join(mysql.DataMountPath, "clone.lock")
-	requireClone, err := isCloneRequired(cloneLock)
+
+	donorExecuted, donorPurged, err := donorGTIDs(ctx, donor, operatorPass)
 	if err != nil {
-		return errors.Wrap(err, "check if clone is required")
+		return errors.Wrapf(err, "get GTID sets from donor %s", donor)
+	}
+
+	localExecuted, err := db.GetGTIDExecuted(ctx)
+	if err != nil {
+		return errors.Wrap(err, "get local GTID_EXECUTED")
+	}
+
+	requireClone, err := cloneRequired(ctx, db, localExecuted, donorExecuted, donorPurged)
+	if err != nil {
+		return err
 	}
 
 	log.Printf("Clone required: %t", requireClone)
@@ -238,7 +256,10 @@ func Bootstrap(ctx context.Context) error {
 
 func getTopology(ctx context.Context, fqdn string, peers sets.Set[string]) (string, []string, error) {
 	replicas := sets.New[string]()
+	gtids := make(map[string]string)
 	primary := ""
+
+	var subtractor gtidSubtractor
 
 	operatorPass, err := utils.GetSecret(apiv1.UserOperator)
 	if err != nil {
@@ -261,7 +282,16 @@ func getTopology(ctx context.Context, fqdn string, peers sets.Set[string]) (stri
 		if err != nil {
 			return "", nil, errors.Wrapf(err, "connect to %s", peer)
 		}
-		defer db.Close()
+
+		defer func() {
+			if err := db.Close(); err != nil {
+				log.Printf("ERROR: failed to close connection: %v", err)
+			}
+		}()
+
+		if subtractor == nil {
+			subtractor = db
+		}
 
 		status, source, err := db.ReplicationStatus(ctx)
 		if err != nil {
@@ -277,6 +307,13 @@ func getTopology(ctx context.Context, fqdn string, peers sets.Set[string]) (stri
 		}
 		replicas.Insert(replicaHost)
 
+		gtid, err := db.GetGTIDExecuted(ctx)
+		if err != nil {
+			return "", nil, errors.Wrapf(err, "get GTID_EXECUTED from %s", peer)
+		}
+		gtids[replicaHost] = gtid
+		log.Printf("Peer %s GTIDExecuted=%s", replicaHost, gtid)
+
 		if status == mysqldb.ReplicationStatusActive {
 			primary = source
 		}
@@ -285,13 +322,20 @@ func getTopology(ctx context.Context, fqdn string, peers sets.Set[string]) (stri
 	if primary == "" && peers.Len() == 1 {
 		primary = sets.List(peers)[0]
 	} else if primary == "" {
-		for _, r := range sets.List(replicas) {
-			// We should set primary to the first replica, which is not the bootstrapped pod.
-			// The bootstrapped pod can't be a primary.
-			// Even if it was a primary before, orchestrator will promote another replica "as result of DeadMaster".
-			if r != fqdn {
-				primary = r
-				break
+		primary, err = electPrimary(ctx, subtractor, gtids)
+		if err != nil {
+			return "", nil, err
+		}
+
+		// The peers hold the same transactions, so there is nothing to lose
+		// whichever way round we point replication. Prefer another pod: ours has
+		// just started and is the one asking.
+		if primary == "" {
+			for _, r := range sets.List(replicas) {
+				if r != fqdn {
+					primary = r
+					break
+				}
 			}
 		}
 	}
@@ -300,7 +344,12 @@ func getTopology(ctx context.Context, fqdn string, peers sets.Set[string]) (stri
 		replicas.Delete(primary)
 	}
 
-	return primary, sets.List(replicas), nil
+	donors, err := orderDonors(ctx, subtractor, sets.List(replicas), fqdn, gtids)
+	if err != nil {
+		return "", nil, err
+	}
+
+	return primary, donors, nil
 }
 
 func selectDonor(ctx context.Context, fqdn, primary string, replicas []string) (string, error) {
@@ -342,16 +391,162 @@ func selectDonor(ctx context.Context, fqdn, primary string, replicas []string) (
 	return donor, nil
 }
 
-func isCloneRequired(file string) (bool, error) {
-	_, err := os.Stat(file)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return true, nil
+var (
+	errAheadOfDonor  = errors.New("local data is ahead of the donor")
+	errDivergedPeers = errors.New("peers have diverged")
+)
+
+// orderDonors puts the replica worth cloning from first: the one holding the most transactions.
+func orderDonors(ctx context.Context, s gtidSubtractor, replicas []string, fqdn string, gtids map[string]string) ([]string, error) {
+	local := gtids[fqdn]
+
+	rest := make([]string, 0, len(replicas))
+	for _, replica := range replicas {
+		missing, err := s.GTIDSubtract(ctx, local, gtids[replica])
+		if err != nil {
+			return nil, errors.Wrapf(err, "compare %s against the local GTID set", replica)
 		}
-		return false, errors.Wrapf(err, "stat %s", file)
+		if missing != "" {
+			log.Printf("Not a donor: %s is missing %s", replica, missing)
+			continue
+		}
+
+		rest = append(rest, replica)
 	}
 
-	return false, nil
+	ordered := make([]string, 0, len(rest))
+
+	for len(rest) > 0 {
+		best := 0
+
+		for i := 1; i < len(rest); i++ {
+			extra, err := s.GTIDSubtract(ctx, gtids[rest[i]], gtids[rest[best]])
+			if err != nil {
+				return nil, errors.Wrapf(err, "compare %s against %s", rest[i], rest[best])
+			}
+			if extra == "" {
+				continue
+			}
+
+			// Only overtake a replica we hold nothing over, so replicas that have
+			// each gone their own way keep the order they came in.
+			short, err := s.GTIDSubtract(ctx, gtids[rest[best]], gtids[rest[i]])
+			if err != nil {
+				return nil, errors.Wrapf(err, "compare %s against %s", rest[best], rest[i])
+			}
+			if short == "" {
+				best = i
+			}
+		}
+
+		ordered = append(ordered, rest[best])
+		rest = append(rest[:best], rest[best+1:]...)
+	}
+
+	return ordered, nil
+}
+
+// electPrimary picks the peer whose executed GTID set holds every other peer's.
+func electPrimary(ctx context.Context, s gtidSubtractor, gtids map[string]string) (string, error) {
+	if len(gtids) == 0 {
+		return "", nil
+	}
+
+	complete := make([]string, 0, len(gtids))
+
+	for _, candidate := range sets.List(sets.KeySet(gtids)) {
+		holdsAll := true
+
+		for peer, gtid := range gtids {
+			if peer == candidate {
+				continue
+			}
+
+			missing, err := s.GTIDSubtract(ctx, gtid, gtids[candidate])
+			if err != nil {
+				return "", errors.Wrapf(err, "compare GTID sets of %s and %s", peer, candidate)
+			}
+			if missing != "" {
+				holdsAll = false
+				break
+			}
+		}
+
+		if holdsAll {
+			complete = append(complete, candidate)
+		}
+	}
+
+	switch len(complete) {
+	case 0:
+		return "", errors.Wrapf(errDivergedPeers, "none of %v holds every transaction", sets.List(sets.KeySet(gtids)))
+	case 1:
+		return complete[0], nil
+	default:
+		return "", nil
+	}
+}
+
+type gtidSubtractor interface {
+	GTIDSubtract(ctx context.Context, set, other string) (string, error)
+}
+
+// cloneRequired reports whether the local data directory has to be re-provisioned
+// from the donor before it can replicate.
+func cloneRequired(ctx context.Context, s gtidSubtractor, local, donorExecuted, donorPurged string) (bool, error) {
+	ahead, err := s.GTIDSubtract(ctx, local, donorExecuted)
+	if err != nil {
+		return false, errors.Wrap(err, "compare local GTID set against the donor")
+	}
+	if ahead != "" {
+		// CLONE INSTANCE drops all user data. These transactions are on no other
+		// node, so cloning is the thing that would lose them.
+		return false, errors.Wrapf(errAheadOfDonor, "donor is missing %s", ahead)
+	}
+
+	missing, err := s.GTIDSubtract(ctx, donorPurged, local)
+	if err != nil {
+		return false, errors.Wrap(err, "compare donor's purged GTID set against the local one")
+	}
+
+	// The donor no longer has the binary logs we would need to catch up.
+	return missing != "", nil
+}
+
+func donorGTIDs(ctx context.Context, donor, operatorPass string) (string, string, error) {
+	params := database.DBParams{
+		User: apiv1.UserOperator,
+		Pass: operatorPass,
+		Host: donor,
+	}
+	readTimeout, err := utils.GetReadTimeout()
+	if err != nil {
+		return "", "", errors.Wrap(err, "get read timeout")
+	}
+	params.ReadTimeoutSeconds = readTimeout
+
+	db, err := database.NewDatabase(ctx, params)
+	if err != nil {
+		return "", "", errors.Wrapf(err, "connect to %s", donor)
+	}
+
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Printf("ERROR: failed to close connection: %v", err)
+		}
+	}()
+
+	executed, err := db.GetGTIDExecuted(ctx)
+	if err != nil {
+		return "", "", err
+	}
+
+	purged, err := db.GetGTIDPurged(ctx)
+	if err != nil {
+		return "", "", err
+	}
+
+	return executed, purged, nil
 }
 
 func createCloneLock(file string) error {
@@ -361,5 +556,9 @@ func createCloneLock(file string) error {
 
 func deleteCloneLock(file string) error {
 	err := os.Remove(file)
+	if os.IsNotExist(err) {
+		return nil
+	}
+
 	return errors.Wrapf(err, "remove %s", file)
 }
