@@ -8,9 +8,7 @@ commands:
 
       source ../../functions
 
-      platform="$(detect_k8s_platform)"
-
-      if [[ "$platform" == "eks" ]]; then
+      if [[ "${PLATFORM}" == "eks" ]]; then
           kubectl apply -f ../../conf/eks-storage-class.yaml
       fi
 

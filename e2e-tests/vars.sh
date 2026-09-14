@@ -25,10 +25,43 @@ export MYSQL_VERSION=${MYSQL_VERSION:-"9.7"}
 export date=$(which gdate || which date)
 export sed=$(which gsed || which sed)
 
-oc get projects &>/dev/null && export OPENSHIFT=4 || :
-if kubectl get nodes | grep "^minikube" >/dev/null; then
-	export MINIKUBE=1
-fi
+detect_k8s_platform() {
+	local platform=""
+	local xtrace_enabled=false
+
+	if [[ -o xtrace ]]; then
+		xtrace_enabled=true
+		set +o xtrace
+	fi
+
+	if [[ -n ${PLATFORM:-} ]]; then
+		platform="${PLATFORM}"
+	elif kubectl get nodes -o json | jq -r '.items[0].spec.providerID' | grep -q "gce://"; then
+		platform="gke"
+	elif oc get projects >/dev/null 2>&1; then
+		platform="openshift"
+	elif kubectl get nodes -o json | jq -r '.items[0].spec.providerID' | grep -q "aws://"; then
+		platform="eks"
+	elif kubectl get nodes -o json | jq -r '.items[0].spec.providerID' | grep -q "digitalocean://"; then
+		platform="doks"
+	elif kubectl get nodes -o json | jq -r '.items[0].spec.providerID' | grep -q "azure://"; then
+		platform="aks"
+	elif kubectl get nodes -o json | jq -e '.items[0].metadata.labels["minikube.k8s.io/name"] != null' >/dev/null; then
+		platform="minikube"
+	elif kubectl get nodes -o json | jq -r '.items[0].spec.providerID' | grep -qi "rke2"; then
+		platform="rancher"
+	else
+		platform="unknown"
+	fi
+
+	export PLATFORM="${platform}"
+
+	if [[ ${xtrace_enabled} == true ]]; then
+		set -o xtrace
+	fi
+}
+
+detect_k8s_platform
 
 image_with_registry() {
 	local image="$1"

@@ -12,7 +12,7 @@ commands:
 
       source ../../functions
 
-      if [[ -n ${OPENSHIFT} ]]; then
+      if [[ ${PLATFORM} == "openshift" ]]; then
           oc adm policy remove-scc-from-user privileged -z default -n "${NAMESPACE}"
       fi
 

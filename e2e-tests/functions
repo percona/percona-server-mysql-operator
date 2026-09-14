@@ -14,7 +14,7 @@ init_temp_dir() {
 create_namespace() {
 	local namespace=$1
 
-	if [[ -n $OPENSHIFT ]]; then
+	if [[ ${PLATFORM} == "openshift" ]]; then
 		set -o pipefail
 		if [[ $OPERATOR_NS ]] && (oc get project "$OPERATOR_NS" -o json >/dev/null 2>&1 | jq -r '.metadata.name' >/dev/null 2>&1); then
 			oc delete --grace-period=0 --force=true project "$namespace" && sleep 120 || :
@@ -183,7 +183,7 @@ deploy_pmm_server() {
 	helm repo add percona https://percona.github.io/percona-helm-charts/
 	helm repo update
 
-	if [[ -n $OPENSHIFT ]]; then
+	if [[ ${PLATFORM} == "openshift" ]]; then
 		platform=openshift
 		oc create sa pmm-server -n "${NAMESPACE}" || :
 		oc adm policy add-scc-to-user privileged -z pmm-server -n "${NAMESPACE}" || :
@@ -645,13 +645,11 @@ storage \"file\" {
 deploy_vault() {
 	local name=${1:-vault-service}
 	local protocol=${2:-http}
-	local platform=${3:-kubernetes}
+	local platform=${3:-${PLATFORM}}
 	local namespace=${4:-${name}}
 
 	local tmp_dir=/tmp/vault
 	echo "Using tmp dir: ${tmp_dir}"
-
-	platform=$(detect_k8s_platform)
 
 	_deploy_vault ${name} ${protocol} ${platform} ${namespace} ${tmp_dir}
 
@@ -722,63 +720,14 @@ get_operator_image() {
 		-o 'jsonpath={.items[].spec.containers[].image}'
 }
 
-detect_k8s_platform() {
-	set +x
-
-	local platform=""
-
-	if kubectl get nodes -o json | jq -r '.items[0].spec.providerID' | grep -q "gce://"; then
-		platform="gke"
-
-	elif oc get projects >/dev/null 2>&1; then
-		platform="openshift"
-
-	elif kubectl get nodes -o json | jq -r '.items[0].spec.providerID' | grep -q "aws://"; then
-		platform="eks"
-
-	elif kubectl get nodes -o json | jq -r '.items[0].spec.providerID' | grep -q "digitalocean://"; then
-		platform="digitalocean"
-
-	elif kubectl get nodes -o json | jq -r '.items[0].spec.providerID' | grep -q "azure://"; then
-		platform="aks"
-
-	elif kubectl get nodes -o json | jq -r '.items[0].metadata.labels["minikube.k8s.io/name"]' | grep -q .; then
-		platform="minikube"
-
-	else
-		platform="unknown"
-	fi
-
-	set -x
-	echo "${platform}"
-}
-
-get_platform_alias() {
-	set +x
-
-	local platform=${1:-$(detect_k8s_platform)}
-
-	case "$platform" in
-		"digitalocean")
-			platform="doks"
-			;;
-		"openshift")
-			platform="op"
-			;;
-	esac
-
-	set -x
-	echo "$platform"
-}
-
 get_storage_alias() {
 	set +x
 
-	local platform=${1:-$(detect_k8s_platform)}
+	local platform=${1:-${PLATFORM}}
 	local storage="default"
 
 	case "$platform" in
-		"digitalocean")
+		"doks")
 			storage="spaces"
 			;;
 	esac
@@ -789,12 +738,11 @@ get_storage_alias() {
 
 get_test_cr() {
 	local cr_name=${1:-$test_name}
-	local platform=${2:-$(detect_k8s_platform)}
+	local platform=${2:-${PLATFORM}}
 
-	platform_alias="$(get_platform_alias $platform)"
 	storage_alias="$(get_storage_alias $platform)"
 	local default_cr="${TEST_CONFIG_DIR}/${cr_name}.yaml"
-	local platform_cr="${TEST_CONFIG_DIR}/${cr_name}-${platform_alias}.yaml"
+	local platform_cr="${TEST_CONFIG_DIR}/${cr_name}-${platform}.yaml"
 	local storage_cr="${TEST_CONFIG_DIR}/${cr_name}-${storage_alias}.yaml"
 
 	if [[ -n $storage_cr && -f $storage_cr ]]; then
@@ -818,7 +766,6 @@ get_cr() {
 	local image_binlog_server=${9:-${IMAGE_BINLOG_SERVER}}
 	local cr_file=${10:-${DEPLOY_DIR}/cr.yaml}
 
-	local platform="$(detect_k8s_platform)"
 	local cr_name="${test_name}${name_suffix:+-$name_suffix}"
 	local crs=("$cr_file")
 	local test_cr="$(get_test_cr "$cr_name")"
@@ -847,7 +794,7 @@ get_cr() {
 		.spec.backup.pitr.binlogServer.image="'"${image_binlog_server}"'" |
 		(.. | select(tag == "!!str")) |= sub("<namespace>"; "'"${NAMESPACE}"'")
 	' "${crs[@]}" \
-		| if [[ $platform == "minikube" ]]; then
+		| if [[ ${PLATFORM} == "minikube" ]]; then
 			yq eval '(.. | select(has("antiAffinityTopologyKey")).antiAffinityTopologyKey) = "none"' - \
 				| yq eval '.spec.proxy.haproxy.resources.requests.cpu = "300m"' -
 		else
@@ -1706,7 +1653,7 @@ deploy_chaos_mesh() {
 	helm repo add chaos-mesh https://charts.chaos-mesh.org
 	helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=${NAMESPACE} --set chaosDaemon.runtime=$container_runtime --set chaosDaemon.socketPath=$socket_path --set dashboard.create=false --version ${CHAOS_MESH_VER}
 
-	if [ -n "${OPENSHIFT}" ]; then
+	if [[ ${PLATFORM} == "openshift" ]]; then
 		oc adm policy add-scc-to-user privileged -z chaos-daemon --namespace=${NAMESPACE}
 	fi
 
@@ -2198,12 +2145,10 @@ run_restore() {
 	local pitr_date=$6
 	local pitr_binlog_server=$7
 
-	local platform=$(detect_k8s_platform)
-	local storage_alias=$(get_storage_alias $platform)
-	local platform_alias=$(get_platform_alias $platform)
+	local storage_alias=$(get_storage_alias "${PLATFORM}")
 	local restore_template="${TEST_CONFIG_DIR}/backup/restore${prefix}.yaml"
 	local restore_template_storage="${TEST_CONFIG_DIR}/backup/restore${prefix}-${storage_alias}.yaml"
-	local restore_template_platform="${TEST_CONFIG_DIR}/backup/restore${prefix}-${platform_alias}.yaml"
+	local restore_template_platform="${TEST_CONFIG_DIR}/backup/restore${prefix}-${PLATFORM}.yaml"
 
 	if [[ -f $restore_template_storage ]]; then
 		restore_template="$restore_template_storage"
