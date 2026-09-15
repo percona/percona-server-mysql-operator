@@ -6,7 +6,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
@@ -28,10 +27,8 @@ func TestStatefulset(t *testing.T) {
 	}
 
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "some-secret",
-			Namespace: ns,
-		},
+		Name:       "some-secret",
+		Namespace:  ns,
 		StringData: map[string]string{},
 	}
 
@@ -297,9 +294,7 @@ func TestStatefulset(t *testing.T) {
 		}
 
 		expectedReadinessProbe := corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				Exec: &corev1.ExecAction{Command: []string{"/opt/percona/haproxy_readiness_check.sh"}},
-			},
+			Exec:                &corev1.ExecAction{Command: []string{"/opt/percona/haproxy_readiness_check.sh"}},
 			InitialDelaySeconds: 15,
 			TimeoutSeconds:      1,
 			PeriodSeconds:       5,
@@ -307,9 +302,7 @@ func TestStatefulset(t *testing.T) {
 			FailureThreshold:    3,
 		}
 		expectedLivenessProbe := corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				Exec: &corev1.ExecAction{Command: []string{"/opt/percona/haproxy_liveness_check.sh"}},
-			},
+			Exec:                &corev1.ExecAction{Command: []string{"/opt/percona/haproxy_liveness_check.sh"}},
 			InitialDelaySeconds: 60,
 			TimeoutSeconds:      3,
 			PeriodSeconds:       30,
@@ -318,9 +311,7 @@ func TestStatefulset(t *testing.T) {
 		}
 
 		expectedStartupProbe := corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				Exec: &corev1.ExecAction{Command: []string{"/opt/percona/haproxy_startup_check.sh"}},
-			},
+			Exec:                &corev1.ExecAction{Command: []string{"/opt/percona/haproxy_startup_check.sh"}},
 			InitialDelaySeconds: 10,
 			TimeoutSeconds:      3,
 			PeriodSeconds:       10,
@@ -333,10 +324,8 @@ func TestStatefulset(t *testing.T) {
 		assert.Equal(t, expectedStartupProbe, *hContainer.StartupProbe)
 
 		cluster.Spec.Proxy.HAProxy.ReadinessProbe = corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				Exec: &corev1.ExecAction{
-					Command: []string{"invalid-command"},
-				},
+			Exec: &corev1.ExecAction{
+				Command: []string{"invalid-command"},
 			},
 			InitialDelaySeconds:           10,
 			TimeoutSeconds:                20,
@@ -346,10 +335,8 @@ func TestStatefulset(t *testing.T) {
 			TerminationGracePeriodSeconds: new(int64),
 		}
 		cluster.Spec.Proxy.HAProxy.LivenessProbe = corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				Exec: &corev1.ExecAction{
-					Command: []string{"invalid-command"},
-				},
+			Exec: &corev1.ExecAction{
+				Command: []string{"invalid-command"},
 			},
 			InitialDelaySeconds:           11,
 			TimeoutSeconds:                21,
@@ -359,9 +346,7 @@ func TestStatefulset(t *testing.T) {
 			TerminationGracePeriodSeconds: new(int64),
 		}
 		cluster.Spec.Proxy.HAProxy.StartupProbe = corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				Exec: &corev1.ExecAction{Command: []string{"invalid-command"}},
-			},
+			Exec:                          &corev1.ExecAction{Command: []string{"invalid-command"}},
 			InitialDelaySeconds:           12,
 			TimeoutSeconds:                22,
 			PeriodSeconds:                 32,
@@ -381,9 +366,7 @@ func TestStatefulset(t *testing.T) {
 		}
 
 		expectedReadinessProbe = corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				Exec: &corev1.ExecAction{Command: []string{"/opt/percona/haproxy_readiness_check.sh"}},
-			},
+			Exec:                          &corev1.ExecAction{Command: []string{"/opt/percona/haproxy_readiness_check.sh"}},
 			InitialDelaySeconds:           10,
 			TimeoutSeconds:                20,
 			PeriodSeconds:                 30,
@@ -392,9 +375,7 @@ func TestStatefulset(t *testing.T) {
 			TerminationGracePeriodSeconds: new(int64),
 		}
 		expectedLivenessProbe = corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				Exec: &corev1.ExecAction{Command: []string{"/opt/percona/haproxy_liveness_check.sh"}},
-			},
+			Exec:                          &corev1.ExecAction{Command: []string{"/opt/percona/haproxy_liveness_check.sh"}},
 			InitialDelaySeconds:           11,
 			TimeoutSeconds:                21,
 			PeriodSeconds:                 31,
@@ -403,9 +384,7 @@ func TestStatefulset(t *testing.T) {
 			TerminationGracePeriodSeconds: new(int64),
 		}
 		expectedStartupProbe = corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				Exec: &corev1.ExecAction{Command: []string{"/opt/percona/haproxy_startup_check.sh"}},
-			},
+			Exec:                          &corev1.ExecAction{Command: []string{"/opt/percona/haproxy_startup_check.sh"}},
 			InitialDelaySeconds:           12,
 			TimeoutSeconds:                22,
 			PeriodSeconds:                 32,
@@ -424,10 +403,8 @@ func TestService(t *testing.T) {
 	podName := "test-cluster-haproxy"
 
 	cr := &apiv1.PerconaServerMySQL{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cluster",
-			Namespace: "test-namespace",
-		},
+		Name:      "test-cluster",
+		Namespace: "test-namespace",
 		Spec: apiv1.PerconaServerMySQLSpec{
 			Proxy: apiv1.ProxySpec{
 				HAProxy: &apiv1.HAProxySpec{

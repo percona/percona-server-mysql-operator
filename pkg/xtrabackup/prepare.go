@@ -28,12 +28,10 @@ func PrepareJob(
 	pvcName := fmt.Sprintf("%s-%s-mysql-0", mysql.DataVolumeName, cluster.Name)
 
 	job := &batchv1.Job{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        PrepareJobName(restore),
-			Namespace:   cluster.Namespace,
-			Labels:      labels,
-			Annotations: util.SSMapMerge(cluster.GlobalAnnotations(), restore.Annotations, storage.Annotations),
-		},
+		Name:        PrepareJobName(restore),
+		Namespace:   cluster.Namespace,
+		Labels:      labels,
+		Annotations: util.SSMapMerge(cluster.GlobalAnnotations(), restore.Annotations, storage.Annotations),
 		Spec: batchv1.JobSpec{
 			Parallelism: new(int32(1)),
 			Completions: new(int32(1)),
@@ -84,33 +82,25 @@ func PrepareJob(
 					SecurityContext:           storage.PodSecurityContext,
 					Volumes: []corev1.Volume{
 						{
-							Name: apiv1.BinVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								EmptyDir: &corev1.EmptyDirVolumeSource{},
-							},
+							Name:     apiv1.BinVolumeName,
+							EmptyDir: &corev1.EmptyDirVolumeSource{},
 						},
 						{
 							Name: dataVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-									ClaimName: pvcName,
-								},
+							PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+								ClaimName: pvcName,
 							},
 						},
 						{
 							Name: credsVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								Secret: &corev1.SecretVolumeSource{
-									SecretName: cluster.Spec.SecretsName,
-								},
+							Secret: &corev1.SecretVolumeSource{
+								SecretName: cluster.Spec.SecretsName,
 							},
 						},
 						{
 							Name: tlsVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								Secret: &corev1.SecretVolumeSource{
-									SecretName: cluster.Spec.SSLSecretName,
-								},
+							Secret: &corev1.SecretVolumeSource{
+								SecretName: cluster.Spec.SSLSecretName,
 							},
 						},
 					},
@@ -123,11 +113,9 @@ func PrepareJob(
 	if cluster.Spec.MySQL.VaultSecretName != "" {
 		job.Spec.Template.Spec.Volumes = append(job.Spec.Template.Spec.Volumes, corev1.Volume{
 			Name: vaultSecretVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: cluster.Spec.MySQL.VaultSecretName,
-					Optional:   new(true),
-				},
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: cluster.Spec.MySQL.VaultSecretName,
+				Optional:   new(true),
 			},
 		})
 	}

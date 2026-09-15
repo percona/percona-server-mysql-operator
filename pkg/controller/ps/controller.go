@@ -169,10 +169,8 @@ func enqueueClusterFromSecretsName(c client.Client) handler.EventHandler {
 		var requests []reconcile.Request
 		for _, cluster := range clusters.Items {
 			requests = append(requests, reconcile.Request{
-				NamespacedName: types.NamespacedName{
-					Name:      cluster.Name,
-					Namespace: cluster.Namespace,
-				},
+				Name:      cluster.Name,
+				Namespace: cluster.Namespace,
 			})
 		}
 		return requests
@@ -198,10 +196,8 @@ func enqueueClusterFromEncryptionKeySecret(c client.Client) handler.EventHandler
 		var requests []reconcile.Request
 		for _, cluster := range clusters.Items {
 			requests = append(requests, reconcile.Request{
-				NamespacedName: types.NamespacedName{
-					Name:      cluster.Name,
-					Namespace: cluster.Namespace,
-				},
+				Name:      cluster.Name,
+				Namespace: cluster.Namespace,
 			})
 		}
 		return requests
@@ -687,10 +683,8 @@ func validateVaultSecret(ctx context.Context, cl client.Client, cr *apiv1.Percon
 	}
 
 	vaultSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      vaultSecretName,
-			Namespace: cr.GetNamespace(),
-		},
+		Name:      vaultSecretName,
+		Namespace: cr.GetNamespace(),
 	}
 
 	if err := cl.Get(ctx, client.ObjectKeyFromObject(vaultSecret), vaultSecret); err != nil {
@@ -714,10 +708,8 @@ func (r *PerconaServerMySQLReconciler) getObservedClusterType(
 	cr *apiv1.PerconaServerMySQL,
 ) (apiv1.ClusterType, error) {
 	sts := &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      mysql.Name(cr),
-			Namespace: cr.GetNamespace(),
-		},
+		Name:      mysql.Name(cr),
+		Namespace: cr.GetNamespace(),
 	}
 
 	if err := r.Get(ctx, client.ObjectKeyFromObject(sts), sts); err != nil {
@@ -801,10 +793,8 @@ func (r *PerconaServerMySQLReconciler) reconcileClusterTypeChange(
 
 	// Delete mysql pods
 	if err := r.Delete(ctx, &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      mysql.Name(cr),
-			Namespace: cr.GetNamespace(),
-		},
+		Name:      mysql.Name(cr),
+		Namespace: cr.GetNamespace(),
 	}); client.IgnoreNotFound(err) != nil {
 		return errors.Wrap(err, "delete mysql statefulset")
 	}
@@ -812,10 +802,8 @@ func (r *PerconaServerMySQLReconciler) reconcileClusterTypeChange(
 	// Delete haproxy (if set)
 	if cr.Spec.Proxy.HAProxy.Enabled {
 		if err := r.Delete(ctx, &appsv1.StatefulSet{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      haproxy.Name(cr),
-				Namespace: cr.GetNamespace(),
-			},
+			Name:      haproxy.Name(cr),
+			Namespace: cr.GetNamespace(),
 		}); client.IgnoreNotFound(err) != nil {
 			return errors.Wrap(err, "delete haproxy statefulset")
 		}
@@ -824,10 +812,8 @@ func (r *PerconaServerMySQLReconciler) reconcileClusterTypeChange(
 	// Delete router (if set)
 	if cr.Spec.Proxy.Router.Enabled {
 		if err := r.Delete(ctx, &appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      router.Name(cr),
-				Namespace: cr.GetNamespace(),
-			},
+			Name:      router.Name(cr),
+			Namespace: cr.GetNamespace(),
 		}); client.IgnoreNotFound(err) != nil {
 			return errors.Wrap(err, "delete router deployment")
 		}
@@ -1232,10 +1218,8 @@ func (r *PerconaServerMySQLReconciler) reconcileInternalHAProxyConfigMap(ctx con
 	}
 
 	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      naming.InternalHAProxyConfigMapName(cr.Name),
-			Namespace: cr.Namespace,
-		},
+		Name:      naming.InternalHAProxyConfigMapName(cr.Name),
+		Namespace: cr.Namespace,
 	}
 
 	data := map[string]string{
@@ -1706,10 +1690,8 @@ func (r *PerconaServerMySQLReconciler) cleanupProxies(ctx context.Context, cr *a
 		}
 
 		if err := r.Delete(ctx, &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      naming.InternalHAProxyConfigMapName(cr.Name),
-				Namespace: cr.GetNamespace(),
-			},
+			Name:      naming.InternalHAProxyConfigMapName(cr.Name),
+			Namespace: cr.GetNamespace(),
 		}); client.IgnoreNotFound(err) != nil {
 			return errors.Wrap(err, "failed to delete internal HAProxy config map")
 		}
@@ -1786,14 +1768,12 @@ func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context
 	}
 
 	configSecret := corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        binlogserver.ConfigSecretName(cr),
-			Namespace:   cr.Namespace,
-			Labels:      cr.GlobalLabels(),
-			Annotations: cr.GlobalAnnotations(),
-		},
-	}
-	configSecret.Data = make(map[string][]byte)
+		Name:        binlogserver.ConfigSecretName(cr),
+		Namespace:   cr.Namespace,
+		Labels:      cr.GlobalLabels(),
+		Annotations: cr.GlobalAnnotations(),
+
+		Data: make(map[string][]byte)}
 
 	configBytes, err := json.Marshal(config)
 	if err != nil {
@@ -1834,19 +1814,15 @@ func (r *PerconaServerMySQLReconciler) cleanupBinlogServer(ctx context.Context, 
 	}
 
 	if err := r.Delete(ctx, &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      binlogserver.Name(cr),
-			Namespace: cr.Namespace,
-		},
+		Name:      binlogserver.Name(cr),
+		Namespace: cr.Namespace,
 	}); err != nil && !k8serrors.IsNotFound(err) {
 		return errors.Wrap(err, "failed to delete binlog server statefulset")
 	}
 
 	if err := r.Delete(ctx, &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      binlogserver.ConfigSecretName(cr),
-			Namespace: cr.Namespace,
-		},
+		Name:      binlogserver.ConfigSecretName(cr),
+		Namespace: cr.Namespace,
 	}); err != nil && !k8serrors.IsNotFound(err) {
 		return errors.Wrap(err, "failed to delete binlog server config secret")
 	}
@@ -2167,10 +2143,8 @@ func (r *PerconaServerMySQLReconciler) reconcileInternalEncryptionKeySecret(ctx 
 	}
 
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      naming.EncryptionKeyInternalSecretName(cr.Name),
-			Namespace: cr.Namespace,
-		},
+		Name:      naming.EncryptionKeyInternalSecretName(cr.Name),
+		Namespace: cr.Namespace,
 	}
 
 	data, err := buildEncryptionKeySecretData(ctx, r.Client, cr)
