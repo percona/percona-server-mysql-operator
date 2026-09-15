@@ -59,7 +59,7 @@ func (r *PerconaServerMySQLReconciler) reconcileScheduledTelemetrySending(ctx co
 	logger.Info("adding new job", "name", jobName, "schedule", configuredSchedule)
 
 	r.Crons.telemetryJobs.Store(jobName, telemetryJob{
-		scheduleJob:  scheduleJob{jobID: id},
+		jobID:        id,
 		cronSchedule: configuredSchedule,
 	})
 

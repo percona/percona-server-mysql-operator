@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	restclient "k8s.io/client-go/rest"
@@ -46,10 +45,8 @@ func (f *fakeExecClient) REST() restclient.Interface {
 
 func newReadyBinlogServerPod(cr *apiv1.PerconaServerMySQL) *corev1.Pod {
 	return &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      Name(cr) + "-0",
-			Namespace: cr.Namespace,
-		},
+		Name:      Name(cr) + "-0",
+		Namespace: cr.Namespace,
 		Status: corev1.PodStatus{
 			Phase: corev1.PodRunning,
 			Conditions: []corev1.PodCondition{
@@ -109,11 +106,9 @@ func TestSearchByGTID(t *testing.T) {
 		},
 		"pod not ready": {
 			pod: &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      Name(cr) + "-0",
-					Namespace: cr.Namespace,
-				},
-				Status: corev1.PodStatus{Phase: corev1.PodPending},
+				Name:      Name(cr) + "-0",
+				Namespace: cr.Namespace,
+				Status:    corev1.PodStatus{Phase: corev1.PodPending},
 			},
 			cliCmd:        &fakeExecClient{},
 			gtidSet:       "some-gtid",
@@ -189,11 +184,9 @@ func TestSearchByTimestamp(t *testing.T) {
 		},
 		"pod not ready": {
 			pod: &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      Name(cr) + "-0",
-					Namespace: cr.Namespace,
-				},
-				Status: corev1.PodStatus{Phase: corev1.PodPending},
+				Name:      Name(cr) + "-0",
+				Namespace: cr.Namespace,
+				Status:    corev1.PodStatus{Phase: corev1.PodPending},
 			},
 			cliCmd:        &fakeExecClient{},
 			timestamp:     "2024-01-01 00:30:00",

@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -24,16 +23,14 @@ import (
 
 func newMySQLPod(clusterName, namespace string) *corev1.Pod {
 	return &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      clusterName + "-mysql-0",
-			Namespace: namespace,
-			Labels: map[string]string{
-				"app.kubernetes.io/component":  "database",
-				"app.kubernetes.io/instance":   clusterName,
-				"app.kubernetes.io/managed-by": "percona-server-mysql-operator",
-				"app.kubernetes.io/name":       "mysql",
-				"app.kubernetes.io/part-of":    "percona-server",
-			},
+		Name:      clusterName + "-mysql-0",
+		Namespace: namespace,
+		Labels: map[string]string{
+			"app.kubernetes.io/component":  "database",
+			"app.kubernetes.io/instance":   clusterName,
+			"app.kubernetes.io/managed-by": "percona-server-mysql-operator",
+			"app.kubernetes.io/name":       "mysql",
+			"app.kubernetes.io/part-of":    "percona-server",
 		},
 		Status: corev1.PodStatus{
 			Phase: corev1.PodRunning,
@@ -128,14 +125,14 @@ func TestBackupSize(t *testing.T) {
 			stor := cluster.Spec.Backup.Storages[storageName]
 
 			s3Secret := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{Name: stor.S3.CredentialsSecret, Namespace: tt.namespace},
+				Name: stor.S3.CredentialsSecret, Namespace: tt.namespace,
 				Data: map[string][]byte{
 					secret.CredentialsAWSAccessKey: []byte("access-key"),
 					secret.CredentialsAWSSecretKey: []byte("secret-key"),
 				},
 			}
 			userSecret := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{Name: cluster.InternalSecretName(), Namespace: tt.namespace},
+				Name: cluster.InternalSecretName(), Namespace: tt.namespace,
 				Data: map[string][]byte{
 					string(apiv1.UserOperator): []byte("operator-pass"),
 				},

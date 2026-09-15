@@ -82,10 +82,8 @@ func TestStatefulSet(t *testing.T) {
 	const tlsHash = "config-hash"
 
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "some-secret",
-			Namespace: ns,
-		},
+		Name:       "some-secret",
+		Namespace:  ns,
 		StringData: map[string]string{},
 	}
 
@@ -344,9 +342,7 @@ func TestStatefulsetVolumes(t *testing.T) {
 
 	expectedPVCs := []corev1.PersistentVolumeClaim{
 		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "datadir",
-			},
+			Name: "datadir",
 			Spec: corev1.PersistentVolumeClaimSpec{
 				Resources: corev1.VolumeResourceRequirements{
 					Requests: corev1.ResourceList{
@@ -433,10 +429,8 @@ func TestStatefulsetVolumes(t *testing.T) {
 							TerminationGracePeriodSeconds: new(int64(30)),
 							Volumes: append(expectedVolumes(),
 								corev1.Volume{
-									Name: "datadir",
-									VolumeSource: corev1.VolumeSource{
-										HostPath: &corev1.HostPathVolumeSource{},
-									},
+									Name:     "datadir",
+									HostPath: &corev1.HostPathVolumeSource{},
 								},
 							),
 						},
@@ -475,10 +469,8 @@ func TestStatefulsetVolumes(t *testing.T) {
 							TerminationGracePeriodSeconds: new(int64(30)),
 							Volumes: append(expectedVolumes(),
 								corev1.Volume{
-									Name: "datadir",
-									VolumeSource: corev1.VolumeSource{
-										EmptyDir: &corev1.EmptyDirVolumeSource{},
-									},
+									Name:     "datadir",
+									EmptyDir: &corev1.EmptyDirVolumeSource{},
 								},
 							),
 						},
@@ -518,10 +510,8 @@ func TestStatefulsetVolumes(t *testing.T) {
 							TerminationGracePeriodSeconds: new(int64(30)),
 							Volumes: append(expectedVolumes(),
 								corev1.Volume{
-									Name: "datadir",
-									VolumeSource: corev1.VolumeSource{
-										HostPath: &corev1.HostPathVolumeSource{},
-									},
+									Name:     "datadir",
+									HostPath: &corev1.HostPathVolumeSource{},
 								},
 							),
 						},
@@ -535,10 +525,8 @@ func TestStatefulsetVolumes(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			cr := &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "ps-cluster1",
-					Namespace: "test-ns",
-				},
+				Name:      "ps-cluster1",
+				Namespace: "test-ns",
 				Spec: apiv1.PerconaServerMySQLSpec{
 					CRVersion: version.Version(),
 					MySQL:     tt.mysqlSpec,
@@ -572,106 +560,84 @@ func TestStatefulsetVolumes(t *testing.T) {
 func expectedVolumes() []corev1.Volume {
 	return []corev1.Volume{
 		{
-			Name: "bin",
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			},
+			Name:     "bin",
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		},
 		{
-			Name: "mysqlsh",
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			},
+			Name:     "mysqlsh",
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		},
 		{
 			Name: "users",
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: "internal-ps-cluster1",
-				},
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: "internal-ps-cluster1",
 			},
 		},
 		{
 			Name: "tls",
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: "",
-				},
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: "",
 			},
 		},
 		{
 			Name: "config",
-			VolumeSource: corev1.VolumeSource{
-				Projected: &corev1.ProjectedVolumeSource{
-					Sources: []corev1.VolumeProjection{
-						{
-							ConfigMap: &corev1.ConfigMapProjection{
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: "ps-cluster1-mysql",
+			Projected: &corev1.ProjectedVolumeSource{
+				Sources: []corev1.VolumeProjection{
+					{
+						ConfigMap: &corev1.ConfigMapProjection{
+							Name: "ps-cluster1-mysql",
+							Items: []corev1.KeyToPath{
+								{
+									Key:  "my.cnf",
+									Path: "my-config.cnf",
 								},
-								Items: []corev1.KeyToPath{
-									{
-										Key:  "my.cnf",
-										Path: "my-config.cnf",
-									},
-								},
-								Optional: new(true),
 							},
+							Optional: new(true),
 						},
-						{
-							ConfigMap: &corev1.ConfigMapProjection{
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: "auto-ps-cluster1-mysql",
+					},
+					{
+						ConfigMap: &corev1.ConfigMapProjection{
+							Name: "auto-ps-cluster1-mysql",
+							Items: []corev1.KeyToPath{
+								{
+									Key:  "my.cnf",
+									Path: "auto-config.cnf",
 								},
-								Items: []corev1.KeyToPath{
-									{
-										Key:  "my.cnf",
-										Path: "auto-config.cnf",
-									},
-								},
-								Optional: new(true),
 							},
+							Optional: new(true),
 						},
-						{
-							Secret: &corev1.SecretProjection{
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: "ps-cluster1-mysql",
+					},
+					{
+						Secret: &corev1.SecretProjection{
+							Name: "ps-cluster1-mysql",
+							Items: []corev1.KeyToPath{
+								{
+									Key:  "my.cnf",
+									Path: "my-secret.cnf",
 								},
-								Items: []corev1.KeyToPath{
-									{
-										Key:  "my.cnf",
-										Path: "my-secret.cnf",
-									},
-								},
-								Optional: new(true),
 							},
+							Optional: new(true),
 						},
 					},
 				},
 			},
 		},
 		{
-			Name: "backup-logs",
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			},
+			Name:     "backup-logs",
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		},
 		{
 			Name: "vault-keyring-secret",
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: "",
-					Optional:   new(true),
-				},
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: "",
+				Optional:   new(true),
 			},
 		},
 		{
 			Name: "backup-encryption-keys",
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: "internal-encryption-keys-ps-cluster1",
-					Optional:   new(true),
-				},
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: "internal-encryption-keys-ps-cluster1",
+				Optional:   new(true),
 			},
 		},
 	}
@@ -679,10 +645,8 @@ func expectedVolumes() []corev1.Volume {
 
 func TestPrimaryService_GroupReplication(t *testing.T) {
 	cr := &apiv1.PerconaServerMySQL{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cluster",
-			Namespace: "test-namespace",
-		},
+		Name:      "test-cluster",
+		Namespace: "test-namespace",
 		Spec: apiv1.PerconaServerMySQLSpec{
 			MySQL: apiv1.MySQLSpec{
 				ClusterType: apiv1.ClusterTypeGR,
@@ -772,10 +736,8 @@ func TestPodService(t *testing.T) {
 	podName := "test-pod"
 
 	cr := &apiv1.PerconaServerMySQL{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cluster",
-			Namespace: "test-namespace",
-		},
+		Name:      "test-cluster",
+		Namespace: "test-namespace",
 		Spec: apiv1.PerconaServerMySQLSpec{
 			MySQL: apiv1.MySQLSpec{
 				ClusterType: apiv1.ClusterTypeGR,
@@ -864,9 +826,7 @@ func TestPodService(t *testing.T) {
 
 func TestPrimaryServiceName(t *testing.T) {
 	cr := &apiv1.PerconaServerMySQL{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "my-cluster",
-		},
+		Name: "my-cluster",
 	}
 	serviceName := PrimaryServiceName(cr)
 	assert.Equal(t, "my-cluster-mysql-primary", serviceName)
@@ -874,10 +834,8 @@ func TestPrimaryServiceName(t *testing.T) {
 
 func TestBackupVolumeMounts(t *testing.T) {
 	cr := &apiv1.PerconaServerMySQL{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "ps-cluster1",
-			Namespace: "test-ns",
-		},
+		Name:      "ps-cluster1",
+		Namespace: "test-ns",
 		Spec: apiv1.PerconaServerMySQLSpec{
 			CRVersion: version.Version(),
 		},

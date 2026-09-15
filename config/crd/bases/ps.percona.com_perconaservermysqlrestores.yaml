@@ -516,8 +516,16 @@ spec:
                                 type: array
                               xtrabackup:
                                 items:
+                                  maxLength: 1024
                                   type: string
+                                maxItems: 100
                                 type: array
+                                x-kubernetes-validations:
+                                - message: --defaults-file must use --defaults-file=<path>
+                                    syntax and be the first xtrabackup argument
+                                  rule: '!self.exists(arg, arg == ''--defaults-file''
+                                    || arg.startsWith(''--defaults-file='')) || (self[0].startsWith(''--defaults-file='')
+                                    && self[0] != ''--defaults-file='')'
                             type: object
                           env:
                             items:
@@ -933,6 +941,9 @@ spec:
                             properties:
                               medium:
                                 type: string
+                              mode:
+                                format: int32
+                                type: integer
                               sizeLimit:
                                 anyOf:
                                 - type: integer
@@ -1058,8 +1069,16 @@ spec:
                         type: array
                       xtrabackup:
                         items:
+                          maxLength: 1024
                           type: string
+                        maxItems: 100
                         type: array
+                        x-kubernetes-validations:
+                        - message: --defaults-file must use --defaults-file=<path>
+                            syntax and be the first xtrabackup argument
+                          rule: '!self.exists(arg, arg == ''--defaults-file'' || arg.startsWith(''--defaults-file=''))
+                            || (self[0].startsWith(''--defaults-file='') && self[0]
+                            != ''--defaults-file='')'
                     type: object
                   env:
                     items:
@@ -1952,6 +1971,8 @@ spec:
                                 type: integer
                               grpc:
                                 properties:
+                                  mode:
+                                    type: string
                                   port:
                                     format: int32
                                     type: integer
@@ -1985,6 +2006,8 @@ spec:
                                     - type: integer
                                     - type: string
                                     x-kubernetes-int-or-string: true
+                                  protocol:
+                                    type: string
                                   scheme:
                                     type: string
                                 required:
@@ -2138,6 +2161,8 @@ spec:
                                 type: integer
                               grpc:
                                 properties:
+                                  mode:
+                                    type: string
                                   port:
                                     format: int32
                                     type: integer
@@ -2171,6 +2196,8 @@ spec:
                                     - type: integer
                                     - type: string
                                     x-kubernetes-int-or-string: true
+                                  protocol:
+                                    type: string
                                   scheme:
                                     type: string
                                 required:
@@ -2270,6 +2297,8 @@ spec:
                                 type: integer
                               grpc:
                                 properties:
+                                  mode:
+                                    type: string
                                   port:
                                     format: int32
                                     type: integer
@@ -2303,6 +2332,8 @@ spec:
                                     - type: integer
                                     - type: string
                                     x-kubernetes-int-or-string: true
+                                  protocol:
+                                    type: string
                                   scheme:
                                     type: string
                                 required:

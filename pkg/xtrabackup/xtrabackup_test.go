@@ -45,7 +45,7 @@ func TestS3CABundleJobs(t *testing.T) {
 	})
 
 	t.Run("restore", func(t *testing.T) {
-		restore := &apiv1.PerconaServerMySQLRestore{ObjectMeta: metav1.ObjectMeta{Name: "restore", Namespace: "ns"}}
+		restore := &apiv1.PerconaServerMySQLRestore{Name: "restore", Namespace: "ns"}
 		job := RestoreJob(cluster, DestinationInfo{Base: "destination"}, restore, storage, "init-image", "pvc")
 		checkContainer(t, job.Spec.Template.Spec.Containers[0], "/opt/percona/run-restore.sh")
 		require.Len(t, job.Spec.Template.Spec.InitContainers, 1)
@@ -651,9 +651,7 @@ func TestGetDestination(t *testing.T) {
 
 	newBackup := func(clusterName string, backupType apiv1.BackupType) *apiv1.PerconaServerMySQLBackup {
 		return &apiv1.PerconaServerMySQLBackup{
-			ObjectMeta: metav1.ObjectMeta{
-				CreationTimestamp: metav1.NewTime(ts),
-			},
+			CreationTimestamp: metav1.NewTime(ts),
 			Spec: apiv1.PerconaServerMySQLBackupSpec{
 				Type:        backupType,
 				ClusterName: clusterName,

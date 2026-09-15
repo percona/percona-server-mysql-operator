@@ -120,16 +120,12 @@ func StatefulSet(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServerSpec, lab
 	}
 
 	return &appsv1.StatefulSet{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "apps/v1",
-			Kind:       "StatefulSet",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        Name(cr),
-			Namespace:   cr.Namespace,
-			Labels:      labels,
-			Annotations: cr.GlobalAnnotations(),
-		},
+		APIVersion:  "apps/v1",
+		Kind:        "StatefulSet",
+		Name:        Name(cr),
+		Namespace:   cr.Namespace,
+		Labels:      labels,
+		Annotations: cr.GlobalAnnotations(),
 		Spec: appsv1.StatefulSetSpec{
 			Replicas: new(int32(1)),
 			Selector: &metav1.LabelSelector{
@@ -162,23 +158,17 @@ func volumes(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServerSpec, configS
 
 	vols := []corev1.Volume{
 		{
-			Name: apiv1.BinVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			},
+			Name:     apiv1.BinVolumeName,
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		},
 		{
-			Name: bufferVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			},
+			Name:     bufferVolumeName,
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		},
 		{
 			Name: credsVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: cr.InternalSecretName(),
-				},
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: cr.InternalSecretName(),
 			},
 		},
 	}
@@ -186,10 +176,8 @@ func volumes(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServerSpec, configS
 	if !sslDisabled(spec) {
 		vols = append(vols, corev1.Volume{
 			Name: tlsVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: cr.Spec.SSLSecretName,
-				},
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: cr.Spec.SSLSecretName,
 			},
 		})
 	}
@@ -198,43 +186,35 @@ func volumes(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServerSpec, configS
 		vols,
 		corev1.Volume{
 			Name: storageCredsVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: spec.Storage.S3.CredentialsSecret,
-				},
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: spec.Storage.S3.CredentialsSecret,
 			},
 		},
 		corev1.Volume{
 			Name: configVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				Projected: &corev1.ProjectedVolumeSource{
-					Sources: []corev1.VolumeProjection{
-						{
-							Secret: &corev1.SecretProjection{
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: configSecretName,
-								},
-								Items: []corev1.KeyToPath{
-									{
-										Key:  ConfigKey,
-										Path: ConfigKey,
-									},
+			Projected: &corev1.ProjectedVolumeSource{
+				Sources: []corev1.VolumeProjection{
+					{
+						Secret: &corev1.SecretProjection{
+							Name: configSecretName,
+							Items: []corev1.KeyToPath{
+								{
+									Key:  ConfigKey,
+									Path: ConfigKey,
 								},
 							},
 						},
-						{
-							ConfigMap: &corev1.ConfigMapProjection{
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: conf.GetConfigMapName(),
+					},
+					{
+						ConfigMap: &corev1.ConfigMapProjection{
+							Name: conf.GetConfigMapName(),
+							Items: []corev1.KeyToPath{
+								{
+									Key:  conf.GetConfigMapKey(),
+									Path: conf.GetConfigMapKey(),
 								},
-								Items: []corev1.KeyToPath{
-									{
-										Key:  conf.GetConfigMapKey(),
-										Path: conf.GetConfigMapKey(),
-									},
-								},
-								Optional: &t,
 							},
+							Optional: &t,
 						},
 					},
 				},
@@ -247,18 +227,16 @@ func volumes(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServerSpec, configS
 		selectors := []apiv1.CABundleSecretSelector{*s.CABundle}
 		vols = append(vols, k8s.S3CertVolumes(selectors)...)
 		vols = append(vols, corev1.Volume{
-			Name:         naming.S3CertsVolumeName,
-			VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+			Name:     naming.S3CertsVolumeName,
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		})
 	}
 
 	if spec.KeyringSecret != nil {
 		vols = append(vols, corev1.Volume{
 			Name: keyringVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: spec.KeyringSecret.Name,
-				},
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: spec.KeyringSecret.Name,
 			},
 		})
 	}
