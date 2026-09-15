@@ -18,7 +18,6 @@ import (
 	"google.golang.org/grpc"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	k8sversion "k8s.io/apimachinery/pkg/version"
@@ -62,11 +61,9 @@ func TestReconcileVersions(t *testing.T) {
 		{
 			name: "Test disabled telemetry and version upgrade",
 			cr: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      clusterName,
-					Namespace: namespace,
-					UID:       types.UID("custom-resource-uid"),
-				},
+				Name:      clusterName,
+				Namespace: namespace,
+				UID:       types.UID("custom-resource-uid"),
 				Spec: apiv1.PerconaServerMySQLSpec{
 					Backup: &apiv1.BackupSpec{
 						Image: "some-image",
@@ -89,9 +86,7 @@ func TestReconcileVersions(t *testing.T) {
 					Proxy: apiv1.ProxySpec{
 						HAProxy: &apiv1.HAProxySpec{
 							Enabled: true,
-							PodSpec: apiv1.PodSpec{
-								Size: 2,
-							},
+							Size:    2,
 						},
 					},
 					UpgradeOptions: apiv1.UpgradeOptions{
@@ -106,11 +101,9 @@ func TestReconcileVersions(t *testing.T) {
 		{
 			name: "Test enabled telemetry and version upgrade",
 			cr: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      clusterName,
-					Namespace: namespace,
-					UID:       types.UID("custom-resource-uid"),
-				},
+				Name:      clusterName,
+				Namespace: namespace,
+				UID:       types.UID("custom-resource-uid"),
 				Spec: apiv1.PerconaServerMySQLSpec{
 					Backup: &apiv1.BackupSpec{
 						Image: "some-image",
@@ -133,9 +126,7 @@ func TestReconcileVersions(t *testing.T) {
 					Proxy: apiv1.ProxySpec{
 						HAProxy: &apiv1.HAProxySpec{
 							Enabled: true,
-							PodSpec: apiv1.PodSpec{
-								Size: 2,
-							},
+							Size:    2,
 						},
 					},
 					UpgradeOptions: apiv1.UpgradeOptions{
@@ -150,11 +141,9 @@ func TestReconcileVersions(t *testing.T) {
 		{
 			name: "Test enabled telemetry with empty upgrade strategy",
 			cr: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      clusterName,
-					Namespace: namespace,
-					UID:       types.UID("custom-resource-uid"),
-				},
+				Name:      clusterName,
+				Namespace: namespace,
+				UID:       types.UID("custom-resource-uid"),
 				Spec: apiv1.PerconaServerMySQLSpec{
 					Backup: &apiv1.BackupSpec{
 						Image: "some-image",
@@ -177,9 +166,7 @@ func TestReconcileVersions(t *testing.T) {
 					Proxy: apiv1.ProxySpec{
 						HAProxy: &apiv1.HAProxySpec{
 							Enabled: true,
-							PodSpec: apiv1.PodSpec{
-								Size: 2,
-							},
+							Size:    2,
 						},
 					},
 					UpgradeOptions: apiv1.UpgradeOptions{
@@ -193,11 +180,9 @@ func TestReconcileVersions(t *testing.T) {
 		{
 			name: "Test enabled telemetry and custom version upgrade endpoint",
 			cr: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      clusterName,
-					Namespace: namespace,
-					UID:       types.UID("custom-resource-uid"),
-				},
+				Name:      clusterName,
+				Namespace: namespace,
+				UID:       types.UID("custom-resource-uid"),
 				Spec: apiv1.PerconaServerMySQLSpec{
 					Backup: &apiv1.BackupSpec{
 						Image: "some-image",
@@ -220,9 +205,7 @@ func TestReconcileVersions(t *testing.T) {
 					Proxy: apiv1.ProxySpec{
 						HAProxy: &apiv1.HAProxySpec{
 							Enabled: true,
-							PodSpec: apiv1.PodSpec{
-								Size: 2,
-							},
+							Size:    2,
 						},
 					},
 					UpgradeOptions: apiv1.UpgradeOptions{
@@ -238,11 +221,9 @@ func TestReconcileVersions(t *testing.T) {
 		{
 			name: "Test disabled telemetry with `recommended` upgrade strategy",
 			cr: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      clusterName,
-					Namespace: namespace,
-					UID:       types.UID("custom-resource-uid"),
-				},
+				Name:      clusterName,
+				Namespace: namespace,
+				UID:       types.UID("custom-resource-uid"),
 				Spec: apiv1.PerconaServerMySQLSpec{
 					Backup: &apiv1.BackupSpec{
 						Image: "some-image",
@@ -265,9 +246,7 @@ func TestReconcileVersions(t *testing.T) {
 					Proxy: apiv1.ProxySpec{
 						HAProxy: &apiv1.HAProxySpec{
 							Enabled: true,
-							PodSpec: apiv1.PodSpec{
-								Size: 2,
-							},
+							Size:    2,
 						},
 					},
 					UpgradeOptions: apiv1.UpgradeOptions{
@@ -394,26 +373,22 @@ func TestReconcileHAProxyVersionSetsImageIDAndSkipsWhenUnchanged(t *testing.T) {
 	require.NoError(t, apiv1.AddToScheme(scheme))
 
 	cr := &apiv1.PerconaServerMySQL{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "cluster1",
-			Namespace: "ns1",
-		},
+		Name:      "cluster1",
+		Namespace: "ns1",
 		Spec: apiv1.PerconaServerMySQLSpec{
 			Proxy: apiv1.ProxySpec{
 				HAProxy: &apiv1.HAProxySpec{
 					Enabled: true,
-					PodSpec: apiv1.PodSpec{Size: 1},
+					Size:    1,
 				},
 			},
 		},
 	}
 
 	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "cluster1-haproxy-0",
-			Namespace: "ns1",
-			Labels:    haproxy.MatchLabels(cr),
-		},
+		Name:      "cluster1-haproxy-0",
+		Namespace: "ns1",
+		Labels:    haproxy.MatchLabels(cr),
 		Status: corev1.PodStatus{
 			Phase: corev1.PodRunning,
 			Conditions: []corev1.PodCondition{{
@@ -474,11 +449,9 @@ func TestGetVersion(t *testing.T) {
 		{
 			name: "Test minimal CR",
 			cr: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      clusterName,
-					Namespace: namespace,
-					UID:       types.UID("custom-resource-uid"),
-				},
+				Name:      clusterName,
+				Namespace: namespace,
+				UID:       types.UID("custom-resource-uid"),
 				Spec: apiv1.PerconaServerMySQLSpec{
 					Backup: &apiv1.BackupSpec{
 						Image: "some-image",
@@ -501,9 +474,7 @@ func TestGetVersion(t *testing.T) {
 					Proxy: apiv1.ProxySpec{
 						HAProxy: &apiv1.HAProxySpec{
 							Enabled: true,
-							PodSpec: apiv1.PodSpec{
-								Size: 2,
-							},
+							Size:    2,
 						},
 					},
 					UpgradeOptions: apiv1.UpgradeOptions{

@@ -32,9 +32,7 @@ var _ = Describe("TLS secrets without cert-manager", Ordered, func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 	namespace := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: cr.Namespace,
-		},
+		Name: cr.Namespace,
 	}
 
 	BeforeAll(func() {
@@ -55,10 +53,8 @@ var _ = Describe("TLS secrets without cert-manager", Ordered, func() {
 	Context("without custom SANs", Ordered, func() {
 		It("should reconcile", func() {
 			req := ctrl.Request{
-				NamespacedName: types.NamespacedName{
-					Namespace: cr.Namespace,
-					Name:      cr.Name,
-				},
+				Namespace: cr.Namespace,
+				Name:      cr.Name,
 			}
 			_, err := reconciler().Reconcile(ctx, req)
 			Expect(err).Should(Succeed())
@@ -105,10 +101,8 @@ var _ = Describe("TLS secrets without cert-manager", Ordered, func() {
 		})
 		It("should reconcile", func() {
 			req := ctrl.Request{
-				NamespacedName: types.NamespacedName{
-					Namespace: cr.Namespace,
-					Name:      cr.Name,
-				},
+				Namespace: cr.Namespace,
+				Name:      cr.Name,
 			}
 			_, err := reconciler().Reconcile(ctx, req)
 			Expect(err).Should(Succeed())
@@ -174,11 +168,11 @@ var _ = Describe("TLS cert-manager leak regression", Ordered, func() {
 	cr, err := readDefaultCR(crName, ns)
 
 	namespace := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{Name: ns},
+		Name: ns,
 	}
 
 	req := ctrl.Request{
-		NamespacedName: types.NamespacedName{Namespace: ns, Name: crName},
+		Namespace: ns, Name: crName,
 	}
 
 	BeforeAll(func() {
@@ -240,7 +234,7 @@ var _ = Describe("TLS issuer kind handling", Ordered, func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		clusterIssuer := &cm.ClusterIssuer{
-			ObjectMeta: metav1.ObjectMeta{Name: clusterIssuerName},
+			Name: clusterIssuerName,
 			Spec: cm.IssuerSpec{
 				IssuerConfig: cm.IssuerConfig{SelfSigned: &cm.SelfSignedIssuer{}},
 			},
@@ -248,7 +242,7 @@ var _ = Describe("TLS issuer kind handling", Ordered, func() {
 		Expect(k8sClient.Create(ctx, clusterIssuer)).To(Succeed())
 
 		issuer := &cm.Issuer{
-			ObjectMeta: metav1.ObjectMeta{Name: issuerName, Namespace: namespace},
+			Name: issuerName, Namespace: namespace,
 			Spec: cm.IssuerSpec{
 				IssuerConfig: cm.IssuerConfig{SelfSigned: &cm.SelfSignedIssuer{}},
 			},
@@ -257,13 +251,13 @@ var _ = Describe("TLS issuer kind handling", Ordered, func() {
 	})
 
 	AfterAll(func(ctx SpecContext) {
-		_ = k8sClient.Delete(ctx, &cm.ClusterIssuer{ObjectMeta: metav1.ObjectMeta{Name: clusterIssuerName}})
-		_ = k8sClient.Delete(ctx, &cm.Issuer{ObjectMeta: metav1.ObjectMeta{Name: issuerName, Namespace: namespace}})
+		_ = k8sClient.Delete(ctx, &cm.ClusterIssuer{Name: clusterIssuerName})
+		_ = k8sClient.Delete(ctx, &cm.Issuer{Name: issuerName, Namespace: namespace})
 	})
 
 	It("returns nil when tls is not configured", func(ctx SpecContext) {
 		cr := &apiv1.PerconaServerMySQL{
-			ObjectMeta: metav1.ObjectMeta{Namespace: namespace},
+			Namespace: namespace,
 		}
 
 		Expect(reconciler().checkTLSIssuer(ctx, cr)).To(Succeed())
@@ -271,7 +265,7 @@ var _ = Describe("TLS issuer kind handling", Ordered, func() {
 
 	It("returns nil when tls.issuerConf is not configured", func(ctx SpecContext) {
 		cr := &apiv1.PerconaServerMySQL{
-			ObjectMeta: metav1.ObjectMeta{Namespace: namespace},
+			Namespace: namespace,
 			Spec: apiv1.PerconaServerMySQLSpec{
 				TLS: &apiv1.TLSSpec{},
 			},
@@ -282,7 +276,7 @@ var _ = Describe("TLS issuer kind handling", Ordered, func() {
 
 	It("checks existing ClusterIssuer when tls.issuerConf.kind is set", func(ctx SpecContext) {
 		cr := &apiv1.PerconaServerMySQL{
-			ObjectMeta: metav1.ObjectMeta{Namespace: namespace},
+			Namespace: namespace,
 			Spec: apiv1.PerconaServerMySQLSpec{
 				TLS: &apiv1.TLSSpec{
 					IssuerConf: &cmmeta.IssuerReference{
@@ -299,7 +293,7 @@ var _ = Describe("TLS issuer kind handling", Ordered, func() {
 
 	It("checks existing Issuer when tls.issuerConf.kind is Issuer", func(ctx SpecContext) {
 		cr := &apiv1.PerconaServerMySQL{
-			ObjectMeta: metav1.ObjectMeta{Namespace: namespace},
+			Namespace: namespace,
 			Spec: apiv1.PerconaServerMySQLSpec{
 				TLS: &apiv1.TLSSpec{
 					IssuerConf: &cmmeta.IssuerReference{
@@ -315,7 +309,7 @@ var _ = Describe("TLS issuer kind handling", Ordered, func() {
 
 	It("fails when referenced ClusterIssuer does not exist", func(ctx SpecContext) {
 		cr := &apiv1.PerconaServerMySQL{
-			ObjectMeta: metav1.ObjectMeta{Namespace: namespace},
+			Namespace: namespace,
 			Spec: apiv1.PerconaServerMySQLSpec{
 				TLS: &apiv1.TLSSpec{
 					IssuerConf: &cmmeta.IssuerReference{
@@ -337,7 +331,7 @@ var _ = Describe("TLS issuer kind handling", Ordered, func() {
 		testReconciler.Client = &forbiddenClusterIssuerGetClient{Client: baseReconciler.Client}
 
 		cr := &apiv1.PerconaServerMySQL{
-			ObjectMeta: metav1.ObjectMeta{Namespace: namespace},
+			Namespace: namespace,
 			Spec: apiv1.PerconaServerMySQLSpec{
 				TLS: &apiv1.TLSSpec{
 					IssuerConf: &cmmeta.IssuerReference{
@@ -372,10 +366,8 @@ var _ = Describe("Finalizer delete-ssl", Ordered, func() {
 	crNamespacedName := types.NamespacedName{Name: crName, Namespace: ns}
 
 	namespace := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      crName,
-			Namespace: ns,
-		},
+		Name:      crName,
+		Namespace: ns,
 	}
 
 	BeforeAll(func() {

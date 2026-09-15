@@ -165,12 +165,10 @@ func (r *PerconaServerMySQLReconciler) ensureSSLByCertManager(ctx context.Contex
 		secretName := cr.Name + "-ca-cert"
 
 		caCert := &cm.Certificate{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:        certName,
-				Namespace:   cr.Namespace,
-				Labels:      cr.GlobalLabels(),
-				Annotations: cr.GlobalAnnotations(),
-			},
+			Name:        certName,
+			Namespace:   cr.Namespace,
+			Labels:      cr.GlobalLabels(),
+			Annotations: cr.GlobalAnnotations(),
 			Spec: cm.CertificateSpec{
 				SecretName: secretName,
 				CommonName: cr.Name + "-ca",
@@ -203,12 +201,10 @@ func (r *PerconaServerMySQLReconciler) ensureSSLByCertManager(ctx context.Contex
 	certName := cr.Name + "-ssl"
 
 	kubeCert := &cm.Certificate{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        certName,
-			Namespace:   cr.Namespace,
-			Labels:      cr.GlobalLabels(),
-			Annotations: cr.GlobalAnnotations(),
-		},
+		Name:        certName,
+		Namespace:   cr.Namespace,
+		Labels:      cr.GlobalLabels(),
+		Annotations: cr.GlobalAnnotations(),
 		Spec: cm.CertificateSpec{
 			SecretName: cr.Spec.SSLSecretName,
 			DNSNames:   tls.DNSNames(cr),
@@ -231,12 +227,10 @@ func (r *PerconaServerMySQLReconciler) ensureSSLByCertManager(ctx context.Contex
 func (r *PerconaServerMySQLReconciler) ensureIssuer(ctx context.Context, cr *apiv1.PerconaServerMySQL, issuerName string, IssuerConf cm.IssuerConfig,
 ) error {
 	isr := &cm.Issuer{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        issuerName,
-			Namespace:   cr.Namespace,
-			Labels:      cr.GlobalLabels(),
-			Annotations: cr.GlobalAnnotations(),
-		},
+		Name:        issuerName,
+		Namespace:   cr.Namespace,
+		Labels:      cr.GlobalLabels(),
+		Annotations: cr.GlobalAnnotations(),
 		Spec: cm.IssuerSpec{
 			IssuerConfig: IssuerConf,
 		},

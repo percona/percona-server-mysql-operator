@@ -11,7 +11,6 @@ import (
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
@@ -112,10 +111,8 @@ func GetConfiguration(ctx context.Context, cl client.Client, cr *apiv1.PerconaSe
 	}
 
 	s3Secret := corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      spec.Storage.S3.CredentialsSecret,
-			Namespace: cr.Namespace,
-		},
+		Name:      spec.Storage.S3.CredentialsSecret,
+		Namespace: cr.Namespace,
 	}
 	if err := cl.Get(ctx, client.ObjectKeyFromObject(&s3Secret), &s3Secret); err != nil {
 		return Configuration{}, errors.Wrap(err, "get s3 credentials secret")
