@@ -56,6 +56,44 @@ func metaTime(t time.Time) *metav1.Time {
 	return &metav1.Time{Time: t}
 }
 
+func TestGetRunningBackup(t *testing.T) {
+	tests := map[string]struct {
+		state     apiv1.BackupState
+		wantFound bool
+	}{
+		"starting backup is active": {
+			state:     apiv1.BackupStarting,
+			wantFound: true,
+		},
+		"running backup is active": {
+			state:     apiv1.BackupRunning,
+			wantFound: true,
+		},
+		"suspended backup is active": {
+			state:     apiv1.BackupSuspended,
+			wantFound: true,
+		},
+		"succeeded backup is not active": {
+			state: apiv1.BackupSucceeded,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			backup := newBackup("backup", "cluster1", apiv1.BackupTypeFull, tt.state, nil)
+			result, err := GetRunningBackup(t.Context(), buildTestClient(backup), "cluster1", "default")
+
+			require.NoError(t, err)
+			if !tt.wantFound {
+				assert.Nil(t, result)
+				return
+			}
+			require.NotNil(t, result)
+			assert.Equal(t, backup.Name, result.Name)
+		})
+	}
+}
+
 func TestGetLastFullBackup(t *testing.T) {
 	now := time.Now()
 

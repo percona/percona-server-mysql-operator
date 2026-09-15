@@ -653,6 +653,14 @@ func TestCheckFinalizers(t *testing.T) {
 			expectedFinalizers: []string{naming.FinalizerDeleteBackup},
 		},
 		{
+			name: "with finalizer and suspended state",
+			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQLBackup) {
+				cr.Finalizers = []string{naming.FinalizerDeleteBackup}
+				cr.Status.State = apiv1.BackupSuspended
+			}),
+			expectedFinalizers: []string{naming.FinalizerDeleteBackup},
+		},
+		{
 			name: "with finalizer and error state",
 			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQLBackup) {
 				cr.Finalizers = []string{naming.FinalizerDeleteBackup}

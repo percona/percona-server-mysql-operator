@@ -82,6 +82,46 @@ func notReadyPod(name, namespace string) corev1.Pod {
 	}
 }
 
+func TestIsBackupRunning(t *testing.T) {
+	tests := map[string]struct {
+		state  apiv1.BackupState
+		active bool
+	}{
+		"starting backup is active": {
+			state:  apiv1.BackupStarting,
+			active: true,
+		},
+		"running backup is active": {
+			state:  apiv1.BackupRunning,
+			active: true,
+		},
+		"suspended backup is active": {
+			state:  apiv1.BackupSuspended,
+			active: true,
+		},
+		"succeeded backup is not active": {
+			state: apiv1.BackupSucceeded,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			cluster := readDefaultCRForUpgrade("cluster1", "test-ns")
+			backup := &apiv1.PerconaServerMySQLBackup{
+				ObjectMeta: metav1.ObjectMeta{Name: "backup", Namespace: cluster.Namespace},
+				Spec:       apiv1.PerconaServerMySQLBackupSpec{ClusterName: cluster.Name},
+				Status:     apiv1.PerconaServerMySQLBackupStatus{State: tt.state},
+			}
+			r := PerconaServerMySQLReconciler{Client: fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(backup).Build()}
+
+			active, err := r.isBackupRunning(t.Context(), cluster)
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.active, active)
+		})
+	}
+}
+
 func TestSelectPrimaryCandidate(t *testing.T) {
 	now := metav1.Now()
 
