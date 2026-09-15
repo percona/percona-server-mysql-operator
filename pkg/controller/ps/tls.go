@@ -175,7 +175,7 @@ func (r *PerconaServerMySQLReconciler) ensureSSLByCertManager(ctx context.Contex
 				SecretName: secretName,
 				CommonName: cr.Name + "-ca",
 				IsCA:       true,
-				IssuerRef: cmmeta.ObjectReference{
+				IssuerRef: cmmeta.IssuerReference{
 					Name:  caIssuerName,
 					Kind:  issuerKind,
 					Group: issuerGroup,
@@ -213,7 +213,7 @@ func (r *PerconaServerMySQLReconciler) ensureSSLByCertManager(ctx context.Contex
 			SecretName: cr.Spec.SSLSecretName,
 			DNSNames:   tls.DNSNames(cr),
 			IsCA:       false,
-			IssuerRef: cmmeta.ObjectReference{
+			IssuerRef: cmmeta.IssuerReference{
 				Name:  issuerName,
 				Kind:  issuerKind,
 				Group: issuerGroup,
