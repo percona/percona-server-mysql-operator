@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -29,7 +30,7 @@ func TestGetConfig(t *testing.T) {
 	)
 
 	cr := &apiv1.PerconaServerMySQL{
-		ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: ns},
+		Name: crName, Namespace: ns,
 	}
 	name := ConfigMapName(cr)
 
@@ -191,14 +192,14 @@ func TestGetConfig(t *testing.T) {
 			}
 			if tt.configMap != nil {
 				objs = append(objs, &corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
-					Data:       map[string]string{CustomConfigKey: *tt.configMap},
+					Name: name, Namespace: ns,
+					Data: map[string]string{CustomConfigKey: *tt.configMap},
 				})
 			}
 			if tt.secret != nil {
 				objs = append(objs, &corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
-					Data:       map[string][]byte{CustomConfigKey: []byte(*tt.secret)},
+					Name: name, Namespace: ns,
+					Data: map[string][]byte{CustomConfigKey: []byte(*tt.secret)},
 				})
 			}
 

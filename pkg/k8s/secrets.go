@@ -14,8 +14,8 @@ import (
 // SecretKeySelector is a k8s helper to create SecretKeySelector object
 func SecretKeySelector(name, key string) *corev1.SecretKeySelector {
 	return &corev1.SecretKeySelector{
-		LocalObjectReference: corev1.LocalObjectReference{Name: name},
-		Key:                  key,
+		Name: name,
+		Key:  key,
 	}
 }
 

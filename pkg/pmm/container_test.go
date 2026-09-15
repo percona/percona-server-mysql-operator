@@ -5,7 +5,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
@@ -15,7 +14,7 @@ import (
 
 func TestContainer(t *testing.T) {
 	cr := &apiv1.PerconaServerMySQL{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-cluster"},
+		Name: "test-cluster",
 		Spec: apiv1.PerconaServerMySQLSpec{
 			CRVersion: version.Version(),
 			PMM: &apiv1.PMMSpec{
@@ -27,7 +26,7 @@ func TestContainer(t *testing.T) {
 	}
 
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-secret"},
+		Name: "test-secret",
 		Data: map[string][]byte{
 			string(apiv1.UserPMMServerToken): []byte("token"),
 			string(apiv1.UserMonitor):        []byte("monitor-pass"),
@@ -117,7 +116,7 @@ func TestContainer_CustomProbes(t *testing.T) {
 	}
 
 	cr := &apiv1.PerconaServerMySQL{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-cluster"},
+		Name: "test-cluster",
 		Spec: apiv1.PerconaServerMySQLSpec{
 			CRVersion: version.Version(),
 			PMM: &apiv1.PMMSpec{
@@ -142,7 +141,7 @@ func TestContainer_CustomProbes(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			secret := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{Name: "test-secret"},
+				Name: "test-secret",
 				Data: map[string][]byte{
 					string(apiv1.UserPMMServerToken): []byte("token"),
 					string(apiv1.UserMonitor):        []byte("monitor-pass"),
@@ -168,7 +167,7 @@ func TestContainer_CustomProbes(t *testing.T) {
 
 func TestCustomClusterName(t *testing.T) {
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-secret"},
+		Name: "test-secret",
 		Data: map[string][]byte{
 			string(apiv1.UserPMMServerToken): []byte("token"),
 			string(apiv1.UserMonitor):        []byte("monitor-pass"),
@@ -207,7 +206,7 @@ func TestCustomClusterName(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cr := &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{Name: tt.crName},
+				Name: tt.crName,
 				Spec: apiv1.PerconaServerMySQLSpec{
 					CRVersion: tt.crVersion,
 					PMM: &apiv1.PMMSpec{

@@ -49,10 +49,8 @@ func (r *PerconaServerMySQLReconciler) reconcileStorageAutoscaling(
 	}
 
 	sts := &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      mysql.Name(cr),
-			Namespace: cr.Namespace,
-		},
+		Name:      mysql.Name(cr),
+		Namespace: cr.Namespace,
 	}
 	if err := r.Get(ctx, client.ObjectKeyFromObject(sts), sts); err != nil {
 		if k8serrors.IsNotFound(err) {

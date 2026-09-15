@@ -148,10 +148,8 @@ func (r *PerconaServerMySQLReconciler) reconcilePersistentVolumes(ctx context.Co
 	}
 
 	sts := &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      stsName,
-			Namespace: cr.Namespace,
-		},
+		Name:      stsName,
+		Namespace: cr.Namespace,
 	}
 	if err := r.Get(ctx, client.ObjectKeyFromObject(sts), sts); err != nil {
 		if k8serrors.IsNotFound(err) {
