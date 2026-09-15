@@ -14,8 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
@@ -186,8 +184,8 @@ func TestGetConfig(t *testing.T) {
 			objs := []client.Object{}
 			if tt.autoConfig != nil {
 				objs = append(objs, &corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{Name: AutoConfigMapName(cr), Namespace: ns},
-					Data:       map[string]string{CustomConfigKey: *tt.autoConfig},
+					Name: AutoConfigMapName(cr), Namespace: ns,
+					Data: map[string]string{CustomConfigKey: *tt.autoConfig},
 				})
 			}
 			if tt.configMap != nil {
@@ -225,7 +223,7 @@ func TestHasUserConfig(t *testing.T) {
 
 	newCR := func(configuration string) *apiv1.PerconaServerMySQL {
 		cr := &apiv1.PerconaServerMySQL{
-			ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: ns},
+			Name: crName, Namespace: ns,
 		}
 		cr.Spec.MySQL.Configuration = configuration
 		return cr
@@ -298,14 +296,14 @@ func TestHasUserConfig(t *testing.T) {
 			objs := []client.Object{}
 			if tc.configMap != nil {
 				objs = append(objs, &corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{Name: cmName, Namespace: ns},
-					Data:       map[string]string{CustomConfigKey: *tc.configMap},
+					Name: cmName, Namespace: ns,
+					Data: map[string]string{CustomConfigKey: *tc.configMap},
 				})
 			}
 			if tc.secret != nil {
 				objs = append(objs, &corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{Name: cmName, Namespace: ns},
-					Data:       map[string][]byte{CustomConfigKey: []byte(*tc.secret)},
+					Name: cmName, Namespace: ns,
+					Data: map[string][]byte{CustomConfigKey: []byte(*tc.secret)},
 				})
 			}
 

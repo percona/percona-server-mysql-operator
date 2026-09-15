@@ -85,8 +85,8 @@ func TestReconcileMySQLConfig(t *testing.T) {
 
 	newAutoConfigMap := func(cr *apiv1.PerconaServerMySQL, data string) *corev1.ConfigMap {
 		return &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{Name: mysql.AutoConfigMapName(cr), Namespace: cr.Namespace},
-			Data:       map[string]string{mysql.CustomConfigKey: data},
+			Name: mysql.AutoConfigMapName(cr), Namespace: cr.Namespace,
+			Data: map[string]string{mysql.CustomConfigKey: data},
 		}
 	}
 

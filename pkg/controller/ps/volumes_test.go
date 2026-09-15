@@ -280,17 +280,15 @@ func TestStashAppliedConfig(t *testing.T) {
 
 	newCR := func() *apiv1.PerconaServerMySQL {
 		return &apiv1.PerconaServerMySQL{
-			ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: ns},
+			Name: crName, Namespace: ns,
 		}
 	}
 
 	newSTS := func(annotations map[string]string) *appsv1.StatefulSet {
 		return &appsv1.StatefulSet{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:        crName + "-mysql",
-				Namespace:   ns,
-				Annotations: annotations,
-			},
+			Name:        crName + "-mysql",
+			Namespace:   ns,
+			Annotations: annotations,
 		}
 	}
 

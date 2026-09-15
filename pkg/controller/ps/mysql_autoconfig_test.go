@@ -11,7 +11,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -34,7 +33,7 @@ func TestReconcileMySQLAutoConfig(t *testing.T) {
 
 	newCR := func(enabled bool, mysqlVersion string) *apiv1.PerconaServerMySQL {
 		cr := &apiv1.PerconaServerMySQL{
-			ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: ns},
+			Name: crName, Namespace: ns,
 		}
 		cr.Spec.CRVersion = version.Version()
 		cr.Spec.MySQL.ClusterType = apiv1.ClusterTypeGR
@@ -133,14 +132,14 @@ func TestReconcileMySQLAutoConfig(t *testing.T) {
 	userConfigTests := map[string]func(cr *apiv1.PerconaServerMySQL) client.Object{
 		"a user configmap disables the calculator": func(cr *apiv1.PerconaServerMySQL) client.Object {
 			return &corev1.ConfigMap{
-				ObjectMeta: metav1.ObjectMeta{Name: mysql.ConfigMapName(cr), Namespace: cr.Namespace},
-				Data:       map[string]string{mysql.CustomConfigKey: "[mysqld]\nsql_mode=STRICT_TRANS_TABLES\n"},
+				Name: mysql.ConfigMapName(cr), Namespace: cr.Namespace,
+				Data: map[string]string{mysql.CustomConfigKey: "[mysqld]\nsql_mode=STRICT_TRANS_TABLES\n"},
 			}
 		},
 		"a user secret disables the calculator": func(cr *apiv1.PerconaServerMySQL) client.Object {
 			return &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{Name: mysql.ConfigMapName(cr), Namespace: cr.Namespace},
-				Data:       map[string][]byte{mysql.CustomConfigKey: []byte("[mysqld]\nsql_mode=STRICT_TRANS_TABLES\n")},
+				Name: mysql.ConfigMapName(cr), Namespace: cr.Namespace,
+				Data: map[string][]byte{mysql.CustomConfigKey: []byte("[mysqld]\nsql_mode=STRICT_TRANS_TABLES\n")},
 			}
 		},
 	}
