@@ -21,6 +21,15 @@ func TestPerconaServerMySQLBackup_IsStartingDeadlineExceeded(t *testing.T) {
 		"deadline is not configured": {
 			expected: false,
 		},
+		"zero cluster deadline disables deadline": {
+			clusterDeadline: new(int64(0)),
+			expected:        false,
+		},
+		"zero backup deadline disables cluster deadline": {
+			clusterDeadline: new(int64(30)),
+			backupDeadline:  new(int64(0)),
+			expected:        false,
+		},
 		"cluster deadline is exceeded": {
 			clusterDeadline: new(int64(30)),
 			expected:        true,
@@ -76,6 +85,19 @@ func TestPerconaServerMySQLBackup_IsSuspendedDeadlineExceeded(t *testing.T) {
 			suspend:       new(true),
 			withCondition: true,
 			expected:      false,
+		},
+		"zero cluster deadline disables deadline": {
+			clusterDeadline: new(int64(0)),
+			suspend:         new(true),
+			withCondition:   true,
+			expected:        false,
+		},
+		"zero backup deadline disables cluster deadline": {
+			clusterDeadline: new(int64(30)),
+			backupDeadline:  new(int64(0)),
+			suspend:         new(true),
+			withCondition:   true,
+			expected:        false,
 		},
 		"cluster deadline is exceeded": {
 			clusterDeadline: new(int64(30)),

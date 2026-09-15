@@ -95,7 +95,7 @@ func (b *PerconaServerMySQLBackup) IsStartingDeadlineExceeded(cluster *PerconaSe
 	if b.Spec.StartingDeadlineSeconds != nil {
 		deadline = b.Spec.StartingDeadlineSeconds
 	}
-	if deadline == nil || b.CreationTimestamp.IsZero() {
+	if deadline == nil || *deadline <= 0 || b.CreationTimestamp.IsZero() {
 		return false
 	}
 
@@ -115,7 +115,7 @@ func (b *PerconaServerMySQLBackup) IsSuspendedDeadlineExceeded(cluster *PerconaS
 	if b.Spec.SuspendedDeadlineSeconds != nil {
 		deadline = b.Spec.SuspendedDeadlineSeconds
 	}
-	if deadline == nil {
+	if deadline == nil || *deadline <= 0 {
 		return false
 	}
 
