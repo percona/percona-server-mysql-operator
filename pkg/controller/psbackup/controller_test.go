@@ -605,11 +605,12 @@ func TestCheckFinalizers(t *testing.T) {
 	require.NoError(t, err)
 
 	tests := []struct {
-		name               string
-		cr                 *apiv1.PerconaServerMySQLBackup
-		expectedFinalizers []string
-		finalizerJobFail   bool
-		additionalObjs     []client.Object
+		name                string
+		cr                  *apiv1.PerconaServerMySQLBackup
+		expectedFinalizers  []string
+		finalizerJobFail    bool
+		finalizerJobMissing bool
+		additionalObjs      []client.Object
 	}{
 		{
 			name: "without finalizers",
@@ -667,6 +668,15 @@ func TestCheckFinalizers(t *testing.T) {
 				cr.Status.State = apiv1.BackupSucceeded
 			}),
 			expectedFinalizers: nil,
+		},
+		{
+			name: "with missing cluster and delete job",
+			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQLBackup) {
+				cr.Finalizers = []string{naming.FinalizerDeleteBackup}
+				cr.Status.State = apiv1.BackupSucceeded
+			}),
+			finalizerJobMissing: true,
+			expectedFinalizers:  []string{naming.FinalizerDeleteBackup},
 		},
 		{
 			name: "with successful finalizer, unknown finalizer and succeeded state",
@@ -802,7 +812,10 @@ func TestCheckFinalizers(t *testing.T) {
 			}
 			job.Status.Conditions = append(job.Status.Conditions, cond)
 
-			objs := []client.Object{cr, sec, job}
+			objs := []client.Object{cr, sec}
+			if !tt.finalizerJobMissing {
+				objs = append(objs, job)
+			}
 			objs = append(objs, tt.additionalObjs...)
 			cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).
 				WithIndex(&apiv1.PerconaServerMySQLBackup{}, "spec.clusterName", func(o client.Object) []string {
