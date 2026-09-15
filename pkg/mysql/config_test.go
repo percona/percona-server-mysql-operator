@@ -706,3 +706,228 @@ func TestCheckRedoLogFits(t *testing.T) {
 		})
 	}
 }
+
+func TestGetAutoConfigParamsLoadType(t *testing.T) {
+	cpu := resource.NewQuantity(4, resource.DecimalSI)
+	mem := resource.NewQuantity(8<<30, resource.BinarySI)
+
+	loadTypes := []apiv1.AutoConfigLoadType{
+		apiv1.AutoConfigLoadTypeMostlyReads,
+		apiv1.AutoConfigLoadTypeSomeWrites,
+		apiv1.AutoConfigLoadTypeEqualReadsWrites,
+		apiv1.AutoConfigLoadTypeHeavyWrites,
+	}
+
+	got := make(map[apiv1.AutoConfigLoadType]string, len(loadTypes))
+	for _, lt := range loadTypes {
+		params, err := GetAutoConfigParams(newAutoConfigCR(apiv1.ClusterTypeGR, lt, "8.4.8"), "8.4.8", cpu, mem)
+		require.NoErrorf(t, err, "load type %q", lt)
+		got[lt] = params
+	}
+
+	for i, a := range loadTypes {
+		for _, b := range loadTypes[i+1:] {
+			assert.NotEqualf(t, got[a], got[b], "%q and %q produced the same config", a, b)
+		}
+	}
+
+	// An unset load type falls back to someWrites.
+	unset, err := GetAutoConfigParams(newAutoConfigCR(apiv1.ClusterTypeGR, "", "8.4.8"), "8.4.8", cpu, mem)
+	require.NoError(t, err)
+	assert.Equal(t, got[apiv1.AutoConfigLoadTypeSomeWrites], unset)
+}
+
+func TestConfigurableGetConfiguration(t *testing.T) {
+	tests := map[string]struct {
+		configuration string
+		want          string
+	}{
+		"empty": {},
+		"plain config": {
+			configuration: "[mysqld]\nmax_connections=1000\n",
+			want:          "[mysqld]\nmax_connections=1000\n",
+		},
+		"template is returned unexpanded": {
+			configuration: "[mysqld]\ninnodb_buffer_pool_size={{ containerMemoryLimit }}\n",
+			want:          "[mysqld]\ninnodb_buffer_pool_size={{ containerMemoryLimit }}\n",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := &apiv1.PerconaServerMySQL{}
+			cr.Spec.MySQL.Configuration = tc.configuration
+			c := Configurable(*cr)
+
+			assert.Equal(t, tc.want, c.GetConfiguration())
+		})
+	}
+}
+
+func TestConfigurableGetResources(t *testing.T) {
+	tests := map[string]struct {
+		res corev1.ResourceRequirements
+	}{
+		"unset": {},
+		"requests only": {
+			res: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{corev1.ResourceMemory: resource.MustParse("2Gi")},
+			},
+		},
+		"requests and limits": {
+			res: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("500m"),
+					corev1.ResourceMemory: resource.MustParse("2Gi"),
+				},
+				Limits: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("2"),
+					corev1.ResourceMemory: resource.MustParse("8Gi"),
+				},
+			},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := &apiv1.PerconaServerMySQL{}
+			cr.Spec.MySQL.Resources = tc.res
+			c := Configurable(*cr)
+
+			assert.Equal(t, tc.res, c.GetResources())
+		})
+	}
+}
+
+func TestConfigurableExecuteConfigurationTemplate(t *testing.T) {
+	tests := map[string]struct {
+		input      string
+		memory     *resource.Quantity
+		want       string
+		wantErrMsg string
+	}{
+		"plain text is returned unchanged": {
+			input:  "[mysqld]\ninnodb_buffer_pool_size=128M",
+			memory: resource.NewQuantity(1<<30, resource.BinarySI),
+			want:   "[mysqld]\ninnodb_buffer_pool_size=128M",
+		},
+		"container memory limit is interpolated": {
+			input:  "innodb_buffer_pool_size={{ containerMemoryLimit }}",
+			memory: resource.NewQuantity(1<<30, resource.BinarySI),
+			want:   "innodb_buffer_pool_size=1073741824",
+		},
+		"expression over the memory limit": {
+			input:  "innodb_buffer_pool_size={{ containerMemoryLimit * 3 / 4 }}",
+			memory: resource.NewQuantity(1<<30, resource.BinarySI),
+			want:   "innodb_buffer_pool_size=805306368",
+		},
+		"unknown variable renders empty": {
+			input:  "max_connections={{ nope }}",
+			memory: resource.NewQuantity(1<<30, resource.BinarySI),
+			want:   "max_connections=",
+		},
+		"file-access tags are banned": {
+			input:      `{% include "/etc/passwd" %}`,
+			memory:     resource.NewQuantity(1<<30, resource.BinarySI),
+			wantErrMsg: "parse template",
+		},
+		"malformed template": {
+			input:      "{% if %}",
+			memory:     resource.NewQuantity(1<<30, resource.BinarySI),
+			wantErrMsg: "parse template",
+		},
+		"filter failing at render time": {
+			input:      `{{ containerMemoryLimit|date:"Y" }}`,
+			memory:     resource.NewQuantity(1<<30, resource.BinarySI),
+			wantErrMsg: "execute template",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := &apiv1.PerconaServerMySQL{}
+			c := Configurable(*cr)
+
+			got, err := c.ExecuteConfigurationTemplate(tc.input, tc.memory)
+
+			if tc.wantErrMsg != "" {
+				require.ErrorContains(t, err, tc.wantErrMsg)
+				assert.Empty(t, got)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestGetAutoTuneParams(t *testing.T) {
+	tests := map[string]struct {
+		configuration string
+		memory        string
+		want          string
+		wantErrMsg    string
+	}{
+		"pool size under 1Gi keeps the default chunk size": {
+			memory: "1Gi",
+			want:   "\ninnodb_buffer_pool_size=536870912\ninnodb_buffer_pool_chunk_size=134217728\nmax_connections=85",
+		},
+		// A pool over 1Gi is split across 8 instances, so the chunk size grows with it.
+		"pool size over 1Gi is spread over 8 instances": {
+			memory: "8Gi",
+			want:   "\ninnodb_buffer_pool_size=4294967296\ninnodb_buffer_pool_chunk_size=536870912\nmax_connections=682",
+		},
+		// 500Mi is not a multiple of the 128Mi chunk, so the pool is rounded up to 512Mi.
+		"pool size is rounded up to a chunk multiple": {
+			memory: "1000Mi",
+			want:   "\ninnodb_buffer_pool_size=536870912\ninnodb_buffer_pool_chunk_size=134217728\nmax_connections=83",
+		},
+		"user-set buffer pool size skips both pool params": {
+			configuration: "[mysqld]\ninnodb_buffer_pool_size=1G\n",
+			memory:        "1Gi",
+			want:          "\nmax_connections=85",
+		},
+		"user-set chunk size keeps the calculated pool size": {
+			configuration: "[mysqld]\ninnodb_buffer_pool_chunk_size=64M\n",
+			memory:        "1Gi",
+			want:          "\ninnodb_buffer_pool_size=536870912\nmax_connections=85",
+		},
+		"user-set max connections is not overridden": {
+			configuration: "[mysqld]\nmax_connections=1000\n",
+			memory:        "1Gi",
+			want:          "\ninnodb_buffer_pool_size=536870912\ninnodb_buffer_pool_chunk_size=134217728",
+		},
+		"lowest memory that still yields a connection": {
+			memory: "12Mi",
+			want:   "\ninnodb_buffer_pool_size=134217728\ninnodb_buffer_pool_chunk_size=134217728\nmax_connections=1",
+		},
+		"memory too small for max connections": {
+			memory:     "10Mi",
+			wantErrMsg: "not enough memory set in requests. Must be >= 12Mi",
+		},
+		// Without max_connections to calculate, the memory floor doesn't apply.
+		"memory too small but max connections is user-set": {
+			configuration: "[mysqld]\nmax_connections=1000\n",
+			memory:        "10Mi",
+			want:          "\ninnodb_buffer_pool_size=134217728\ninnodb_buffer_pool_chunk_size=134217728",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := &apiv1.PerconaServerMySQL{}
+			cr.Spec.MySQL.Configuration = tc.configuration
+			q := resource.MustParse(tc.memory)
+
+			got, err := GetAutoTuneParams(cr, &q)
+
+			if tc.wantErrMsg != "" {
+				require.EqualError(t, err, tc.wantErrMsg)
+				assert.Empty(t, got)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
