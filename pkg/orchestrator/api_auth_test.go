@@ -100,12 +100,34 @@ func TestOrchestratorAPIAuthGate(t *testing.T) {
 }
 
 func TestMySQLMonitServiceEnvironment(t *testing.T) {
-	cr := &apiv1.PerconaServerMySQL{}
-	cr.Name = "cluster1"
+	tests := []struct {
+		name               string
+		crVersion          string
+		expectedOrcService string
+	}{
+		{
+			name:               "before 1.3.0",
+			crVersion:          "1.2.0",
+			expectedOrcService: "cluster1-mysql",
+		},
+		{
+			name:               "from 1.3.0",
+			crVersion:          "1.3.0",
+			expectedOrcService: "cluster1-orc",
+		},
+	}
 
-	sidecars := sidecarContainers(cr)
-	require.Len(t, sidecars, 1)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cr := &apiv1.PerconaServerMySQL{}
+			cr.Name = "cluster1"
+			cr.Spec.CRVersion = tt.crVersion
 
-	assert.Equal(t, "cluster1-orc", envValue(t, sidecars[0].Env, "ORC_SERVICE"))
-	assert.Equal(t, "cluster1-mysql", envValue(t, sidecars[0].Env, "MYSQL_SERVICE"))
+			sidecars := sidecarContainers(cr)
+			require.Len(t, sidecars, 1)
+
+			assert.Equal(t, tt.expectedOrcService, envValue(t, sidecars[0].Env, "ORC_SERVICE"))
+			assert.Equal(t, "cluster1-mysql", envValue(t, sidecars[0].Env, "MYSQL_SERVICE"))
+		})
+	}
 }
