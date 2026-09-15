@@ -27,8 +27,8 @@ func (m *mockClientCmd) REST() restclient.Interface {
 	return nil
 }
 
-func (m *mockClientCmd) Host() string {
-	return ""
+func (m *mockClientCmd) Config() *restclient.Config {
+	return nil
 }
 
 func TestGetPVCUsage(t *testing.T) {

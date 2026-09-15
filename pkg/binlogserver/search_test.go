@@ -44,8 +44,8 @@ func (f *fakeExecClient) REST() restclient.Interface {
 	return nil
 }
 
-func (f *fakeExecClient) Host() string {
-	return ""
+func (f *fakeExecClient) Config() *restclient.Config {
+	return nil
 }
 
 func newReadyBinlogServerPod(cr *apiv1.PerconaServerMySQL) *corev1.Pod {

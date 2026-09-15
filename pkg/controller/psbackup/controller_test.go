@@ -368,7 +368,7 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 			r := PerconaServerMySQLBackupReconciler{
 				Client:           cb.Build(),
 				Scheme:           scheme,
-				ServerVersion:    &platform.ServerVersion{Platform: platform.PlatformKubernetes},
+				ServerVersion:    &platform.ServerVersion{Platform: platform.Kubernetes},
 				NewStorageClient: fakeValidateStorageClient,
 			}
 			_, err := r.Reconcile(t.Context(), controllerruntime.Request{
@@ -511,7 +511,7 @@ func TestStateDescCleanup(t *testing.T) {
 			r := PerconaServerMySQLBackupReconciler{
 				Client:        cb.Build(),
 				Scheme:        scheme,
-				ServerVersion: &platform.ServerVersion{Platform: platform.PlatformKubernetes},
+				ServerVersion: &platform.ServerVersion{Platform: platform.Kubernetes},
 			}
 
 			_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(cr)})
@@ -815,7 +815,7 @@ func TestCheckFinalizers(t *testing.T) {
 			r := PerconaServerMySQLBackupReconciler{
 				Client:        cb.Build(),
 				Scheme:        scheme,
-				ServerVersion: &platform.ServerVersion{Platform: platform.PlatformKubernetes},
+				ServerVersion: &platform.ServerVersion{Platform: platform.Kubernetes},
 			}
 
 			require.NoError(t, r.Delete(t.Context(), cr))
@@ -923,7 +923,7 @@ func TestRunningState(t *testing.T) {
 			r := PerconaServerMySQLBackupReconciler{
 				Client:        cb.Build(),
 				Scheme:        scheme,
-				ServerVersion: &platform.ServerVersion{Platform: platform.PlatformKubernetes},
+				ServerVersion: &platform.ServerVersion{Platform: platform.Kubernetes},
 				NewSidecarClient: func(srcNode string) xtrabackup.SidecarClient {
 					return tt.sidecarClient
 				},
@@ -1095,7 +1095,7 @@ func TestGetBackupSource(t *testing.T) {
 			r := PerconaServerMySQLBackupReconciler{
 				Client:        cb.Build(),
 				Scheme:        scheme,
-				ServerVersion: &platform.ServerVersion{Platform: platform.PlatformKubernetes},
+				ServerVersion: &platform.ServerVersion{Platform: platform.Kubernetes},
 			}
 
 			got, err := r.getBackupSource(ctx, tt.cr, tt.cluster)
@@ -1231,8 +1231,8 @@ func (f *fakeClientCmd) REST() restclient.Interface {
 	return nil
 }
 
-func (f *fakeClientCmd) Host() string {
-	return ""
+func (f *fakeClientCmd) Config() *restclient.Config {
+	return nil
 }
 
 func TestRenewDowntime(t *testing.T) {
@@ -1418,7 +1418,7 @@ func TestRenewDowntime(t *testing.T) {
 			r := PerconaServerMySQLBackupReconciler{
 				Client:        cb.Build(),
 				Scheme:        scheme,
-				ServerVersion: &platform.ServerVersion{Platform: platform.PlatformKubernetes},
+				ServerVersion: &platform.ServerVersion{Platform: platform.Kubernetes},
 				ClientCmd:     clientCmd,
 			}
 
@@ -1694,7 +1694,7 @@ func TestRunPostFinishTasks(t *testing.T) {
 			r := PerconaServerMySQLBackupReconciler{
 				Client:        cb.Build(),
 				Scheme:        scheme,
-				ServerVersion: &platform.ServerVersion{Platform: platform.PlatformKubernetes},
+				ServerVersion: &platform.ServerVersion{Platform: platform.Kubernetes},
 				ClientCmd:     tt.clientCmd,
 			}
 

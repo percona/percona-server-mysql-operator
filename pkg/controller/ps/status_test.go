@@ -389,7 +389,7 @@ func TestReconcileStatusAsync(t *testing.T) {
 				ClientCmd: cliCmd,
 				Recorder:  new(record.FakeRecorder),
 				ServerVersion: &platform.ServerVersion{
-					Platform: platform.PlatformKubernetes,
+					Platform: platform.Kubernetes,
 				},
 			}
 
@@ -836,7 +836,7 @@ func TestReconcileStatusHAProxyGR(t *testing.T) {
 				Client: cb.Build(),
 				Scheme: scheme,
 				ServerVersion: &platform.ServerVersion{
-					Platform: platform.PlatformKubernetes,
+					Platform: platform.Kubernetes,
 				},
 				ClientCmd: cliCmd,
 				Recorder:  new(record.FakeRecorder),
@@ -1102,7 +1102,7 @@ func TestReconcileStatusRouterGR(t *testing.T) {
 				Client: cb.Build(),
 				Scheme: scheme,
 				ServerVersion: &platform.ServerVersion{
-					Platform: platform.PlatformKubernetes,
+					Platform: platform.Kubernetes,
 				},
 				ClientCmd: cliCmd,
 				Recorder:  new(record.FakeRecorder),
@@ -1160,7 +1160,7 @@ func TestReconcileErrorStatus(t *testing.T) {
 		Scheme:   scheme,
 		Recorder: new(record.FakeRecorder),
 		ServerVersion: &platform.ServerVersion{
-			Platform: platform.PlatformKubernetes,
+			Platform: platform.Kubernetes,
 		},
 	}
 
@@ -1262,8 +1262,8 @@ func (c *fakeClient) REST() restclient.Interface {
 	return nil
 }
 
-func (c *fakeClient) Host() string {
-	return ""
+func (c *fakeClient) Config() *restclient.Config {
+	return nil
 }
 
 // fakeClientScript is an object which contains an info about executed command.
@@ -1644,7 +1644,7 @@ func TestReconcileStatusBinlogServer(t *testing.T) {
 				ClientCmd: cliCmd,
 				Recorder:  new(record.FakeRecorder),
 				ServerVersion: &platform.ServerVersion{
-					Platform: platform.PlatformKubernetes,
+					Platform: platform.Kubernetes,
 				},
 			}
 

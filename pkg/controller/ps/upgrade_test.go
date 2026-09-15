@@ -469,7 +469,7 @@ func TestSwitchOverAsync(t *testing.T) {
 			Scheme:    s,
 			ClientCmd: fc,
 			ServerVersion: &platform.ServerVersion{
-				Platform: platform.PlatformKubernetes,
+				Platform: platform.Kubernetes,
 			},
 			Recorder: new(record.FakeRecorder),
 		}
@@ -485,7 +485,7 @@ func TestSwitchOverAsync(t *testing.T) {
 			Client: cli,
 			Scheme: s,
 			ServerVersion: &platform.ServerVersion{
-				Platform: platform.PlatformKubernetes,
+				Platform: platform.Kubernetes,
 			},
 			Recorder: new(record.FakeRecorder),
 		}
@@ -518,7 +518,7 @@ func TestSwitchOverAsync(t *testing.T) {
 			Scheme:    s,
 			ClientCmd: fc,
 			ServerVersion: &platform.ServerVersion{
-				Platform: platform.PlatformKubernetes,
+				Platform: platform.Kubernetes,
 			},
 			Recorder: new(record.FakeRecorder),
 		}
@@ -542,7 +542,7 @@ func TestSwitchOverAsync(t *testing.T) {
 			Scheme:    s,
 			ClientCmd: fc,
 			ServerVersion: &platform.ServerVersion{
-				Platform: platform.PlatformKubernetes,
+				Platform: platform.Kubernetes,
 			},
 			Recorder: new(record.FakeRecorder),
 		}
@@ -652,7 +652,7 @@ func TestSwitchOverAndWait(t *testing.T) {
 			Scheme:    s,
 			ClientCmd: fc,
 			ServerVersion: &platform.ServerVersion{
-				Platform: platform.PlatformKubernetes,
+				Platform: platform.Kubernetes,
 			},
 			Recorder: new(record.FakeRecorder),
 		}
@@ -760,7 +760,7 @@ func TestSwitchOverAndWait(t *testing.T) {
 			Scheme:    s,
 			ClientCmd: fc,
 			ServerVersion: &platform.ServerVersion{
-				Platform: platform.PlatformKubernetes,
+				Platform: platform.Kubernetes,
 			},
 			Recorder: new(record.FakeRecorder),
 		}

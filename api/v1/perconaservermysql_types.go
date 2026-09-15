@@ -1350,7 +1350,7 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 	}
 
 	var fsgroup *int64
-	if serverVersion != nil && serverVersion.Platform != platform.PlatformOpenshift {
+	if serverVersion != nil && serverVersion.Platform != platform.Openshift {
 		var tp int64 = 1001
 		fsgroup = &tp
 	}
