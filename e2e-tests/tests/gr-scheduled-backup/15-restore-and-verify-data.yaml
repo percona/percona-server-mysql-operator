@@ -15,7 +15,7 @@ commands:
         .items
         | sort_by([.metadata.creationTimestamp, .metadata.name])
         | map(select(.status.state == "Succeeded"))
-        | map(select(.spec.storageName == "s3"))
+        | map(select(.spec.storageName == "local-s3"))
         | .[0].metadata.name // ""
       ')
 

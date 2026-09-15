@@ -19,5 +19,5 @@ commands:
           | yq eval '.kind = "PerconaServerMySQLBackup"' - \
           | yq eval '.metadata.name = "async-pitr-s3-backup-2"' - \
           | yq eval ".spec.clusterName = \"${cluster_name}\"" - \
-          | yq eval '.spec.storageName = "s3"' - \
+          | yq eval '.spec.storageName = "local-s3"' - \
           | kubectl apply -n "${NAMESPACE}" -f -

@@ -6,4 +6,4 @@ metadata:
     - percona.com/delete-backup
 spec:
   clusterName: async-data-at-rest-encryption
-  storageName: s3
+  storageName: local-s3

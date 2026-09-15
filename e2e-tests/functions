@@ -355,7 +355,7 @@ has_s3_storage() {
 	local has_s3="$(yq eval '
 		(.spec.backup.storages // {})
 		| keys
-		| map(select(test("^s3")))
+		| map(select(test("^local-s3")))
 		| length > 0
 	' "$cr")"
 

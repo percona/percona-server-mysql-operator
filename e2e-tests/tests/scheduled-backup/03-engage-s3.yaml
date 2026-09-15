@@ -8,4 +8,4 @@ spec:
     - keep: 3
       name: s3
       schedule: '*/3 * * * *'
-      storageName: s3
+      storageName: local-s3

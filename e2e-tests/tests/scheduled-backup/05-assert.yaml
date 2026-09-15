@@ -69,7 +69,7 @@ metadata:
     percona.com/cluster: scheduled-backup
 spec:
   clusterName: scheduled-backup
-  storageName: s3
+  storageName: local-s3
 status:
   state: Succeeded
 ---
@@ -84,6 +84,6 @@ metadata:
     percona.com/cluster: scheduled-backup
 spec:
   clusterName: scheduled-backup
-  storageName: s3
+  storageName: local-s3
 status:
   state: Succeeded

@@ -4,4 +4,4 @@ metadata:
   name: gr-one-pod-s3
 spec:
   clusterName: gr-one-pod
-  storageName: s3
+  storageName: local-s3

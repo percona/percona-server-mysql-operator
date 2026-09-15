@@ -4,4 +4,4 @@ metadata:
   name: gr-security-context-s3
 spec:
   clusterName: gr-security-context
-  storageName: s3
+  storageName: local-s3

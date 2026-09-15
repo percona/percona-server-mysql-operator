@@ -4,4 +4,4 @@ metadata:
   name: gr-pitr-s3-backup
 spec:
   clusterName: gr-pitr-s3
-  storageName: s3
+  storageName: local-s3

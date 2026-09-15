@@ -4,4 +4,4 @@ metadata:
   name: async-pitr-s3-backup
 spec:
   clusterName: async-pitr-s3
-  storageName: s3
+  storageName: local-s3

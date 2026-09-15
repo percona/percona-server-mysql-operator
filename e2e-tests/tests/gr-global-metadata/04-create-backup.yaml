@@ -6,4 +6,4 @@ metadata:
     - percona.com/delete-backup
 spec:
   clusterName: gr-global-metadata
-  storageName: s3
+  storageName: local-s3

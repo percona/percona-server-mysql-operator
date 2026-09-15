@@ -24,7 +24,7 @@ spec:
 
   backup:
     storages:
-      s3:
+      local-s3:
         type: s3
         s3:
           bucket: operator-testing

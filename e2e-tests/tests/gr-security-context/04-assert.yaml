@@ -12,7 +12,7 @@ metadata:
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: xtrabackup
     app.kubernetes.io/part-of: percona-server-backup
-  name: xb-gr-security-context-s3-s3
+  name: xb-gr-security-context-s3-local-s3
 spec:
   backoffLimit: 6
   completionMode: NonIndexed
@@ -27,7 +27,7 @@ spec:
         app.kubernetes.io/managed-by: percona-server-mysql-operator
         app.kubernetes.io/name: xtrabackup
         app.kubernetes.io/part-of: percona-server-backup
-        job-name: xb-gr-security-context-s3-s3
+        job-name: xb-gr-security-context-s3-local-s3
     spec:
       containers:
       - command:

@@ -4,4 +4,4 @@ metadata:
   name: one-pod-s3
 spec:
   clusterName: one-pod
-  storageName: s3
+  storageName: local-s3
