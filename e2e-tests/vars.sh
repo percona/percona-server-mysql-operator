@@ -12,7 +12,7 @@ export VERSION=${VERSION:-$(echo "${GIT_BRANCH}" | sed -e 's^/^-^g; s^[.]^-^g;' 
 
 export PMM_SERVER_VERSION=${PMM_SERVER_VERSION:-"1.4.3"}
 export CERT_MANAGER_VER="1.20.3"
-export MINIO_VER="5.4.0"
+export SEAWEEDFS_VER="4.47.0"
 export CHAOS_MESH_VER="2.7.2"
 export VAULT_VER="0.16.1"
 

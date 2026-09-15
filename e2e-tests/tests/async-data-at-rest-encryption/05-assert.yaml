@@ -8,6 +8,6 @@ metadata:
   name: backup1
 spec:
   clusterName: async-data-at-rest-encryption
-  storageName: minio
+  storageName: s3
 status:
   state: Succeeded

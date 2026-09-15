@@ -6,6 +6,6 @@ spec:
   backup:
     schedule:
     - keep: 1
-      name: minio
+      name: s3
       schedule: ''
-      storageName: minio
+      storageName: s3

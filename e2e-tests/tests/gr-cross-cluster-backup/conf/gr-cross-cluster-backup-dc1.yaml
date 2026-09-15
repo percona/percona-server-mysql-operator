@@ -6,12 +6,12 @@ spec:
   backup:
     backoffLimit: 3
     storages:
-      minio:
+      s3:
         type: s3
         s3:
           bucket: operator-testing
-          credentialsSecret: minio-secret
-          endpointUrl: http://minio-service.<namespace>:9000
+          credentialsSecret: s3-secret
+          endpointUrl: http://s3-storage-all-in-one.<namespace>:8333
           region: us-east-1
         containerOptions:
           env:

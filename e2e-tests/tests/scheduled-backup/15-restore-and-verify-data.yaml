@@ -15,12 +15,12 @@ commands:
         .items
         | sort_by([.metadata.creationTimestamp, .metadata.name])
         | map(select(.status.state == "Succeeded"))
-        | map(select(.spec.storageName == "minio"))
+        | map(select(.spec.storageName == "s3"))
         | .[0].metadata.name // ""
       ')
 
       if [[ -z "${backup_name}" ]]; then
-        echo "No succeeded minio backups found to restore"
+        echo "No succeeded s3 backups found to restore"
         exit 1
       fi
 

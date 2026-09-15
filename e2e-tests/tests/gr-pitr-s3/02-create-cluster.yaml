@@ -1,0 +1,39 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 10
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      get_cr \
+          | yq eval '.spec.mysql.clusterType="group-replication"' - \
+          | yq eval ".spec.mysql.size=3" - \
+          | yq eval ".spec.proxy.haproxy.enabled=false" - \
+          | yq eval ".spec.proxy.router.enabled=true" - \
+          | yq eval ".spec.proxy.router.size=3" - \
+          | yq eval ".spec.backup.backoffLimit=3" - \
+          | yq eval '.spec.backup.storages.s3.type="s3"' - \
+          | yq eval '.spec.backup.storages.s3.s3.bucket="operator-testing"' - \
+          | yq eval '.spec.backup.storages.s3.s3.credentialsSecret="s3-secret"' - \
+          | yq eval ".spec.backup.storages.s3.s3.endpointUrl=\"https://s3-storage-all-in-one.${NAMESPACE}:8443\"" - \
+          | yq eval '.spec.backup.storages.s3.s3.region="us-east-1"' - \
+          | yq eval '.spec.backup.storages.s3.s3.caBundle.name="s3-ca-bundle"' - \
+          | yq eval '.spec.backup.storages.s3.s3.caBundle.key="ca.crt"' - \
+          | yq eval '.spec.backup.pitr.enabled=true' - \
+          | yq eval '.spec.backup.pitr.binlogServer.size=1' - \
+          | yq eval '.spec.backup.pitr.binlogServer.storage.s3.bucket="operator-testing"' - \
+          | yq eval '.spec.backup.pitr.binlogServer.storage.s3.prefix="binlogs"' - \
+          | yq eval '.spec.backup.pitr.binlogServer.storage.s3.credentialsSecret="s3-secret"' - \
+          | yq eval ".spec.backup.pitr.binlogServer.storage.s3.endpointUrl=\"https://s3-storage-all-in-one.${NAMESPACE}:8443\"" - \
+          | yq eval '.spec.backup.pitr.binlogServer.storage.s3.region="us-east-1"' - \
+          | yq eval '.spec.backup.pitr.binlogServer.storage.s3.caBundle.name="s3-ca-bundle"' - \
+          | yq eval '.spec.backup.pitr.binlogServer.storage.s3.caBundle.key="ca.crt"' - \
+          | yq eval '.spec.backup.pitr.binlogServer.connectTimeout=10' - \
+          | yq eval '.spec.backup.pitr.binlogServer.readTimeout=10' - \
+          | yq eval '.spec.backup.pitr.binlogServer.writeTimeout=10' - \
+          | yq eval '.spec.backup.pitr.binlogServer.idleTime=3' - \
+          | yq eval '.spec.backup.pitr.binlogServer.logLevel="debug"' - \
+          | kubectl -n "${NAMESPACE}" apply -f -

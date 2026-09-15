@@ -8,7 +8,7 @@ commands:
           (
             .spec.backup.storages
             | keys
-            | map(select(. != "minio"))
+            | map(select(. != "s3"))
             | .[2] // ""
           ) as $storage
           | .spec.backup.schedule = [{
