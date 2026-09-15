@@ -724,7 +724,7 @@ func TestGetTLSHash(t *testing.T) {
 
 	newCR := func(crVersion string) *apiv1.PerconaServerMySQL {
 		return &apiv1.PerconaServerMySQL{
-			ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: ns},
+			Name: crName, Namespace: ns,
 			Spec: apiv1.PerconaServerMySQLSpec{
 				CRVersion:     crVersion,
 				SSLSecretName: sslSecret,
@@ -741,8 +741,8 @@ func TestGetTLSHash(t *testing.T) {
 		data[naming.TLSKeyKey] = []byte(key)
 
 		return &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: sslSecret, Namespace: ns},
-			Data:       data,
+			Name: sslSecret, Namespace: ns,
+			Data: data,
 		}
 	}
 

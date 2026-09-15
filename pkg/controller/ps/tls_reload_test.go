@@ -47,7 +47,7 @@ func TestReconcileTLSReload(t *testing.T) {
 
 	newCR := func(crVersion string, state apiv1.StatefulAppState, paused bool) *apiv1.PerconaServerMySQL {
 		return &apiv1.PerconaServerMySQL{
-			ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: ns},
+			Name: crName, Namespace: ns,
 			Spec: apiv1.PerconaServerMySQLSpec{
 				CRVersion:     crVersion,
 				SSLSecretName: sslSecret,
@@ -68,11 +68,9 @@ func TestReconcileTLSReload(t *testing.T) {
 		}
 
 		return &appsv1.StatefulSet{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:        mysql.Name(cr),
-				Namespace:   cr.Namespace,
-				Annotations: annotations,
-			},
+			Name:        mysql.Name(cr),
+			Namespace:   cr.Namespace,
+			Annotations: annotations,
 			Spec: appsv1.StatefulSetSpec{
 				Selector: &metav1.LabelSelector{MatchLabels: mysql.MatchLabels(cr)},
 				Template: corev1.PodTemplateSpec{
@@ -84,7 +82,7 @@ func TestReconcileTLSReload(t *testing.T) {
 
 	newTLSSecret := func(cert, key string) client.Object {
 		return &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: sslSecret, Namespace: ns},
+			Name: sslSecret, Namespace: ns,
 			Data: map[string][]byte{
 				naming.TLSCAKey:   []byte(caPEM),
 				naming.TLSCertKey: []byte(cert),
@@ -95,8 +93,8 @@ func TestReconcileTLSReload(t *testing.T) {
 
 	newInternalSecret := func() client.Object {
 		return &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: "internal-" + crName, Namespace: ns},
-			Data:       map[string][]byte{string(apiv1.UserOperator): []byte(operatorPass)},
+			Name: "internal-" + crName, Namespace: ns,
+			Data: map[string][]byte{string(apiv1.UserOperator): []byte(operatorPass)},
 		}
 	}
 
@@ -110,12 +108,10 @@ func TestReconcileTLSReload(t *testing.T) {
 		objs := make([]client.Object, 0, count)
 		for i := range count {
 			objs = append(objs, &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      podName(i),
-					Namespace: ns,
-					Labels:    mysql.MatchLabels(cr),
-				},
-				Status: corev1.PodStatus{Phase: corev1.PodRunning},
+				Name:      podName(i),
+				Namespace: ns,
+				Labels:    mysql.MatchLabels(cr),
+				Status:    corev1.PodStatus{Phase: corev1.PodRunning},
 			})
 		}
 		return objs
@@ -188,8 +184,8 @@ func TestReconcileTLSReload(t *testing.T) {
 		"secret without a certificate is ignored": {
 			state: apiv1.StateReady,
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{Name: sslSecret, Namespace: ns},
-				Data:       map[string][]byte{naming.TLSCAKey: []byte(caPEM)},
+				Name: sslSecret, Namespace: ns,
+				Data: map[string][]byte{naming.TLSCAKey: []byte(caPEM)},
 			},
 			lastReloaded: leafHash(oldCertPEM, oldKeyPEM),
 			expectedHash: leafHash(oldCertPEM, oldKeyPEM),
