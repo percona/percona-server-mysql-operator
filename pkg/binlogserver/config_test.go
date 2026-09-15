@@ -6,7 +6,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -39,20 +38,20 @@ func TestGetConfigurationEncryption(t *testing.T) {
 
 	cl := newConfigTestClient(t,
 		&corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: "s3-creds-secret", Namespace: "ns"},
+			Name: "s3-creds-secret", Namespace: "ns",
 			Data: map[string][]byte{
 				secret.CredentialsAWSAccessKey: []byte("access-key"),
 				secret.CredentialsAWSSecretKey: []byte("secret-key"),
 			},
 		},
 		&corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: cr.InternalSecretName(), Namespace: "ns"},
+			Name: cr.InternalSecretName(), Namespace: "ns",
 			Data: map[string][]byte{
 				string(apiv1.UserReplication): []byte("replication-pass"),
 			},
 		},
 		&corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: "keyring-secret", Namespace: "ns"},
+			Name: "keyring-secret", Namespace: "ns",
 			Data: map[string][]byte{
 				"keyring.json": []byte(`{"version":1,"keys":[{"id":"alpha","cipher":"AES-256-ECB","data_hex":"0000000000000000000000000000000000000000000000000000000000000000"}]}`),
 			},
@@ -155,8 +154,8 @@ func TestGetConfigurationEncryptionValidation(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			cl := newConfigTestClient(t,
 				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{Name: "keyring-secret", Namespace: "ns"},
-					Data:       tt.keyringData,
+					Name: "keyring-secret", Namespace: "ns",
+					Data: tt.keyringData,
 				},
 			)
 

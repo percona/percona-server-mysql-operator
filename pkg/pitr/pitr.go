@@ -42,16 +42,12 @@ func BinlogsConfigMap(cluster *apiv1.PerconaServerMySQL, restore *apiv1.PerconaS
 	labels := util.SSMapMerge(cluster.GlobalLabels(), restore.Labels(appName, naming.ComponentPITR))
 
 	return &corev1.ConfigMap{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "ConfigMap",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        binlogsConfigMapName(restore),
-			Namespace:   cluster.Namespace,
-			Labels:      labels,
-			Annotations: cluster.GlobalAnnotations(),
-		},
+		APIVersion:  "v1",
+		Kind:        "ConfigMap",
+		Name:        binlogsConfigMapName(restore),
+		Namespace:   cluster.Namespace,
+		Labels:      labels,
+		Annotations: cluster.GlobalAnnotations(),
 	}
 }
 
@@ -81,16 +77,12 @@ func RestoreJob(
 	pvcName := fmt.Sprintf("%s-%s-mysql-0", mysql.DataVolumeName, cluster.Name)
 
 	job := &batchv1.Job{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "batch/v1",
-			Kind:       "Job",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        JobName(restore),
-			Namespace:   cluster.Namespace,
-			Labels:      labels,
-			Annotations: util.SSMapMerge(cluster.GlobalAnnotations(), restore.Annotations, storage.Annotations),
-		},
+		APIVersion:  "batch/v1",
+		Kind:        "Job",
+		Name:        JobName(restore),
+		Namespace:   cluster.Namespace,
+		Labels:      labels,
+		Annotations: util.SSMapMerge(cluster.GlobalAnnotations(), restore.Annotations, storage.Annotations),
 		Spec: batchv1.JobSpec{
 			Parallelism: new(int32(1)),
 			Completions: new(int32(1)),
@@ -141,43 +133,31 @@ func RestoreJob(
 					SecurityContext:           storage.PodSecurityContext,
 					Volumes: []corev1.Volume{
 						{
-							Name: apiv1.BinVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								EmptyDir: &corev1.EmptyDirVolumeSource{},
-							},
+							Name:     apiv1.BinVolumeName,
+							EmptyDir: &corev1.EmptyDirVolumeSource{},
 						},
 						{
 							Name: dataVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-									ClaimName: pvcName,
-								},
+							PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+								ClaimName: pvcName,
 							},
 						},
 						{
 							Name: credsVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								Secret: &corev1.SecretVolumeSource{
-									SecretName: cluster.Spec.SecretsName,
-								},
+							Secret: &corev1.SecretVolumeSource{
+								SecretName: cluster.Spec.SecretsName,
 							},
 						},
 						{
 							Name: tlsVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								Secret: &corev1.SecretVolumeSource{
-									SecretName: cluster.Spec.SSLSecretName,
-								},
+							Secret: &corev1.SecretVolumeSource{
+								SecretName: cluster.Spec.SSLSecretName,
 							},
 						},
 						{
 							Name: binlogsVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								ConfigMap: &corev1.ConfigMapVolumeSource{
-									LocalObjectReference: corev1.LocalObjectReference{
-										Name: binlogsConfigMapName(restore),
-									},
-								},
+							ConfigMap: &corev1.ConfigMapVolumeSource{
+								Name: binlogsConfigMapName(restore),
 							},
 						},
 					},
@@ -198,10 +178,8 @@ func RestoreJob(
 	if keyringSecretRef := getKeyringSecretRef(cluster, restore); keyringSecretRef != nil {
 		job.Spec.Template.Spec.Volumes = append(job.Spec.Template.Spec.Volumes, corev1.Volume{
 			Name: keyringVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: keyringSecretRef.Name,
-				},
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: keyringSecretRef.Name,
 			},
 		})
 	}
@@ -211,11 +189,9 @@ func RestoreJob(
 	if cluster.Spec.MySQL.VaultSecretName != "" {
 		job.Spec.Template.Spec.Volumes = append(job.Spec.Template.Spec.Volumes, corev1.Volume{
 			Name: vaultSecretVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: cluster.Spec.MySQL.VaultSecretName,
-					Optional:   new(true),
-				},
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: cluster.Spec.MySQL.VaultSecretName,
+				Optional:   new(true),
 			},
 		})
 	}
