@@ -314,8 +314,6 @@ func apiProbe(cr *apiv1.PerconaServerMySQL, path string, initialDelay int32) *co
 }
 
 func sidecarContainers(cr *apiv1.PerconaServerMySQL) []corev1.Container {
-	serviceName := mysql.ServiceName(cr)
-
 	addNodesScript := "/usr/bin/add_mysql_nodes.sh"
 	if cr.CompareVersion("1.2.0") >= 0 {
 		addNodesScript = "/opt/percona/orc-add_mysql_nodes.sh"
@@ -329,11 +327,11 @@ func sidecarContainers(cr *apiv1.PerconaServerMySQL) []corev1.Container {
 			Env: append([]corev1.EnvVar{
 				{
 					Name:  "ORC_SERVICE",
-					Value: serviceName,
+					Value: ServiceName(cr),
 				},
 				{
 					Name:  "MYSQL_SERVICE",
-					Value: serviceName,
+					Value: mysql.ServiceName(cr),
 				},
 			}, apiAuthEnv(cr)...),
 			VolumeMounts: containerMounts(),

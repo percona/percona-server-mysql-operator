@@ -20,6 +20,17 @@ func hasEnv(env []corev1.EnvVar, name string) bool {
 	return false
 }
 
+func envValue(t *testing.T, env []corev1.EnvVar, name string) string {
+	t.Helper()
+	for _, e := range env {
+		if e.Name == name {
+			return e.Value
+		}
+	}
+	require.Fail(t, "environment variable not found", "name: %s", name)
+	return ""
+}
+
 func onChangeArg(t *testing.T, args []string) string {
 	t.Helper()
 	for _, a := range args {
@@ -86,4 +97,15 @@ func TestOrchestratorAPIAuthGate(t *testing.T) {
 			assert.Falsef(t, hasEnv(s.Env, "ORC_API_AUTH"), "sidecar %s must not set ORC_API_AUTH for crVersion < 1.2.0", s.Name)
 		}
 	})
+}
+
+func TestMySQLMonitServiceEnvironment(t *testing.T) {
+	cr := &apiv1.PerconaServerMySQL{}
+	cr.Name = "cluster1"
+
+	sidecars := sidecarContainers(cr)
+	require.Len(t, sidecars, 1)
+
+	assert.Equal(t, "cluster1-orc", envValue(t, sidecars[0].Env, "ORC_SERVICE"))
+	assert.Equal(t, "cluster1-mysql", envValue(t, sidecars[0].Env, "MYSQL_SERVICE"))
 }
