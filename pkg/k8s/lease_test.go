@@ -25,11 +25,9 @@ func TestAcquireLease(t *testing.T) {
 		require.NoError(t, apiv1.AddToScheme(scheme))
 		cl := fake.NewClientBuilder().WithScheme(scheme).Build()
 		restore := &apiv1.PerconaServerMySQLRestore{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "restore1",
-				Namespace: "ns",
-				UID:       "restore1-uid",
-			},
+			Name:      "restore1",
+			Namespace: "ns",
+			UID:       "restore1-uid",
 			Spec: apiv1.PerconaServerMySQLRestoreSpec{
 				ClusterName: "cluster1",
 			},
@@ -54,10 +52,8 @@ func TestAcquireLease(t *testing.T) {
 		require.NoError(t, clientgoscheme.AddToScheme(scheme))
 		require.NoError(t, apiv1.AddToScheme(scheme))
 		cl := fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(&coordv1.Lease{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "restore-lock-cluster1",
-				Namespace: "ns",
-			},
+			Name:      "restore-lock-cluster1",
+			Namespace: "ns",
 			Spec: coordv1.LeaseSpec{
 				HolderIdentity:       new(naming.LeaseHolderName("restore1", "restore1-uid")),
 				LeaseDurationSeconds: new(int32(30)),
@@ -67,11 +63,9 @@ func TestAcquireLease(t *testing.T) {
 		}).Build()
 
 		restore := &apiv1.PerconaServerMySQLRestore{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "restore2",
-				Namespace: "ns",
-				UID:       "restore2-uid",
-			},
+			Name:      "restore2",
+			Namespace: "ns",
+			UID:       "restore2-uid",
 			Spec: apiv1.PerconaServerMySQLRestoreSpec{
 				ClusterName: "cluster1",
 			},
@@ -96,10 +90,8 @@ func TestAcquireLease(t *testing.T) {
 		require.NoError(t, clientgoscheme.AddToScheme(scheme))
 		require.NoError(t, apiv1.AddToScheme(scheme))
 		cl := fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(&coordv1.Lease{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "restore-lock-cluster1",
-				Namespace: "ns",
-			},
+			Name:      "restore-lock-cluster1",
+			Namespace: "ns",
 			Spec: coordv1.LeaseSpec{
 				HolderIdentity:       new(naming.LeaseHolderName("restore1", "restore1-uid")),
 				LeaseDurationSeconds: new(int32(30)),
@@ -124,11 +116,9 @@ func TestAcquireLease(t *testing.T) {
 func TestReleaseLease(t *testing.T) {
 	now := time.Now()
 	restore := &apiv1.PerconaServerMySQLRestore{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "restore1",
-			Namespace: "ns",
-			UID:       "restore1-uid",
-		},
+		Name:      "restore1",
+		Namespace: "ns",
+		UID:       "restore1-uid",
 		Spec: apiv1.PerconaServerMySQLRestoreSpec{
 			ClusterName: "cluster1",
 		},
@@ -141,10 +131,8 @@ func TestReleaseLease(t *testing.T) {
 	require.NoError(t, clientgoscheme.AddToScheme(scheme))
 	require.NoError(t, apiv1.AddToScheme(scheme))
 	cl := fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(&coordv1.Lease{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "restore-lock-cluster1",
-			Namespace: "ns",
-		},
+		Name:      "restore-lock-cluster1",
+		Namespace: "ns",
 		Spec: coordv1.LeaseSpec{
 			HolderIdentity:       new(naming.LeaseHolderName(restore.Name, string(restore.UID))),
 			LeaseDurationSeconds: new(int32(30)),
@@ -166,10 +154,8 @@ func TestReleaseLease(t *testing.T) {
 		require.NoError(t, clientgoscheme.AddToScheme(scheme))
 		require.NoError(t, apiv1.AddToScheme(scheme))
 		cl := fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(&coordv1.Lease{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "restore-lock-cluster1",
-				Namespace: "ns",
-			},
+			Name:      "restore-lock-cluster1",
+			Namespace: "ns",
 			Spec: coordv1.LeaseSpec{
 				HolderIdentity:       new(naming.LeaseHolderName("restore1", "restore1-uid")),
 				LeaseDurationSeconds: new(int32(30)),

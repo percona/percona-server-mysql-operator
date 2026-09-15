@@ -48,17 +48,13 @@ func main() {
 
 func printCluster(ctx context.Context) error {
 	cr := &apiv1.PerconaServerMySQL{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "PerconaServerMySQL",
-			APIVersion: "ps.percona.com/v1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: defaults.NameCluster,
-			Finalizers: []string{
-				"percona.com/delete-mysql-pods-in-order",
-				"percona.com/delete-ssl",
-				"percona.com/delete-mysql-pvc",
-			},
+		Kind:       "PerconaServerMySQL",
+		APIVersion: "ps.percona.com/v1",
+		Name:       defaults.NameCluster,
+		Finalizers: []string{
+			"percona.com/delete-mysql-pods-in-order",
+			"percona.com/delete-ssl",
+			"percona.com/delete-mysql-pvc",
 		},
 		Spec: apiv1.PerconaServerMySQLSpec{
 			Backup: &apiv1.BackupSpec{
@@ -116,15 +112,11 @@ func printCluster(ctx context.Context) error {
 
 func printBackup() error {
 	cr := &apiv1.PerconaServerMySQLBackup{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "PerconaServerMySQLBackup",
-			APIVersion: "ps.percona.com/v1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: defaults.NameBackup,
-			Finalizers: []string{
-				"percona.com/delete-backup",
-			},
+		Kind:       "PerconaServerMySQLBackup",
+		APIVersion: "ps.percona.com/v1",
+		Name:       defaults.NameBackup,
+		Finalizers: []string{
+			"percona.com/delete-backup",
 		},
 		Spec: apiv1.PerconaServerMySQLBackupSpec{
 			ClusterName:               defaults.NameCluster,
@@ -156,13 +148,9 @@ func printBackup() error {
 
 func printRestore() error {
 	cr := &apiv1.PerconaServerMySQLRestore{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "PerconaServerMySQLRestore",
-			APIVersion: "ps.percona.com/v1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: defaults.NameRestore,
-		},
+		Kind:       "PerconaServerMySQLRestore",
+		APIVersion: "ps.percona.com/v1",
+		Name:       defaults.NameRestore,
 		Spec: apiv1.PerconaServerMySQLRestoreSpec{
 			ClusterName: defaults.NameCluster,
 			BackupName:  defaults.NameBackup,
@@ -188,12 +176,8 @@ func printRestore() error {
 						WriteTimeout:   30,
 						IdleTime:       30,
 						LogLevel:       "info",
-						PodSpec: apiv1.PodSpec{
-							Size: 1,
-							ContainerSpec: apiv1.ContainerSpec{
-								Image: defaults.ImageBinlogServer,
-							},
-						},
+						Size:           1,
+						Image:          defaults.ImageBinlogServer,
 					},
 				},
 				Type: apiv1.PITRDate,
