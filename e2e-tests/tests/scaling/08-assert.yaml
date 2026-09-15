@@ -8,10 +8,10 @@ metadata:
   name: scaling-mysql
 status:
   observedGeneration: 3
-  replicas: 3
-  readyReplicas: 3
-  currentReplicas: 3
-  updatedReplicas: 3
+  replicas: 2
+  readyReplicas: 2
+  currentReplicas: 2
+  updatedReplicas: 2
   collisionCount: 0
 ---
 kind: StatefulSet
@@ -34,8 +34,8 @@ metadata:
     - percona.com/delete-mysql-pods-in-order
 status:
   mysql:
-    ready: 3
-    size: 3
+    ready: 2
+    size: 2
     state: ready
   orchestrator:
     ready: 3
@@ -57,7 +57,7 @@ metadata:
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: mysql
     app.kubernetes.io/part-of: percona-server
-  name: datadir-scaling-mysql-3
+  name: datadir-scaling-mysql-2
 spec:
   accessModes:
   - ReadWriteOnce
@@ -86,7 +86,7 @@ metadata:
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: mysql
     app.kubernetes.io/part-of: percona-server
-  name: datadir-scaling-mysql-4
+  name: datadir-scaling-mysql-3
 spec:
   accessModes:
   - ReadWriteOnce

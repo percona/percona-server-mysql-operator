@@ -453,8 +453,12 @@ func (r *PerconaServerMySQLRestoreReconciler) reconcileBackupSourceBinlogServer(
 
 	sts := binlogserver.StatefulSet(cluster, spec, binlogserver.RestoreMatchLabels(cluster, cr), initImage, fmt.Sprintf("%x", md5.Sum(configBytes)), binlogserver.RestoreConfigSecretName(cluster, cr))
 	sts.Name = binlogserver.RestoreName(cluster, cr)
-	sts.Spec.Template.Spec.Containers[0].Command = []string{"sleep"}
-	sts.Spec.Template.Spec.Containers[0].Args = []string{"infinity"}
+	if spec.Storage.S3 != nil && spec.Storage.S3.CABundle != nil && cluster.CompareVersion("1.3.0") >= 0 {
+		sts.Spec.Template.Spec.Containers[0].Args = []string{"sleep", "infinity"}
+	} else {
+		sts.Spec.Template.Spec.Containers[0].Command = []string{"sleep"}
+		sts.Spec.Template.Spec.Containers[0].Args = []string{"infinity"}
+	}
 	sts.Spec.Template.Spec.TerminationGracePeriodSeconds = new(int64(5))
 
 	err = k8s.EnsureObjectWithHash(ctx, r.Client, cr, sts, r.Scheme)

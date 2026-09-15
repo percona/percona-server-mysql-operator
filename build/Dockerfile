@@ -94,6 +94,7 @@ COPY build/orc-add_mysql_nodes.sh /opt/percona-server-mysql-operator/orc-add_mys
 COPY build/ps-init-entrypoint.sh /opt/percona-server-mysql-operator/ps-init-entrypoint.sh
 COPY build/run-backup.sh /opt/percona-server-mysql-operator/run-backup.sh
 COPY build/run-restore.sh /opt/percona-server-mysql-operator/run-restore.sh
+COPY build/prepare-s3-certs.sh /opt/percona-server-mysql-operator/prepare-s3-certs.sh
 COPY build/haproxy-entrypoint.sh /opt/percona-server-mysql-operator/haproxy-entrypoint.sh
 COPY build/haproxy_add_mysql_nodes.sh /opt/percona-server-mysql-operator/haproxy_add_mysql_nodes.sh
 COPY build/haproxy_check_primary.sh /opt/percona-server-mysql-operator/haproxy_check_primary.sh

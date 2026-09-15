@@ -9,4 +9,3 @@ metadata:
 data:
   scaling-mysql-0.scaling-mysql: "100500"
   scaling-mysql-1.scaling-mysql: "100500"
-  scaling-mysql-2.scaling-mysql: "100500"

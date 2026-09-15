@@ -1,0 +1,13 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 10
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      # Unpause the primary (dc2). It will FCC-recover its own InnoDB Cluster,
+      # but dc1's replication channel will remain broken.
+      kubectl patch -n "${NAMESPACE}" ps gr-cross-cluster-dc2 --type=merge \
+        -p '{"spec":{"pause":false}}'
+

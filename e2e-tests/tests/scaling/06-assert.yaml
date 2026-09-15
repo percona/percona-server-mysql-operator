@@ -8,10 +8,10 @@ metadata:
   name: scaling-mysql
 status:
   observedGeneration: 2
-  replicas: 5
-  readyReplicas: 5
-  currentReplicas: 5
-  updatedReplicas: 5
+  replicas: 4
+  readyReplicas: 4
+  currentReplicas: 4
+  updatedReplicas: 4
   collisionCount: 0
 ---
 kind: StatefulSet
@@ -34,8 +34,8 @@ metadata:
     - percona.com/delete-mysql-pods-in-order
 status:
   mysql:
-    ready: 5
-    size: 5
+    ready: 4
+    size: 4
     state: ready
   orchestrator:
     ready: 5

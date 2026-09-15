@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"os"
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -38,6 +39,14 @@ func GetOptionsFromBackupConfig(cfg *xtrabackup.BackupConfig) (Options, error) {
 		}, nil
 	case apiv1.BackupStorageS3:
 		s3 := cfg.S3
+		var caBundle []byte
+		if cfg.CACert != "" {
+			var err error
+			caBundle, err = os.ReadFile(cfg.CACert)
+			if err != nil {
+				return nil, errors.Wrap(err, "read S3 CA bundle")
+			}
+		}
 		return &S3Options{
 			Endpoint:        s3.EndpointURL,
 			AccessKeyID:     s3.AccessKey,
@@ -45,6 +54,7 @@ func GetOptionsFromBackupConfig(cfg *xtrabackup.BackupConfig) (Options, error) {
 			BucketName:      s3.Bucket,
 			Region:          s3.Region,
 			VerifyTLS:       cfg.VerifyTLS,
+			CABundle:        caBundle,
 		}, nil
 	}
 	return nil, errors.Errorf("storage type %s is not supported", cfg.Type)
@@ -190,6 +200,20 @@ func getS3Options(ctx context.Context, cl client.Client, cluster *apiv1.PerconaS
 		}
 	}
 
+	var caBundle []byte
+	if s := backupStatus.Storage.S3; s != nil && s.CABundle != nil {
+		selector := *s.CABundle
+		secret := new(corev1.Secret)
+		if err := cl.Get(ctx, types.NamespacedName{Name: selector.Name, Namespace: cluster.Namespace}, secret); err != nil {
+			return nil, errors.Wrap(err, "failed to get S3 CA bundle secret")
+		}
+		var ok bool
+		caBundle, ok = secret.Data[selector.Key]
+		if !ok {
+			return nil, errors.Errorf("key %s is not found in the %s secret", selector.Key, secret.Name)
+		}
+	}
+
 	return &S3Options{
 		Endpoint:        backupStatus.Storage.S3.EndpointURL,
 		AccessKeyID:     string(accessKeyID),
@@ -198,6 +222,7 @@ func getS3Options(ctx context.Context, cl client.Client, cluster *apiv1.PerconaS
 		Prefix:          prefix,
 		Region:          region,
 		VerifyTLS:       verifyTLS,
+		CABundle:        caBundle,
 	}, nil
 }
 
@@ -211,6 +236,7 @@ type S3Options struct {
 	Prefix          string
 	Region          string
 	VerifyTLS       bool
+	CABundle        []byte
 }
 
 func (o *S3Options) Type() apiv1.BackupStorageType {

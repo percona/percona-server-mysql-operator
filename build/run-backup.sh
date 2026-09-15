@@ -15,6 +15,7 @@ request_data() {
 				{
 				    "destination": "$(json_escape "${BACKUP_DEST}")",
 				    "type": "$(json_escape "${STORAGE_TYPE}")",
+				    "caCert": "$(json_escape "${SSL_CERT_FILE:-}")",
 				    "containerOptions": ${CONTAINER_OPTIONS},
 				    "verifyTLS": $(json_escape "${VERIFY_TLS}"),
 					"incrementalLsn": "$(json_escape "${INCREMENTAL_LSN}")",

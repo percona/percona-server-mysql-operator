@@ -1,0 +1,26 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 120
+commands:
+  - script: |-
+      set -o errexit
+      set -o pipefail
+      set -o xtrace
+
+      source ../../functions
+      mysql_user="-uroot -p'$(get_user_pass root test-secrets)'"
+
+      # Write new data to primary (dc2) after FCC recovery
+      run_mysql \
+          "INSERT INTO myDB.myTable (id) VALUES (100600)" \
+          "-h $(get_haproxy_svc "gr-cross-cluster-dc2")" "${mysql_user}"
+
+      # Wait for replication to propagate to dc1
+      sleep 30
+
+      # Read from replica (dc1) to verify replication is working after pause+FCC
+      data=$(run_mysql "SELECT id FROM myDB.myTable WHERE id=100600" "-h gr-cross-cluster-dc1-mysql-0.gr-cross-cluster-dc1-mysql" "${mysql_user}")
+      kubectl create configmap -n "${NAMESPACE}" 16-verify-replication --from-literal=data="${data}"
+
+      # dc1 stays at size:1 / mode:manual for the next steps (complementary test)
+
