@@ -13,4 +13,5 @@ commands:
       deploy_operator
       deploy_client
       deploy_minio
+      deploy_vault
     timeout: 300

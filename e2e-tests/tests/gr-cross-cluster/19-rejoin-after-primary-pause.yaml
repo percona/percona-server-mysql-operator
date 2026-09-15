@@ -6,5 +6,7 @@ commands:
       set -o errexit
       set -o xtrace
 
+      # Rejoin dc1 (replica whose replication channel broke when primary was paused)
       kubectl annotate -n "${NAMESPACE}" ps-clusterset gr-cross-cluster \
         percona.com/clusterset-rejoin-cluster=grcrossclusterdc1
+

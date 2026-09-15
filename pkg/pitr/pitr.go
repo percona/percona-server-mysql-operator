@@ -29,6 +29,9 @@ const (
 	BinlogsConfigKey  = "binlogs.json"
 	keyringVolumeName = "keyring"
 	keyringMountPath  = "/etc/binlog_server/keyring"
+
+	vaultSecretVolumeName = "vault-keyring-secret"
+	vaultSecretMountPath  = "/etc/mysql/vault-keyring-secret"
 )
 
 func JobName(restore *apiv1.PerconaServerMySQLRestore) string {
@@ -184,6 +187,14 @@ func RestoreJob(
 		},
 	}
 
+	binlogServer := cluster.Spec.Backup.PiTR.BinlogServer
+	if restore.Spec.PITR != nil && restore.Spec.PITR.BackupSource != nil && restore.Spec.PITR.BackupSource.BinlogServer != nil {
+		binlogServer = restore.Spec.PITR.BackupSource.BinlogServer
+	}
+	if binlogServer != nil {
+		k8s.PrepareJobWithS3CA(job, cluster, binlogServer.Storage.S3)
+	}
+
 	if keyringSecretRef := getKeyringSecretRef(cluster, restore); keyringSecretRef != nil {
 		job.Spec.Template.Spec.Volumes = append(job.Spec.Template.Spec.Volumes, corev1.Volume{
 			Name: keyringVolumeName,
@@ -194,6 +205,21 @@ func RestoreJob(
 			},
 		})
 	}
+
+	// mysqld replays the binlogs on the restored datadir, so it needs the same
+	// vault keyring the cluster runs with to open its encrypted tablespaces.
+	if cluster.Spec.MySQL.VaultSecretName != "" {
+		job.Spec.Template.Spec.Volumes = append(job.Spec.Template.Spec.Volumes, corev1.Volume{
+			Name: vaultSecretVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: cluster.Spec.MySQL.VaultSecretName,
+					Optional:   new(true),
+				},
+			},
+		})
+	}
+
 	return job
 }
 
@@ -332,6 +358,18 @@ func restoreContainer(
 			Value: filepath.Join(keyringMountPath, keyringSecretRef.Key),
 		})
 	}
+
+	if cluster.Spec.MySQL.VaultSecretName != "" {
+		c.VolumeMounts = append(c.VolumeMounts, corev1.VolumeMount{
+			Name:      vaultSecretVolumeName,
+			MountPath: vaultSecretMountPath,
+		})
+		c.Env = append(c.Env, corev1.EnvVar{
+			Name:  "KEYRING_VAULT_PATH",
+			Value: filepath.Join(vaultSecretMountPath, "keyring_vault.cnf"),
+		})
+	}
+
 	return c
 }
 

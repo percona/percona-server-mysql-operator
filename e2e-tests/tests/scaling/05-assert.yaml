@@ -11,4 +11,3 @@ data:
   instances: |
     scaling-mysql-0.scaling-mysql
     scaling-mysql-1.scaling-mysql
-    scaling-mysql-2.scaling-mysql

@@ -124,6 +124,7 @@ func pmmDefaults(spec *apiv1.PMMSpec) {
 	spec.ServerHost = "monitoring-service"
 	spec.CustomClusterName = "cluster1-custom"
 	spec.MySQLParams = "PMM_ADMIN_CUSTOM_PARAMS"
+	spec.HAProxyParams = "PMM_ADMIN_CUSTOM_PARAMS"
 }
 
 func customUserDefaults(spec *apiv1.PerconaServerMySQLSpec) {
@@ -159,6 +160,10 @@ func backupDefaults(spec *apiv1.BackupSpec) {
 					CredentialsSecret: fmt.Sprintf("%s-s3-credentials", NameCluster),
 					Region:            "us-west-2",
 					EndpointURL:       "https://s3.amazonaws.com",
+					CABundle: &apiv1.CABundleSecretSelector{
+						Name: "minio-ca-bundle",
+						Key:  "ca.crt",
+					},
 				},
 				Encryption: &apiv1.BinlogServerStorageEncryptionSpec{
 					KekID:  "alpha",
@@ -238,6 +243,10 @@ func backupDefaults(spec *apiv1.BackupSpec) {
 				CredentialsSecret: fmt.Sprintf("%s-s3-credentials", NameCluster),
 				Region:            "us-west-2",
 				EndpointURL:       "https://s3.amazonaws.com",
+				CABundle: &apiv1.CABundleSecretSelector{
+					Name: "minio-ca-bundle",
+					Key:  "ca.crt",
+				},
 			},
 			Annotations: map[string]string{
 				"testName": "scheduled-backup",

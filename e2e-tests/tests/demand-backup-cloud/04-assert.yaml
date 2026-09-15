@@ -1,6 +1,20 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
 timeout: 300
+resourceRefs:
+- apiVersion: ps.percona.com/v1
+  kind: PerconaServerMySQLBackup
+  name: demand-backup-cloud-1
+  ref: bcp
+assertAll:
+- celExpr: bcp.status.state == "Succeeded"
+  message: "Backup should be succeeded"
+
+- celExpr: '!has(bcp.status.size) || (bcp.status.size != "" && bcp.status.size != "0B")'
+  message: "Backup size should be populated and non-zero when available (PXB 8.4+)"
+
+- celExpr: '!has(bcp.status.uncompressedSize) || !has(bcp.status.size) || bcp.status.uncompressedSize == bcp.status.size'
+  message: "For uncompressed backups, uncompressedSize should equal size when available"
 ---
 kind: PerconaServerMySQLBackup
 apiVersion: ps.percona.com/v1

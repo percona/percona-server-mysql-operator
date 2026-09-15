@@ -64,8 +64,16 @@ spec:
                         type: array
                       xtrabackup:
                         items:
+                          maxLength: 1024
                           type: string
+                        maxItems: 100
                         type: array
+                        x-kubernetes-validations:
+                        - message: --defaults-file must use --defaults-file=<path>
+                            syntax and be the first xtrabackup argument
+                          rule: '!self.exists(arg, arg == ''--defaults-file'' || arg.startsWith(''--defaults-file=''))
+                            || (self[0].startsWith(''--defaults-file='') && self[0]
+                            != ''--defaults-file='')'
                     type: object
                   env:
                     items:
@@ -220,6 +228,8 @@ spec:
               destination:
                 type: string
               image:
+                type: string
+              size:
                 type: string
               state:
                 type: string
@@ -700,8 +710,16 @@ spec:
                             type: array
                           xtrabackup:
                             items:
+                              maxLength: 1024
                               type: string
+                            maxItems: 100
                             type: array
+                            x-kubernetes-validations:
+                            - message: --defaults-file must use --defaults-file=<path>
+                                syntax and be the first xtrabackup argument
+                              rule: '!self.exists(arg, arg == ''--defaults-file''
+                                || arg.startsWith(''--defaults-file='')) || (self[0].startsWith(''--defaults-file='')
+                                && self[0] != ''--defaults-file='')'
                         type: object
                       env:
                         items:
@@ -1013,6 +1031,16 @@ spec:
                     properties:
                       bucket:
                         type: string
+                      caBundle:
+                        properties:
+                          key:
+                            default: ca.crt
+                            type: string
+                          name:
+                            type: string
+                        required:
+                        - name
+                        type: object
                       credentialsSecret:
                         type: string
                       endpointUrl:
@@ -1107,6 +1135,9 @@ spec:
                         properties:
                           medium:
                             type: string
+                          mode:
+                            format: int32
+                            type: integer
                           sizeLimit:
                             anyOf:
                             - type: integer
@@ -1216,6 +1247,8 @@ spec:
                 - type
                 type: object
               type:
+                type: string
+              uncompressedSize:
                 type: string
             type: object
         type: object

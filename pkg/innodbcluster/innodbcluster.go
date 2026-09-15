@@ -19,6 +19,13 @@ const (
 	ClusterStatusOffline              ClusterStatus = "OFFLINE"
 )
 
+func (s ClusterStatus) IsOnline() bool {
+	return s == ClusterStatusOK ||
+		s == ClusterStatusOKPartial ||
+		s == ClusterStatusOKNoTolerance ||
+		s == ClusterStatusOKNoTolerancePartial
+}
+
 type MemberState string
 
 const (

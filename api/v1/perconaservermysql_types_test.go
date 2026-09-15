@@ -149,6 +149,37 @@ func TestCheckNSetDefaults(t *testing.T) {
 		err := cr.CheckNSetDefaults(t.Context(), nil)
 		assert.NoError(t, err)
 	})
+	t.Run("S3 CA bundle keys are defaulted", func(t *testing.T) {
+		cr := new(PerconaServerMySQL)
+		cr.Spec.MySQL.VolumeSpec = &VolumeSpec{
+			PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
+				Resources: corev1.VolumeResourceRequirements{
+					Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("1G")},
+				},
+			},
+		}
+		cr.Spec.Backup = &BackupSpec{
+			Storages: map[string]*BackupStorageSpec{
+				"default": {
+					S3: &BackupStorageS3Spec{CABundle: &CABundleSecretSelector{Name: "default-ca"}},
+				},
+				"explicit": {
+					S3: &BackupStorageS3Spec{CABundle: &CABundleSecretSelector{Name: "explicit-ca", Key: "root.pem"}},
+				},
+			},
+			PiTR: PiTRSpec{BinlogServer: &BinlogServerSpec{
+				Storage: BinlogServerStorageSpec{S3: &BackupStorageS3Spec{
+					CABundle: &CABundleSecretSelector{Name: "binlog-ca"},
+				}},
+			}},
+		}
+
+		err := cr.CheckNSetDefaults(t.Context(), nil)
+		assert.NoError(t, err)
+		assert.Equal(t, DefaultCABundleKey, cr.Spec.Backup.Storages["default"].S3.CABundle.Key)
+		assert.Equal(t, "root.pem", cr.Spec.Backup.Storages["explicit"].S3.CABundle.Key)
+		assert.Equal(t, DefaultCABundleKey, cr.Spec.Backup.PiTR.BinlogServer.Storage.S3.CABundle.Key)
+	})
 	t.Run("without backup image, with volume spec", func(t *testing.T) {
 		cr := new(PerconaServerMySQL)
 		cr.Spec.MySQL.VolumeSpec = &VolumeSpec{

@@ -81,6 +81,7 @@ COPY --from=go_builder /usr/local/bin/peer-list /opt/percona-server-mysql-operat
 COPY --from=go_builder /usr/local/bin/orc-handler /opt/percona-server-mysql-operator/orc-handler
 COPY --from=go_builder /usr/local/bin/mysql-state-monitor /opt/percona-server-mysql-operator/mysql-state-monitor
 COPY --from=go_builder /usr/local/bin/clusterset-replica-manager /opt/percona-server-mysql-operator/clusterset-replica-manager
+COPY build/lib/util.sh /opt/percona-server-mysql-operator/lib/util.sh
 COPY build/ps-entrypoint.sh /opt/percona-server-mysql-operator/ps-entrypoint.sh
 COPY build/ps-pre-stop.sh /opt/percona-server-mysql-operator/ps-pre-stop.sh
 COPY build/heartbeat-entrypoint.sh /opt/percona-server-mysql-operator/heartbeat-entrypoint.sh
@@ -93,6 +94,7 @@ COPY build/orc-add_mysql_nodes.sh /opt/percona-server-mysql-operator/orc-add_mys
 COPY build/ps-init-entrypoint.sh /opt/percona-server-mysql-operator/ps-init-entrypoint.sh
 COPY build/run-backup.sh /opt/percona-server-mysql-operator/run-backup.sh
 COPY build/run-restore.sh /opt/percona-server-mysql-operator/run-restore.sh
+COPY build/prepare-s3-certs.sh /opt/percona-server-mysql-operator/prepare-s3-certs.sh
 COPY build/haproxy-entrypoint.sh /opt/percona-server-mysql-operator/haproxy-entrypoint.sh
 COPY build/haproxy_add_mysql_nodes.sh /opt/percona-server-mysql-operator/haproxy_add_mysql_nodes.sh
 COPY build/haproxy_check_primary.sh /opt/percona-server-mysql-operator/haproxy_check_primary.sh

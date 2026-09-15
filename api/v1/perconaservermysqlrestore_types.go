@@ -27,11 +27,16 @@ import (
 
 // PerconaServerMySQLRestoreSpec defines the desired state of PerconaServerMySQLRestore
 type PerconaServerMySQLRestoreSpec struct {
-	ClusterName      string                          `json:"clusterName"`
-	BackupName       string                          `json:"backupName,omitempty"`
-	BackupSource     *PerconaServerMySQLBackupStatus `json:"backupSource,omitempty"`
-	ContainerOptions *BackupContainerOptions         `json:"containerOptions,omitempty"`
-	PITR             *RestorePITRSpec                `json:"pitr,omitempty"`
+	ClusterName      string                  `json:"clusterName"`
+	BackupName       string                  `json:"backupName,omitempty"`
+	BackupSource     *RestoreBackupSource    `json:"backupSource,omitempty"`
+	ContainerOptions *BackupContainerOptions `json:"containerOptions,omitempty"`
+	PITR             *RestorePITRSpec        `json:"pitr,omitempty"`
+}
+
+type RestoreBackupSource struct {
+	Destination BackupDestination  `json:"destination,omitempty"`
+	Storage     *BackupStorageSpec `json:"storage,omitempty"`
 }
 
 type RestorePITRSpec struct {
