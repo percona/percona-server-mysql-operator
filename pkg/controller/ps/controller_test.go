@@ -552,10 +552,8 @@ var _ = Describe("CR validations", Ordered, func() {
 	Context("xtrabackup --defaults-file argument validation", func() {
 		newBackup := func(name string, args []string) *psv1.PerconaServerMySQLBackup {
 			return &psv1.PerconaServerMySQLBackup{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      name,
-					Namespace: ns,
-				},
+				Name:      name,
+				Namespace: ns,
 				Spec: psv1.PerconaServerMySQLBackupSpec{
 					ClusterName: "cluster",
 					StorageName: "storage",
