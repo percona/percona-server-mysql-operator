@@ -55,13 +55,15 @@ func (r *PerconaServerMySQLReconciler) reconcileTLSReload(ctx context.Context, c
 		return nil
 	}
 
-	lastReloaded, ok := sts.Annotations[naming.AnnotationLastReloadedTLS.String()]
-
-	// Pods read the certificates on startup, so a cluster with no hash recorded
-	// yet only needs something to compare against on the next rotation.
-	if !ok || cr.Status.State == apiv1.StateNew {
+	// A cluster being created reads the certificates on startup, so it only needs
+	// something to compare against on the next rotation. An existing cluster with no
+	// hash recorded gives no proof its pods hold this certificate, so it goes through
+	// the reload path like any other rotation.
+	if cr.Status.State == apiv1.StateNew {
 		return writeAnnotation()
 	}
+
+	lastReloaded := sts.Annotations[naming.AnnotationLastReloadedTLS.String()]
 
 	if lastReloaded == certHash {
 		return nil

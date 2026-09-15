@@ -168,10 +168,17 @@ func TestReconcileTLSReload(t *testing.T) {
 			secret:       newTLSSecret(certPEM, keyPEM),
 			expectedHash: leafHash(certPEM, keyPEM),
 		},
-		"cluster without a recorded hash records it": {
+		"existing cluster without a recorded hash is reloaded": {
 			state:        apiv1.StateReady,
 			secret:       newTLSSecret(certPEM, keyPEM),
+			expectReload: true,
 			expectedHash: leafHash(certPEM, keyPEM),
+		},
+		"existing cluster without a recorded hash defers until the certificate reaches the pods": {
+			state:   apiv1.StateReady,
+			secret:  newTLSSecret(certPEM, keyPEM),
+			podCert: oldCertPEM,
+			podKey:  oldKeyPEM,
 		},
 		"missing TLS secret is ignored": {
 			state:        apiv1.StateReady,
