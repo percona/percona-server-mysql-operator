@@ -385,6 +385,14 @@ func (d *DB) watchCloneProgress(ctx context.Context, cancel context.CancelFunc, 
 			bytes, err := d.cloneBytesTransferred(qCtx)
 			qCancel()
 			if err != nil {
+				// We could not measure progress this tick (for example the mysqld
+				// restart at the end of a clone, or a transient admin-connection
+				// error). Do not count an unmeasurable window as "no progress":
+				// reset the timer so an outage longer than the stall window does
+				// not abort a healthy clone. A genuine stall keeps the recipient
+				// reachable (the donor side is what is stuck), so real stalls are
+				// still detected once polling resumes.
+				lastProgress = time.Now()
 				continue
 			}
 
