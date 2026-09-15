@@ -192,7 +192,7 @@ func RestoreJob(
 		binlogServer = restore.Spec.PITR.BackupSource.BinlogServer
 	}
 	if binlogServer != nil {
-		k8s.PrepareJobWithS3CA(job, cluster, binlogServer.Storage.S3)
+		k8s.PrepareJobWithS3CA(job, binlogServer.Storage.S3)
 	}
 
 	if keyringSecretRef := getKeyringSecretRef(cluster, restore); keyringSecretRef != nil {

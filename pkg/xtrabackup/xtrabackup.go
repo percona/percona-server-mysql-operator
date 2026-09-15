@@ -228,7 +228,7 @@ func Job(
 		},
 	}
 
-	k8s.PrepareJobWithS3CA(job, cluster, storage.S3)
+	k8s.PrepareJobWithS3CA(job, storage.S3)
 
 	return job, nil
 }
@@ -556,7 +556,7 @@ func RestoreJob(
 		})
 	}
 
-	k8s.PrepareJobWithS3CA(job, cluster, storage.S3)
+	k8s.PrepareJobWithS3CA(job, storage.S3)
 
 	return job
 }
@@ -633,7 +633,7 @@ func GetDeleteJob(cluster *apiv1.PerconaServerMySQL, cr *apiv1.PerconaServerMySQ
 				nil,
 			),
 		}
-		k8s.PrepareJobWithS3CA(job, cluster, storage.S3)
+		k8s.PrepareJobWithS3CA(job, storage.S3)
 	}
 
 	return job
