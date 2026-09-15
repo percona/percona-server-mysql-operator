@@ -412,11 +412,12 @@ deploy_s3_storage_tls() {
 	openssl req -newkey rsa:2048 -nodes \
 		-keyout "${cert_dir}/private.key" -out "${cert_dir}/server.csr" \
 		-subj '/CN=s3-storage-all-in-one'
+	printf 'subjectAltName=DNS:s3-storage-all-in-one,DNS:s3-storage-all-in-one.%s,DNS:s3-storage-all-in-one.%s.svc' "${NAMESPACE}" "${NAMESPACE}" >"${cert_dir}/server.ext"
 	openssl x509 -req -days 2 \
 		-in "${cert_dir}/server.csr" \
 		-CA "${cert_dir}/ca.crt" -CAkey "${cert_dir}/ca.key" -CAcreateserial \
 		-out "${cert_dir}/server.crt" \
-		-extfile <(printf 'subjectAltName=DNS:s3-storage-all-in-one,DNS:s3-storage-all-in-one.%s,DNS:s3-storage-all-in-one.%s.svc' "${NAMESPACE}" "${NAMESPACE}")
+		-extfile "${cert_dir}/server.ext"
 	cat "${cert_dir}/server.crt" "${cert_dir}/ca.crt" >"${cert_dir}/public.crt"
 
 	kubectl -n "${NAMESPACE}" create secret tls s3-tls \
