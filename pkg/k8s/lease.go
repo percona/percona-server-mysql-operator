@@ -36,10 +36,8 @@ func GetLease(ctx context.Context, client client.Client, leaseName, namespace st
 // A stale holder is evicted atomically and the lease is granted to the new holder.
 func AcquireLease(ctx context.Context, cl client.Client, leaseName, holder, namespace string, checkStale IsHolderStaleFunc) error {
 	lease := &coordv1.Lease{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      leaseName,
-			Namespace: namespace,
-		},
+		Name:      leaseName,
+		Namespace: namespace,
 	}
 
 	_, err := controllerutil.CreateOrUpdate(ctx, cl, lease, func() error {

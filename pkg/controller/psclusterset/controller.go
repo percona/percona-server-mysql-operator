@@ -17,7 +17,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/events"
 	kstatus "sigs.k8s.io/cli-utils/pkg/kstatus/status"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -107,10 +106,8 @@ func enqueueFromCredentialsSecret(c client.Client) handler.EventHandler {
 		var requests []reconcile.Request
 		for _, cluster := range list.Items {
 			requests = append(requests, reconcile.Request{
-				NamespacedName: types.NamespacedName{
-					Name:      cluster.Name,
-					Namespace: cluster.Namespace,
-				},
+				Name:      cluster.Name,
+				Namespace: cluster.Namespace,
 			})
 		}
 		return requests
@@ -895,10 +892,8 @@ func (r *PerconaServerMySQLClusterSetReconciler) dissolveClusterSet(
 
 func clustersetRole(pcs *apiv1.PerconaServerMySQLClusterSet) *rbacv1.Role {
 	return &rbacv1.Role{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-clusterset", pcs.Name),
-			Namespace: pcs.Namespace,
-		},
+		Name:      fmt.Sprintf("%s-clusterset", pcs.Name),
+		Namespace: pcs.Namespace,
 		Rules: []rbacv1.PolicyRule{
 			{
 				APIGroups: []string{""},
@@ -928,10 +923,8 @@ func clustersetRoleBinding(pcs *apiv1.PerconaServerMySQLClusterSet) *rbacv1.Role
 	role := clustersetRole(pcs)
 	serviceAccount := clustersetServiceAccount(pcs)
 	return &rbacv1.RoleBinding{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-clusterset", pcs.Name),
-			Namespace: pcs.Namespace,
-		},
+		Name:      fmt.Sprintf("%s-clusterset", pcs.Name),
+		Namespace: pcs.Namespace,
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: rbacv1.SchemeGroupVersion.Group,
 			Kind:     "Role",
@@ -949,10 +942,8 @@ func clustersetRoleBinding(pcs *apiv1.PerconaServerMySQLClusterSet) *rbacv1.Role
 
 func clustersetServiceAccount(pcs *apiv1.PerconaServerMySQLClusterSet) *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-clusterset", pcs.Name),
-			Namespace: pcs.Namespace,
-		},
+		Name:      fmt.Sprintf("%s-clusterset", pcs.Name),
+		Namespace: pcs.Namespace,
 	}
 }
 

@@ -58,9 +58,7 @@ func envFromList(name string) []corev1.EnvFromSource {
 	return []corev1.EnvFromSource{
 		{
 			SecretRef: &corev1.SecretEnvSource{
-				LocalObjectReference: corev1.LocalObjectReference{
-					Name: name,
-				},
+				Name: name,
 			},
 		},
 	}

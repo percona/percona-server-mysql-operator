@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -70,7 +69,7 @@ func TestGetOptionsFromBackupStatus(t *testing.T) {
 
 	const namespace = "test"
 	credentials := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "credentials", Namespace: namespace},
+		Name: "credentials", Namespace: namespace,
 		Data: map[string][]byte{
 			secret.CredentialsAWSAccessKey: []byte("access-key"),
 			secret.CredentialsAWSSecretKey: []byte("secret-key"),
@@ -89,8 +88,8 @@ func TestGetOptionsFromBackupStatus(t *testing.T) {
 			name:     "load CA bundle",
 			selector: selector,
 			caSecret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{Name: "minio-ca", Namespace: namespace},
-				Data:       map[string][]byte{apiv1.DefaultCABundleKey: []byte("test-ca")},
+				Name: "minio-ca", Namespace: namespace,
+				Data: map[string][]byte{apiv1.DefaultCABundleKey: []byte("test-ca")},
 			},
 			wantCABundle: []byte("test-ca"),
 		},
@@ -106,7 +105,7 @@ func TestGetOptionsFromBackupStatus(t *testing.T) {
 			name:     "missing CA bundle key",
 			selector: selector,
 			caSecret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{Name: "minio-ca", Namespace: namespace},
+				Name: "minio-ca", Namespace: namespace,
 			},
 			wantErr: "key ca.crt is not found in the minio-ca secret",
 		},
@@ -119,7 +118,7 @@ func TestGetOptionsFromBackupStatus(t *testing.T) {
 				objects = append(objects, tt.caSecret)
 			}
 			cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
-			cluster := &apiv1.PerconaServerMySQL{ObjectMeta: metav1.ObjectMeta{Namespace: namespace}}
+			cluster := &apiv1.PerconaServerMySQL{Namespace: namespace}
 			status := apiv1.PerconaServerMySQLBackupStatus{Storage: &apiv1.BackupStorageSpec{
 				S3: &apiv1.BackupStorageS3Spec{
 					Bucket:            "bucket",
