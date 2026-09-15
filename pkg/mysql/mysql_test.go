@@ -274,7 +274,7 @@ func TestHeartbeatCloneTimeoutEnvGate(t *testing.T) {
 func TestCloneStallWatchdogGate(t *testing.T) {
 	const ns = "mysql-ns"
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "some-secret", Namespace: ns},
+		Name: "some-secret", Namespace: ns,
 		StringData: map[string]string{},
 	}
 
