@@ -58,7 +58,7 @@ func TestS3CABundleJobs(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, k8sutil.S3CAPath(selector), backupConfig.CACert)
 
-		job := GetDeleteJob(cluster, backup, backupConfig, "init-image")
+		job := GetDeleteJob(new(apiv1.PerconaServerMySQL), backup, backupConfig, "init-image")
 		checkContainer(t, job.Spec.Template.Spec.Containers[0], "xbcloud")
 		require.Len(t, job.Spec.Template.Spec.InitContainers, 1)
 		assert.Contains(t, job.Spec.Template.Spec.Containers[0].Command, "--cacert="+k8sutil.S3CAPath(selector))
