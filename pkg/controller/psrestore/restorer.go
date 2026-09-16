@@ -11,7 +11,6 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -357,10 +356,8 @@ func getBackup(ctx context.Context, cl client.Client, cr *apiv1.PerconaServerMyS
 		}
 
 		return &apiv1.PerconaServerMySQLBackup{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      cr.Name,
-				Namespace: cr.Namespace,
-			},
+			Name:      cr.Name,
+			Namespace: cr.Namespace,
 			Spec: apiv1.PerconaServerMySQLBackupSpec{
 				ClusterName: cr.Spec.ClusterName,
 				Type:        backupType,

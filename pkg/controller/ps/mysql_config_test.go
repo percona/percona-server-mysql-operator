@@ -37,7 +37,7 @@ func TestReconcileMySQLConfig(t *testing.T) {
 
 	newCR := func(crVersion string, state apiv1.StatefulAppState) *apiv1.PerconaServerMySQL {
 		return &apiv1.PerconaServerMySQL{
-			ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: ns},
+			Name: crName, Namespace: ns,
 			Spec: apiv1.PerconaServerMySQLSpec{
 				CRVersion: crVersion,
 				MySQL: apiv1.MySQLSpec{
@@ -56,11 +56,9 @@ func TestReconcileMySQLConfig(t *testing.T) {
 		}
 
 		return &appsv1.StatefulSet{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:        mysql.Name(cr),
-				Namespace:   cr.Namespace,
-				Annotations: annotations,
-			},
+			Name:        mysql.Name(cr),
+			Namespace:   cr.Namespace,
+			Annotations: annotations,
 			Spec: appsv1.StatefulSetSpec{
 				Selector: &metav1.LabelSelector{MatchLabels: mysql.MatchLabels(cr)},
 				Template: corev1.PodTemplateSpec{
@@ -79,15 +77,15 @@ func TestReconcileMySQLConfig(t *testing.T) {
 
 	newConfigMap := func(cr *apiv1.PerconaServerMySQL, data string) *corev1.ConfigMap {
 		return &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{Name: mysql.ConfigMapName(cr), Namespace: cr.Namespace},
-			Data:       map[string]string{mysql.CustomConfigKey: data},
+			Name: mysql.ConfigMapName(cr), Namespace: cr.Namespace,
+			Data: map[string]string{mysql.CustomConfigKey: data},
 		}
 	}
 
 	newSecret := func(cr *apiv1.PerconaServerMySQL) *corev1.Secret {
 		return &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: cr.InternalSecretName(), Namespace: cr.Namespace},
-			Data:       map[string][]byte{string(apiv1.UserConfigurator): []byte(configuratorPass)},
+			Name: cr.InternalSecretName(), Namespace: cr.Namespace,
+			Data: map[string][]byte{string(apiv1.UserConfigurator): []byte(configuratorPass)},
 		}
 	}
 
@@ -104,11 +102,9 @@ func TestReconcileMySQLConfig(t *testing.T) {
 		objs := make([]client.Object, 0, count)
 		for i := range count {
 			objs = append(objs, &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      podName(i),
-					Namespace: cr.Namespace,
-					Labels:    mysql.MatchLabels(cr),
-				},
+				Name:      podName(i),
+				Namespace: cr.Namespace,
+				Labels:    mysql.MatchLabels(cr),
 				Status: corev1.PodStatus{
 					Phase: corev1.PodRunning,
 					Conditions: []corev1.PodCondition{

@@ -6,7 +6,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 )
@@ -49,10 +48,8 @@ func TestGetBackupFromBackupSource(t *testing.T) {
 
 	newRestore := func(source *apiv1.RestoreBackupSource) *apiv1.PerconaServerMySQLRestore {
 		return &apiv1.PerconaServerMySQLRestore{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      restoreName,
-				Namespace: namespace,
-			},
+			Name:      restoreName,
+			Namespace: namespace,
 			Spec: apiv1.PerconaServerMySQLRestoreSpec{
 				ClusterName:  clusterName,
 				BackupSource: source,
@@ -158,10 +155,8 @@ func TestGetBackupFromBackupName(t *testing.T) {
 
 	newRestore := func() *apiv1.PerconaServerMySQLRestore {
 		return &apiv1.PerconaServerMySQLRestore{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      restoreName,
-				Namespace: namespace,
-			},
+			Name:      restoreName,
+			Namespace: namespace,
 			Spec: apiv1.PerconaServerMySQLRestoreSpec{
 				ClusterName: clusterName,
 				BackupName:  backupName,
@@ -171,10 +166,8 @@ func TestGetBackupFromBackupName(t *testing.T) {
 
 	newBackup := func() *apiv1.PerconaServerMySQLBackup {
 		return &apiv1.PerconaServerMySQLBackup{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      backupName,
-				Namespace: namespace,
-			},
+			Name:      backupName,
+			Namespace: namespace,
 			Spec: apiv1.PerconaServerMySQLBackupSpec{
 				ClusterName: clusterName,
 				StorageName: storageName,
@@ -188,10 +181,8 @@ func TestGetBackupFromBackupName(t *testing.T) {
 
 	newCluster := func(storages map[string]*apiv1.BackupStorageSpec) *apiv1.PerconaServerMySQL {
 		return &apiv1.PerconaServerMySQL{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      clusterName,
-				Namespace: namespace,
-			},
+			Name:      clusterName,
+			Namespace: namespace,
 			Spec: apiv1.PerconaServerMySQLSpec{
 				Backup: &apiv1.BackupSpec{
 					Storages: storages,

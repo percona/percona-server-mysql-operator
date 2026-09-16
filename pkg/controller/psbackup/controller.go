@@ -893,10 +893,8 @@ func getBackupSourcePod(ctx context.Context, cl client.Client, namespace, src st
 	podName := s[0]
 
 	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      podName,
-			Namespace: namespace,
-		},
+		Name:      podName,
+		Namespace: namespace,
 	}
 	err := cl.Get(ctx, client.ObjectKeyFromObject(pod), pod)
 	if err != nil {

@@ -74,7 +74,7 @@ func (r *CronRegistry) addBackupJob(ctx context.Context, cl client.Client, clust
 
 	r.backupJobs.Store(bcp.Name, backupScheduleJob{
 		BackupSchedule: bcp,
-		scheduleJob:    scheduleJob{jobID: jobID},
+		jobID:          jobID,
 	})
 	return nil
 }

@@ -28,10 +28,8 @@ import (
 
 func readDefaultCRForUpgrade(name, namespace string) *apiv1.PerconaServerMySQL {
 	cr := &apiv1.PerconaServerMySQL{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
+		Name:      name,
+		Namespace: namespace,
 		Spec: apiv1.PerconaServerMySQLSpec{
 			MySQL: apiv1.MySQLSpec{
 				ClusterType: apiv1.ClusterTypeGR,
@@ -54,10 +52,8 @@ func newScheme(t *testing.T) *runtime.Scheme {
 
 func readyPod(name, namespace string) corev1.Pod {
 	return corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
+		Name:      name,
+		Namespace: namespace,
 		Status: corev1.PodStatus{
 			Phase: corev1.PodRunning,
 			Conditions: []corev1.PodCondition{
@@ -72,10 +68,8 @@ func readyPod(name, namespace string) corev1.Pod {
 
 func notReadyPod(name, namespace string) corev1.Pod {
 	return corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
+		Name:      name,
+		Namespace: namespace,
 		Status: corev1.PodStatus{
 			Phase: corev1.PodPending,
 		},
@@ -159,7 +153,7 @@ func TestStsChanged(t *testing.T) {
 			labels["controller-revision-hash"] = revision
 		}
 		return corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{Labels: labels},
+			Labels: labels,
 		}
 	}
 
@@ -208,12 +202,10 @@ func TestDeleteOutdatedStuckPods(t *testing.T) {
 
 	newPod := func(revision string, phase corev1.PodPhase, isCrashLoopBackOff bool) corev1.Pod {
 		pod := corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "mysql-0",
-				Namespace: "test-ns",
-				Labels: map[string]string{
-					controllerRevisionHash: revision,
-				},
+			Name:      "mysql-0",
+			Namespace: "test-ns",
+			Labels: map[string]string{
+				controllerRevisionHash: revision,
 			},
 			Status: corev1.PodStatus{Phase: phase},
 		}
@@ -303,10 +295,8 @@ func TestSmartUpdateDeletesOutdatedPendingPod(t *testing.T) {
 	cr := readDefaultCRForUpgrade("test-cluster", "test-ns")
 
 	sts := &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "mysql",
-			Namespace: cr.Namespace,
-		},
+		Name:      "mysql",
+		Namespace: cr.Namespace,
 		Spec: appsv1.StatefulSetSpec{
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{"app": "mysql"},
@@ -319,13 +309,11 @@ func TestSmartUpdateDeletesOutdatedPendingPod(t *testing.T) {
 		},
 	}
 	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "mysql-0",
-			Namespace: cr.Namespace,
-			Labels: map[string]string{
-				"app":                  "mysql",
-				controllerRevisionHash: "rev-1",
-			},
+		Name:      "mysql-0",
+		Namespace: cr.Namespace,
+		Labels: map[string]string{
+			"app":                  "mysql",
+			controllerRevisionHash: "rev-1",
 		},
 		Status: corev1.PodStatus{Phase: corev1.PodPending},
 	}
@@ -344,18 +332,16 @@ func TestSwitchOverGR(t *testing.T) {
 	s := newScheme(t)
 
 	primary := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: mysql.PodName(cr, 0), Namespace: cr.Namespace},
+		Name: mysql.PodName(cr, 0), Namespace: cr.Namespace,
 	}
 	target := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: mysql.PodName(cr, 1), Namespace: cr.Namespace},
+		Name: mysql.PodName(cr, 1), Namespace: cr.Namespace,
 	}
 
 	operatorPassword := "test-pass"
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.InternalSecretName(),
-			Namespace: cr.Namespace,
-		},
+		Name:      cr.InternalSecretName(),
+		Namespace: cr.Namespace,
 		Data: map[string][]byte{
 			string(apiv1.UserOperator): []byte(operatorPassword),
 		},
@@ -405,19 +391,17 @@ func TestSwitchOverAsync(t *testing.T) {
 	s := newScheme(t)
 
 	target := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: mysql.PodName(cr, 1), Namespace: cr.Namespace},
+		Name: mysql.PodName(cr, 1), Namespace: cr.Namespace,
 	}
 	primary := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: mysql.PodName(cr, 0), Namespace: cr.Namespace},
+		Name: mysql.PodName(cr, 0), Namespace: cr.Namespace,
 	}
 
 	makeOrcPod := func(ready bool) *corev1.Pod {
 		pod := &corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      orchestrator.PodName(cr, 0),
-				Namespace: cr.Namespace,
-				Labels:    orchestrator.MatchLabels(cr),
-			},
+			Name:      orchestrator.PodName(cr, 0),
+			Namespace: cr.Namespace,
+			Labels:    orchestrator.MatchLabels(cr),
 			Status: corev1.PodStatus{
 				Phase: corev1.PodRunning,
 			},
@@ -559,10 +543,8 @@ func TestSwitchOverAndWait(t *testing.T) {
 
 	makeSecret := func(cr *apiv1.PerconaServerMySQL) *corev1.Secret {
 		return &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      cr.InternalSecretName(),
-				Namespace: cr.Namespace,
-			},
+			Name:      cr.InternalSecretName(),
+			Namespace: cr.Namespace,
 			Data: map[string][]byte{
 				string(apiv1.UserOperator): []byte("test-pass"),
 			},
@@ -571,11 +553,9 @@ func TestSwitchOverAndWait(t *testing.T) {
 
 	makeReadyOrcPod := func(cr *apiv1.PerconaServerMySQL) *corev1.Pod {
 		return &corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      orchestrator.PodName(cr, 0),
-				Namespace: cr.Namespace,
-				Labels:    orchestrator.MatchLabels(cr),
-			},
+			Name:      orchestrator.PodName(cr, 0),
+			Namespace: cr.Namespace,
+			Labels:    orchestrator.MatchLabels(cr),
 			Status: corev1.PodStatus{
 				Phase: corev1.PodRunning,
 				Conditions: []corev1.PodCondition{
@@ -589,8 +569,8 @@ func TestSwitchOverAndWait(t *testing.T) {
 		cr := readDefaultCRForUpgrade("test-cluster", "test-ns")
 		cr.Spec.MySQL.ClusterType = apiv1.ClusterTypeGR
 
-		primary := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: mysql.PodName(cr, 0), Namespace: cr.Namespace}}
-		target := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: mysql.PodName(cr, 1), Namespace: cr.Namespace}}
+		primary := &corev1.Pod{Name: mysql.PodName(cr, 0), Namespace: cr.Namespace}
+		target := &corev1.Pod{Name: mysql.PodName(cr, 1), Namespace: cr.Namespace}
 
 		cli := fake.NewClientBuilder().WithScheme(s).WithObjects(makeSecret(cr)).Build()
 		fc := &fakeClient{
@@ -612,8 +592,8 @@ func TestSwitchOverAndWait(t *testing.T) {
 		cr := readDefaultCRForUpgrade("test-cluster", "test-ns")
 		cr.Spec.MySQL.ClusterType = apiv1.ClusterTypeAsync
 
-		primary := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: mysql.PodName(cr, 0), Namespace: cr.Namespace}}
-		target := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: mysql.PodName(cr, 1), Namespace: cr.Namespace}}
+		primary := &corev1.Pod{Name: mysql.PodName(cr, 0), Namespace: cr.Namespace}
+		target := &corev1.Pod{Name: mysql.PodName(cr, 1), Namespace: cr.Namespace}
 
 		clusterHint := cr.ClusterHint()
 
@@ -670,11 +650,9 @@ func TestSwitchOverAndWait(t *testing.T) {
 		mysqlLabels := mysql.MatchLabels(cr)
 		makeMysqlPod := func(name string) *corev1.Pod {
 			return &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      name,
-					Namespace: cr.Namespace,
-					Labels:    mysqlLabels,
-				},
+				Name:      name,
+				Namespace: cr.Namespace,
+				Labels:    mysqlLabels,
 				Status: corev1.PodStatus{
 					Phase: corev1.PodRunning,
 					Conditions: []corev1.PodCondition{
@@ -732,8 +710,8 @@ func TestSwitchOverAndWait(t *testing.T) {
 		cr := readDefaultCRForUpgrade("test-cluster", "test-ns")
 		cr.Spec.MySQL.ClusterType = apiv1.ClusterTypeAsync
 
-		primary := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: mysql.PodName(cr, 0), Namespace: cr.Namespace}}
-		target := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: mysql.PodName(cr, 1), Namespace: cr.Namespace}}
+		primary := &corev1.Pod{Name: mysql.PodName(cr, 0), Namespace: cr.Namespace}
+		target := &corev1.Pod{Name: mysql.PodName(cr, 1), Namespace: cr.Namespace}
 
 		oldPrimaryResp, _ := json.Marshal(orchestrator.Instance{
 			Key:   orchestrator.InstanceKey{Hostname: primary.Name},

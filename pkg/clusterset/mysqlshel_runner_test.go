@@ -5,17 +5,14 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 )
 
 func TestMySQLShellRunner(t *testing.T) {
 	pcs := &apiv1.PerconaServerMySQLClusterSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "clusterset",
-			Namespace: "clusterset-ns",
-		},
+		Name:      "clusterset",
+		Namespace: "clusterset-ns",
 		Spec: apiv1.PerconaServerMySQLClusterSetSpec{
 			CredentialsSecret: corev1.SecretKeySelector{
 				LocalObjectReference: corev1.LocalObjectReference{Name: "clusterset-creds"},
@@ -64,7 +61,7 @@ func TestMySQLShellRunner(t *testing.T) {
 	pwEnv, ok := envByName[MySQLShellRunnerPassword]
 	assert.True(t, ok, "%s env var must be set from the credentials secret", MySQLShellRunnerPassword)
 	assert.Equal(t, corev1.SecretKeySelector{
-		LocalObjectReference: corev1.LocalObjectReference{Name: "clusterset-creds"},
-		Key:                  "password",
+		Name: "clusterset-creds",
+		Key:  "password",
 	}, *pwEnv.ValueFrom.SecretKeyRef)
 }
