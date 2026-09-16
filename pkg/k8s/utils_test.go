@@ -22,6 +22,10 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/version"
 )
 
+func boolPtr(v bool) *bool {
+	return &v
+}
+
 func TestEnsureService(t *testing.T) {
 	scheme := runtime.NewScheme()
 	err := corev1.AddToScheme(scheme)
@@ -39,14 +43,18 @@ func TestEnsureService(t *testing.T) {
 	}{
 		"no ignore annotations or labels, saveOldMeta false": {
 			cr: &apiv1.PerconaServerMySQL{
-				Name:      "test-cr",
-				Namespace: "default",
-				UID:       "test-uid",
-				Spec:      apiv1.PerconaServerMySQLSpec{},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-cr",
+					Namespace: "default",
+					UID:       types.UID("test-uid"),
+				},
+				Spec: apiv1.PerconaServerMySQLSpec{},
 			},
 			svc: &corev1.Service{
-				Name:      "test-service",
-				Namespace: "default",
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-service",
+					Namespace: "default",
+				},
 				Spec: corev1.ServiceSpec{
 					Ports: []corev1.ServicePort{
 						{Port: 3306, Name: "mysql"},
@@ -68,18 +76,22 @@ func TestEnsureService(t *testing.T) {
 		},
 		"service doesn't exist - creates new service": {
 			cr: &apiv1.PerconaServerMySQL{
-				Name:      "test-cr",
-				Namespace: "default",
-				UID:       "test-uid",
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-cr",
+					Namespace: "default",
+					UID:       types.UID("test-uid"),
+				},
 				Spec: apiv1.PerconaServerMySQLSpec{
 					IgnoreAnnotations: []string{"ignore.me"},
 				},
 			},
 			svc: &corev1.Service{
-				Name:      "new-service",
-				Namespace: "default",
-				Annotations: map[string]string{
-					"new": "annotation",
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "new-service",
+					Namespace: "default",
+					Annotations: map[string]string{
+						"new": "annotation",
+					},
 				},
 				Spec: corev1.ServiceSpec{
 					Ports: []corev1.ServicePort{
@@ -101,19 +113,23 @@ func TestEnsureService(t *testing.T) {
 		},
 		"service exists - preserves old metadata when saveOldMeta is true": {
 			cr: &apiv1.PerconaServerMySQL{
-				Name:      "test-cr",
-				Namespace: "default",
-				UID:       "test-uid",
-				Spec:      apiv1.PerconaServerMySQLSpec{},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-cr",
+					Namespace: "default",
+					UID:       types.UID("test-uid"),
+				},
+				Spec: apiv1.PerconaServerMySQLSpec{},
 			},
 			svc: &corev1.Service{
-				Name:      "existing-service",
-				Namespace: "default",
-				Annotations: map[string]string{
-					"new": "annotation",
-				},
-				Labels: map[string]string{
-					"new": "label",
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "existing-service",
+					Namespace: "default",
+					Annotations: map[string]string{
+						"new": "annotation",
+					},
+					Labels: map[string]string{
+						"new": "label",
+					},
 				},
 				Spec: corev1.ServiceSpec{
 					Ports: []corev1.ServicePort{
@@ -122,13 +138,15 @@ func TestEnsureService(t *testing.T) {
 				},
 			},
 			existingSvc: &corev1.Service{
-				Name:      "existing-service",
-				Namespace: "default",
-				Annotations: map[string]string{
-					"old": "annotation",
-				},
-				Labels: map[string]string{
-					"old": "label",
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "existing-service",
+					Namespace: "default",
+					Annotations: map[string]string{
+						"old": "annotation",
+					},
+					Labels: map[string]string{
+						"old": "label",
+					},
 				},
 				Spec: corev1.ServiceSpec{
 					Ports: []corev1.ServicePort{
@@ -152,14 +170,18 @@ func TestEnsureService(t *testing.T) {
 		},
 		"service exists - dont preserve old metadata when saveOldMeta is true": {
 			cr: &apiv1.PerconaServerMySQL{
-				Name:      "test-cr",
-				Namespace: "default",
-				UID:       "test-uid",
-				Spec:      apiv1.PerconaServerMySQLSpec{},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-cr",
+					Namespace: "default",
+					UID:       types.UID("test-uid"),
+				},
+				Spec: apiv1.PerconaServerMySQLSpec{},
 			},
 			svc: &corev1.Service{
-				Name:      "existing-service",
-				Namespace: "default",
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "existing-service",
+					Namespace: "default",
+				},
 				Spec: corev1.ServiceSpec{
 					Ports: []corev1.ServicePort{
 						{Port: 3306, Name: "mysql"},
@@ -167,13 +189,15 @@ func TestEnsureService(t *testing.T) {
 				},
 			},
 			existingSvc: &corev1.Service{
-				Name:      "existing-service",
-				Namespace: "default",
-				Annotations: map[string]string{
-					"old": "annotation",
-				},
-				Labels: map[string]string{
-					"old": "label",
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "existing-service",
+					Namespace: "default",
+					Annotations: map[string]string{
+						"old": "annotation",
+					},
+					Labels: map[string]string{
+						"old": "label",
+					},
 				},
 				Spec: corev1.ServiceSpec{
 					Ports: []corev1.ServicePort{
@@ -195,18 +219,22 @@ func TestEnsureService(t *testing.T) {
 		},
 		"service exists - handles ignored annotations": {
 			cr: &apiv1.PerconaServerMySQL{
-				Name:      "test-cr",
-				Namespace: "default",
-				UID:       "test-uid",
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-cr",
+					Namespace: "default",
+					UID:       types.UID("test-uid"),
+				},
 				Spec: apiv1.PerconaServerMySQLSpec{
 					IgnoreAnnotations: []string{"ignore.annotation"},
 				},
 			},
 			svc: &corev1.Service{
-				Name:      "service-with-ignored",
-				Namespace: "default",
-				Annotations: map[string]string{
-					"keep": "this",
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "service-with-ignored",
+					Namespace: "default",
+					Annotations: map[string]string{
+						"keep": "this",
+					},
 				},
 				Spec: corev1.ServiceSpec{
 					Ports: []corev1.ServicePort{
@@ -215,11 +243,13 @@ func TestEnsureService(t *testing.T) {
 				},
 			},
 			existingSvc: &corev1.Service{
-				Name:      "service-with-ignored",
-				Namespace: "default",
-				Annotations: map[string]string{
-					"ignore.annotation": "should-be-kept",
-					"remove":            "this",
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "service-with-ignored",
+					Namespace: "default",
+					Annotations: map[string]string{
+						"ignore.annotation": "should-be-kept",
+						"remove":            "this",
+					},
 				},
 				Spec: corev1.ServiceSpec{
 					Ports: []corev1.ServicePort{
@@ -242,18 +272,22 @@ func TestEnsureService(t *testing.T) {
 		},
 		"service exists - handles ignored labels": {
 			cr: &apiv1.PerconaServerMySQL{
-				Name:      "test-cr",
-				Namespace: "default",
-				UID:       "test-uid",
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-cr",
+					Namespace: "default",
+					UID:       types.UID("test-uid"),
+				},
 				Spec: apiv1.PerconaServerMySQLSpec{
 					IgnoreLabels: []string{"ignore.label"},
 				},
 			},
 			svc: &corev1.Service{
-				Name:      "service-with-ignored-labels",
-				Namespace: "default",
-				Labels: map[string]string{
-					"keep": "this",
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "service-with-ignored-labels",
+					Namespace: "default",
+					Labels: map[string]string{
+						"keep": "this",
+					},
 				},
 				Spec: corev1.ServiceSpec{
 					Ports: []corev1.ServicePort{
@@ -262,11 +296,13 @@ func TestEnsureService(t *testing.T) {
 				},
 			},
 			existingSvc: &corev1.Service{
-				Name:      "service-with-ignored-labels",
-				Namespace: "default",
-				Labels: map[string]string{
-					"ignore.label": "should-be-kept",
-					"remove":       "this",
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "service-with-ignored-labels",
+					Namespace: "default",
+					Labels: map[string]string{
+						"ignore.label": "should-be-kept",
+						"remove":       "this",
+					},
 				},
 				Spec: corev1.ServiceSpec{
 					Ports: []corev1.ServicePort{
@@ -366,7 +402,6 @@ func TestEqualMetadata(t *testing.T) {
 						"test-fin-1",
 					},
 
-					SelfLink:        "selflink1",
 					UID:             "uid1",
 					ResourceVersion: "resourceVer1",
 					Generation:      1,
@@ -403,7 +438,6 @@ func TestEqualMetadata(t *testing.T) {
 						"test-fin-1",
 					},
 
-					SelfLink:        "selflink2",
 					UID:             "uid2",
 					ResourceVersion: "resourceVer2",
 					Generation:      2,
@@ -509,8 +543,10 @@ func TestSetCRVersion(t *testing.T) {
 
 	t.Run("CRVersion is already set", func(t *testing.T) {
 		cr := &apiv1.PerconaServerMySQL{
-			Name:      "cr-version-1",
-			Namespace: "default",
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "cr-version-1",
+				Namespace: "default",
+			},
 			Spec: apiv1.PerconaServerMySQLSpec{
 				CRVersion: version.Version(),
 			},
@@ -526,8 +562,10 @@ func TestSetCRVersion(t *testing.T) {
 
 	t.Run("CRVersion is empty and gets patched", func(t *testing.T) {
 		cr := &apiv1.PerconaServerMySQL{
-			Name:      "cr-version-2",
-			Namespace: "default",
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "cr-version-2",
+				Namespace: "default",
+			},
 			Spec: apiv1.PerconaServerMySQLSpec{
 				CRVersion: "",
 			},
@@ -546,8 +584,10 @@ func TestSetCRVersion(t *testing.T) {
 
 	t.Run("Patch fails because object does not exist", func(t *testing.T) {
 		cr := &apiv1.PerconaServerMySQL{
-			Name:      "cr-version-3",
-			Namespace: "default",
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "cr-version-3",
+				Namespace: "default",
+			},
 			Spec: apiv1.PerconaServerMySQLSpec{
 				CRVersion: "",
 			},
@@ -568,9 +608,11 @@ func TestEnsureObjectWithHash(t *testing.T) {
 	require.NoError(t, apiv1.AddToScheme(scheme))
 
 	cr := &apiv1.PerconaServerMySQL{
-		Name:      "test-cr",
-		Namespace: "default",
-		UID:       "test-uid",
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cr",
+			Namespace: "default",
+			UID:       types.UID("test-uid"),
+		},
 		Spec: apiv1.PerconaServerMySQLSpec{
 			CRVersion: version.Version(),
 		},
@@ -583,12 +625,16 @@ func TestEnsureObjectWithHash(t *testing.T) {
 			Build()
 
 		secret := &corev1.Secret{
-			APIVersion: "v1",
-			Kind:       "Secret",
-			Name:       "test-secret",
-			Namespace:  "default",
-			Type:       corev1.SecretTypeOpaque,
-			Data:       map[string][]byte{"key": []byte("value")},
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: "v1",
+				Kind:       "Secret",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-secret",
+				Namespace: "default",
+			},
+			Type: corev1.SecretTypeOpaque,
+			Data: map[string][]byte{"key": []byte("value")},
 		}
 
 		err := EnsureObjectWithHash(context.Background(), cl, cr, secret, scheme)
@@ -606,28 +652,32 @@ func TestEnsureObjectWithHash(t *testing.T) {
 	t.Run("skips update when nothing changed", func(t *testing.T) {
 		// First, compute the hash for the secret data
 		secret := &corev1.Secret{
-			Name:      "test-secret",
-			Namespace: "default",
-			Type:      corev1.SecretTypeOpaque,
-			Data:      map[string][]byte{"key": []byte("value")},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-secret",
+				Namespace: "default",
+			},
+			Type: corev1.SecretTypeOpaque,
+			Data: map[string][]byte{"key": []byte("value")},
 		}
 		hash, err := ObjectHash(secret)
 		require.NoError(t, err)
 
 		existingSecret := &corev1.Secret{
-			Name:      "test-secret",
-			Namespace: "default",
-			Annotations: map[string]string{
-				naming.AnnotationLastConfigHash.String(): hash,
-			},
-			OwnerReferences: []metav1.OwnerReference{
-				{
-					APIVersion:         "ps.percona.com/v1",
-					Kind:               "PerconaServerMySQL",
-					Name:               "test-cr",
-					UID:                "test-uid",
-					Controller:         new(true),
-					BlockOwnerDeletion: new(true),
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-secret",
+				Namespace: "default",
+				Annotations: map[string]string{
+					naming.AnnotationLastConfigHash.String(): hash,
+				},
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						APIVersion:         "ps.percona.com/v1",
+						Kind:               "PerconaServerMySQL",
+						Name:               "test-cr",
+						UID:                types.UID("test-uid"),
+						Controller:         boolPtr(true),
+						BlockOwnerDeletion: boolPtr(true),
+					},
 				},
 			},
 			Type: corev1.SecretTypeOpaque,
@@ -640,10 +690,12 @@ func TestEnsureObjectWithHash(t *testing.T) {
 			Build()
 
 		desired := &corev1.Secret{
-			Name:      "test-secret",
-			Namespace: "default",
-			Type:      corev1.SecretTypeOpaque,
-			Data:      map[string][]byte{"key": []byte("value")},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-secret",
+				Namespace: "default",
+			},
+			Type: corev1.SecretTypeOpaque,
+			Data: map[string][]byte{"key": []byte("value")},
 		}
 
 		err = EnsureObjectWithHash(context.Background(), cl, cr, desired, scheme)
@@ -659,29 +711,35 @@ func TestEnsureObjectWithHash(t *testing.T) {
 	t.Run("updates when data changes", func(t *testing.T) {
 		// Compute hash for old data
 		oldSecret := &corev1.Secret{
-			Name:      "test-secret",
-			Namespace: "default",
-			Data:      map[string][]byte{"key": []byte("old-value")},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-secret",
+				Namespace: "default",
+			},
+			Data: map[string][]byte{"key": []byte("old-value")},
 		}
 		oldHash, err := ObjectHash(oldSecret)
 		require.NoError(t, err)
 
 		existingSecret := &corev1.Secret{
-			APIVersion: "v1",
-			Kind:       "Secret",
-			Name:       "test-secret",
-			Namespace:  "default",
-			Annotations: map[string]string{
-				naming.AnnotationLastConfigHash.String(): oldHash,
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: "v1",
+				Kind:       "Secret",
 			},
-			OwnerReferences: []metav1.OwnerReference{
-				{
-					APIVersion:         "ps.percona.com/v1",
-					Kind:               "PerconaServerMySQL",
-					Name:               "test-cr",
-					UID:                "test-uid",
-					Controller:         new(true),
-					BlockOwnerDeletion: new(true),
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-secret",
+				Namespace: "default",
+				Annotations: map[string]string{
+					naming.AnnotationLastConfigHash.String(): oldHash,
+				},
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						APIVersion:         "ps.percona.com/v1",
+						Kind:               "PerconaServerMySQL",
+						Name:               "test-cr",
+						UID:                types.UID("test-uid"),
+						Controller:         boolPtr(true),
+						BlockOwnerDeletion: boolPtr(true),
+					},
 				},
 			},
 			Type: corev1.SecretTypeOpaque,
@@ -695,12 +753,16 @@ func TestEnsureObjectWithHash(t *testing.T) {
 
 		// Build the desired object with updated data
 		desired := &corev1.Secret{
-			APIVersion: "v1",
-			Kind:       "Secret",
-			Name:       "test-secret",
-			Namespace:  "default",
-			Type:       corev1.SecretTypeOpaque,
-			Data:       map[string][]byte{"key": []byte("new-value")},
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: "v1",
+				Kind:       "Secret",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-secret",
+				Namespace: "default",
+			},
+			Type: corev1.SecretTypeOpaque,
+			Data: map[string][]byte{"key": []byte("new-value")},
 		}
 
 		err = EnsureObjectWithHash(context.Background(), cl, cr, desired, scheme)
@@ -716,7 +778,7 @@ func TestEnsureObjectWithHash(t *testing.T) {
 	t.Run("updates certificate issuerRef when switching ClusterIssuer to Issuer", func(t *testing.T) {
 		existingCert := &cm.Certificate{
 			TypeMeta: metav1.TypeMeta{
-				APIVersion: cm.SchemeGroupVersion.String(),
+				APIVersion: "cert-manager.io/v1",
 				Kind:       "Certificate",
 			},
 			ObjectMeta: metav1.ObjectMeta{
@@ -726,7 +788,7 @@ func TestEnsureObjectWithHash(t *testing.T) {
 			Spec: cm.CertificateSpec{
 				SecretName: "test-ssl",
 				DNSNames:   []string{"test.example.com"},
-				IssuerRef: cmmeta.ObjectReference{
+				IssuerRef: cmmeta.IssuerReference{
 					Name:  "my-org-issuer",
 					Kind:  cm.ClusterIssuerKind,
 					Group: "cert-manager.io",
@@ -744,7 +806,7 @@ func TestEnsureObjectWithHash(t *testing.T) {
 
 		desired := &cm.Certificate{
 			TypeMeta: metav1.TypeMeta{
-				APIVersion: cm.SchemeGroupVersion.String(),
+				APIVersion: "cert-manager.io/v1",
 				Kind:       "Certificate",
 			},
 			ObjectMeta: metav1.ObjectMeta{
@@ -754,7 +816,7 @@ func TestEnsureObjectWithHash(t *testing.T) {
 			Spec: cm.CertificateSpec{
 				SecretName: "test-ssl",
 				DNSNames:   []string{"test.example.com"},
-				IssuerRef: cmmeta.ObjectReference{
+				IssuerRef: cmmeta.IssuerReference{
 					Name:  "my-ns-issuer",
 					Kind:  cm.IssuerKind,
 					Group: "cert-manager.io",
