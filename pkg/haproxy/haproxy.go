@@ -124,16 +124,12 @@ func Service(cr *apiv1.PerconaServerMySQL, secret *corev1.Secret) *corev1.Servic
 	}
 
 	return &corev1.Service{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "Service",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        ServiceName(cr),
-			Namespace:   cr.Namespace,
-			Labels:      labels,
-			Annotations: util.SSMapMerge(cr.GlobalAnnotations(), expose.Annotations),
-		},
+		APIVersion:  "v1",
+		Kind:        "Service",
+		Name:        ServiceName(cr),
+		Namespace:   cr.Namespace,
+		Labels:      labels,
+		Annotations: util.SSMapMerge(cr.GlobalAnnotations(), expose.Annotations),
 		Spec: corev1.ServiceSpec{
 			Type:                          serviceType,
 			Ports:                         ports,
@@ -158,16 +154,12 @@ func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, configHash, tlsHash st
 	}
 
 	return &appsv1.StatefulSet{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "apps/v1",
-			Kind:       "StatefulSet",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        Name(cr),
-			Namespace:   cr.Namespace,
-			Labels:      Labels(cr),
-			Annotations: util.SSMapMerge(cr.GlobalAnnotations(), cr.Spec.Proxy.HAProxy.Annotations),
-		},
+		APIVersion:  "apps/v1",
+		Kind:        "StatefulSet",
+		Name:        Name(cr),
+		Namespace:   cr.Namespace,
+		Labels:      Labels(cr),
+		Annotations: util.SSMapMerge(cr.GlobalAnnotations(), cr.Spec.Proxy.HAProxy.Annotations),
 		Spec: appsv1.StatefulSetSpec{
 			Replicas:    &cr.Spec.Proxy.HAProxy.Size,
 			ServiceName: Name(cr),
@@ -209,51 +201,39 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 
 	volumes := []corev1.Volume{
 		{
-			Name: "bin",
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			},
+			Name:     "bin",
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		},
 		{
-			Name: "haproxy-config",
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			},
+			Name:     "haproxy-config",
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		},
 		{
 			Name: credsVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: cr.InternalSecretName(),
-				},
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: cr.InternalSecretName(),
 			},
 		},
 		{
 			Name: tlsVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: cr.Spec.SSLSecretName,
-				},
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: cr.Spec.SSLSecretName,
 			},
 		},
 		{
 			Name: configVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				Projected: &corev1.ProjectedVolumeSource{
-					Sources: []corev1.VolumeProjection{
-						{
-							ConfigMap: &corev1.ConfigMapProjection{
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: conf.GetConfigMapName(),
+			Projected: &corev1.ProjectedVolumeSource{
+				Sources: []corev1.VolumeProjection{
+					{
+						ConfigMap: &corev1.ConfigMapProjection{
+							Name: conf.GetConfigMapName(),
+							Items: []corev1.KeyToPath{
+								{
+									Key:  conf.GetConfigMapKey(),
+									Path: conf.GetConfigMapKey(),
 								},
-								Items: []corev1.KeyToPath{
-									{
-										Key:  conf.GetConfigMapKey(),
-										Path: conf.GetConfigMapKey(),
-									},
-								},
-								Optional: &t,
 							},
+							Optional: &t,
 						},
 					},
 				},
@@ -264,13 +244,9 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 	if cr.CompareVersion("1.2.0") >= 0 {
 		volumes = append(volumes, corev1.Volume{
 			Name: internalConfigVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: naming.InternalHAProxyConfigMapName(cr.Name),
-					},
-					Optional: new(true),
-				},
+			ConfigMap: &corev1.ConfigMapVolumeSource{
+				Name:     naming.InternalHAProxyConfigMapName(cr.Name),
+				Optional: new(true),
 			},
 		})
 	}

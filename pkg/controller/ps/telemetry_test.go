@@ -9,7 +9,6 @@ import (
 	. "github.com/onsi/gomega"
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -20,10 +19,8 @@ var _ = Describe("Reconcile telemetry sending", Ordered, func() {
 	const ns = crName
 
 	namespace := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      ns,
-			Namespace: ns,
-		},
+		Name:      ns,
+		Namespace: ns,
 	}
 
 	BeforeAll(func() {

@@ -8,7 +8,6 @@ import (
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
@@ -27,16 +26,12 @@ func ConfigMapHash(cm *corev1.ConfigMap) (string, error) {
 
 func ConfigMap(cr *apiv1.PerconaServerMySQL, name, filename, data string, component string) *corev1.ConfigMap {
 	cm := &corev1.ConfigMap{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "ConfigMap",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        name,
-			Namespace:   cr.Namespace,
-			Labels:      cr.GlobalLabels(),
-			Annotations: cr.GlobalAnnotations(),
-		},
+		APIVersion:  "v1",
+		Kind:        "ConfigMap",
+		Name:        name,
+		Namespace:   cr.Namespace,
+		Labels:      cr.GlobalLabels(),
+		Annotations: cr.GlobalAnnotations(),
 		Data: map[string]string{
 			filename: data,
 		},

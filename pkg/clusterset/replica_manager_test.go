@@ -15,10 +15,8 @@ import (
 
 func TestClusterSetReplicaManagerJob(t *testing.T) {
 	pcs := &apiv1.PerconaServerMySQLClusterSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "cluster-set",
-			Namespace: "test-ns",
-		},
+		Name:      "cluster-set",
+		Namespace: "test-ns",
 	}
 	cluster := &apiv1.ClusterSetCluster{
 		InnoDBClusterName: "replica",
