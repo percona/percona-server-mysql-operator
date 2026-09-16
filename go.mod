@@ -15,7 +15,7 @@ require (
 	github.com/go-openapi/strfmt v0.27.1
 	github.com/go-openapi/swag v0.29.2
 	github.com/go-openapi/validate v1.0.0
-	github.com/go-sql-driver/mysql v1.10.0
+	github.com/go-sql-driver/mysql v1.10.1
 	github.com/gocarina/gocsv v0.0.0-20230616125104-99d496ca653d
 	github.com/golang/mock v1.6.0
 	github.com/google/go-cmp v0.7.0
