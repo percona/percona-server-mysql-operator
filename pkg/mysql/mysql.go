@@ -885,10 +885,12 @@ func heartbeatContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 		},
 	}
 
-	// Before 1.3.0 the sidecar honored a clone-wait timeout via CLONE_TIMEOUT_SECONDS.
-	// From 1.3.0 it waits without a timeout and ignores this env, so it is dropped.
-	// Keep emitting it for older clusters (same value main produces) so upgrading
-	// only the operator image does not change the pod template and roll them.
+	// The current sidecar script ignores CLONE_TIMEOUT_SECONDS (it waits without a
+	// timeout for every version). We still emit the env for pre-1.3.0 clusters -
+	// with the same value main produced - purely to keep their pod template
+	// unchanged, so upgrading only the operator image does not roll them. This
+	// does not preserve the old wait-timeout behavior (the script no longer reads
+	// it); from 1.3.0 the env is dropped entirely.
 	if cr.CompareVersion("1.3.0") < 0 && cr.CompareVersion("1.0.0") >= 0 {
 		t, err := utils.GetCloneTimeout()
 		if err != nil || t == 0 {

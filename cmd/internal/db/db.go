@@ -33,8 +33,16 @@ var ErrRestartAfterClone = errors.New("Error 3707: Restart server failed (mysqld
 type ReplicationStatus int8
 
 type DB struct {
-	db *sql.DB
+	db     *sql.DB
+	params DBParams
 }
+
+// cloneReadTimeoutSeconds is the read timeout for the dedicated clone connection.
+// CLONE INSTANCE sends nothing on the wire until it finishes, so the normal
+// read timeout would abort a long clone; this is set effectively "no deadline"
+// (7 days, matching the startup-probe backstop) instead - the stall watchdog and
+// context bound the operation.
+const cloneReadTimeoutSeconds = 7 * 24 * 60 * 60
 
 type DBParams struct {
 	User apiv1.SystemUser
@@ -91,7 +99,9 @@ func (p *DBParams) DSN() string {
 }
 
 func NewDatabase(ctx context.Context, params DBParams) (*DB, error) {
-	db, err := sql.Open("mysql", params.DSN())
+	// DSN() applies defaults to params (pointer receiver), so read it back after.
+	dsn := params.DSN()
+	db, err := sql.Open("mysql", dsn)
 	if err != nil {
 		return nil, errors.Wrap(err, "connect to MySQL")
 	}
@@ -100,7 +110,7 @@ func NewDatabase(ctx context.Context, params DBParams) (*DB, error) {
 		return nil, errors.Wrap(err, "ping DB")
 	}
 
-	return &DB{db}, nil
+	return &DB{db: db, params: params}, nil
 }
 
 func (d *DB) StartReplication(ctx context.Context, host, replicaPass string, port int32, sourceRetryCount, sourceConnectRetry uint32) error {
@@ -276,7 +286,20 @@ func (d *DB) getCloneStatusDetails(ctx context.Context) (map[string]any, error) 
 }
 
 func (d *DB) Clone(ctx context.Context, donor, user, pass string, port int32, cloneTimeoutSeconds, stallTimeoutSeconds uint32) error {
-	_, err := d.db.ExecContext(ctx, "SET GLOBAL clone_valid_donor_list=?", fmt.Sprintf("%s:%d", donor, port))
+	// CLONE INSTANCE is silent on the wire until it completes, so running it on
+	// the normal connection would trip that connection's read timeout on any
+	// clone longer than ReadTimeoutSeconds (1h by default). Use a dedicated
+	// connection with an effectively unlimited read deadline; the stall watchdog
+	// and context bound the operation instead.
+	cloneParams := d.params
+	cloneParams.ReadTimeoutSeconds = cloneReadTimeoutSeconds
+	cloneDB, err := sql.Open("mysql", cloneParams.DSN())
+	if err != nil {
+		return errors.Wrap(err, "open clone connection")
+	}
+	defer cloneDB.Close()
+
+	_, err = cloneDB.ExecContext(ctx, "SET GLOBAL clone_valid_donor_list=?", fmt.Sprintf("%s:%d", donor, port))
 	if err != nil {
 		return errors.Wrap(err, "set clone_valid_donor_list")
 	}
@@ -302,7 +325,7 @@ func (d *DB) Clone(ctx context.Context, donor, user, pass string, port int32, cl
 		go d.watchCloneProgress(ctx, cancel, time.Duration(stallTimeoutSeconds)*time.Second, stop)
 	}
 
-	_, err = d.db.ExecContext(cloneCtx, "CLONE INSTANCE FROM ?@?:? IDENTIFIED BY ?", user, donor, port, pass)
+	_, err = cloneDB.ExecContext(cloneCtx, "CLONE INSTANCE FROM ?@?:? IDENTIFIED BY ?", user, donor, port, pass)
 	if err != nil {
 		mErr, ok := err.(*mysql.MySQLError)
 		if !ok {

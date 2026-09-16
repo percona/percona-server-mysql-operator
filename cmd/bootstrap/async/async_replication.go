@@ -104,7 +104,13 @@ func Bootstrap(ctx context.Context) error {
 		return errors.Wrap(err, "get clone stall timeout")
 	}
 	if stallSet {
-		log.Printf("Clone progress watchdog stall timeout: %ds (0 = disabled)", cloneStallTimeout)
+		// From 1.3.0 the progress watchdog fully governs clone termination, so
+		// ignore any fixed BOOTSTRAP_CLONE_TIMEOUT here: a healthy clone should run
+		// as long as it keeps making progress (and BOOTSTRAP_CLONE_STALL_TIMEOUT=0
+		// means no timeout at all). The fixed timeout stays in effect only for
+		// pre-1.3.0 clusters, which do not set BOOTSTRAP_CLONE_STALL_TIMEOUT.
+		params.CloneTimeoutSeconds = 0
+		log.Printf("Clone progress watchdog stall timeout: %ds (0 = disabled); fixed clone timeout ignored", cloneStallTimeout)
 	}
 
 	sourceRetryCount, err := utils.GetSourceRetryCount()
