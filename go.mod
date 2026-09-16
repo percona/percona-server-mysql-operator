@@ -3,7 +3,7 @@ module github.com/percona/percona-server-mysql-operator
 go 1.27.0
 
 require (
-	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.8.0
+	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.8.1
 	github.com/Percona-Lab/percona-version-service v0.0.0-20230324081000-27de445df239
 	github.com/cert-manager/cert-manager v1.21.2
 	github.com/dustin/go-humanize v1.0.1
@@ -49,6 +49,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.23.1 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.12.0 // indirect
 	github.com/Masterminds/semver/v3 v3.5.0 // indirect
+	github.com/apache/arrow-go/v18 v18.7.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bool64/shared v0.1.6 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
@@ -79,7 +80,9 @@ require (
 	github.com/go-openapi/swag/yamlutils v0.29.2 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
+	github.com/goccy/go-json v0.10.6 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
+	github.com/google/flatbuffers v25.12.19+incompatible // indirect
 	github.com/google/gnostic-models v0.7.1 // indirect
 	github.com/google/pprof v0.0.0-20260402051712-545e8a4df936 // indirect
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 // indirect
@@ -106,6 +109,7 @@ require (
 	github.com/oklog/ulid/v2 v2.1.2 // indirect
 	github.com/pelletier/go-toml/v2 v2.3.1 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
+	github.com/pierrec/lz4/v4 v4.1.28 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/client_golang v1.24.0 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
@@ -139,6 +143,7 @@ require (
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/crypto v0.56.0 // indirect
+	golang.org/x/exp v0.0.0-20260813180055-c1d0aacb2297 // indirect
 	golang.org/x/mod v0.41.0 // indirect
 	golang.org/x/net v0.58.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
