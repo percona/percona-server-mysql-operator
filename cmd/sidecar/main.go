@@ -28,6 +28,7 @@ func startServer() *http.Server {
 	mux.HandleFunc("/backup/checkpoint-info", handler.GetBackupInfoFunc) // Deprecated: use /backup/info instead
 	mux.HandleFunc("/backup/info", handler.GetBackupInfoFunc)
 	mux.HandleFunc("/logs/", handler.LogsHandlerFunc)
+	mux.Handle("/failover/stream", handler.FailoverStream())
 
 	srv := &http.Server{
 		Addr:              ":" + strconv.Itoa(mysql.SidecarHTTPPort),
