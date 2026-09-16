@@ -5,7 +5,7 @@ go 1.27.0
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.8.0
 	github.com/Percona-Lab/percona-version-service v0.0.0-20230324081000-27de445df239
-	github.com/cert-manager/cert-manager v1.21.1
+	github.com/cert-manager/cert-manager v1.21.2
 	github.com/dustin/go-humanize v1.0.1
 	github.com/flosch/pongo2 v0.0.0-20200913210552-0d938eb266f3
 	github.com/go-ini/ini v1.67.0
@@ -138,7 +138,7 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
-	golang.org/x/crypto v0.55.0 // indirect
+	golang.org/x/crypto v0.56.0 // indirect
 	golang.org/x/mod v0.41.0 // indirect
 	golang.org/x/net v0.58.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
