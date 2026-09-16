@@ -48,6 +48,17 @@ install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/pitr" "${BINDIR}/
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/run-pitr-restore.sh" "${BINDIR}/run-pitr-restore.sh"
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/run-prepare-restore.sh" "${BINDIR}/run-prepare-restore.sh"
 
+# Distribute the log collector assets (entrypoint + fluent-bit/logrotate config)
+# into the shared bin volume so the log collector sidecars can run them without
+# baking them into the fluent-bit image. The assets are only present when the
+# operator image ships them, so guard the copy to avoid failing the init
+# container (and thus the whole pod) on images without them.
+if [[ -d ${OPERATORDIR}/logcollector ]]; then
+	cp -a "${OPERATORDIR}/logcollector" "${BINDIR}/"
+	chown -R "$(id -u)":"$(id -g)" "${BINDIR}/logcollector"
+	chmod -R 0755 "${BINDIR}/logcollector"
+fi
+
 if [[ -d /etc/s3/certs-in && -d /etc/s3/certs ]]; then
 	"${BINDIR}/prepare-s3-certs.sh"
 fi

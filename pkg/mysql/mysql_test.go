@@ -12,6 +12,8 @@ import (
 	"k8s.io/utils/ptr"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/pkg/logcollector"
+	"github.com/percona/percona-server-mysql-operator/pkg/logcollector/logrotate"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/version"
@@ -764,4 +766,114 @@ func TestBackupVolumeMounts(t *testing.T) {
 	mounts := backupVolumeMounts(cr)
 
 	assert.Equal(t, expected, mounts)
+}
+
+func TestStatefulSetLogCollector(t *testing.T) {
+	newCR := func(t *testing.T, update ...func(cr *apiv1.PerconaServerMySQL)) *apiv1.PerconaServerMySQL {
+		t.Helper()
+
+		cr := readDefaultCluster(t, "cluster", "ns")
+		cr.Spec.CRVersion = "1.3.0"
+		cr.Spec.LogCollector = &apiv1.LogCollectorSpec{
+			Enabled: new(true),
+			Image:   "percona/fluentbit:test",
+		}
+		for _, f := range update {
+			f(cr)
+		}
+		return cr
+	}
+
+	containerNames := func(sts *appsv1.StatefulSet) []string {
+		names := make([]string, 0, len(sts.Spec.Template.Spec.Containers))
+		for _, c := range sts.Spec.Template.Spec.Containers {
+			names = append(names, c.Name)
+		}
+		return names
+	}
+
+	t.Run("sidecars are added when enabled", func(t *testing.T) {
+		sts := StatefulSet(newCR(t), "init", "", "", nil)
+
+		names := containerNames(sts)
+		assert.Contains(t, names, logcollector.ContainerName)
+		assert.Contains(t, names, logrotate.ContainerName)
+	})
+
+	t.Run("no sidecars when disabled", func(t *testing.T) {
+		sts := StatefulSet(newCR(t, func(cr *apiv1.PerconaServerMySQL) {
+			cr.Spec.LogCollector.Enabled = new(false)
+		}), "init", "", "", nil)
+
+		names := containerNames(sts)
+		assert.NotContains(t, names, logcollector.ContainerName)
+		assert.NotContains(t, names, logrotate.ContainerName)
+	})
+
+	t.Run("no sidecars below cr version 1.3.0", func(t *testing.T) {
+		sts := StatefulSet(newCR(t, func(cr *apiv1.PerconaServerMySQL) {
+			cr.Spec.CRVersion = "1.2.0"
+		}), "init", "", "", nil)
+
+		assert.NotContains(t, containerNames(sts), logcollector.ContainerName)
+	})
+
+	t.Run("mysqld is told to write its error log to a file", func(t *testing.T) {
+		sts := StatefulSet(newCR(t), "init", "", "", nil)
+
+		var mysqld *corev1.Container
+		for i := range sts.Spec.Template.Spec.Containers {
+			if sts.Spec.Template.Spec.Containers[i].Name == AppName {
+				mysqld = &sts.Spec.Template.Spec.Containers[i]
+			}
+		}
+		require.NotNil(t, mysqld)
+
+		env := make(map[string]string, len(mysqld.Env))
+		for _, e := range mysqld.Env {
+			env[e.Name] = e.Value
+		}
+
+		assert.Equal(t, "true", env[logcollector.EnabledEnvVar])
+		assert.Equal(t, logcollector.LogDir(DataMountPath), env[logcollector.LogDirEnvVar])
+	})
+
+	t.Run("mysqld keeps stderr logging when disabled", func(t *testing.T) {
+		sts := StatefulSet(newCR(t, func(cr *apiv1.PerconaServerMySQL) {
+			cr.Spec.LogCollector.Enabled = new(false)
+		}), "init", "", "", nil)
+
+		for _, c := range sts.Spec.Template.Spec.Containers {
+			for _, e := range c.Env {
+				assert.NotEqual(t, logcollector.EnabledEnvVar, e.Name)
+			}
+		}
+	})
+
+	t.Run("sidecars are appended after the user sidecars", func(t *testing.T) {
+		sts := StatefulSet(newCR(t, func(cr *apiv1.PerconaServerMySQL) {
+			cr.Spec.MySQL.Sidecars = []corev1.Container{{Name: "user-sidecar"}}
+		}), "init", "", "", nil)
+
+		names := containerNames(sts)
+		require.Len(t, names, 5)
+		assert.Equal(t,
+			[]string{"user-sidecar", logcollector.ContainerName, logrotate.ContainerName},
+			names[len(names)-3:],
+		)
+	})
+
+	t.Run("custom configuration adds the config volume", func(t *testing.T) {
+		sts := StatefulSet(newCR(t, func(cr *apiv1.PerconaServerMySQL) {
+			cr.Spec.LogCollector.Configuration = "pipeline: {}"
+		}), "init", "", "", nil)
+
+		var found bool
+		for _, v := range sts.Spec.Template.Spec.Volumes {
+			if v.Name == "log-collector-volume" {
+				found = true
+			}
+		}
+		assert.True(t, found, "log collector config volume missing")
+	})
 }

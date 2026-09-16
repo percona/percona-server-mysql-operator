@@ -6,7 +6,7 @@
 export RESOURCE_PATH="deploy/cr.yaml"
 
 sort_yaml() {
-	GENERAL_ORDER='"metadata", "unsafeFlags", "pause", "clusterServiceDNSSuffix", "crVersion", "enableVolumeExpansion", "storageScaling", "secretsName", "sslSecretName", "updateStrategy", "upgradeOptions", "initContainer", "ignoreAnnotations", "ignoreLabels", "tls", "mysql", "proxy", "orchestrator", "pmm", "backup", "toolkit"'
+	GENERAL_ORDER='"metadata", "unsafeFlags", "pause", "clusterServiceDNSSuffix", "crVersion", "enableVolumeExpansion", "storageScaling", "secretsName", "sslSecretName", "updateStrategy", "upgradeOptions", "initContainer", "ignoreAnnotations", "ignoreLabels", "tls", "mysql", "proxy", "orchestrator", "pmm", "logcollector", "backup", "toolkit"'
 
 	POD_SPEC_ORDER='"size", "image", "imagePullPolicy","imagePullSecrets", "runtimeClassName", "tolerations", "annotations", "labels", "nodeSelector", "priorityClassName", "schedulerName", "serviceAccountName","gracePeriod", "initContainer", "env", "envFrom", "podDisruptionBudget", "resources","startupProbe", "readinessProbe", "livenessProbe", "affinity", "topologySpreadConstraints", "containerSecurityContext", "podSecurityContext"'
 	MYSQL_ORDER='"clusterType", "autoRecovery", "vaultSecretName", '"$POD_SPEC_ORDER"',"exposePrimary", "expose", "volumeSpec", "configuration", "sidecars", "sidecarVolumes", "sidecarPVCs"'
@@ -18,6 +18,9 @@ sort_yaml() {
 	BINLOG_SERVER_ORDER='"enabled","binlogServer"'
 	BINLOG_SERVER_SPEC_ORDER='"size","image","imagePullPolicy","imagePullSecrets","serverId","storage","keyringSecret","connectTimeout","readTimeout","writeTimeout","idleTime"'
 	BACKUP_ORDER='"enabled","pitr","sourcePod","image","imagePullPolicy","imagePullSecrets","schedule","backoffLimit", "serviceAccountName", "initContainer", "containerSecurityContext", "resources","storages"'
+	LOGCOLLECTOR_ORDER='"enabled","image","imagePullPolicy","configuration","env","envFrom","containerSecurityContext","resources","readinessProbe","livenessProbe","volumeMounts","volumes","logRotate"'
+	LOGROTATE_ORDER='"schedule","configuration","extraConfig","readinessProbe","livenessProbe"'
+
 	TOOLKIT_ORDER='"image","imagePullPolicy","imagePullSecrets","env","envFrom","resources","containerSecurityContext", "startupProbe", "readinessProbe", "livenessProbe"'
 
 	yq - \
@@ -30,6 +33,8 @@ sort_yaml() {
 		| yq '.spec.backup |= pick((['"$BACKUP_ORDER"'] + keys) | unique)' \
 		| yq '.spec.backup.pitr |= pick((['"$BINLOG_SERVER_ORDER"'] + keys) | unique)' \
 		| yq '.spec.backup.pitr.binlogServer |= pick((['"$BINLOG_SERVER_SPEC_ORDER"'] + keys) | unique)' \
+		| yq '.spec.logcollector |= pick((['"$LOGCOLLECTOR_ORDER"'] + keys) | unique)' \
+		| yq '.spec.logcollector.logRotate |= pick((['"$LOGROTATE_ORDER"'] + keys) | unique)' \
 		| yq '.spec.toolkit |= pick((['"$TOOLKIT_ORDER"'] + keys) | unique)'
 }
 

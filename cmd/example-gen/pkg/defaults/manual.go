@@ -25,6 +25,7 @@ func ManualCluster(cr *apiv1.PerconaServerMySQL) {
 	routerDefaults(cr.Spec.Proxy.Router)
 	orchestratorDefaults(&cr.Spec.Orchestrator)
 	pmmDefaults(cr.Spec.PMM)
+	logCollectorDefaults(cr.Spec.LogCollector)
 	toolkitDefaults(cr.Spec.Toolkit)
 	backupDefaults(cr.Spec.Backup)
 	customUserDefaults(&cr.Spec)
@@ -123,6 +124,63 @@ func pmmDefaults(spec *apiv1.PMMSpec) {
 	spec.CustomClusterName = "cluster1-custom"
 	spec.MySQLParams = "PMM_ADMIN_CUSTOM_PARAMS"
 	spec.HAProxyParams = "PMM_ADMIN_CUSTOM_PARAMS"
+}
+
+func logCollectorDefaults(spec *apiv1.LogCollectorSpec) {
+	if spec == nil {
+		return
+	}
+
+	spec.Enabled = new(true)
+	spec.Image = ImageLogCollector
+	spec.Resources = resources("150M", "300m", "200M", "350m")
+	spec.LivenessProbe = tcpProbe(2020, 30, 15)
+	spec.ReadinessProbe = tcpProbe(2020, 5, 10)
+	spec.Configuration = `pipeline:
+  filters:
+    - name: record_modifier
+      match: "*"
+      record:
+        - cluster_name cluster1
+`
+
+	if spec.LogRotate != nil {
+		spec.LogRotate.LivenessProbe = execProbe([]string{"/bin/true"}, 30, 15)
+		spec.LogRotate.ReadinessProbe = execProbe([]string{"/bin/true"}, 5, 10)
+		spec.LogRotate.Schedule = "0 0 * * *"
+		spec.LogRotate.ExtraConfig = corev1.LocalObjectReference{Name: "my-logrotate-config"}
+		spec.LogRotate.Configuration = `/var/lib/mysql/log/*.log {
+    daily
+    maxsize 100M
+    rotate 7
+    missingok
+    nocompress
+    notifempty
+    copytruncate
+    sharedscripts
+}
+`
+	}
+}
+
+func tcpProbe(port int32, initialDelay, period int32) *corev1.Probe {
+	return &corev1.Probe{
+		ProbeHandler: corev1.ProbeHandler{
+			TCPSocket: &corev1.TCPSocketAction{Port: intstr.FromInt32(port)},
+		},
+		InitialDelaySeconds: initialDelay,
+		PeriodSeconds:       period,
+	}
+}
+
+func execProbe(command []string, initialDelay, period int32) *corev1.Probe {
+	return &corev1.Probe{
+		ProbeHandler: corev1.ProbeHandler{
+			Exec: &corev1.ExecAction{Command: command},
+		},
+		InitialDelaySeconds: initialDelay,
+		PeriodSeconds:       period,
+	}
 }
 
 func customUserDefaults(spec *apiv1.PerconaServerMySQLSpec) {

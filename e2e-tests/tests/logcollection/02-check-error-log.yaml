@@ -1,0 +1,19 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 120
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      pod=$(get_mysql_pod_names logcollection | awk '{print $1}')
+
+      kubectl -n "${NAMESPACE}" exec "${pod}" -c mysql -- \
+          test -s /var/lib/mysql/log/mysqld-error.log
+
+      configured=$(kubectl -n "${NAMESPACE}" exec "${pod}" -c mysql -- \
+          cat /etc/my.cnf.d/node.cnf | grep -c '^log_error=/var/lib/mysql/log/mysqld-error.log')
+
+      kubectl create configmap -n "${NAMESPACE}" 02-check-error-log --from-literal=configured="${configured}"

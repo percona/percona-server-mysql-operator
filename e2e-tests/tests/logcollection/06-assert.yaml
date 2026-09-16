@@ -1,0 +1,18 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 420
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      containers=$(kubectl -n "${NAMESPACE}" get sts logcollection-mysql \
+          -o jsonpath='{.spec.template.spec.containers[*].name}')
+
+      echo "${containers}" | grep -qw logs && exit 1
+      echo "${containers}" | grep -qw logrotate && exit 1
+
+      kubectl -n "${NAMESPACE}" get configmap logcollection-log-collector-logrotate-config \
+          2>&1 | grep -q NotFound

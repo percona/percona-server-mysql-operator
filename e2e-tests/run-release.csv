@@ -58,3 +58,4 @@ telemetry
 tls-cert-manager
 users
 version-service
+logcollection

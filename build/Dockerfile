@@ -109,5 +109,6 @@ COPY build/binlog-server-entrypoint.sh /opt/percona-server-mysql-operator/binlog
 COPY --from=go_builder /usr/local/bin/pitr /opt/percona-server-mysql-operator/pitr
 COPY build/run-pitr-restore.sh /opt/percona-server-mysql-operator/run-pitr-restore.sh
 COPY build/run-prepare-restore.sh /opt/percona-server-mysql-operator/run-prepare-restore.sh
+COPY build/logcollector /opt/percona-server-mysql-operator/logcollector
 
 USER 2
