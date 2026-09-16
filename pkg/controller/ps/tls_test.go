@@ -350,6 +350,77 @@ var _ = Describe("TLS issuer kind handling", Ordered, func() {
 
 		Expect(testReconciler.checkTLSIssuer(ctx, cr)).To(Succeed())
 	})
+
+	It("updates certificate issuerRef when switching from ClusterIssuer to Issuer", func(ctx SpecContext) {
+		const crName = "tls-kind-switch"
+		const ns = "tls-kind-switch"
+
+		cr, err := readDefaultCR(crName, ns)
+		Expect(err).NotTo(HaveOccurred())
+		cr.Spec.TLS = &apiv1.TLSSpec{
+			IssuerConf: &cmmeta.IssuerReference{
+				Name:  clusterIssuerName,
+				Kind:  cm.ClusterIssuerKind,
+				Group: "cert-manager.io",
+			},
+		}
+
+		nsObj := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: ns}}
+		Expect(k8sClient.Create(ctx, nsObj)).To(Succeed())
+		DeferCleanup(func(cleanupCtx SpecContext) {
+			_ = k8sClient.Delete(cleanupCtx, nsObj)
+		})
+
+		Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+
+		firstCtx, cancelFirst := context.WithTimeout(ctx, 500*time.Millisecond)
+		defer cancelFirst()
+		err = reconciler().ensureSSLByCertManager(firstCtx, cr)
+		Expect(err).To(HaveOccurred())
+
+		cert := &cm.Certificate{}
+		certNN := types.NamespacedName{Name: cr.Name + "-ssl", Namespace: ns}
+		Eventually(func(g Gomega) {
+			err := k8sClient.Get(ctx, certNN, cert)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(cert.Spec.IssuerRef.Name).To(Equal(clusterIssuerName))
+			g.Expect(cert.Spec.IssuerRef.Kind).To(Equal(cm.ClusterIssuerKind))
+			g.Expect(cert.Spec.IssuerRef.Group).To(Equal("cert-manager.io"))
+		}, 5*time.Second, 200*time.Millisecond).Should(Succeed())
+
+		nsIssuer := &cm.Issuer{
+			ObjectMeta: metav1.ObjectMeta{Name: issuerName, Namespace: ns},
+			Spec: cm.IssuerSpec{
+				IssuerConfig: cm.IssuerConfig{SelfSigned: &cm.SelfSignedIssuer{}},
+			},
+		}
+		Expect(k8sClient.Create(ctx, nsIssuer)).To(Succeed())
+		DeferCleanup(func(cleanupCtx SpecContext) {
+			_ = k8sClient.Delete(cleanupCtx, nsIssuer)
+		})
+
+		latest := &apiv1.PerconaServerMySQL{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: crName, Namespace: ns}, latest)).To(Succeed())
+		latest.Spec.TLS.IssuerConf = &cmmeta.IssuerReference{
+			Name:  issuerName,
+			Kind:  cm.IssuerKind,
+			Group: "cert-manager.io",
+		}
+		Expect(k8sClient.Update(ctx, latest)).To(Succeed())
+
+		secondCtx, cancelSecond := context.WithTimeout(ctx, 500*time.Millisecond)
+		defer cancelSecond()
+		err = reconciler().ensureSSLByCertManager(secondCtx, latest)
+		Expect(err).To(HaveOccurred())
+
+		Eventually(func(g Gomega) {
+			err := k8sClient.Get(ctx, certNN, cert)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(cert.Spec.IssuerRef.Name).To(Equal(issuerName))
+			g.Expect(cert.Spec.IssuerRef.Kind).To(Equal(cm.IssuerKind))
+			g.Expect(cert.Spec.IssuerRef.Group).To(Equal("cert-manager.io"))
+		}, 5*time.Second, 200*time.Millisecond).Should(Succeed())
+	})
 })
 
 type forbiddenClusterIssuerGetClient struct {

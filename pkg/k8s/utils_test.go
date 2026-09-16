@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -600,6 +602,7 @@ func TestSetCRVersion(t *testing.T) {
 func TestEnsureObjectWithHash(t *testing.T) {
 	scheme := runtime.NewScheme()
 	require.NoError(t, corev1.AddToScheme(scheme))
+	require.NoError(t, cm.AddToScheme(scheme))
 	require.NoError(t, apiv1.AddToScheme(scheme))
 
 	cr := &apiv1.PerconaServerMySQL{
@@ -768,5 +771,66 @@ func TestEnsureObjectWithHash(t *testing.T) {
 		err = cl.Get(context.Background(), types.NamespacedName{Name: "test-secret", Namespace: "default"}, got)
 		require.NoError(t, err)
 		assert.Equal(t, []byte("new-value"), got.Data["key"])
+	})
+
+	t.Run("updates certificate issuerRef when switching ClusterIssuer to Issuer", func(t *testing.T) {
+		existingCert := &cm.Certificate{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: cm.SchemeGroupVersion.String(),
+				Kind:       "Certificate",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-ssl",
+				Namespace: "default",
+			},
+			Spec: cm.CertificateSpec{
+				SecretName: "test-ssl",
+				DNSNames:   []string{"test.example.com"},
+				IssuerRef: cmmeta.ObjectReference{
+					Name:  "my-org-issuer",
+					Kind:  cm.ClusterIssuerKind,
+					Group: "cert-manager.io",
+				},
+			},
+		}
+		oldHash, err := ObjectHash(existingCert)
+		require.NoError(t, err)
+		existingCert.Annotations = map[string]string{naming.AnnotationLastConfigHash.String(): oldHash}
+
+		cl := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(existingCert).
+			Build()
+
+		desired := &cm.Certificate{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: cm.SchemeGroupVersion.String(),
+				Kind:       "Certificate",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-ssl",
+				Namespace: "default",
+			},
+			Spec: cm.CertificateSpec{
+				SecretName: "test-ssl",
+				DNSNames:   []string{"test.example.com"},
+				IssuerRef: cmmeta.ObjectReference{
+					Name:  "my-ns-issuer",
+					Kind:  cm.IssuerKind,
+					Group: "cert-manager.io",
+				},
+			},
+		}
+
+		err = EnsureObjectWithHash(context.Background(), cl, nil, desired, scheme)
+		require.NoError(t, err)
+
+		got := &cm.Certificate{}
+		err = cl.Get(context.Background(), types.NamespacedName{Name: "test-ssl", Namespace: "default"}, got)
+		require.NoError(t, err)
+
+		assert.Equal(t, "my-ns-issuer", got.Spec.IssuerRef.Name)
+		assert.Equal(t, cm.IssuerKind, got.Spec.IssuerRef.Kind)
+		assert.Equal(t, "cert-manager.io", got.Spec.IssuerRef.Group)
 	})
 }
