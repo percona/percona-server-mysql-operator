@@ -22,11 +22,6 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/version"
 )
 
-//go:fix inline
-func boolPtr(v bool) *bool {
-	return new(v)
-}
-
 func TestEnsureService(t *testing.T) {
 	scheme := runtime.NewScheme()
 	err := corev1.AddToScheme(scheme)
