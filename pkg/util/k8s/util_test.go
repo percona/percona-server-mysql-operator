@@ -37,10 +37,8 @@ func buildTestClient(objs ...client.Object) client.Client {
 
 func newBackup(name, clusterName string, backupType apiv1.BackupType, state apiv1.BackupState, completedAt *metav1.Time) *apiv1.PerconaServerMySQLBackup {
 	return &apiv1.PerconaServerMySQLBackup{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: "default",
-		},
+		Name:      name,
+		Namespace: "default",
 		Spec: apiv1.PerconaServerMySQLBackupSpec{
 			Type:        backupType,
 			ClusterName: clusterName,

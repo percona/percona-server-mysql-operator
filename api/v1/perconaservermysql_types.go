@@ -451,8 +451,9 @@ type BackupSpec struct {
 	ServiceAccountName       string                        `json:"serviceAccountName,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext       `json:"containerSecurityContext,omitempty"`
 	Resources                corev1.ResourceRequirements   `json:"resources,omitempty"`
-	Storages                 map[string]*BackupStorageSpec `json:"storages,omitempty"`
-	BackoffLimit             *int32                        `json:"backoffLimit,omitempty"`
+	// +kubebuilder:validation:MaxProperties=100
+	Storages     map[string]*BackupStorageSpec `json:"storages,omitempty"`
+	BackoffLimit *int32                        `json:"backoffLimit,omitempty"`
 	// +kubebuilder:validation:Minimum=0
 	StartingDeadlineSeconds *int64 `json:"startingDeadlineSeconds,omitempty"`
 	// +kubebuilder:validation:Minimum=0
@@ -579,6 +580,10 @@ func (args BackupContainerArgs) GetXtrabackupFlagValue(flag string) string {
 }
 
 type BackupContainerArgs struct {
+	// XtraBackup requires --defaults-file to precede every other option.
+	// +kubebuilder:validation:MaxItems=100
+	// +kubebuilder:validation:items:MaxLength=1024
+	// +kubebuilder:validation:XValidation:rule="!self.exists(arg, arg == '--defaults-file' || arg.startsWith('--defaults-file=')) || (self[0].startsWith('--defaults-file=') && self[0] != '--defaults-file=')",message="--defaults-file must use --defaults-file=<path> syntax and be the first xtrabackup argument"
 	Xtrabackup []string `json:"xtrabackup,omitempty"`
 	Xbcloud    []string `json:"xbcloud,omitempty"`
 	Xbstream   []string `json:"xbstream,omitempty"`

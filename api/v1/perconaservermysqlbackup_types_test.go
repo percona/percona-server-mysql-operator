@@ -59,9 +59,9 @@ func TestPerconaServerMySQLBackup_IsStartingDeadlineExceeded(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			backup := &PerconaServerMySQLBackup{
-				ObjectMeta: metav1.ObjectMeta{CreationTimestamp: metav1.NewTime(now.Add(-time.Minute))},
-				Spec:       PerconaServerMySQLBackupSpec{StartingDeadlineSeconds: tt.backupDeadline},
-				Status:     PerconaServerMySQLBackupStatus{State: tt.state},
+				CreationTimestamp: metav1.NewTime(now.Add(-time.Minute)),
+				Spec:              PerconaServerMySQLBackupSpec{StartingDeadlineSeconds: tt.backupDeadline},
+				Status:            PerconaServerMySQLBackupStatus{State: tt.state},
 			}
 			cluster := &PerconaServerMySQL{Spec: PerconaServerMySQLSpec{
 				Backup: &BackupSpec{StartingDeadlineSeconds: tt.clusterDeadline},
