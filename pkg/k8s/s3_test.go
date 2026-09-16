@@ -52,13 +52,12 @@ func TestS3CAPath(t *testing.T) {
 
 func TestPrepareJobWithS3CA(t *testing.T) {
 	selector := apiv1.CABundleSecretSelector{Name: "private-ca", Key: "root.crt"}
-	cluster := &apiv1.PerconaServerMySQL{Spec: apiv1.PerconaServerMySQLSpec{CRVersion: "1.3.0"}}
 	storage := &apiv1.BackupStorageS3Spec{CABundle: &selector}
 	job := &batchv1.Job{Spec: batchv1.JobSpec{Template: corev1.PodTemplateSpec{
 		Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "backup"}}},
 	}}}
 
-	PrepareJobWithS3CA(job, cluster, storage)
+	PrepareJobWithS3CA(job, storage)
 
 	require.Len(t, job.Spec.Template.Spec.Volumes, 1)
 	container := job.Spec.Template.Spec.Containers[0]
@@ -71,8 +70,6 @@ func TestPrepareJobWithS3CA(t *testing.T) {
 }
 
 func TestPrepareJobWithS3CANoOp(t *testing.T) {
-	cluster := &apiv1.PerconaServerMySQL{Spec: apiv1.PerconaServerMySQLSpec{CRVersion: "1.3.0"}}
-
 	tests := []struct {
 		name    string
 		storage *apiv1.BackupStorageS3Spec
@@ -87,7 +84,7 @@ func TestPrepareJobWithS3CANoOp(t *testing.T) {
 				Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "backup"}}},
 			}}}
 
-			PrepareJobWithS3CA(job, cluster, tt.storage)
+			PrepareJobWithS3CA(job, tt.storage)
 
 			assert.Empty(t, job.Spec.Template.Spec.Volumes)
 			assert.Empty(t, job.Spec.Template.Spec.Containers[0].VolumeMounts)
