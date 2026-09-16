@@ -40,8 +40,8 @@ func S3CertVolumes(selectors []apiv1.CABundleSecretSelector) []corev1.Volume {
 	}}
 }
 
-func PrepareJobWithS3CA(job *batchv1.Job, cluster *apiv1.PerconaServerMySQL, storage *apiv1.BackupStorageS3Spec) {
-	if storage == nil || storage.CABundle == nil || cluster.CompareVersion("1.3.0") < 0 {
+func PrepareJobWithS3CA(job *batchv1.Job, storage *apiv1.BackupStorageS3Spec) {
+	if storage == nil || storage.CABundle == nil {
 		return
 	}
 
