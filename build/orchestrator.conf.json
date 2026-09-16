@@ -34,7 +34,7 @@
   "PostUnsuccessfulFailoverProcesses": [],
   "PreFailoverProcesses": [
     "echo 'Will recover from {failureType} on {failureCluster}'",
-    "echo 'PreFailoverProcesses:' && /opt/percona/orc-handler failover -source {failedHost} -failure-type '{failureType}'"
+    "echo 'PreFailoverProcesses:' && /opt/percona/orc-handler failover -source {failedHost} -failure-type '{failureType}' -command '{command}'"
   ],
   "ProcessesShellCommand": "sh",
   "RaftAdvertise": "127.0.0.1",
@@ -44,6 +44,7 @@
   "RaftNodes": [
     "127.0.0.1"
   ],
+  "ReasonableMaintenanceReplicationLagSeconds": 300,
   "RecoverIntermediateMasterClusterFilters": [
     ".*"
   ],
@@ -59,5 +60,5 @@
   "StatusEndpoint": "/api/status",
   "UseSuperReadOnly": true,
   "ReplicationLagQuery": "SELECT CAST((UNIX_TIMESTAMP(NOW()) - UNIX_TIMESTAMP(ts)) AS UNSIGNED INTEGER) AS 'delay' FROM sys_operator.heartbeat ORDER BY ts DESC LIMIT 1",
-  "FailMasterPromotionOnLagMinutes": 10
+  "FailMasterPromotionOnLagMinutes": 0
 }

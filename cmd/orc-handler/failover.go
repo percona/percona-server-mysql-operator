@@ -27,12 +27,18 @@ func runFailover(ctx context.Context, args []string) error {
 	target := fs.String("target", "", "Hostname of the server to apply the missing binary logs on. Defaults to the most up to date replica of the source")
 	timeout := fs.Duration("timeout", defaultTimeout, "How long fetching and applying the missing binary logs may take")
 	failureType := fs.String("failure-type", "", "Analysis code orchestrator reported the problem as. The command only runs for the ones whose recovery promotes a replica")
+	command := fs.String("command", "", "Orchestrator command that started the recovery. Empty for the failures orchestrator detects on its own")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 
 	if !orchestrator.IsMasterFailover(*failureType) {
 		log.Info("Recovery does not promote a replica, nothing to apply", "failureType", *failureType)
+		return nil
+	}
+
+	if orchestrator.IsPlannedTakeover(*command) {
+		log.Info("Recovery is a planned takeover, nothing to apply", "command", *command)
 		return nil
 	}
 
