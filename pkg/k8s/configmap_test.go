@@ -5,7 +5,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/version"
@@ -13,10 +12,8 @@ import (
 
 func TestConfigMap(t *testing.T) {
 	cluster := &apiv1.PerconaServerMySQL{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "cluster1",
-			Namespace: "configmap-ns",
-		},
+		Name:      "cluster1",
+		Namespace: "configmap-ns",
 		Spec: apiv1.PerconaServerMySQLSpec{
 			CRVersion: version.Version(),
 		},
@@ -102,10 +99,8 @@ func TestEqualConfigMaps(t *testing.T) {
 
 	t.Run("single configmap", func(t *testing.T) {
 		cm := &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-cm",
-				Namespace: "test-ns",
-			},
+			Name:      "test-cm",
+			Namespace: "test-ns",
 			Data: map[string]string{
 				"key": "value",
 			},
@@ -121,24 +116,20 @@ func TestEqualConfigMaps(t *testing.T) {
 
 	t.Run("two identical configmaps", func(t *testing.T) {
 		cm1 := &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-cm",
-				Namespace: "test-ns",
-				Labels: map[string]string{
-					"app": "myapp",
-				},
+			Name:      "test-cm",
+			Namespace: "test-ns",
+			Labels: map[string]string{
+				"app": "myapp",
 			},
 			Data: map[string]string{
 				"key": "value",
 			},
 		}
 		cm2 := &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-cm",
-				Namespace: "test-ns",
-				Labels: map[string]string{
-					"app": "myapp",
-				},
+			Name:      "test-cm",
+			Namespace: "test-ns",
+			Labels: map[string]string{
+				"app": "myapp",
 			},
 			Data: map[string]string{
 				"key": "value",
@@ -150,19 +141,15 @@ func TestEqualConfigMaps(t *testing.T) {
 
 	t.Run("two configmaps with different data", func(t *testing.T) {
 		cm1 := &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-cm",
-				Namespace: "test-ns",
-			},
+			Name:      "test-cm",
+			Namespace: "test-ns",
 			Data: map[string]string{
 				"key": "value1",
 			},
 		}
 		cm2 := &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-cm",
-				Namespace: "test-ns",
-			},
+			Name:      "test-cm",
+			Namespace: "test-ns",
 			Data: map[string]string{
 				"key": "value2",
 			},
@@ -173,24 +160,20 @@ func TestEqualConfigMaps(t *testing.T) {
 
 	t.Run("two configmaps with different labels", func(t *testing.T) {
 		cm1 := &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-cm",
-				Namespace: "test-ns",
-				Labels: map[string]string{
-					"app": "app1",
-				},
+			Name:      "test-cm",
+			Namespace: "test-ns",
+			Labels: map[string]string{
+				"app": "app1",
 			},
 			Data: map[string]string{
 				"key": "value",
 			},
 		}
 		cm2 := &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-cm",
-				Namespace: "test-ns",
-				Labels: map[string]string{
-					"app": "app2",
-				},
+			Name:      "test-cm",
+			Namespace: "test-ns",
+			Labels: map[string]string{
+				"app": "app2",
 			},
 			Data: map[string]string{
 				"key": "value",
@@ -207,10 +190,8 @@ func TestEqualConfigMaps(t *testing.T) {
 
 	t.Run("first configmap nil, second not nil", func(t *testing.T) {
 		cm := &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-cm",
-				Namespace: "test-ns",
-			},
+			Name:      "test-cm",
+			Namespace: "test-ns",
 			Data: map[string]string{
 				"key": "value",
 			},
@@ -221,10 +202,8 @@ func TestEqualConfigMaps(t *testing.T) {
 
 	t.Run("first configmap not nil, second nil", func(t *testing.T) {
 		cm := &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-cm",
-				Namespace: "test-ns",
-			},
+			Name:      "test-cm",
+			Namespace: "test-ns",
 			Data: map[string]string{
 				"key": "value",
 			},
@@ -235,12 +214,10 @@ func TestEqualConfigMaps(t *testing.T) {
 
 	t.Run("multiple configmaps all equal", func(t *testing.T) {
 		cm1 := &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-cm",
-				Namespace: "test-ns",
-				Labels: map[string]string{
-					"app": "myapp",
-				},
+			Name:      "test-cm",
+			Namespace: "test-ns",
+			Labels: map[string]string{
+				"app": "myapp",
 			},
 			Data: map[string]string{
 				"key": "value",
@@ -254,20 +231,16 @@ func TestEqualConfigMaps(t *testing.T) {
 
 	t.Run("multiple configmaps with one different", func(t *testing.T) {
 		cm1 := &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-cm",
-				Namespace: "test-ns",
-			},
+			Name:      "test-cm",
+			Namespace: "test-ns",
 			Data: map[string]string{
 				"key": "value",
 			},
 		}
 		cm2 := cm1.DeepCopy()
 		cm3 := &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-cm",
-				Namespace: "test-ns",
-			},
+			Name:      "test-cm",
+			Namespace: "test-ns",
 			Data: map[string]string{
 				"key": "different-value",
 			},
@@ -278,10 +251,8 @@ func TestEqualConfigMaps(t *testing.T) {
 
 	t.Run("multiple configmaps with nil in the middle", func(t *testing.T) {
 		cm1 := &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-cm",
-				Namespace: "test-ns",
-			},
+			Name:      "test-cm",
+			Namespace: "test-ns",
 			Data: map[string]string{
 				"key": "value",
 			},

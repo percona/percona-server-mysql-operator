@@ -568,10 +568,8 @@ func loadBalancerHost(ctx context.Context, cl client.Reader, cr *apiv1.PerconaSe
 	}
 
 	svc := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      proxyServiceName(cr),
-			Namespace: cr.Namespace,
-		},
+		Name:      proxyServiceName(cr),
+		Namespace: cr.Namespace,
 	}
 	if err := cl.Get(ctx, client.ObjectKeyFromObject(svc), svc); err != nil {
 		if k8serrors.IsNotFound(err) {

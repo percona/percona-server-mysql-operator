@@ -5,7 +5,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
@@ -161,10 +160,8 @@ func TestPodService(t *testing.T) {
 	podName := "test-pod"
 
 	cr := &apiv1.PerconaServerMySQL{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cluster",
-			Namespace: "test-namespace",
-		},
+		Name:      "test-cluster",
+		Namespace: "test-namespace",
 		Spec: apiv1.PerconaServerMySQLSpec{
 			Metadata: &apiv1.Metadata{
 				Labels: map[string]string{

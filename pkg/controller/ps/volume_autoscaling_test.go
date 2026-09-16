@@ -10,7 +10,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	restclient "k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -45,10 +44,8 @@ func autoscalingCR(t *testing.T) *apiv1.PerconaServerMySQL {
 	t.Helper()
 
 	cr := &apiv1.PerconaServerMySQL{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cluster",
-			Namespace: "test-ns",
-		},
+		Name:      "test-cluster",
+		Namespace: "test-ns",
 		Spec: apiv1.PerconaServerMySQLSpec{
 			MySQL: apiv1.MySQLSpec{
 				VolumeSpec: &apiv1.VolumeSpec{
@@ -81,11 +78,9 @@ func autoscalingCR(t *testing.T) *apiv1.PerconaServerMySQL {
 
 func autoscalingPVC(cr *apiv1.PerconaServerMySQL, idx string, capacity string) *corev1.PersistentVolumeClaim {
 	return &corev1.PersistentVolumeClaim{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "datadir-" + mysql.Name(cr) + "-" + idx,
-			Namespace: cr.Namespace,
-			Labels:    mysql.MatchLabels(cr),
-		},
+		Name:      "datadir-" + mysql.Name(cr) + "-" + idx,
+		Namespace: cr.Namespace,
+		Labels:    mysql.MatchLabels(cr),
 		Status: corev1.PersistentVolumeClaimStatus{
 			Capacity: corev1.ResourceList{
 				corev1.ResourceStorage: resource.MustParse(capacity),
@@ -96,15 +91,11 @@ func autoscalingPVC(cr *apiv1.PerconaServerMySQL, idx string, capacity string) *
 
 func autoscalingPod(cr *apiv1.PerconaServerMySQL, idx string, running bool) *corev1.Pod {
 	pod := &corev1.Pod{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Pod",
-			APIVersion: "v1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      mysql.Name(cr) + "-" + idx,
-			Namespace: cr.Namespace,
-			Labels:    mysql.MatchLabels(cr),
-		},
+		Kind:       "Pod",
+		APIVersion: "v1",
+		Name:       mysql.Name(cr) + "-" + idx,
+		Namespace:  cr.Namespace,
+		Labels:     mysql.MatchLabels(cr),
 	}
 	if running {
 		pod.Status = corev1.PodStatus{
@@ -128,10 +119,8 @@ func autoscalingPod(cr *apiv1.PerconaServerMySQL, idx string, running bool) *cor
 
 func autoscalingSTS(cr *apiv1.PerconaServerMySQL) *appsv1.StatefulSet {
 	return &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      mysql.Name(cr),
-			Namespace: cr.Namespace,
-		},
+		Name:      mysql.Name(cr),
+		Namespace: cr.Namespace,
 	}
 }
 
@@ -173,8 +162,8 @@ func TestExtractPodNameFromPVC(t *testing.T) {
 func TestFindPodByName(t *testing.T) {
 	podList := &corev1.PodList{
 		Items: []corev1.Pod{
-			{ObjectMeta: metav1.ObjectMeta{Name: "pod-0"}},
-			{ObjectMeta: metav1.ObjectMeta{Name: "pod-1"}},
+			{Name: "pod-0"},
+			{Name: "pod-1"},
 		},
 	}
 
