@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/utils/ptr"
 
@@ -154,6 +155,56 @@ func TestStatefulSet(t *testing.T) {
 		sts = StatefulSet(cluster, initImage, configHash, tlsHash)
 		assert.Equal(t, tolerations, sts.Spec.Template.Spec.Tolerations)
 	})
+
+	t.Run("mysql-monit service environment", func(t *testing.T) {
+		tests := []struct {
+			name               string
+			crVersion          string
+			expectedOrcService string
+		}{
+			{
+				name:               "before 1.3.0",
+				crVersion:          "1.2.0",
+				expectedOrcService: "cluster-mysql",
+			},
+			{
+				name:               "from 1.3.0",
+				crVersion:          "1.3.0",
+				expectedOrcService: "cluster-orc",
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				cluster := cr.DeepCopy()
+				cluster.Spec.CRVersion = tt.crVersion
+
+				sts := StatefulSet(cluster, initImage, configHash, tlsHash)
+				var mysqlMonit *corev1.Container
+				for i := range sts.Spec.Template.Spec.Containers {
+					if sts.Spec.Template.Spec.Containers[i].Name == "mysql-monit" {
+						mysqlMonit = &sts.Spec.Template.Spec.Containers[i]
+						break
+					}
+				}
+				require.NotNil(t, mysqlMonit)
+
+				assert.Equal(t, tt.expectedOrcService, envValue(t, mysqlMonit.Env, "ORC_SERVICE"))
+				assert.Equal(t, "cluster-mysql", envValue(t, mysqlMonit.Env, "MYSQL_SERVICE"))
+			})
+		}
+	})
+}
+
+func envValue(t *testing.T, env []corev1.EnvVar, name string) string {
+	t.Helper()
+	for _, e := range env {
+		if e.Name == name {
+			return e.Value
+		}
+	}
+	require.Fail(t, "environment variable not found", "name: %s", name)
+	return ""
 }
 
 func TestPodService(t *testing.T) {
