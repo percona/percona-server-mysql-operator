@@ -14,6 +14,28 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 )
 
+func containerByName(t *testing.T, containers []corev1.Container, name string) *corev1.Container {
+	t.Helper()
+	for i := range containers {
+		if containers[i].Name == name {
+			return &containers[i]
+		}
+	}
+	require.Fail(t, "container not found", "name: %s", name)
+	return nil
+}
+
+func envValue(t *testing.T, env []corev1.EnvVar, name string) string {
+	t.Helper()
+	for _, e := range env {
+		if e.Name == name {
+			return e.Value
+		}
+	}
+	require.Fail(t, "environment variable not found", "name: %s", name)
+	return ""
+}
+
 func TestStatefulSet(t *testing.T) {
 	const (
 		ns         = "orc-ns"
@@ -197,73 +219,61 @@ func TestStatefulSet(t *testing.T) {
 	})
 
 	t.Run("containers", func(t *testing.T) {
-		tests := []struct {
-			name               string
-			crVersion          string
-			expectedOrcService string
-		}{
-			{
-				name:               "before 1.3.0",
-				crVersion:          "1.2.0",
-				expectedOrcService: "cluster-mysql",
-			},
-			{
-				name:               "from 1.3.0",
-				crVersion:          "1.3.0",
-				expectedOrcService: "cluster-orc",
-			},
-		}
+		t.Run("orchestrator", func(t *testing.T) {
+			cluster := cr.DeepCopy()
+			cluster.Spec.CRVersion = "1.3.0"
 
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				cluster := cr.DeepCopy()
-				cluster.Spec.CRVersion = tt.crVersion
+			sts := StatefulSet(cluster, initImage, configHash, tlsHash)
+			require.Len(t, sts.Spec.Template.Spec.Containers, 2)
+			orchestrator := containerByName(t, sts.Spec.Template.Spec.Containers, AppName)
 
-				sts := StatefulSet(cluster, initImage, configHash, tlsHash)
-				require.Len(t, sts.Spec.Template.Spec.Containers, 2)
-				orchestrator := containerByName(t, sts.Spec.Template.Spec.Containers, AppName)
-				mysqlMonit := containerByName(t, sts.Spec.Template.Spec.Containers, "mysql-monit")
-
-				assert.Equal(t, sts.Spec.ServiceName, envValue(t, orchestrator.Env, "ORC_SERVICE"))
-				assert.Equal(t, "cluster-mysql", envValue(t, orchestrator.Env, "MYSQL_SERVICE"))
-				assert.Equal(t, "true", envValue(t, orchestrator.Env, "RAFT_ENABLED"))
-				assert.Equal(t, "cluster", envValue(t, orchestrator.Env, "CLUSTER_NAME"))
-
-				assert.Equal(t, tt.expectedOrcService, envValue(t, mysqlMonit.Env, "ORC_SERVICE"))
-				assert.Equal(t, "cluster-mysql", envValue(t, mysqlMonit.Env, "MYSQL_SERVICE"))
-				assert.Contains(t, mysqlMonit.Args, "-service=$(MYSQL_SERVICE)")
-				assert.Contains(t, mysqlMonit.Args, "-on-change=/opt/percona/orc-add_mysql_nodes.sh")
-				assert.Contains(t, orchestrator.VolumeMounts, corev1.VolumeMount{
-					Name: configVolumeName, MountPath: configMountPath,
-				})
-				assert.Contains(t, mysqlMonit.VolumeMounts, corev1.VolumeMount{
-					Name: configVolumeName, MountPath: configMountPath,
-				})
+			assert.Equal(t, "cluster-orc", envValue(t, orchestrator.Env, "ORC_SERVICE"))
+			assert.Equal(t, "cluster-mysql", envValue(t, orchestrator.Env, "MYSQL_SERVICE"))
+			assert.Equal(t, "true", envValue(t, orchestrator.Env, "RAFT_ENABLED"))
+			assert.Equal(t, "cluster", envValue(t, orchestrator.Env, "CLUSTER_NAME"))
+			assert.Contains(t, orchestrator.VolumeMounts, corev1.VolumeMount{
+				Name: "config", MountPath: "/etc/orchestrator/config",
 			})
-		}
+		})
+
+		t.Run("mysql-monit", func(t *testing.T) {
+			tests := []struct {
+				name               string
+				crVersion          string
+				expectedOrcService string
+			}{
+				{
+					name:               "before 1.3.0",
+					crVersion:          "1.2.0",
+					expectedOrcService: "cluster-mysql",
+				},
+				{
+					name:               "from 1.3.0",
+					crVersion:          "1.3.0",
+					expectedOrcService: "cluster-orc",
+				},
+			}
+
+			for _, tt := range tests {
+				t.Run(tt.name, func(t *testing.T) {
+					cluster := cr.DeepCopy()
+					cluster.Spec.CRVersion = tt.crVersion
+
+					sts := StatefulSet(cluster, initImage, configHash, tlsHash)
+					require.Len(t, sts.Spec.Template.Spec.Containers, 2)
+					mysqlMonit := containerByName(t, sts.Spec.Template.Spec.Containers, "mysql-monit")
+
+					assert.Equal(t, tt.expectedOrcService, envValue(t, mysqlMonit.Env, "ORC_SERVICE"))
+					assert.Equal(t, "cluster-mysql", envValue(t, mysqlMonit.Env, "MYSQL_SERVICE"))
+					assert.Contains(t, mysqlMonit.Args, "-service=$(MYSQL_SERVICE)")
+					assert.Contains(t, mysqlMonit.Args, "-on-change=/opt/percona/orc-add_mysql_nodes.sh")
+					assert.Contains(t, mysqlMonit.VolumeMounts, corev1.VolumeMount{
+						Name: "config", MountPath: "/etc/orchestrator/config",
+					})
+				})
+			}
+		})
 	})
-}
-
-func containerByName(t *testing.T, containers []corev1.Container, name string) *corev1.Container {
-	t.Helper()
-	for i := range containers {
-		if containers[i].Name == name {
-			return &containers[i]
-		}
-	}
-	require.Fail(t, "container not found", "name: %s", name)
-	return nil
-}
-
-func envValue(t *testing.T, env []corev1.EnvVar, name string) string {
-	t.Helper()
-	for _, e := range env {
-		if e.Name == name {
-			return e.Value
-		}
-	}
-	require.Fail(t, "environment variable not found", "name: %s", name)
-	return ""
 }
 
 func TestService(t *testing.T) {
