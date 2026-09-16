@@ -8,6 +8,6 @@ metadata:
   name: backup1
 spec:
   clusterName: gr-data-at-rest-encryption
-  storageName: minio
+  storageName: local-s3
 status:
   state: Succeeded
