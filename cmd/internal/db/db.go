@@ -146,6 +146,11 @@ func (d *DB) StartSQLThread(ctx context.Context) error {
 	return errors.Wrap(err, "start SQL_THREAD")
 }
 
+func (d *DB) StartIOThread(ctx context.Context) error {
+	_, err := d.db.ExecContext(ctx, "START REPLICA IO_THREAD")
+	return errors.Wrap(err, "start IO_THREAD")
+}
+
 func (d *DB) StopReplication(ctx context.Context) error {
 	_, err := d.db.ExecContext(ctx, "STOP REPLICA")
 	return errors.Wrap(err, "stop replication")

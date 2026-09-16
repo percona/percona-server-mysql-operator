@@ -56,22 +56,29 @@ type database interface {
 	GetSourceLogPos(ctx context.Context) (db.ReplicaPosition, error)
 	RelayLogPaths(ctx context.Context) (string, string, error)
 	StartSQLThread(ctx context.Context) error
+	StartIOThread(ctx context.Context) error
+	GetGTIDExecuted(ctx context.Context) (string, error)
+	GTIDSubtract(ctx context.Context, set, other string) (string, error)
 	Close() error
 }
 
 var _ database = (*db.DB)(nil)
 
 type failoverConfig struct {
-	newDatabase  func(ctx context.Context) (database, error)
-	sourceURL    func(host string) string
-	source       string
-	stagingDir   string
-	logDir       string
-	lockPath     string
-	wait         bool
-	applyPoll    time.Duration
-	applyTimeout time.Duration
-	fetchTimeout time.Duration
+	newDatabase   func(ctx context.Context) (database, error)
+	newSourceDB   func(ctx context.Context, host string) (sourceDatabase, error)
+	sourceURL     func(host string) string
+	source        string
+	stagingDir    string
+	logDir        string
+	lockPath      string
+	wait          bool
+	applyPoll     time.Duration
+	applyTimeout  time.Duration
+	fetchTimeout  time.Duration
+	sourcePoll    time.Duration
+	sourceTimeout time.Duration
+	receiverWait  time.Duration
 }
 
 type flags struct {
@@ -98,16 +105,20 @@ func parseFlags() flags {
 
 func config(f flags) failoverConfig {
 	return failoverConfig{
-		newDatabase:  func(ctx context.Context) (database, error) { return connectToDB(ctx) },
-		sourceURL:    sourceStreamURL,
-		source:       f.source,
-		stagingDir:   f.stagingDir,
-		logDir:       mysql.DataMountPath,
-		lockPath:     lockPath,
-		wait:         f.wait,
-		applyPoll:    relayLogApplyPoll,
-		applyTimeout: f.waitTimeout,
-		fetchTimeout: f.fetchTimeout,
+		newDatabase:   func(ctx context.Context) (database, error) { return connectToDB(ctx) },
+		newSourceDB:   connectToSource,
+		sourceURL:     sourceStreamURL,
+		source:        f.source,
+		stagingDir:    f.stagingDir,
+		logDir:        mysql.DataMountPath,
+		lockPath:      lockPath,
+		wait:          f.wait,
+		applyPoll:     relayLogApplyPoll,
+		applyTimeout:  f.waitTimeout,
+		fetchTimeout:  f.fetchTimeout,
+		sourcePoll:    sourceProbePoll,
+		sourceTimeout: sourceProbeTimeout,
+		receiverWait:  receiverWait,
 	}
 }
 
@@ -181,13 +192,26 @@ func run(ctx context.Context, cfg failoverConfig) error {
 		}
 	}()
 
-	if _, err := d.ShowReplicaStatus(ctx); err != nil {
+	status, err := d.ShowReplicaStatus(ctx)
+	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			log.Printf("Not a replica, nothing to apply")
 			return nil
 		}
 
 		return fmt.Errorf("show replica status: %w", err)
+	}
+
+	// Nothing has been touched yet, so a source that is already back costs us
+	// only the probe.
+	watch := newSourceWatch(cfg, d, status["Source_Host"])
+	if watch.confirmed(ctx) {
+		if status["Replica_IO_Running"] == "Yes" {
+			return errSourceRecovered
+		}
+
+		// An attempt that failed after its STOP REPLICA left the receiver down.
+		return watch.standDown(ctx)
 	}
 
 	if err := d.StopReplication(ctx); err != nil {
@@ -244,11 +268,14 @@ func run(ctx context.Context, cfg failoverConfig) error {
 		return nil
 	}
 
-	if err := waitForRelayLogsApplied(ctx, d, relayLogs, relayLog, startPos, cfg.applyPoll, cfg.applyTimeout); err != nil {
-		if errors.Is(err, errRelayApplyTimeout) && ctx.Err() == nil {
-			log.Printf("Timed out while waiting for applier, it will continue in the server anyway")
-			return nil
+	watchCtx, stopWatch := context.WithCancel(ctx)
+	defer stopWatch()
+
+	if err := waitForRelayLogsApplied(ctx, d, relayLogs, watchSource(watchCtx, watch), relayLog, startPos, cfg.applyPoll, cfg.applyTimeout); err != nil {
+		if errors.Is(err, errSourceRecovered) {
+			return watch.standDown(ctx)
 		}
+
 		return fmt.Errorf("apply relay logs: %w", err)
 	}
 
@@ -691,6 +718,7 @@ func waitForRelayLogsApplied(
 	ctx context.Context,
 	s replicaStatuser,
 	relayLogs relayIndex,
+	recovered <-chan struct{},
 	relayLog string,
 	startPos uint64,
 	poll, timeout time.Duration,
@@ -710,6 +738,14 @@ func waitForRelayLogsApplied(
 	var prevPos uint64
 
 	for {
+		// Promoting while the source is serving again would leave the cluster
+		// with two writable primaries, so it wins over a finished drain.
+		select {
+		case <-recovered:
+			return errSourceRecovered
+		default:
+		}
+
 		status, err := s.ShowReplicaStatus(ctx)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
@@ -763,6 +799,8 @@ func waitForRelayLogsApplied(
 		}
 
 		select {
+		case <-recovered:
+			return errSourceRecovered
 		case <-ctx.Done():
 			return fmt.Errorf("gave up after %s at %s:%d: %w: %w", timeout, prevLog, prevPos, errRelayApplyTimeout, ctx.Err())
 		case <-ticker.C:
