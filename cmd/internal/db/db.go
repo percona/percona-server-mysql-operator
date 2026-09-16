@@ -362,8 +362,10 @@ func (d *DB) cloneBytesTransferred(ctx context.Context) (int64, error) {
 
 // watchCloneProgress polls how many bytes the clone has transferred and calls
 // cancel to stop the clone if that number does not grow for the whole stall
-// duration. A failed poll - for example during the mysqld restart at the end of
-// a clone, or a transient error - is ignored and does not count as no progress.
+// duration. Short outages (the mysqld restart at the end of a clone, a transient
+// error) are tolerated, but if the clone cannot be observed at all for a whole
+// stall duration - so we can neither confirm progress nor a stall - it is stopped
+// too, rather than waiting indefinitely.
 func (d *DB) watchCloneProgress(ctx context.Context, cancel context.CancelFunc, stall time.Duration, stop <-chan struct{}) {
 	log := logf.FromContext(ctx)
 
@@ -371,8 +373,10 @@ func (d *DB) watchCloneProgress(ctx context.Context, cancel context.CancelFunc, 
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 
+	now := time.Now()
 	lastBytes := int64(-1)
-	lastProgress := time.Now()
+	lastProgress := now // last time the transferred-byte count grew
+	lastMeasured := now // last time we successfully read the byte count
 
 	for {
 		select {
@@ -385,16 +389,20 @@ func (d *DB) watchCloneProgress(ctx context.Context, cancel context.CancelFunc, 
 			bytes, err := d.cloneBytesTransferred(qCtx)
 			qCancel()
 			if err != nil {
-				// We could not measure progress this tick (for example the mysqld
-				// restart at the end of a clone, or a transient admin-connection
-				// error). Do not count an unmeasurable window as "no progress":
-				// reset the timer so an outage longer than the stall window does
-				// not abort a healthy clone. A genuine stall keeps the recipient
-				// reachable (the donor side is what is stuck), so real stalls are
-				// still detected once polling resumes.
-				lastProgress = time.Now()
+				// Could not read progress this tick (the mysqld restart at the end
+				// of a clone, or a transient error). Tolerate short outages, but if
+				// we cannot observe the clone at all for a whole stall duration,
+				// stop it instead of waiting forever: a healthy clone keeps its
+				// recipient reachable, so persistent unreadability is itself a
+				// failure.
+				if time.Since(lastMeasured) >= stall {
+					log.Info("clone progress could not be measured, aborting", "stall", stall.String())
+					cancel()
+					return
+				}
 				continue
 			}
+			lastMeasured = time.Now()
 
 			if lastBytes < 0 || bytes > lastBytes {
 				lastBytes = bytes
