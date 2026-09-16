@@ -19,15 +19,11 @@ const (
 func MySQLShellRunner(pcs *apiv1.PerconaServerMySQLClusterSet) *appsv1.Deployment {
 	matchLabels := naming.Labels(MySQLShellRunnerAppName, pcs.Name, "percona-server", MySQLShellRunnerComponent)
 	depl := &appsv1.Deployment{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "apps/v1",
-			Kind:       "Deployment",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      pcs.Name + "-runner",
-			Namespace: pcs.Namespace,
-			Labels:    naming.Labels(MySQLShellRunnerAppName, pcs.Name, "percona-server", MySQLShellRunnerComponent),
-		},
+		APIVersion: "apps/v1",
+		Kind:       "Deployment",
+		Name:       pcs.Name + "-runner",
+		Namespace:  pcs.Namespace,
+		Labels:     naming.Labels(MySQLShellRunnerAppName, pcs.Name, "percona-server", MySQLShellRunnerComponent),
 		Spec: appsv1.DeploymentSpec{
 			Replicas: new(int32(1)),
 			Selector: &metav1.LabelSelector{

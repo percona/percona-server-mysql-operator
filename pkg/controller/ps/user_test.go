@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -37,10 +36,8 @@ var _ = Describe("Keep user secrets", Ordered, func() {
 	crNamespacedName := types.NamespacedName{Name: crName, Namespace: ns}
 
 	namespace := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      crName,
-			Namespace: ns,
-		},
+		Name:      crName,
+		Namespace: ns,
 	}
 
 	BeforeAll(func() {
@@ -87,10 +84,8 @@ func TestEnsureUserSecrets(t *testing.T) {
 		{
 			name: "without user secret",
 			cr: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "some-cluster",
-					Namespace: ns,
-				},
+				Name:      "some-cluster",
+				Namespace: ns,
 				Spec: apiv1.PerconaServerMySQLSpec{
 					SecretsName: secretsName,
 					CRVersion:   "1.2.0",
@@ -100,20 +95,16 @@ func TestEnsureUserSecrets(t *testing.T) {
 		{
 			name: "with user secret",
 			cr: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "some-cluster",
-					Namespace: ns,
-				},
+				Name:      "some-cluster",
+				Namespace: ns,
 				Spec: apiv1.PerconaServerMySQLSpec{
 					SecretsName: secretsName,
 					CRVersion:   "1.2.0",
 				},
 			},
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      secretsName,
-					Namespace: ns,
-				},
+				Name:      secretsName,
+				Namespace: ns,
 				Data: map[string][]byte{
 					string(apiv1.UserHeartbeat):    []byte("hb-password"),
 					string(apiv1.UserMonitor):      []byte("m-password"),
@@ -129,20 +120,16 @@ func TestEnsureUserSecrets(t *testing.T) {
 		{
 			name: "with partially filled secret",
 			cr: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "some-cluster",
-					Namespace: ns,
-				},
+				Name:      "some-cluster",
+				Namespace: ns,
 				Spec: apiv1.PerconaServerMySQLSpec{
 					SecretsName: secretsName,
 					CRVersion:   "1.2.0",
 				},
 			},
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      secretsName,
-					Namespace: ns,
-				},
+				Name:      secretsName,
+				Namespace: ns,
 				Data: map[string][]byte{
 					string(apiv1.UserHeartbeat):   []byte("hb-password"),
 					string(apiv1.UserMonitor):     []byte("m-password"),
@@ -154,21 +141,17 @@ func TestEnsureUserSecrets(t *testing.T) {
 		{
 			name: "with existing empty secret",
 			cr: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "some-cluster",
-					Namespace: ns,
-				},
+				Name:      "some-cluster",
+				Namespace: ns,
 				Spec: apiv1.PerconaServerMySQLSpec{
 					SecretsName: secretsName,
 					CRVersion:   "1.2.0",
 				},
 			},
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      secretsName,
-					Namespace: ns,
-				},
-				Data: nil,
+				Name:      secretsName,
+				Namespace: ns,
+				Data:      nil,
 			},
 		},
 	}
@@ -227,10 +210,8 @@ func TestEnsureClusterUserSecret(t *testing.T) {
 
 	newCR := func() *apiv1.PerconaServerMySQL {
 		return &apiv1.PerconaServerMySQL{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "cluster",
-				Namespace: "database",
-			},
+			Name:      "cluster",
+			Namespace: "database",
 			Spec: apiv1.PerconaServerMySQLSpec{
 				ClusterServiceDNSSuffix: "cluster.example",
 				Proxy: apiv1.ProxySpec{
@@ -289,7 +270,7 @@ func TestEnsureClusterUserSecret(t *testing.T) {
 			}(),
 			objects: []client.Object{
 				&corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{Name: "cluster-router", Namespace: "database"},
+					Name: "cluster-router", Namespace: "database",
 					Status: corev1.ServiceStatus{LoadBalancer: corev1.LoadBalancerStatus{
 						Ingress: []corev1.LoadBalancerIngress{{Hostname: "lb.example.com"}},
 					}},
@@ -472,26 +453,26 @@ func TestReconcileUsersRestartsRouterOnOperatorPasswordUpdate(t *testing.T) {
 	const newOperatorPass = "op-password-new"
 
 	cr := &apiv1.PerconaServerMySQL{
-		ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: ns},
+		Name: crName, Namespace: ns,
 		Spec: apiv1.PerconaServerMySQLSpec{
 			CRVersion:   "1.2.0",
 			SecretsName: "some-secret",
 			MySQL:       apiv1.MySQLSpec{ClusterType: apiv1.ClusterTypeGR},
-			Proxy:       apiv1.ProxySpec{Router: &apiv1.MySQLRouterSpec{Enabled: true, PodSpec: apiv1.PodSpec{Size: 1}}},
+			Proxy:       apiv1.ProxySpec{Router: &apiv1.MySQLRouterSpec{Enabled: true, Size: 1}},
 		},
 	}
 
 	userSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: cr.Spec.SecretsName, Namespace: ns},
-		Data:       map[string][]byte{string(apiv1.UserOperator): []byte(newOperatorPass)},
+		Name: cr.Spec.SecretsName, Namespace: ns,
+		Data: map[string][]byte{string(apiv1.UserOperator): []byte(newOperatorPass)},
 	}
 	internalSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: cr.InternalSecretName(), Namespace: ns},
-		Data:       map[string][]byte{string(apiv1.UserOperator): []byte(oldOperatorPass)},
+		Name: cr.InternalSecretName(), Namespace: ns,
+		Data: map[string][]byte{string(apiv1.UserOperator): []byte(oldOperatorPass)},
 	}
 	routerDeployment := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: router.Name(cr), Namespace: ns},
-		Spec:       appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{}},
+		Name: router.Name(cr), Namespace: ns,
+		Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{}},
 	}
 
 	scheme := runtime.NewScheme()

@@ -25,10 +25,8 @@ func TestDNSNames(t *testing.T) {
 	}{
 		"no extra SANs": {
 			cr: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "cluster1",
-					Namespace: "default",
-				},
+				Name:      "cluster1",
+				Namespace: "default",
 				Spec: apiv1.PerconaServerMySQLSpec{
 					CRVersion: version.Version(),
 				},
@@ -50,10 +48,8 @@ func TestDNSNames(t *testing.T) {
 		},
 		"with extra SANs": {
 			cr: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "cluster1",
-					Namespace: "default",
-				},
+				Name:      "cluster1",
+				Namespace: "default",
 				Spec: apiv1.PerconaServerMySQLSpec{
 					CRVersion: version.Version(),
 					TLS: &apiv1.TLSSpec{
@@ -79,10 +75,8 @@ func TestDNSNames(t *testing.T) {
 		},
 		"with extra SANs version 1.0.0": {
 			cr: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "cluster1",
-					Namespace: "default",
-				},
+				Name:      "cluster1",
+				Namespace: "default",
 				Spec: apiv1.PerconaServerMySQLSpec{
 					CRVersion: "1.0.0",
 					TLS: &apiv1.TLSSpec{

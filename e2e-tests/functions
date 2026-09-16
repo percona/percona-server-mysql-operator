@@ -408,12 +408,9 @@ deploy_minio_tls() {
 	local access_key
 	local secret_key
 	local cert_dir
-	local extfile
 	access_key="$(kubectl -n "${NAMESPACE}" get secret minio-secret -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' | base64 -d)"
 	secret_key="$(kubectl -n "${NAMESPACE}" get secret minio-secret -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}' | base64 -d)"
 	cert_dir="$(mktemp -d)"
-	extfile="${cert_dir}/openssl-ext.cnf"
-	printf 'subjectAltName=DNS:minio-service,DNS:minio-service.%s,DNS:minio-service.%s.svc' "${NAMESPACE}" "${NAMESPACE}" >"${extfile}"
 
 	openssl req -x509 -newkey rsa:2048 -nodes -days 2 \
 		-keyout "${cert_dir}/ca.key" -out "${cert_dir}/ca.crt" \
@@ -421,11 +418,12 @@ deploy_minio_tls() {
 	openssl req -newkey rsa:2048 -nodes \
 		-keyout "${cert_dir}/private.key" -out "${cert_dir}/server.csr" \
 		-subj '/CN=minio-service'
+	printf 'subjectAltName=DNS:minio-service,DNS:minio-service.%s,DNS:minio-service.%s.svc' "${NAMESPACE}" "${NAMESPACE}" >"${cert_dir}/server.ext"
 	openssl x509 -req -days 2 \
 		-in "${cert_dir}/server.csr" \
 		-CA "${cert_dir}/ca.crt" -CAkey "${cert_dir}/ca.key" -CAcreateserial \
 		-out "${cert_dir}/server.crt" \
-		-extfile "${extfile}"
+		-extfile "${cert_dir}/server.ext"
 	cat "${cert_dir}/server.crt" "${cert_dir}/ca.crt" >"${cert_dir}/public.crt"
 
 	kubectl -n "${NAMESPACE}" create secret generic minio-tls \

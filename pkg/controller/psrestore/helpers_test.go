@@ -7,7 +7,6 @@ import (
 
 	coordv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -68,10 +67,8 @@ func readDefaultAzureSecret(t *testing.T, name, namespace string) *corev1.Secret
 	t.Helper()
 
 	return &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
+		Name:      name,
+		Namespace: namespace,
 		Data: map[string][]byte{
 			"AZURE_STORAGE_ACCOUNT_NAME": []byte("accountName"),
 			"AZURE_STORAGE_ACCOUNT_KEY":  []byte("accountKey"),
@@ -83,10 +80,8 @@ func readDefaultGCSSecret(t *testing.T, name, namespace string) *corev1.Secret {
 	t.Helper()
 
 	return &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
+		Name:      name,
+		Namespace: namespace,
 		Data: map[string][]byte{
 			"ACCESS_KEY_ID":     []byte("accountName"),
 			"SECRET_ACCESS_KEY": []byte("accountKey"),

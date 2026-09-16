@@ -14,7 +14,6 @@ import (
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -123,10 +122,8 @@ func patchInternalUserSecret(
 ) error {
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		internalSecret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      cr.InternalCustomUserSecretName(),
-				Namespace: cr.GetNamespace(),
-			},
+			Name:      cr.InternalCustomUserSecretName(),
+			Namespace: cr.GetNamespace(),
 		}
 
 		if err := cl.Get(ctx, client.ObjectKeyFromObject(internalSecret), internalSecret); err != nil {
@@ -153,10 +150,8 @@ func updateUserPassword(ctx context.Context, cl client.Client, um users.Manager,
 
 	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		internalSecret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      cr.InternalCustomUserSecretName(),
-				Namespace: cr.GetNamespace(),
-			},
+			Name:      cr.InternalCustomUserSecretName(),
+			Namespace: cr.GetNamespace(),
 		}
 
 		if err := cl.Get(ctx, client.ObjectKeyFromObject(internalSecret), internalSecret); err != nil {
@@ -235,10 +230,8 @@ func getInternalCustomUserSecret(
 	cr *apiv1.PerconaServerMySQL,
 ) (*corev1.Secret, error) {
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.InternalCustomUserSecretName(),
-			Namespace: cr.GetNamespace(),
-		},
+		Name:      cr.InternalCustomUserSecretName(),
+		Namespace: cr.GetNamespace(),
 	}
 
 	if err := cl.Get(ctx, client.ObjectKeyFromObject(secret), secret); err == nil {
@@ -266,10 +259,8 @@ func getUserCredentialsSecret(
 	// If a Secret is provided by the user, return that
 	if ref := user.PasswordSecretRef; ref != nil {
 		secret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      ref.Name,
-				Namespace: cr.GetNamespace(),
-			},
+			Name:      ref.Name,
+			Namespace: cr.GetNamespace(),
 		}
 
 		err := cl.Get(ctx, client.ObjectKeyFromObject(secret), secret)
@@ -278,10 +269,8 @@ func getUserCredentialsSecret(
 
 	// User did not provide a Secret, so we will create one if it doesn't already exist
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.DefaultCustomUserSecretName(*user),
-			Namespace: cr.GetNamespace(),
-		},
+		Name:      cr.DefaultCustomUserSecretName(*user),
+		Namespace: cr.GetNamespace(),
 	}
 
 	if err := cl.Get(ctx, client.ObjectKeyFromObject(secret), secret); err == nil {
