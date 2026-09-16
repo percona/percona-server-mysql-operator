@@ -359,7 +359,7 @@ var _ = Describe("TLS issuer kind handling", Ordered, func() {
 			},
 		}
 
-		nsObj := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: ns}}
+		nsObj := &corev1.Namespace{Name: ns}
 		Expect(k8sClient.Create(ctx, nsObj)).To(Succeed())
 		DeferCleanup(func(cleanupCtx SpecContext) {
 			_ = k8sClient.Delete(cleanupCtx, nsObj)
@@ -383,7 +383,7 @@ var _ = Describe("TLS issuer kind handling", Ordered, func() {
 		}, 5*time.Second, 200*time.Millisecond).Should(Succeed())
 
 		nsIssuer := &cm.Issuer{
-			ObjectMeta: metav1.ObjectMeta{Name: issuerName, Namespace: ns},
+			Name: issuerName, Namespace: ns,
 			Spec: cm.IssuerSpec{
 				IssuerConfig: cm.IssuerConfig{SelfSigned: &cm.SelfSignedIssuer{}},
 			},

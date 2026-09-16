@@ -121,7 +121,7 @@ func TestIsSecretCreatedByUser(t *testing.T) {
 	require.NoError(t, cm.AddToScheme(scheme))
 
 	cr := &apiv1.PerconaServerMySQL{
-		ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: ns},
+		Name: crName, Namespace: ns,
 	}
 
 	// operatorCertName is the name of the Certificate managed by the operator.
@@ -129,14 +129,12 @@ func TestIsSecretCreatedByUser(t *testing.T) {
 
 	certManagerSecret := func(annotations map[string]string) *corev1.Secret {
 		return &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-ssl",
-				Namespace: ns,
-				Labels: map[string]string{
-					cm.PartOfCertManagerControllerLabelKey: "true",
-				},
-				Annotations: annotations,
+			Name:      "test-ssl",
+			Namespace: ns,
+			Labels: map[string]string{
+				cm.PartOfCertManagerControllerLabelKey: "true",
 			},
+			Annotations: annotations,
 		}
 	}
 
@@ -167,17 +165,15 @@ func TestIsSecretCreatedByUser(t *testing.T) {
 			}),
 			existing: []runtime.Object{
 				&cm.Issuer{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      crName + "-ps-issuer",
-						Namespace: ns,
-						OwnerReferences: []metav1.OwnerReference{
-							{
-								APIVersion: apiv1.GroupVersion.String(),
-								Kind:       "PerconaServerMySQL",
-								Name:       crName,
-								UID:        cr.UID,
-								Controller: new(true),
-							},
+					Name:      crName + "-ps-issuer",
+					Namespace: ns,
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							APIVersion: apiv1.GroupVersion.String(),
+							Kind:       "PerconaServerMySQL",
+							Name:       crName,
+							UID:        cr.UID,
+							Controller: new(true),
 						},
 					},
 				},
@@ -186,7 +182,7 @@ func TestIsSecretCreatedByUser(t *testing.T) {
 		},
 		"secret issued by ClusterIssuer configured in cr is not user-created": {
 			cr: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: ns},
+				Name: crName, Namespace: ns,
 				Spec: apiv1.PerconaServerMySQLSpec{
 					TLS: &apiv1.TLSSpec{
 						IssuerConf: &cmmeta.IssuerReference{
@@ -213,7 +209,7 @@ func TestIsSecretCreatedByUser(t *testing.T) {
 		"secret without cert-manager label is user-created": {
 			cr: cr,
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{Name: "test-ssl", Namespace: ns},
+				Name: "test-ssl", Namespace: ns,
 			},
 			expected: true,
 		},
