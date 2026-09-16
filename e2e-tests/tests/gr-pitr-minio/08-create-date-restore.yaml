@@ -11,6 +11,7 @@ commands:
       cluster_name=$(get_cluster_name)
 
       PITR_DATE=$(kubectl get configmap -n "${NAMESPACE}" pitr-date -o jsonpath='{.data.date}')
+      echo "$(date -u "+%Y-%m-%d %H:%M:%S") UTC: restore #2 from gr-pitr-minio-backup, target date=${PITR_DATE}"
       BACKUP_DESTINATION=$(kubectl get ps-backup -n "${NAMESPACE}" gr-pitr-minio-backup -o jsonpath='{.status.destination}')
 
       echo '{}' \

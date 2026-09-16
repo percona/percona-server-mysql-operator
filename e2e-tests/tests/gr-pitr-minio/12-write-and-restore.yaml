@@ -14,10 +14,12 @@ commands:
       run_mysql \
           "INSERT myDB.myTable (id) VALUES (200501)" \
           "-h $(get_router_service ${cluster_name})"
+      echo "$(date -u "+%Y-%m-%d %H:%M:%S") UTC: inserted 200501"
 
       sleep 120
 
       PITR_DATE_POST=$(date -u '+%Y-%m-%d %H:%M:%S')
+      echo "$(date -u "+%Y-%m-%d %H:%M:%S") UTC: restore #3 from gr-pitr-minio-backup-2 with force=true, target date=${PITR_DATE_POST}"
       kubectl create configmap -n "${NAMESPACE}" pitr-date-post --from-literal=date="${PITR_DATE_POST}"
 
       echo '{}' \

@@ -8,6 +8,7 @@ metadata:
   name: 13-read-data-0
 data:
   max_id: "200501"
+  orphan_rows: "0"
 ---
 kind: ConfigMap
 apiVersion: v1
@@ -15,6 +16,7 @@ metadata:
   name: 13-read-data-1
 data:
   max_id: "200501"
+  orphan_rows: "0"
 ---
 kind: ConfigMap
 apiVersion: v1
@@ -22,3 +24,4 @@ metadata:
   name: 13-read-data-2
 data:
   max_id: "200501"
+  orphan_rows: "0"

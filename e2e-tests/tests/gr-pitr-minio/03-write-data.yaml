@@ -14,3 +14,4 @@ commands:
       run_mysql \
           "INSERT myDB.myTable (id) VALUES (100500)" \
           "-h $(get_router_service $(get_cluster_name))"
+      echo "$(date -u "+%Y-%m-%d %H:%M:%S") UTC: inserted 100500"

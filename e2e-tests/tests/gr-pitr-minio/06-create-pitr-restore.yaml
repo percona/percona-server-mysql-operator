@@ -15,15 +15,19 @@ commands:
       run_mysql \
           "INSERT myDB.myTable (id) VALUES (100502)" \
           "-h $(get_router_service ${cluster_name})"
+      echo "$(date -u "+%Y-%m-%d %H:%M:%S") UTC: inserted 100502"
 
       PITR_GTID=$(run_mysql "SELECT GTID_SUBTRACT(@@GLOBAL.gtid_executed, '${GTID_BEFORE}')" "-h $(get_router_service ${cluster_name})" | tr -d '\n')
+      echo "$(date -u "+%Y-%m-%d %H:%M:%S") UTC: restore #1 target gtid=${PITR_GTID}"
 
       run_mysql \
           "INSERT myDB.myTable (id) VALUES (100503)" \
           "-h $(get_router_service ${cluster_name})"
+      echo "$(date -u "+%Y-%m-%d %H:%M:%S") UTC: inserted 100503"
 
       sleep 10
       PITR_DATE=$(date -u '+%Y-%m-%d %H:%M:%S')
+      echo "$(date -u "+%Y-%m-%d %H:%M:%S") UTC: restore #2 target date=${PITR_DATE} (recorded now, used in step 08)"
       kubectl create configmap -n "${NAMESPACE}" pitr-date --from-literal=date="${PITR_DATE}"
 
       sleep 60

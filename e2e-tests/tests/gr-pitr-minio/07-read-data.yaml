@@ -14,3 +14,9 @@ commands:
           max_id=$(run_mysql "SELECT MAX(id) FROM myDB.myTable" "-h ${cluster_name}-mysql-${i}.${cluster_name}-mysql")
           kubectl create configmap -n "${NAMESPACE}" 07-read-data-${i} --from-literal=max_id="${max_id}"
       done
+
+      run_mysql \
+          "INSERT myDB.myTable (id) VALUES (100600)" \
+          "-h $(get_router_service ${cluster_name})"
+      echo "$(date -u "+%Y-%m-%d %H:%M:%S") UTC: inserted 100600 (orphan: after restore #2 target date, must not survive restore #2 or #3)"
+      run_mysql "SELECT @@GLOBAL.gtid_executed" "-h $(get_router_service ${cluster_name})"
