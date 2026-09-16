@@ -1473,6 +1473,83 @@ get_primary_from_haproxy() {
 	run_mysql "SHOW VARIABLES LIKE '%hostname%';" "-h ${haproxy_pod_ip} -P3306" | awk '{print $2}'
 }
 
+# Verifies the backends HAProxy generated for the given cluster: every server is
+# listed on its backend's own port, every backend runs the check that matches the
+# roles it holds, and the x-protocol and admin ports reach a writable primary.
+check_haproxy_backends() {
+	local cluster=$1
+	local haproxy_size=${2:-3}
+
+	local primary_pod=$(get_primary_from_label)
+	local primary_srv=$(kubectl -n "${NAMESPACE}" get pod "${primary_pod}" -o jsonpath='{.status.podIP}' | tr '.' '-')
+
+	local i
+	for i in $(seq 0 $((haproxy_size - 1))); do
+		local pod="${cluster}-haproxy-${i}"
+
+		# '<backend> <kind> <name> <value>' per check and server line
+		local layout=$(kubectl -n "${NAMESPACE}" exec "${pod}" -c haproxy -- \
+			awk '/backend /{b=$2}
+			     /external-check command/{print b, "check", "-", $3}
+			     /^server /{split($3,a,":"); print b, "server", $2, a[2]}' \
+			/etc/haproxy/mysql/haproxy.cfg)
+
+		local backend='' kind='' name='' value='' expected=''
+		while read -r backend kind name value; do
+			case "${backend}" in
+				mysql-primary | mysql-replicas) expected=3306 ;;
+				mysql-x) expected=33060 ;;
+				mysql-admin) expected=33062 ;;
+				*) continue ;;
+			esac
+
+			if [ "${kind}" = "server" ] && [ "${value}" != "${expected}" ]; then
+				echo "${pod}: server ${name} in backend ${backend} uses port ${value}, expected ${expected}"
+				echo "${layout}"
+				exit 1
+			fi
+
+			if [ "${kind}" = "check" ]; then
+				local expected_check='/opt/percona/haproxy_check_primary.sh'
+				if [ "${backend}" = "mysql-replicas" ]; then
+					expected_check='/opt/percona/haproxy_check_replicas.sh'
+				fi
+				if [ "${value}" != "${expected_check}" ]; then
+					echo "${pod}: backend ${backend} is checked by ${value}, expected ${expected_check}"
+					exit 1
+				fi
+			fi
+		done <<<"${layout}"
+
+		local not_up=$(kubectl -n "${NAMESPACE}" exec "${pod}" -c haproxy -- \
+			bash -c "echo 'show stat' | socat stdio /etc/haproxy/mysql/haproxy.sock" \
+			| awk -F, -v p="${primary_srv}" '$1 ~ /^mysql-(x|admin)$/ && $2 == p && $18 !~ /^UP/ {print $1, $2, $18}')
+		if [ -n "${not_up}" ]; then
+			echo "${pod}: primary ${primary_pod} is not UP in the x-protocol/admin backends:"
+			echo "${not_up}"
+			exit 1
+		fi
+	done
+
+	local svc=$(get_haproxy_svc "${cluster}")
+
+	local host_via_x=$(run_mysqlsh "SELECT @@hostname" "--mysqlx -h ${svc} -P 33060")
+	if [ "${host_via_x}" != "${primary_pod}" ]; then
+		echo "x-protocol port 33060 landed on '${host_via_x}', expected primary '${primary_pod}'"
+		exit 1
+	fi
+
+	local host_via_admin=$(run_mysql "SELECT @@hostname" "-h ${svc} -P 33062")
+	if [ "${host_via_admin}" != "${primary_pod}" ]; then
+		echo "admin port 33062 landed on '${host_via_admin}', expected primary '${primary_pod}'"
+		exit 1
+	fi
+
+	# reaching the primary is not enough, x-protocol has to be writable
+	run_mysqlsh "CREATE DATABASE IF NOT EXISTS check_haproxy_x" "--mysqlx -h ${svc} -P 33060"
+	run_mysqlsh "DROP DATABASE check_haproxy_x" "--mysqlx -h ${svc} -P 33060"
+}
+
 get_primary_from_group_replication() {
 	run_mysql \
 		"SELECT MEMBER_HOST FROM performance_schema.replication_group_members where MEMBER_ROLE='PRIMARY';" \
