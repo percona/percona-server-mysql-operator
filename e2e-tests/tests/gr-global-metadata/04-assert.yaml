@@ -8,7 +8,7 @@ metadata:
   name: backup1
 spec:
   clusterName: gr-global-metadata
-  storageName: minio
+  storageName: local-s3
 status:
   state: Succeeded
 ---
@@ -26,7 +26,7 @@ metadata:
     app.kubernetes.io/part-of: percona-server-backup
     label1: label1
     label2: label2
-  name: xb-backup1-minio
+  name: xb-backup1-local-s3
 spec:
   template:
     metadata:

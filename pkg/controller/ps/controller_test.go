@@ -66,10 +66,8 @@ var _ = Describe("Sidecars", Ordered, func() {
 	crNamespacedName := types.NamespacedName{Name: crName, Namespace: ns}
 
 	namespace := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      crName,
-			Namespace: ns,
-		},
+		Name:      crName,
+		Namespace: ns,
 	}
 
 	BeforeAll(func() {
@@ -151,10 +149,8 @@ var _ = Describe("Sidecars", Ordered, func() {
 		cr.MySQLSpec().SidecarVolumes = []corev1.Volume{
 			{
 				Name: volumeName,
-				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{
-						Medium: corev1.StorageMediumMemory,
-					},
+				EmptyDir: &corev1.EmptyDirVolumeSource{
+					Medium: corev1.StorageMediumMemory,
 				},
 			},
 		}
@@ -269,10 +265,8 @@ var _ = Describe("Unsafe configurations", Ordered, func() {
 	crNamespacedName := types.NamespacedName{Name: crName, Namespace: ns}
 
 	namespace := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      crName,
-			Namespace: ns,
-		},
+		Name:      crName,
+		Namespace: ns,
 	}
 
 	BeforeAll(func() {
@@ -326,10 +320,8 @@ var _ = Describe("PodDisruptionBudget", Ordered, func() {
 	crNamespacedName := types.NamespacedName{Name: crName, Namespace: ns}
 
 	namespace := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      crName,
-			Namespace: ns,
-		},
+		Name:      crName,
+		Namespace: ns,
 	}
 
 	var r *PerconaServerMySQLReconciler
@@ -360,10 +352,8 @@ var _ = Describe("PodDisruptionBudget", Ordered, func() {
 			r.ClientCmd = cliCmd
 			const operatorPass = "test"
 			secret := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      cr.InternalSecretName(),
-					Namespace: cr.Namespace,
-				},
+				Name:      cr.InternalSecretName(),
+				Namespace: cr.Namespace,
 				Data: map[string][]byte{
 					string(psv1.UserOperator): []byte(operatorPass),
 				},
@@ -420,10 +410,8 @@ var _ = Describe("PodDisruptionBudget", Ordered, func() {
 			})
 			It("should check PodDisruptionBudget for MySQL", func() {
 				pdb := &policyv1.PodDisruptionBudget{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      cr.Name + "-mysql",
-						Namespace: cr.Namespace,
-					},
+					Name:      cr.Name + "-mysql",
+					Namespace: cr.Namespace,
 				}
 
 				Eventually(func() bool {
@@ -439,10 +427,8 @@ var _ = Describe("PodDisruptionBudget", Ordered, func() {
 
 			It("should check PodDisruptionBudget for HAProxy", func() {
 				pdb := &policyv1.PodDisruptionBudget{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      cr.Name + "-haproxy",
-						Namespace: cr.Namespace,
-					},
+					Name:      cr.Name + "-haproxy",
+					Namespace: cr.Namespace,
 				}
 
 				Eventually(func() bool {
@@ -458,10 +444,8 @@ var _ = Describe("PodDisruptionBudget", Ordered, func() {
 
 			It("should check PodDisruptionBudget for Orchestrator", func() {
 				pdb := &policyv1.PodDisruptionBudget{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      cr.Name + "-orchestrator",
-						Namespace: cr.Namespace,
-					},
+					Name:      cr.Name + "-orchestrator",
+					Namespace: cr.Namespace,
 				}
 
 				Eventually(func() bool {
@@ -486,10 +470,8 @@ var _ = Describe("Reconcile HAProxy when async cluster type", Ordered, func() {
 	crNamespacedName := types.NamespacedName{Name: crName, Namespace: ns}
 
 	namespace := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      crName,
-			Namespace: ns,
-		},
+		Name:      crName,
+		Namespace: ns,
 	}
 
 	BeforeAll(func() {
@@ -552,10 +534,8 @@ var _ = Describe("CR validations", Ordered, func() {
 	ns := "validate"
 
 	namespace := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      ns,
-			Namespace: ns,
-		},
+		Name:      ns,
+		Namespace: ns,
 	}
 
 	BeforeAll(func() {
@@ -572,10 +552,8 @@ var _ = Describe("CR validations", Ordered, func() {
 	Context("xtrabackup --defaults-file argument validation", func() {
 		newBackup := func(name string, args []string) *psv1.PerconaServerMySQLBackup {
 			return &psv1.PerconaServerMySQLBackup{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      name,
-					Namespace: ns,
-				},
+				Name:      name,
+				Namespace: ns,
 				Spec: psv1.PerconaServerMySQLBackupSpec{
 					ClusterName: "cluster",
 					StorageName: "storage",
@@ -1249,9 +1227,7 @@ var _ = Describe("CR validations", Ordered, func() {
 		ns := "validate-pitr"
 
 		namespace := &corev1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: ns,
-			},
+			Name: ns,
 		}
 
 		BeforeAll(func() {
@@ -1376,10 +1352,8 @@ var _ = Describe("CR validations", Ordered, func() {
 				Expect(k8sClient.Create(ctx, cr)).To(Succeed())
 
 				secret := &corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      cr.Spec.MySQL.VaultSecretName,
-						Namespace: cr.Namespace,
-					},
+					Name:      cr.Spec.MySQL.VaultSecretName,
+					Namespace: cr.Namespace,
 					StringData: map[string]string{
 						"keyring_vault.cnf": `vault_url = https://vault.example.com:8200
 secret_mount_point = secret_v2
@@ -1414,10 +1388,8 @@ var _ = Describe("Reconcile Binlog Server", Ordered, func() {
 	crNamespacedName := types.NamespacedName{Name: crName, Namespace: ns}
 
 	namespace := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      crName,
-			Namespace: ns,
-		},
+		Name:      crName,
+		Namespace: ns,
 	}
 
 	BeforeAll(func() {
@@ -1449,20 +1421,14 @@ var _ = Describe("Reconcile Binlog Server", Ordered, func() {
 					CredentialsSecret: "s3-test-credentials",
 				},
 			},
-			PodSpec: psv1.PodSpec{
-				Size: 1,
-				ContainerSpec: psv1.ContainerSpec{
-					Image: "binlog-server-image",
-				},
-			},
+			Size:  1,
+			Image: "binlog-server-image",
 		}
 
 		It("should create s3 credentials secret", func() {
 			secret := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "s3-test-credentials",
-					Namespace: cr.Namespace,
-				},
+				Name:      "s3-test-credentials",
+				Namespace: cr.Namespace,
 			}
 
 			err := k8sClient.Create(ctx, secret)
@@ -1490,10 +1456,8 @@ var _ = Describe("Reconcile Binlog Server", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			secret := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      cr.Name + "-binlog-server-config",
-					Namespace: cr.Namespace,
-				},
+				Name:      cr.Name + "-binlog-server-config",
+				Namespace: cr.Namespace,
 			}
 
 			err := k8sClient.Get(ctx, client.ObjectKeyFromObject(secret), secret)
@@ -1502,10 +1466,8 @@ var _ = Describe("Reconcile Binlog Server", Ordered, func() {
 
 		It("should create statefulset for Binlog Server", func() {
 			sts := &appsv1.StatefulSet{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      cr.Name + "-binlog-server",
-					Namespace: cr.Namespace,
-				},
+				Name:      cr.Name + "-binlog-server",
+				Namespace: cr.Namespace,
 			}
 
 			err := k8sClient.Get(ctx, client.ObjectKeyFromObject(sts), sts)
@@ -1522,10 +1484,8 @@ var _ = Describe("PVC Resizing", Ordered, func() {
 	crNamespacedName := types.NamespacedName{Name: crName, Namespace: ns}
 
 	namespace := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      crName,
-			Namespace: ns,
-		},
+		Name:      crName,
+		Namespace: ns,
 	}
 
 	BeforeAll(func() {
@@ -1572,9 +1532,7 @@ var _ = Describe("PVC Resizing", Ordered, func() {
 		It("should create StorageClass that supports volume expansion", func() {
 			allowVolumeExpansion := true
 			sc := &storagev1.StorageClass{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-storage-class",
-				},
+				Name:                 "test-storage-class",
 				Provisioner:          "kubernetes.io/no-provisioner",
 				AllowVolumeExpansion: &allowVolumeExpansion,
 			}
@@ -1616,11 +1574,9 @@ var _ = Describe("PVC Resizing", Ordered, func() {
 			exposer := mysql.Exposer(*cr)
 			for i := 0; i < int(*sts.Spec.Replicas); i++ {
 				pod := &corev1.Pod{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      fmt.Sprintf("%s-%d", sts.Name, i),
-						Namespace: ns,
-						Labels:    exposer.MatchLabels(),
-					},
+					Name:      fmt.Sprintf("%s-%d", sts.Name, i),
+					Namespace: ns,
+					Labels:    exposer.MatchLabels(),
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{
 							{
@@ -1700,10 +1656,8 @@ var _ = Describe("Finalizer delete-mysql-pvc", Ordered, func() {
 	crNamespacedName := types.NamespacedName{Name: crName, Namespace: ns}
 
 	namespace := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      ns,
-			Namespace: ns,
-		},
+		Name:      ns,
+		Namespace: ns,
 	}
 
 	BeforeAll(func() {
@@ -1842,10 +1796,8 @@ var _ = Describe("Primary mysql service", Ordered, func() {
 	crNamespacedName := types.NamespacedName{Name: crName, Namespace: ns}
 
 	namespace := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      ns,
-			Namespace: ns,
-		},
+		Name:      ns,
+		Namespace: ns,
 	}
 
 	BeforeAll(func() {
@@ -1940,7 +1892,7 @@ var _ = Describe("Primary mysql service", Ordered, func() {
 		})
 
 		It("Should reconcile once to create user secret", func() {
-			_, err := reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: "async-cluster", Namespace: ns}})
+			_, err := reconciler().Reconcile(ctx, ctrl.Request{Name: "async-cluster", Namespace: ns})
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -1975,17 +1927,13 @@ var _ = Describe("Global labels and annotations", Ordered, func() {
 	asyncCrNamespacedName := types.NamespacedName{Name: crName, Namespace: asyncNS}
 
 	namespace := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      ns,
-			Namespace: ns,
-		},
+		Name:      ns,
+		Namespace: ns,
 	}
 
 	asyncNamespace := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      asyncNS,
-			Namespace: asyncNS,
-		},
+		Name:      asyncNS,
+		Namespace: asyncNS,
 	}
 
 	BeforeAll(func() {
@@ -2399,9 +2347,7 @@ var _ = Describe("BinlogServer", Ordered, func() {
 	crNamespacedName := types.NamespacedName{Name: crName, Namespace: ns}
 
 	namespace := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: ns,
-		},
+		Name: ns,
 	}
 
 	BeforeAll(func() {
@@ -2430,22 +2376,16 @@ var _ = Describe("BinlogServer", Ordered, func() {
 				},
 			},
 			ServerID: 1,
-			PodSpec: psv1.PodSpec{
-				Size: 1,
-				ContainerSpec: psv1.ContainerSpec{
-					Image: "perconalab/percona-binlog-server:0.2.0",
-				},
-			},
+			Size:     1,
+			Image:    "perconalab/percona-binlog-server:0.2.0",
 		}
 		Expect(k8sClient.Create(ctx, cr)).To(Succeed())
 	})
 
 	It("should create the S3 credentials secret", func() {
 		s3Secret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "s3-secret",
-				Namespace: ns,
-			},
+			Name:      "s3-secret",
+			Namespace: ns,
 			Data: map[string][]byte{
 				secret.CredentialsAWSAccessKey: []byte("access-key"),
 				secret.CredentialsAWSSecretKey: []byte("secret-key"),
@@ -2456,10 +2396,8 @@ var _ = Describe("BinlogServer", Ordered, func() {
 
 	It("should create the internal secret with the replication user password", func() {
 		internalSecret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      cr.InternalSecretName(),
-				Namespace: ns,
-			},
+			Name:      cr.InternalSecretName(),
+			Namespace: ns,
 			Data: map[string][]byte{
 				string(psv1.UserReplication): []byte("repl-password"),
 			},
@@ -2518,10 +2456,8 @@ var _ = Describe("PVC Resizing with orphaned PVCs", Ordered, func() {
 	crNamespacedName := types.NamespacedName{Name: crName, Namespace: ns}
 
 	namespace := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      ns,
-			Namespace: ns,
-		},
+		Name:      ns,
+		Namespace: ns,
 	}
 
 	BeforeAll(func() {
@@ -2568,9 +2504,7 @@ var _ = Describe("PVC Resizing with orphaned PVCs", Ordered, func() {
 		It("should create StorageClass that supports volume expansion", func() {
 			allowVolumeExpansion := true
 			sc := &storagev1.StorageClass{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "orphan-storage-class",
-				},
+				Name:                 "orphan-storage-class",
 				Provisioner:          "kubernetes.io/no-provisioner",
 				AllowVolumeExpansion: &allowVolumeExpansion,
 			}
@@ -2618,11 +2552,9 @@ var _ = Describe("PVC Resizing with orphaned PVCs", Ordered, func() {
 			exposer := mysql.Exposer(*cr)
 			for i := 0; i < int(cr.Spec.MySQL.Size); i++ {
 				pod := &corev1.Pod{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      fmt.Sprintf("%s-%d", sts.Name, i),
-						Namespace: ns,
-						Labels:    exposer.MatchLabels(),
-					},
+					Name:      fmt.Sprintf("%s-%d", sts.Name, i),
+					Namespace: ns,
+					Labels:    exposer.MatchLabels(),
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{{Name: "mysql", Image: "mysql:8.0"}},
 					},
@@ -2807,10 +2739,8 @@ var _ = Describe("PVC Resizing with a size that is not whole GiB", Ordered, func
 	crNamespacedName := types.NamespacedName{Name: crName, Namespace: ns}
 
 	namespace := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      ns,
-			Namespace: ns,
-		},
+		Name:      ns,
+		Namespace: ns,
 	}
 
 	BeforeAll(func() {
@@ -2859,7 +2789,7 @@ var _ = Describe("PVC Resizing with a size that is not whole GiB", Ordered, func
 		It("should create StorageClass that supports volume expansion", func() {
 			allowVolumeExpansion := true
 			sc := &storagev1.StorageClass{
-				ObjectMeta:           metav1.ObjectMeta{Name: "nogib-storage-class"},
+				Name:                 "nogib-storage-class",
 				Provisioner:          "kubernetes.io/no-provisioner",
 				AllowVolumeExpansion: &allowVolumeExpansion,
 			}
@@ -2899,11 +2829,9 @@ var _ = Describe("PVC Resizing with a size that is not whole GiB", Ordered, func
 			// the last replica has no pod, so its volume is never mounted
 			for i := 0; i < int(cr.Spec.MySQL.Size)-1; i++ {
 				pod := &corev1.Pod{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      fmt.Sprintf("%s-%d", sts.Name, i),
-						Namespace: ns,
-						Labels:    exposer.MatchLabels(),
-					},
+					Name:      fmt.Sprintf("%s-%d", sts.Name, i),
+					Namespace: ns,
+					Labels:    exposer.MatchLabels(),
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{{Name: "mysql", Image: "mysql:8.0"}},
 					},

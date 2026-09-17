@@ -13,7 +13,7 @@ commands:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: minio-service
+  name: s3-storage-all-in-one
 status:
   availableReplicas: 1
   observedGeneration: 1

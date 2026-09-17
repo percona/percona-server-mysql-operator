@@ -6,10 +6,10 @@ config
 config-router
 custom-users
 demand-backup
-gr-pitr-minio
-gr-pitr-encrypted-minio
+gr-pitr-s3
+gr-pitr-encrypted-s3
 gr-pitr-one-pod
-async-pitr-minio
+async-pitr-s3
 demand-backup-cloud
 demand-backup-retry
 demand-backup-incremental

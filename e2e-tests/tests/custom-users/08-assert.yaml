@@ -1,0 +1,15 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 30
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: 08-check-hosts
+data:
+  carol_created: "success"
+  carol_no_percent: "success"
+  carol_router_denied: "success"
+  root_unchanged: "success"
+  root_secret_absent: "success"
+  root_skipped: "success"
