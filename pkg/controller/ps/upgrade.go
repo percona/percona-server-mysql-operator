@@ -91,6 +91,7 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 		if err != nil {
 			return errors.Wrap(err, "get primary pod")
 		}
+		log.Info("MySQL primary pod that will be updated last", "pod", last.Name)
 	case naming.ComponentOrchestrator:
 		last, err = orchestratorRaftLeader(ctx, r.ClientCmd, pods.Items)
 		if err != nil {
@@ -100,10 +101,10 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 			log.Info("Can't start/continue 'SmartUpdate': the Raft leader is unknown")
 			return nil
 		}
+		log.Info("Orchestrator leader pod that will be updated last", "pod", last.Name)
 	default:
 		return errors.Errorf("smart update is not supported for component %q", component)
 	}
-	log.Info("pod to update last", "pod", last.Name)
 
 	pod := podToUpdate(pods.Items, last.Name, currentSet.Status.UpdateRevision)
 	if pod == nil {
