@@ -10,3 +10,24 @@ metadata:
     app.kubernetes.io/instance: demand-backup-retry
 status:
   phase: Failed
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: demand-backup-retry
+status:
+  state: initializing
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQLBackup
+metadata:
+  name: demand-backup-retry
+status:
+  state: Suspended
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: xb-demand-backup-retry-minio
+spec:
+  suspend: true

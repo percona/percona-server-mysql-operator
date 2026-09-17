@@ -6,6 +6,7 @@ commands:
       set -o xtrace
 
       source ../../functions
+
       run_mysql \
           "TRUNCATE TABLE myDB.myTable" \
           "-h $(get_haproxy_svc $(get_cluster_name))"
