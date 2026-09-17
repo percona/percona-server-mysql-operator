@@ -1,0 +1,7 @@
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQLBackup
+metadata:
+  name: gr-pitr-encrypted-s3-backup
+spec:
+  clusterName: gr-pitr-encrypted-s3
+  storageName: local-s3
