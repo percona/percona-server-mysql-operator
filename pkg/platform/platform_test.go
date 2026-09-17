@@ -89,7 +89,7 @@ func newTLSServer(t *testing.T, sans ...string) *rest.Config {
 	srv.StartTLS()
 	t.Cleanup(srv.Close)
 
-	return &rest.Config{Host: srv.URL, TLSClientConfig: rest.TLSClientConfig{Insecure: true}}
+	return &rest.Config{Host: srv.URL, Insecure: true}
 }
 
 func TestServerVersionString(t *testing.T) {
@@ -330,7 +330,7 @@ func TestDetectAKS(t *testing.T) {
 		},
 		"host without port": {
 			setup: func(t *testing.T) *rest.Config {
-				return &rest.Config{Host: "https://127.0.0.1", TLSClientConfig: rest.TLSClientConfig{Insecure: true}}
+				return &rest.Config{Host: "https://127.0.0.1", Insecure: true}
 			},
 		},
 		"unreachable host": {
@@ -338,7 +338,7 @@ func TestDetectAKS(t *testing.T) {
 		},
 		"unreadable ca file": {
 			setup: func(t *testing.T) *rest.Config {
-				return &rest.Config{Host: "https://127.0.0.1:1", TLSClientConfig: rest.TLSClientConfig{CAFile: "/nonexistent"}}
+				return &rest.Config{Host: "https://127.0.0.1:1", CAFile: "/nonexistent"}
 			},
 		},
 	}
