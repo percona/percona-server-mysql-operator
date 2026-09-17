@@ -1036,7 +1036,7 @@ func TestReconcileDeadlineReleasesLease(t *testing.T) {
 			r := PerconaServerMySQLBackupReconciler{
 				Client:        cl,
 				Scheme:        scheme,
-				ServerVersion: &platform.ServerVersion{Platform: platform.PlatformKubernetes},
+				ServerVersion: &platform.ServerVersion{Platform: platform.Kubernetes},
 			}
 
 			_, err = r.Reconcile(t.Context(), reconcile.Request{NamespacedName: client.ObjectKeyFromObject(backup)})
@@ -1088,7 +1088,7 @@ func TestBackupStateFollowsJobSuspension(t *testing.T) {
 	r := PerconaServerMySQLBackupReconciler{
 		Client:        cl,
 		Scheme:        scheme,
-		ServerVersion: &platform.ServerVersion{Platform: platform.PlatformKubernetes},
+		ServerVersion: &platform.ServerVersion{Platform: platform.Kubernetes},
 	}
 
 	request := reconcile.Request{NamespacedName: client.ObjectKeyFromObject(backup)}
@@ -1158,7 +1158,7 @@ func TestRunningBackupDoesNotAcquireLease(t *testing.T) {
 	r := PerconaServerMySQLBackupReconciler{
 		Client:        cl,
 		Scheme:        scheme,
-		ServerVersion: &platform.ServerVersion{Platform: platform.PlatformKubernetes},
+		ServerVersion: &platform.ServerVersion{Platform: platform.Kubernetes},
 	}
 
 	_, err = r.Reconcile(t.Context(), reconcile.Request{NamespacedName: client.ObjectKeyFromObject(backup)})
