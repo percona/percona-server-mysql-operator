@@ -82,7 +82,7 @@ func GetRunningBackup(
 
 	for _, backup := range backupList.Items {
 		switch backup.Status.State {
-		case apiv1.BackupStarting, apiv1.BackupRunning:
+		case apiv1.BackupStarting, apiv1.BackupRunning, apiv1.BackupSuspended:
 			return &backup, nil
 		}
 	}
