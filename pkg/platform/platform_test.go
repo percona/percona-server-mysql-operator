@@ -14,6 +14,7 @@ import (
 	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -249,7 +250,7 @@ func writeGroups(t *testing.T, w http.ResponseWriter, names ...string) {
 		list.Groups = append(list.Groups, metav1.APIGroup{Name: n})
 	}
 	w.Header().Set("Content-Type", "application/json")
-	require.NoError(t, json.NewEncoder(w).Encode(list))
+	assert.NoError(t, json.NewEncoder(w).Encode(list))
 }
 
 func TestServerGroups(t *testing.T) {
@@ -277,7 +278,7 @@ func TestServerGroups(t *testing.T) {
 			handler: func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				_, err := w.Write([]byte("not json"))
-				require.NoError(t, err)
+				assert.NoError(t, err)
 			},
 			wantErrMsg: "invalid character",
 		},
@@ -358,7 +359,7 @@ func TestProbeAPI(t *testing.T) {
 		"version returned": {
 			handler: func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
-				require.NoError(t, json.NewEncoder(w).Encode(k8sversion.Info{Major: "1", Minor: "31", GitVersion: "v1.31.0"}))
+				assert.NoError(t, json.NewEncoder(w).Encode(k8sversion.Info{Major: "1", Minor: "31", GitVersion: "v1.31.0"}))
 			},
 			want: k8sversion.Info{Major: "1", Minor: "31", GitVersion: "v1.31.0"},
 		},
@@ -369,7 +370,7 @@ func TestProbeAPI(t *testing.T) {
 		"malformed body": {
 			handler: func(w http.ResponseWriter, r *http.Request) {
 				_, err := w.Write([]byte("<html>"))
-				require.NoError(t, err)
+				assert.NoError(t, err)
 			},
 			wantErrMsg: "invalid character",
 		},
@@ -402,9 +403,9 @@ func TestGetServerVersion(t *testing.T) {
 	}{
 		"openshift": {
 			handler: func(w http.ResponseWriter, r *http.Request) {
-				require.Equal(t, openshiftPath, r.URL.Path)
+				assert.Equal(t, openshiftPath, r.URL.Path)
 				w.Header().Set("Content-Type", "application/json")
-				require.NoError(t, json.NewEncoder(w).Encode(k8sversion.Info{}))
+				assert.NoError(t, json.NewEncoder(w).Encode(k8sversion.Info{}))
 			},
 			want: &ServerVersion{
 				Platform: Openshift,
@@ -418,7 +419,7 @@ func TestGetServerVersion(t *testing.T) {
 					w.WriteHeader(http.StatusNotFound)
 				case "/version":
 					w.Header().Set("Content-Type", "application/json")
-					require.NoError(t, json.NewEncoder(w).Encode(k8sversion.Info{GitVersion: "v1.31.0"}))
+					assert.NoError(t, json.NewEncoder(w).Encode(k8sversion.Info{GitVersion: "v1.31.0"}))
 				case "/apis":
 					writeGroups(t, w, "networking.gke.io")
 				default:
@@ -436,7 +437,7 @@ func TestGetServerVersion(t *testing.T) {
 				switch r.URL.Path {
 				case "/version":
 					w.Header().Set("Content-Type", "application/json")
-					require.NoError(t, json.NewEncoder(w).Encode(k8sversion.Info{GitVersion: "v1.31.0"}))
+					assert.NoError(t, json.NewEncoder(w).Encode(k8sversion.Info{GitVersion: "v1.31.0"}))
 				case "/apis":
 					writeGroups(t, w, "apps")
 				default:
@@ -477,9 +478,9 @@ func TestGetServerVersion(t *testing.T) {
 	t.Run("result is cached after first call", func(t *testing.T) {
 		resetVersionCache(t)
 
-		calls := 0
+		var calls atomic.Int64
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			calls++
+			calls.Add(1)
 			switch r.URL.Path {
 			case "/version":
 				w.Header().Set("Content-Type", "application/json")
@@ -496,12 +497,12 @@ func TestGetServerVersion(t *testing.T) {
 		first, err := GetServerVersion(cliCmd)
 		require.NoError(t, err)
 
-		callsAfterFirst := calls
+		callsAfterFirst := calls.Load()
 		second, err := GetServerVersion(cliCmd)
 		require.NoError(t, err)
 
 		assert.Same(t, first, second)
-		assert.Equal(t, callsAfterFirst, calls)
+		assert.Equal(t, callsAfterFirst, calls.Load())
 	})
 }
 
