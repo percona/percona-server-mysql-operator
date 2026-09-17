@@ -1,0 +1,7 @@
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQLRestore
+metadata:
+  name: gr-security-context-restore-s3
+spec:
+  clusterName: gr-security-context
+  backupName: gr-security-context-s3

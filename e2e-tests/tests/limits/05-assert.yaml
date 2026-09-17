@@ -375,7 +375,7 @@ spec:
         - /opt/percona/orc-entrypoint.sh
         env:
         - name: ORC_SERVICE
-          value: limits-no-resources-mysql
+          value: limits-no-resources-orc
         - name: MYSQL_SERVICE
           value: limits-no-resources-mysql
         - name: ORC_API_AUTH
