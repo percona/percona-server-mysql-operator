@@ -101,6 +101,9 @@ vet: ## Run go vet against code.
 fix: ## Run go fix against code.
 	go fix ./...
 
+check-deadcode: deadcode ## Report functions unreachable from main or from tests.
+	$(DEADCODE) -test ./...
+
 test: manifests generate fmt vet envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./...
 
@@ -206,6 +209,10 @@ swagger: ## Download swagger locally if necessary.
 MOCKGEN = $(shell pwd)/bin/mockgen
 mockgen: ## Download mockgen locally if necessary.
 	$(call go-get-tool,$(MOCKGEN), github.com/golang/mock/mockgen@latest)
+
+DEADCODE = $(shell pwd)/bin/deadcode
+deadcode: ## Download deadcode locally if necessary.
+	$(call go-get-tool,$(DEADCODE),golang.org/x/tools/cmd/deadcode@latest)
 
 # go-get-tool will 'go get' any package $2 and install it to $1.
 PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
