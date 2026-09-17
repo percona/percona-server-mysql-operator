@@ -1,12 +1,19 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
+timeout: 30
 commands:
-  - script: |
+  - script: |-
       set -o errexit
       set -o xtrace
 
       source ../../functions
 
-      # Gets first storage defined and run backup
-      storage_name=$(kubectl get ps demand-backup -n ${NAMESPACE} -o yaml | yq '(.spec.backup.storages // {}) | keys | .[0]')
-      run_backup demand-backup $storage_name
+      cluster_name=$(get_cluster_name)
+      storage_name=$(kubectl get ps "$cluster_name" -n "$NAMESPACE" -o yaml \
+        | yq '(.spec.backup.storages // {}) | keys | .[0]')
+
+      kubectl patch ps "$cluster_name" -n "$NAMESPACE" --type=merge \
+        -p '{"spec":{"backup":{"allowParallel":true}}}'
+
+      run_backup demand-backup "$storage_name"
+      run_backup demand-backup-parallel "$storage_name"
