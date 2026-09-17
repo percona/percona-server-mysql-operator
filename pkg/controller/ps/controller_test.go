@@ -638,6 +638,22 @@ var _ = Describe("CR validations", Ordered, func() {
 				Expect(err).To(MatchError(ContainSubstring("--defaults-file must use --defaults-file=<path> syntax and be the first xtrabackup argument")))
 			})
 		})
+
+		When("--defaults-extra-file uses a separate value", func() {
+			It("should reject the backup", func() {
+				backup := newBackup("defaults-extra-file-separate", []string{"--defaults-extra-file", "/etc/my.cnf"})
+				err := k8sClient.Create(ctx, backup)
+				Expect(err).To(MatchError(ContainSubstring("--defaults-extra-file is managed by the operator and cannot be specified")))
+			})
+		})
+
+		When("--defaults-extra-file=<path> is specified", func() {
+			It("should reject the backup", func() {
+				backup := newBackup("defaults-extra-file-equals", []string{"--defaults-extra-file=/etc/my.cnf"})
+				err := k8sClient.Create(ctx, backup)
+				Expect(err).To(MatchError(ContainSubstring("--defaults-extra-file is managed by the operator and cannot be specified")))
+			})
+		})
 	})
 
 	Context("cr creation based on CheckNSetDefaults", Ordered, func() {

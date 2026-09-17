@@ -33,6 +33,8 @@ const (
 	tlsVolumeName         = "tls"
 	tlsMountPath          = "/etc/mysql/mysql-tls-secret"
 	BackupLogDir          = "/var/log/xtrabackup"
+	backupTmpVolumeName   = "xtrabackup-tmp"
+	backupTmpMountPath    = "/tmp"
 	vaultSecretVolumeName = "vault-keyring-secret"
 	vaultSecretMountPath  = "/etc/mysql/vault-keyring-secret"
 	crVersionEnvVar       = "CR_VERSION"
@@ -314,6 +316,14 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
 		},
+	}
+	if cr.CompareVersion("1.3.0") >= 0 {
+		volumes = append(volumes, corev1.Volume{
+			Name: backupTmpVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		})
 	}
 
 	if cr.CompareVersion("0.11.0") >= 0 {
@@ -816,6 +826,12 @@ func backupVolumeMounts(cr *apiv1.PerconaServerMySQL) []corev1.VolumeMount {
 			Name:      "backup-logs",
 			MountPath: BackupLogDir,
 		},
+	}
+	if cr.CompareVersion("1.3.0") >= 0 {
+		mounts = append(mounts, corev1.VolumeMount{
+			Name:      backupTmpVolumeName,
+			MountPath: backupTmpMountPath,
+		})
 	}
 
 	if cr.CompareVersion("0.11.0") >= 0 {

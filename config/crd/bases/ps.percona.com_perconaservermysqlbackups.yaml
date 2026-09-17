@@ -74,6 +74,10 @@ spec:
                           rule: '!self.exists(arg, arg == ''--defaults-file'' || arg.startsWith(''--defaults-file=''))
                             || (self[0].startsWith(''--defaults-file='') && self[0]
                             != ''--defaults-file='')'
+                        - message: --defaults-extra-file is managed by the operator
+                            and cannot be specified
+                          rule: '!self.exists(arg, arg == ''--defaults-extra-file''
+                            || arg.startsWith(''--defaults-extra-file=''))'
                     type: object
                   env:
                     items:
@@ -720,6 +724,10 @@ spec:
                               rule: '!self.exists(arg, arg == ''--defaults-file''
                                 || arg.startsWith(''--defaults-file='')) || (self[0].startsWith(''--defaults-file='')
                                 && self[0] != ''--defaults-file='')'
+                            - message: --defaults-extra-file is managed by the operator
+                                and cannot be specified
+                              rule: '!self.exists(arg, arg == ''--defaults-extra-file''
+                                || arg.startsWith(''--defaults-extra-file=''))'
                         type: object
                       env:
                         items:
