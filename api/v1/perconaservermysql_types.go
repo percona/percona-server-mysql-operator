@@ -1018,10 +1018,11 @@ func (s *PerconaServerMySQLStatus) CompareMySQLVersion(ver string) int {
 }
 
 const (
-	ConditionInnoDBClusterBootstrapped string = "InnoDBClusterBootstrapped"
-	ConditionClusterSetMember          string = "ClusterSetMember"
-	ConditionAwaitingExternalBootstrap string = "AwaitingExternalBootstrap"
-	ConditionMySQLConfigSynced                = "MySQLConfigSynced"
+	ConditionInnoDBClusterBootstrapped   string = "InnoDBClusterBootstrapped"
+	ConditionClusterSetMember            string = "ClusterSetMember"
+	ConditionAwaitingExternalBootstrap   string = "AwaitingExternalBootstrap"
+	ConditionMySQLConfigSynced                  = "MySQLConfigSynced"
+	ConditionClusterTypeSwitchInProgress string = "ClusterTypeSwitchInProgress"
 
 	// Deprecated, preserved only for backward compatibility
 	ConditionClusterSetReplicationRunning string = "ClusterSetReplicationRunning"
@@ -1720,6 +1721,14 @@ func (cr *PerconaServerMySQL) AppliedClusterType() ClusterType {
 	}
 
 	return cr.Spec.MySQL.ClusterType
+}
+
+func (cr *PerconaServerMySQL) AppliedIsAsync() bool {
+	return cr.AppliedClusterType() == ClusterTypeAsync
+}
+
+func (cr *PerconaServerMySQL) AppliedIsGR() bool {
+	return cr.AppliedClusterType() == ClusterTypeGR
 }
 
 // OrchestratorEnabled determines if the orchestrator is enabled,

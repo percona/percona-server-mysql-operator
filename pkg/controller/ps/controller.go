@@ -777,23 +777,45 @@ func (r *PerconaServerMySQLReconciler) reconcileClusterTypeChange(
 		}
 	}
 
+	switchInProgress := meta.IsStatusConditionTrue(cr.Status.Conditions, apiv1.ConditionClusterTypeSwitchInProgress)
+
 	if desiredType == observedType {
+		// Nothing left to switch. Drop a marker left behind by a switch that was
+		// reverted mid-flight so it can't bypass the readiness gate later on.
+		if switchInProgress {
+			if err := r.clearClusterTypeSwitchInProgress(ctx, cr); err != nil {
+				return errors.Wrap(err, "clear cluster type switch marker")
+			}
+		}
 		return nil
 	}
 
-	// Both teardowns need a running cluster: teardownAsync stops and resets
-	// replication on every pod, teardownGR needs an online primary to dissolve
-	// the group. Pause scales the pods to zero, so neither can run then either.
-	// Leave the switch pending and retry once the cluster is back. The status
-	// keeps it pending and AppliedClusterType keeps the workloads on
-	// observedType in the meantime, so nothing moves until the teardown runs.
-	if cr.Spec.Pause || cr.Status.State != apiv1.StateReady {
-		log.Info("Deferring clusterType switch until the cluster is running and ready",
-			"from", observedType, "to", desiredType, "paused", cr.Spec.Pause, "state", cr.Status.State)
+	// Pause scales the MySQL pods to zero, so no teardown can run at all.
+	if cr.Spec.Pause {
+		log.Info("Deferring clusterType switch while the cluster is paused",
+			"from", observedType, "to", desiredType)
+		return nil
+	}
+
+	// Switching requires tearing down the existing setup, and that needs the cluster
+	// to be ready.
+	// But once a cluster is already reported to be in the middle of switching, we ignore
+	// any unready status as it could have been caused due to the switch itself and must be retried.
+	if !switchInProgress && cr.Status.State != apiv1.StateReady {
+		log.Info("Deferring clusterType switch until the cluster is ready",
+			"from", observedType, "to", desiredType, "state", cr.Status.State)
 		return nil
 	}
 
 	log.Info("Switching clusterType", "from", observedType, "to", desiredType)
+
+	// Mark before the first destructive step so a teardown that fails partway is
+	// retried regardless of the state the half-torn-down cluster reports.
+	if !switchInProgress {
+		if err := r.markClusterTypeSwitchInProgress(ctx, cr, observedType, desiredType); err != nil {
+			return errors.Wrap(err, "mark cluster type switch in progress")
+		}
+	}
 
 	switch observedType {
 	case apiv1.ClusterTypeAsync:
@@ -844,21 +866,65 @@ func (r *PerconaServerMySQLReconciler) reconcileClusterTypeChange(
 	return nil
 }
 
+// updateClusterTypeStatus records the cluster type the operator has applied. The
+// type only ever advances when a switch finishes, so this also ends any
+// in-progress switch, in the same status update.
 func (r *PerconaServerMySQLReconciler) updateClusterTypeStatus(
 	ctx context.Context,
 	cr *apiv1.PerconaServerMySQL,
 	clusterType apiv1.ClusterType,
 ) error {
-	nn := client.ObjectKeyFromObject(cr)
-	if err := writeStatus(ctx, r.Client, nn, func(status *apiv1.PerconaServerMySQLStatus) error {
+	mutate := func(status *apiv1.PerconaServerMySQLStatus) error {
 		status.ClusterType = clusterType
+		meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionClusterTypeSwitchInProgress)
 		return nil
-	}); err != nil {
-		return errors.Wrapf(err, "write status for %v", nn.String())
+	}
+	if err := writeStatus(ctx, r.Client, client.ObjectKeyFromObject(cr), mutate); err != nil {
+		return errors.Wrap(err, "write cluster type status")
+	}
+	mutate(&cr.Status)
+	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) markClusterTypeSwitchInProgress(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQL,
+	from, to apiv1.ClusterType,
+) error {
+	cond := metav1.Condition{
+		Type:    apiv1.ConditionClusterTypeSwitchInProgress,
+		Status:  metav1.ConditionTrue,
+		Reason:  "TeardownStarted",
+		Message: fmt.Sprintf("Switching clusterType from %s to %s", from, to),
 	}
 
-	cr.Status.ClusterType = clusterType
+	mutate := func(status *apiv1.PerconaServerMySQLStatus) error {
+		meta.SetStatusCondition(&status.Conditions, cond)
+		return nil
+	}
 
+	if err := writeStatus(ctx, r.Client, client.ObjectKeyFromObject(cr), mutate); err != nil {
+		return errors.Wrap(err, "write cluster type switch condition")
+	}
+
+	mutate(&cr.Status)
+	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) clearClusterTypeSwitchInProgress(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQL,
+) error {
+	mutate := func(status *apiv1.PerconaServerMySQLStatus) error {
+		meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionClusterTypeSwitchInProgress)
+		return nil
+	}
+
+	if err := writeStatus(ctx, r.Client, client.ObjectKeyFromObject(cr), mutate); err != nil {
+		return errors.Wrap(err, "clear cluster type switch condition")
+	}
+
+	mutate(&cr.Status)
 	return nil
 }
 

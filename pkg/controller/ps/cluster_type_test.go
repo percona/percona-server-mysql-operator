@@ -8,6 +8,8 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -204,5 +206,63 @@ func TestReconcileClusterTypeChange(t *testing.T) {
 		stored := new(apiv1.PerconaServerMySQL)
 		require.NoError(t, cli.Get(t.Context(), client.ObjectKeyFromObject(cr), stored))
 		assert.Equal(t, apiv1.ClusterTypeAsync, stored.Status.ClusterType)
+
+		assert.True(t,
+			meta.IsStatusConditionTrue(stored.Status.Conditions, apiv1.ConditionClusterTypeSwitchInProgress),
+			"the switch must be marked in progress before the teardown so the retry is not gated on readiness")
+	})
+
+	t.Run("retries an in-progress switch even when the cluster is not ready", func(t *testing.T) {
+		cr := clusterTypeCR("cluster1", "ns", apiv1.ClusterTypeGR)
+		cr.Status.ClusterType = apiv1.ClusterTypeAsync
+		cr.Status.State = apiv1.StateError
+		cr.Spec.Orchestrator.Enabled = false
+		meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
+			Type:   apiv1.ConditionClusterTypeSwitchInProgress,
+			Status: metav1.ConditionTrue,
+			Reason: "TeardownStarted",
+		})
+		sts := mysqlStsWithClusterType(cr, apiv1.ClusterTypeAsync)
+		secret := &corev1.Secret{
+			Name:      cr.InternalSecretName(),
+			Namespace: cr.Namespace,
+			Data:      map[string][]byte{string(apiv1.UserOperator): []byte("pass")},
+		}
+
+		cli := fake.NewClientBuilder().WithScheme(newScheme(t)).
+			WithObjects(cr, sts, secret).WithStatusSubresource(cr).Build()
+		r := &PerconaServerMySQLReconciler{Client: cli}
+
+		require.NoError(t, r.reconcileClusterTypeChange(t.Context(), cr))
+
+		stored := new(apiv1.PerconaServerMySQL)
+		require.NoError(t, cli.Get(t.Context(), client.ObjectKeyFromObject(cr), stored))
+		assert.Equal(t, apiv1.ClusterTypeGR, stored.Status.ClusterType)
+		assert.False(t,
+			meta.IsStatusConditionTrue(stored.Status.Conditions, apiv1.ConditionClusterTypeSwitchInProgress),
+			"the marker must be cleared once the switch completes")
+	})
+
+	t.Run("clears a stale in-progress condition when no switch is pending", func(t *testing.T) {
+		cr := clusterTypeCR("cluster1", "ns", apiv1.ClusterTypeAsync)
+		cr.Status.ClusterType = apiv1.ClusterTypeAsync
+		cr.Status.State = apiv1.StateError
+		meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
+			Type:   apiv1.ConditionClusterTypeSwitchInProgress,
+			Status: metav1.ConditionTrue,
+			Reason: "TeardownStarted",
+		})
+		sts := mysqlStsWithClusterType(cr, apiv1.ClusterTypeAsync)
+
+		cli := fake.NewClientBuilder().WithScheme(newScheme(t)).
+			WithObjects(cr, sts).WithStatusSubresource(cr).Build()
+		r := &PerconaServerMySQLReconciler{Client: cli}
+
+		require.NoError(t, r.reconcileClusterTypeChange(t.Context(), cr))
+
+		stored := new(apiv1.PerconaServerMySQL)
+		require.NoError(t, cli.Get(t.Context(), client.ObjectKeyFromObject(cr), stored))
+		assert.False(t,
+			meta.IsStatusConditionTrue(stored.Status.Conditions, apiv1.ConditionClusterTypeSwitchInProgress))
 	})
 }
