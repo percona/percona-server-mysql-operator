@@ -940,3 +940,20 @@ func TestDefaultCustomUserSecretName(t *testing.T) {
 		assert.Equal(t, first, cr.DefaultCustomUserSecretName(User{Name: "App_User"}))
 	})
 }
+
+func TestAppliedClusterType(t *testing.T) {
+	t.Run("falls back to spec when status is empty", func(t *testing.T) {
+		cr := new(PerconaServerMySQL)
+		cr.Spec.MySQL.ClusterType = ClusterTypeGR
+
+		assert.Equal(t, ClusterTypeGR, cr.AppliedClusterType())
+	})
+
+	t.Run("prefers status while a switch is pending", func(t *testing.T) {
+		cr := new(PerconaServerMySQL)
+		cr.Spec.MySQL.ClusterType = ClusterTypeGR
+		cr.Status.ClusterType = ClusterTypeAsync
+
+		assert.Equal(t, ClusterTypeAsync, cr.AppliedClusterType())
+	})
+}

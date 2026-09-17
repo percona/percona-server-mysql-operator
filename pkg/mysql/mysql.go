@@ -675,7 +675,7 @@ func mysqldContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 		},
 		{
 			Name:  naming.EnvMySQLClusterType,
-			Value: string(cr.Spec.MySQL.ClusterType),
+			Value: string(cr.AppliedClusterType()),
 		},
 		{
 			Name:  naming.EnvMySQLNotifySocket,

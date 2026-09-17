@@ -703,14 +703,21 @@ func validateVaultSecret(ctx context.Context, cl client.Client, cr *apiv1.Percon
 	return nil
 }
 
-// getObservedClusterType returns the MySQL cluster type recorded in the
-// StatefulSet's pod template (the CLUSTER_TYPE env var). Note this reflects the
-// spec the operator last applied, which is not guaranteed to match the cluster
-// type the running pods actually use until they are rolled out.
+// getObservedClusterType returns the MySQL cluster type the operator has
+// applied to the cluster. It is read from the status, which only advances once
+// a switch completes. Clusters created before that field existed have an empty
+// status, so it falls back to the CLUSTER_TYPE env var in the StatefulSet's pod
+// template; that fallback is only safe until reconcileDatabase re-applies the
+// StatefulSet, which is why reconcileClusterTypeChange records the type in the
+// status before anything else in doReconcile can overwrite it.
 func (r *PerconaServerMySQLReconciler) getObservedClusterType(
 	ctx context.Context,
 	cr *apiv1.PerconaServerMySQL,
 ) (apiv1.ClusterType, error) {
+	if cr.Status.ClusterType != "" {
+		return cr.Status.ClusterType, nil
+	}
+
 	sts := &appsv1.StatefulSet{
 		Name:      mysql.Name(cr),
 		Namespace: cr.GetNamespace(),
@@ -756,9 +763,11 @@ func (r *PerconaServerMySQLReconciler) reconcileClusterTypeChange(
 	ctx context.Context,
 	cr *apiv1.PerconaServerMySQL,
 ) error {
-	if cr.Spec.Pause || cr.Status.State != apiv1.StateReady {
+	if cr.Spec.Pause {
 		return nil
 	}
+
+	log := logf.FromContext(ctx)
 
 	desiredType := cr.Spec.MySQL.ClusterType
 	observedType, err := r.getObservedClusterType(ctx, cr)
@@ -766,19 +775,26 @@ func (r *PerconaServerMySQLReconciler) reconcileClusterTypeChange(
 		return client.IgnoreNotFound(err)
 	}
 
-	// observedType is read from the StatefulSet pod template (see
-	// getObservedClusterType), which reflects the spec the operator last applied
-	// rather than the cluster type the running pods actually use. This relies on
-	// reconcileClusterTypeChange running before the MySQL StatefulSet is
-	// re-applied with the new type later in doReconcile (reconcileDatabase). If
-	// it ran afterwards, the template would already carry desiredType and this
-	// early return would skip the switch while the live pods still run the old
-	// type.
+	if cr.Status.ClusterType == "" {
+		if err := r.updateClusterTypeStatus(ctx, cr, observedType); err != nil {
+			return errors.Wrap(err, "record observed cluster type")
+		}
+	}
+
 	if desiredType == observedType {
 		return nil
 	}
 
-	log := logf.FromContext(ctx)
+	// Both teardowns need a working cluster: teardownAsync stops and resets
+	// replication on every pod, teardownGR needs an online primary to dissolve
+	// the group. Leave the switch pending and retry once the cluster recovers.
+	// The status keeps it pending and AppliedClusterType keeps the workloads on
+	// observedType in the meantime, so nothing moves until the teardown runs.
+	if cr.Status.State != apiv1.StateReady {
+		log.Info("Deferring clusterType switch until the cluster is ready",
+			"from", observedType, "to", desiredType, "state", cr.Status.State)
+		return nil
+	}
 
 	log.Info("Switching clusterType", "from", observedType, "to", desiredType)
 
@@ -823,7 +839,29 @@ func (r *PerconaServerMySQLReconciler) reconcileClusterTypeChange(
 		}
 	}
 
+	if err := r.updateClusterTypeStatus(ctx, cr, desiredType); err != nil {
+		return errors.Wrap(err, "record applied cluster type")
+	}
+
 	log.Info("Cluster type switch initiated", "to", desiredType)
+	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) updateClusterTypeStatus(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQL,
+	clusterType apiv1.ClusterType,
+) error {
+	nn := client.ObjectKeyFromObject(cr)
+	if err := writeStatus(ctx, r.Client, nn, func(status *apiv1.PerconaServerMySQLStatus) error {
+		status.ClusterType = clusterType
+		return nil
+	}); err != nil {
+		return errors.Wrapf(err, "write status for %v", nn.String())
+	}
+
+	cr.Status.ClusterType = clusterType
+
 	return nil
 }
 

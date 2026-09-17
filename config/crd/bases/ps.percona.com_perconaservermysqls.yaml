@@ -10771,6 +10771,8 @@ spec:
                   version:
                     type: string
                 type: object
+              clusterType:
+                type: string
               conditions:
                 items:
                   properties:

@@ -954,6 +954,7 @@ type PerconaServerMySQLStatus struct { // INSERT ADDITIONAL STATUS FIELD - defin
 	Router         StatefulAppStatus  `json:"router,omitempty"`
 	BinlogServer   StatefulAppStatus  `json:"binlogServer,omitempty"`
 	State          StatefulAppState   `json:"state,omitempty"`
+	ClusterType    ClusterType        `json:"clusterType,omitempty"`
 	BackupVersion  string             `json:"backupVersion,omitempty"`
 	PMMVersion     string             `json:"pmmVersion,omitempty"`
 	ToolkitVersion string             `json:"toolkitVersion,omitempty"`
@@ -1711,6 +1712,14 @@ func (cr *PerconaServerMySQL) PiTREnabled() bool {
 	return cr.Spec.Backup != nil &&
 		cr.Spec.Backup.PiTR.Enabled &&
 		cr.Spec.Backup.PiTR.BinlogServer != nil
+}
+
+func (cr *PerconaServerMySQL) AppliedClusterType() ClusterType {
+	if cr.Status.ClusterType != "" {
+		return cr.Status.ClusterType
+	}
+
+	return cr.Spec.MySQL.ClusterType
 }
 
 // OrchestratorEnabled determines if the orchestrator is enabled,
