@@ -297,10 +297,8 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 	}
 	if cr.CompareVersion("1.3.0") >= 0 {
 		volumes = append(volumes, corev1.Volume{
-			Name: backupTmpVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			},
+			Name:     backupTmpVolumeName,
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		})
 	}
 

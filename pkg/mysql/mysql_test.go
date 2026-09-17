@@ -537,10 +537,8 @@ func expectedVolumes() []corev1.Volume {
 			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		},
 		{
-			Name: backupTmpVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			},
+			Name:     backupTmpVolumeName,
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		},
 		{
 			Name: "vault-keyring-secret",
