@@ -1994,7 +1994,7 @@ func (r *PerconaServerMySQLReconciler) getPrimaryFromGR(ctx context.Context, cr 
 func (r *PerconaServerMySQLReconciler) getPrimaryHost(ctx context.Context, cr *apiv1.PerconaServerMySQL) (string, error) {
 	log := logf.FromContext(ctx).WithName("getPrimaryHost")
 
-	if cr.Spec.MySQL.IsGR() {
+	if cr.AppliedIsGR() {
 		return r.getPrimaryFromGR(ctx, cr)
 	}
 

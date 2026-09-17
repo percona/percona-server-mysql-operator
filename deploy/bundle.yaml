@@ -14792,7 +14792,7 @@ spec:
             - message: spec.orchestrator.enabled should be false when switching from
                 async cluster type
               rule: (oldSelf.mysql.clusterType == self.mysql.clusterType) || self.mysql.clusterType
-                == 'async' || (!has(self.orchestrator) || !self.orchestrator.enabled)
+                == 'async' || !self.?orchestrator.?enabled.orValue(false)
           status:
             properties:
               backupVersion:
@@ -15221,7 +15221,7 @@ spec:
             fieldRef:
               apiVersion: v1
               fieldPath: metadata.namespace
-        image: perconalab/percona-server-mysql-operator:main
+        image: asia-south1-docker.pkg.dev/cloud-dev-112233/mayankshah/ps-operator:K8SPS-646
         imagePullPolicy: Always
         livenessProbe:
           httpGet:

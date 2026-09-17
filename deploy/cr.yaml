@@ -65,7 +65,8 @@ spec:
 #      kind: ClusterIssuer
 #      name: special-selfsigned-issuer
   mysql:
-    clusterType: group-replication
+    #clusterType: group-replication
+    clusterType: async
     autoRecovery: true
 #    vaultSecretName: ps-cluster1-vault
     size: 3
@@ -557,7 +558,7 @@ spec:
 #        [logger]
 #        level=DEBUG
   orchestrator:
-    enabled: false
+    enabled: true
 #    expose:
 #      allocateLoadBalancerNodePorts: false
 #      annotations:
