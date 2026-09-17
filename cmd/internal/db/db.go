@@ -297,7 +297,7 @@ func (d *DB) Clone(ctx context.Context, donor, user, pass string, port int32, cl
 	if err != nil {
 		return errors.Wrap(err, "open clone connection")
 	}
-	defer cloneDB.Close()
+	defer func() { _ = cloneDB.Close() }()
 
 	_, err = cloneDB.ExecContext(ctx, "SET GLOBAL clone_valid_donor_list=?", fmt.Sprintf("%s:%d", donor, port))
 	if err != nil {
