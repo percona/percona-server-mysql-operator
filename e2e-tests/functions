@@ -1183,7 +1183,7 @@ get_pod_uids() {
 get_mysql_pod_uids() {
 	local cluster_name=$1
 
-	get_pod_uids "${cluster_name}" mysql
+	get_pod_uids "${cluster_name}" database
 }
 
 # Prints the global value of a MySQL variable from every database pod of the
@@ -1240,7 +1240,7 @@ wait_for_mysql_pods_restart() {
 	local uids_before=$2
 	local timeout=${3:-600}
 
-	wait_for_pods_restart "${cluster_name}" mysql "${uids_before}" "${timeout}"
+	wait_for_pods_restart "${cluster_name}" database "${uids_before}" "${timeout}"
 }
 
 # Waits until every pod of the given cluster app has been replaced, comparing
