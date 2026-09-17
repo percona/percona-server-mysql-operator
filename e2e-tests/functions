@@ -880,6 +880,20 @@ run_mysql() {
 	return "${PIPESTATUS[0]}"
 }
 
+# Force the binlog server to roll at least one fresh rewrite file (rewriteFileSize=16K)
+# under the currently active KEK. A rewrite file's encryption is fixed when the file is
+# opened, so a single tiny insert never fills a file and the phase's KEK ends up decided
+# by roll/restart timing (flaky). ~80K of writes guarantees several clean rolls.
+fill_binlog() {
+	local host="$1"
+	local stmt="CREATE TABLE IF NOT EXISTS myDB.binlog_filler (id INT AUTO_INCREMENT PRIMARY KEY, payload BLOB);"
+	local i
+	for i in $(seq 1 40); do
+		stmt="${stmt} INSERT INTO myDB.binlog_filler (payload) VALUES (REPEAT('x', 2048));"
+	done
+	run_mysql "${stmt}" "${host}"
+}
+
 get_clusterset_status() {
 	local host="$1"
 	local user="${2:--uroot -p'$(get_user_pass)'}"
