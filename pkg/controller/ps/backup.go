@@ -74,7 +74,7 @@ func (r *CronRegistry) addBackupJob(ctx context.Context, cl client.Client, clust
 
 	r.backupJobs.Store(bcp.Name, backupScheduleJob{
 		BackupSchedule: bcp,
-		scheduleJob:    scheduleJob{jobID: jobID},
+		jobID:          jobID,
 	})
 	return nil
 }
@@ -118,9 +118,10 @@ func (r *CronRegistry) createBackupJobFunc(ctx context.Context, cl client.Client
 				Annotations: cr.GlobalAnnotations(),
 			},
 			Spec: apiv1.PerconaServerMySQLBackupSpec{
-				ClusterName: cr.Name,
-				StorageName: backupJob.StorageName,
-				Type:        backupJob.Type,
+				ClusterName:             cr.Name,
+				StorageName:             backupJob.StorageName,
+				Type:                    backupJob.Type,
+				StartingDeadlineSeconds: cr.Spec.Backup.StartingDeadlineSeconds,
 			},
 		}
 

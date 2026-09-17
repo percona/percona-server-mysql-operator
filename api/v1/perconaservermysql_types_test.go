@@ -6,11 +6,28 @@ import (
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/validation"
 
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 )
+
+func TestBackupSpecGetAllowParallel(t *testing.T) {
+	tests := map[string]struct {
+		allowParallel *bool
+		expected      bool
+	}{
+		"unset":    {expected: false},
+		"enabled":  {allowParallel: new(true), expected: true},
+		"disabled": {allowParallel: new(false), expected: false},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			spec := &BackupSpec{AllowParallel: tt.allowParallel}
+			assert.Equal(t, tt.expected, spec.GetAllowParallel())
+		})
+	}
+}
 
 func TestCheckNSetDefaults(t *testing.T) {
 	t.Run("with invalid cluster type", func(t *testing.T) {
@@ -914,7 +931,7 @@ func TestPiTREnabled(t *testing.T) {
 }
 
 func TestDefaultCustomUserSecretName(t *testing.T) {
-	cr := &PerconaServerMySQL{ObjectMeta: metav1.ObjectMeta{Name: "cluster1"}}
+	cr := &PerconaServerMySQL{Name: "cluster1"}
 
 	t.Run("valid DNS-1123 user name is kept as-is", func(t *testing.T) {
 		got := cr.DefaultCustomUserSecretName(User{Name: "app-user"})

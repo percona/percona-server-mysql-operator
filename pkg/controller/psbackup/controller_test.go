@@ -17,6 +17,7 @@ import (
 	coordv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -88,8 +89,24 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 			stateDesc: "spec.backup not found in PerconaServerMySQL CustomResource or backups are disabled",
 		},
 		{
-			name: "cluster is not ready for backup",
+			name: "backup waits while cluster is not ready",
 			cr:   cr,
+			cluster: updateResource(
+				cluster.DeepCopy(),
+				func(cr *apiv1.PerconaServerMySQL) {
+					cr.Namespace = namespace
+					cr.Status.State = apiv1.StateError
+					cr.Status.MySQL.State = apiv1.StateReady
+				},
+			),
+			state: apiv1.BackupNew,
+		},
+		{
+			name: "backup starting deadline expires while cluster is initializing",
+			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQLBackup) {
+				cr.CreationTimestamp = metav1.NewTime(time.Now().Add(-time.Minute))
+				cr.Spec.StartingDeadlineSeconds = new(int64(30))
+			}),
 			cluster: updateResource(
 				cluster.DeepCopy(),
 				func(cr *apiv1.PerconaServerMySQL) {
@@ -99,7 +116,7 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 				},
 			),
 			state:     apiv1.BackupError,
-			stateDesc: "cluster is not ready",
+			stateDesc: "backup did not start before startingDeadlineSeconds expired",
 		},
 		{
 			name: "without storage",
@@ -167,10 +184,8 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 			),
 			obj: []client.Object{
 				&apiv1.PerconaServerMySQLBackup{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "base-backup",
-						Namespace: namespace,
-					},
+					Name:      "base-backup",
+					Namespace: namespace,
 					Status: apiv1.PerconaServerMySQLBackupStatus{
 						State: apiv1.BackupFailed,
 					},
@@ -202,10 +217,8 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 			),
 			obj: []client.Object{
 				&apiv1.PerconaServerMySQLBackup{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "base-backup",
-						Namespace: namespace,
-					},
+					Name:      "base-backup",
+					Namespace: namespace,
 					Status: apiv1.PerconaServerMySQLBackupStatus{
 						Type:  apiv1.BackupTypeIncremental,
 						State: apiv1.BackupSucceeded,
@@ -248,19 +261,15 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 			),
 			obj: []client.Object{
 				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      cluster.InternalSecretName(),
-						Namespace: cluster.Namespace,
-					},
+					Name:      cluster.InternalSecretName(),
+					Namespace: cluster.Namespace,
 					Data: map[string][]byte{
 						string(apiv1.UserOperator): []byte("operator-pass"),
 					},
 				},
 				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "gcs-secret",
-						Namespace: cluster.Namespace,
-					},
+					Name:      "gcs-secret",
+					Namespace: cluster.Namespace,
 					Data: map[string][]byte{
 						"ACCESS_KEY_ID":     []byte("somekey"),
 						"SECRET_ACCESS_KEY": []byte("somekey"),
@@ -290,20 +299,16 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 			),
 			obj: []client.Object{
 				&apiv1.PerconaServerMySQLRestore{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "restore1",
-						Namespace: namespace,
-						UID:       types.UID("restore1-uid"),
-					},
+					Name:      "restore1",
+					Namespace: namespace,
+					UID:       types.UID("restore1-uid"),
 					Status: apiv1.PerconaServerMySQLRestoreStatus{
 						State: apiv1.RestoreRunning,
 					},
 				},
 				&coordv1.Lease{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      naming.RestoreLeaseName(cr.Spec.ClusterName),
-						Namespace: namespace,
-					},
+					Name:      naming.RestoreLeaseName(cr.Spec.ClusterName),
+					Namespace: namespace,
 					Spec: coordv1.LeaseSpec{
 						HolderIdentity:       new("restore1|restore1-uid"),
 						LeaseDurationSeconds: new(int32(30)),
@@ -334,20 +339,16 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 			),
 			obj: []client.Object{
 				&apiv1.PerconaServerMySQLRestore{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "restore1",
-						Namespace: namespace,
-						UID:       types.UID("restore1-uid"),
-					},
+					Name:      "restore1",
+					Namespace: namespace,
+					UID:       types.UID("restore1-uid"),
 					Status: apiv1.PerconaServerMySQLRestoreStatus{
 						State: apiv1.RestoreSucceeded,
 					},
 				},
 				&coordv1.Lease{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      naming.RestoreLeaseName(cr.Spec.ClusterName),
-						Namespace: namespace,
-					},
+					Name:      naming.RestoreLeaseName(cr.Spec.ClusterName),
+					Namespace: namespace,
 					Spec: coordv1.LeaseSpec{
 						HolderIdentity: new("restore1|restore1-uid"),
 					},
@@ -454,8 +455,8 @@ func TestStateDescCleanup(t *testing.T) {
 
 	newSecret := func(name string, data map[string][]byte) *corev1.Secret {
 		return &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
-			Data:       data,
+			Name: name, Namespace: namespace,
+			Data: data,
 		}
 	}
 
@@ -605,11 +606,12 @@ func TestCheckFinalizers(t *testing.T) {
 	require.NoError(t, err)
 
 	tests := []struct {
-		name               string
-		cr                 *apiv1.PerconaServerMySQLBackup
-		expectedFinalizers []string
-		finalizerJobFail   bool
-		additionalObjs     []client.Object
+		name                string
+		cr                  *apiv1.PerconaServerMySQLBackup
+		expectedFinalizers  []string
+		finalizerJobFail    bool
+		finalizerJobMissing bool
+		additionalObjs      []client.Object
 	}{
 		{
 			name: "without finalizers",
@@ -632,6 +634,14 @@ func TestCheckFinalizers(t *testing.T) {
 			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQLBackup) {
 				cr.Finalizers = []string{naming.FinalizerDeleteBackup}
 				cr.Status.State = apiv1.BackupRunning
+			}),
+			expectedFinalizers: []string{naming.FinalizerDeleteBackup},
+		},
+		{
+			name: "with finalizer and suspended state",
+			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQLBackup) {
+				cr.Finalizers = []string{naming.FinalizerDeleteBackup}
+				cr.Status.State = apiv1.BackupSuspended
 			}),
 			expectedFinalizers: []string{naming.FinalizerDeleteBackup},
 		},
@@ -667,6 +677,15 @@ func TestCheckFinalizers(t *testing.T) {
 				cr.Status.State = apiv1.BackupSucceeded
 			}),
 			expectedFinalizers: nil,
+		},
+		{
+			name: "with missing cluster and delete job",
+			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQLBackup) {
+				cr.Finalizers = []string{naming.FinalizerDeleteBackup}
+				cr.Status.State = apiv1.BackupSucceeded
+			}),
+			finalizerJobMissing: true,
+			expectedFinalizers:  []string{naming.FinalizerDeleteBackup},
 		},
 		{
 			name: "with successful finalizer, unknown finalizer and succeeded state",
@@ -769,10 +788,8 @@ func TestCheckFinalizers(t *testing.T) {
 	}
 
 	sec := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "some-secret",
-			Namespace: namespace,
-		},
+		Name:      "some-secret",
+		Namespace: namespace,
 		Data: map[string][]byte{
 			secret.CredentialsAWSAccessKey: []byte("access-key"),
 			secret.CredentialsAWSSecretKey: []byte("secret-key"),
@@ -802,7 +819,10 @@ func TestCheckFinalizers(t *testing.T) {
 			}
 			job.Status.Conditions = append(job.Status.Conditions, cond)
 
-			objs := []client.Object{cr, sec, job}
+			objs := []client.Object{cr, sec}
+			if !tt.finalizerJobMissing {
+				objs = append(objs, job)
+			}
 			objs = append(objs, tt.additionalObjs...)
 			cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).
 				WithIndex(&apiv1.PerconaServerMySQLBackup{}, "spec.clusterName", func(o client.Object) []string {
@@ -913,10 +933,8 @@ func TestRunningState(t *testing.T) {
 			}
 			job.Status.Active = 1
 			pod := &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "ps-cluster1-mysql-0",
-					Namespace: tt.cr.Namespace,
-				},
+				Name:      "ps-cluster1-mysql-0",
+				Namespace: tt.cr.Namespace,
 			}
 			cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.cr, tt.cluster, job, pod).WithStatusSubresource(tt.cr, tt.cluster, job)
 
@@ -929,10 +947,8 @@ func TestRunningState(t *testing.T) {
 				},
 			}
 			_, err = r.Reconcile(ctx, controllerruntime.Request{
-				NamespacedName: types.NamespacedName{
-					Name:      tt.cr.Name,
-					Namespace: tt.cr.Namespace,
-				},
+				Name:      tt.cr.Name,
+				Namespace: tt.cr.Namespace,
 			})
 			if err != nil {
 				t.Fatal(err, "failed to reconcile")
@@ -950,6 +966,213 @@ func TestRunningState(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestReconcileDeadlineReleasesLease(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(scheme))
+	require.NoError(t, apiv1.AddToScheme(scheme))
+
+	tests := map[string]struct {
+		initialState  apiv1.BackupState
+		expectedState apiv1.BackupState
+		expectedDesc  string
+	}{
+		"starting deadline": {
+			expectedState: apiv1.BackupError,
+			expectedDesc:  "backup did not start before startingDeadlineSeconds expired",
+		},
+		"suspended deadline": {
+			initialState:  apiv1.BackupSuspended,
+			expectedState: apiv1.BackupFailed,
+			expectedDesc:  "backup did not resume before suspendedDeadlineSeconds expired",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			const namespace = "test-ns"
+			backup, err := readDefaultCRBackup("backup1", namespace)
+			require.NoError(t, err)
+			backup.UID = "backup1-uid"
+			backup.CreationTimestamp = metav1.NewTime(time.Now().Add(-time.Minute))
+			backup.Spec.StartingDeadlineSeconds = new(int64(30))
+			backup.Spec.SuspendedDeadlineSeconds = new(int64(30))
+			backup.Status.State = tt.initialState
+			backup.Status.Conditions = []metav1.Condition{{
+				Type:   apiv1.ConditionBackupLeaseAcquired,
+				Status: metav1.ConditionTrue,
+			}}
+
+			cluster, err := readDefaultCR(backup.Spec.ClusterName, namespace)
+			require.NoError(t, err)
+
+			lease := &coordv1.Lease{
+				Name: naming.BackupLeaseName(cluster.Name), Namespace: namespace,
+				Spec: coordv1.LeaseSpec{
+					HolderIdentity: new(naming.LeaseHolderName(backup.Name, string(backup.UID))),
+				},
+			}
+			objects := []client.Object{backup, cluster, lease}
+			var job *batchv1.Job
+			if tt.initialState == apiv1.BackupSuspended {
+				jobName := xtrabackup.JobNamespacedName(backup)
+				job = &batchv1.Job{
+					Name: jobName.Name, Namespace: jobName.Namespace,
+					Spec: batchv1.JobSpec{Suspend: new(true)},
+					Status: batchv1.JobStatus{Conditions: []batchv1.JobCondition{{
+						Type:               batchv1.JobSuspended,
+						Status:             corev1.ConditionTrue,
+						LastTransitionTime: backup.CreationTimestamp,
+					}}},
+				}
+				objects = append(objects, job)
+			}
+
+			cl := fake.NewClientBuilder().WithScheme(scheme).
+				WithObjects(objects...).
+				WithStatusSubresource(backup).
+				Build()
+			r := PerconaServerMySQLBackupReconciler{
+				Client:        cl,
+				Scheme:        scheme,
+				ServerVersion: &platform.ServerVersion{Platform: platform.PlatformKubernetes},
+			}
+
+			_, err = r.Reconcile(t.Context(), reconcile.Request{NamespacedName: client.ObjectKeyFromObject(backup)})
+			require.NoError(t, err)
+
+			actual := new(apiv1.PerconaServerMySQLBackup)
+			require.NoError(t, cl.Get(t.Context(), client.ObjectKeyFromObject(backup), actual))
+			assert.Equal(t, tt.expectedState, actual.Status.State)
+			assert.Equal(t, tt.expectedDesc, actual.Status.StateDesc)
+			assert.False(t, meta.IsStatusConditionPresentAndEqual(actual.Status.Conditions, apiv1.ConditionBackupLeaseAcquired, metav1.ConditionTrue))
+
+			if job != nil {
+				err = cl.Get(t.Context(), client.ObjectKeyFromObject(job), new(batchv1.Job))
+				assert.True(t, k8serrors.IsNotFound(err))
+			}
+			err = cl.Get(t.Context(), client.ObjectKeyFromObject(lease), new(coordv1.Lease))
+			assert.True(t, k8serrors.IsNotFound(err))
+		})
+	}
+}
+
+func TestBackupStateFollowsJobSuspension(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(scheme))
+	require.NoError(t, apiv1.AddToScheme(scheme))
+
+	const namespace = "test-ns"
+	backup, err := readDefaultCRBackup("backup1", namespace)
+	require.NoError(t, err)
+	backup.Status.State = apiv1.BackupRunning
+
+	cluster, err := readDefaultCR(backup.Spec.ClusterName, namespace)
+	require.NoError(t, err)
+	cluster.Status.State = apiv1.StateInitializing
+	cluster.Status.MySQL.State = apiv1.StateInitializing
+	cluster.Spec.MySQL.ClusterType = apiv1.ClusterTypeGR
+	cluster.Spec.Backup.Enabled = true
+
+	jobName := xtrabackup.JobNamespacedName(backup)
+	job := &batchv1.Job{
+		Name: jobName.Name, Namespace: jobName.Namespace,
+		Status: batchv1.JobStatus{Active: 1},
+	}
+
+	cl := fake.NewClientBuilder().WithScheme(scheme).
+		WithObjects(backup, cluster, job).
+		WithStatusSubresource(backup, cluster, job).
+		Build()
+	r := PerconaServerMySQLBackupReconciler{
+		Client:        cl,
+		Scheme:        scheme,
+		ServerVersion: &platform.ServerVersion{Platform: platform.PlatformKubernetes},
+	}
+
+	request := reconcile.Request{NamespacedName: client.ObjectKeyFromObject(backup)}
+	_, err = r.Reconcile(t.Context(), request)
+	require.NoError(t, err)
+
+	actualBackup := new(apiv1.PerconaServerMySQLBackup)
+	require.NoError(t, cl.Get(t.Context(), client.ObjectKeyFromObject(backup), actualBackup))
+	assert.Equal(t, apiv1.BackupSuspended, actualBackup.Status.State)
+	actualJob := new(batchv1.Job)
+	require.NoError(t, cl.Get(t.Context(), client.ObjectKeyFromObject(job), actualJob))
+	require.NotNil(t, actualJob.Spec.Suspend)
+	assert.True(t, *actualJob.Spec.Suspend)
+
+	actualCluster := new(apiv1.PerconaServerMySQL)
+	require.NoError(t, cl.Get(t.Context(), client.ObjectKeyFromObject(cluster), actualCluster))
+	actualCluster.Status.State = apiv1.StateReady
+	actualCluster.Status.MySQL.State = apiv1.StateReady
+	require.NoError(t, cl.Status().Update(t.Context(), actualCluster))
+
+	_, err = r.Reconcile(t.Context(), request)
+	require.NoError(t, err)
+	require.NoError(t, cl.Get(t.Context(), client.ObjectKeyFromObject(backup), actualBackup))
+	assert.Equal(t, apiv1.BackupStarting, actualBackup.Status.State)
+	require.NoError(t, cl.Get(t.Context(), client.ObjectKeyFromObject(job), actualJob))
+	require.NotNil(t, actualJob.Spec.Suspend)
+	assert.False(t, *actualJob.Spec.Suspend)
+}
+
+func TestRunningBackupDoesNotAcquireLease(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(scheme))
+	require.NoError(t, apiv1.AddToScheme(scheme))
+
+	const namespace = "test-ns"
+	backup, err := readDefaultCRBackup("backup1", namespace)
+	require.NoError(t, err)
+	backup.Status.State = apiv1.BackupRunning
+
+	cluster, err := readDefaultCR(backup.Spec.ClusterName, namespace)
+	require.NoError(t, err)
+	cluster.Status.State = apiv1.StateReady
+	cluster.Status.MySQL.State = apiv1.StateReady
+	cluster.Spec.MySQL.ClusterType = apiv1.ClusterTypeGR
+	cluster.Spec.Backup.Enabled = true
+	cluster.Spec.Backup.AllowParallel = new(false)
+
+	jobName := xtrabackup.JobNamespacedName(backup)
+	job := &batchv1.Job{
+		Name: jobName.Name, Namespace: jobName.Namespace,
+		Status: batchv1.JobStatus{Conditions: []batchv1.JobCondition{{
+			Type:   batchv1.JobComplete,
+			Status: corev1.ConditionTrue,
+		}}},
+	}
+	lease := &coordv1.Lease{
+		Name: naming.BackupLeaseName(cluster.Name), Namespace: namespace,
+		Spec: coordv1.LeaseSpec{
+			HolderIdentity: new(naming.LeaseHolderName("another-backup", "another-uid")),
+		},
+	}
+
+	cl := fake.NewClientBuilder().WithScheme(scheme).
+		WithObjects(backup, cluster, job, lease).
+		WithStatusSubresource(backup, cluster, job).
+		Build()
+	r := PerconaServerMySQLBackupReconciler{
+		Client:        cl,
+		Scheme:        scheme,
+		ServerVersion: &platform.ServerVersion{Platform: platform.PlatformKubernetes},
+	}
+
+	_, err = r.Reconcile(t.Context(), reconcile.Request{NamespacedName: client.ObjectKeyFromObject(backup)})
+	require.NoError(t, err)
+
+	actual := new(apiv1.PerconaServerMySQLBackup)
+	require.NoError(t, cl.Get(t.Context(), client.ObjectKeyFromObject(backup), actual))
+	assert.Equal(t, apiv1.BackupSucceeded, actual.Status.State)
+	assert.Nil(t, meta.FindStatusCondition(actual.Status.Conditions, apiv1.ConditionBackupLeaseAcquired))
+
+	actualLease := new(coordv1.Lease)
+	require.NoError(t, cl.Get(t.Context(), client.ObjectKeyFromObject(lease), actualLease))
+	require.NotNil(t, actualLease.Spec.HolderIdentity)
+	assert.Equal(t, *lease.Spec.HolderIdentity, *actualLease.Spec.HolderIdentity)
 }
 
 func TestGetBackupSource(t *testing.T) {
@@ -973,19 +1196,15 @@ func TestGetBackupSource(t *testing.T) {
 		{
 			name: "sourceHost from backup",
 			cr: &apiv1.PerconaServerMySQLBackup{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-backup",
-					Namespace: "test-ns",
-				},
+				Name:      "test-backup",
+				Namespace: "test-ns",
 				Spec: apiv1.PerconaServerMySQLBackupSpec{
 					SourcePod: "ps-cluster1-mysql-0",
 				},
 			},
 			cluster: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "ps-cluster1",
-					Namespace: "test-ns",
-				},
+				Name:      "ps-cluster1",
+				Namespace: "test-ns",
 				Spec: apiv1.PerconaServerMySQLSpec{
 					Backup: &apiv1.BackupSpec{SourcePod: "ps-cluster1-mysql-1"},
 				},
@@ -995,17 +1214,13 @@ func TestGetBackupSource(t *testing.T) {
 		{
 			name: "host from cluster",
 			cr: &apiv1.PerconaServerMySQLBackup{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-backup",
-					Namespace: "test-ns",
-				},
-				Spec: apiv1.PerconaServerMySQLBackupSpec{},
+				Name:      "test-backup",
+				Namespace: "test-ns",
+				Spec:      apiv1.PerconaServerMySQLBackupSpec{},
 			},
 			cluster: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "ps-cluster1",
-					Namespace: "test-ns",
-				},
+				Name:      "ps-cluster1",
+				Namespace: "test-ns",
 				Spec: apiv1.PerconaServerMySQLSpec{
 					Backup: &apiv1.BackupSpec{SourcePod: "ps-cluster1-mysql-1"},
 				},
@@ -1015,16 +1230,12 @@ func TestGetBackupSource(t *testing.T) {
 		{
 			name: "single node cluster",
 			cr: &apiv1.PerconaServerMySQLBackup{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-backup",
-					Namespace: "test-ns",
-				},
+				Name:      "test-backup",
+				Namespace: "test-ns",
 			},
 			cluster: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "ps-cluster1",
-					Namespace: "test-ns",
-				},
+				Name:      "ps-cluster1",
+				Namespace: "test-ns",
 				Spec: apiv1.PerconaServerMySQLSpec{
 					MySQL: apiv1.MySQLSpec{
 						PodSpec: apiv1.PodSpec{Size: 1},
@@ -1037,16 +1248,12 @@ func TestGetBackupSource(t *testing.T) {
 		{
 			name: "async cluster, orchestrator off, no host",
 			cr: &apiv1.PerconaServerMySQLBackup{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-backup",
-					Namespace: "test-ns",
-				},
+				Name:      "test-backup",
+				Namespace: "test-ns",
 			},
 			cluster: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "ps-cluster1",
-					Namespace: "test-ns",
-				},
+				Name:      "ps-cluster1",
+				Namespace: "test-ns",
 				Spec: apiv1.PerconaServerMySQLSpec{
 					MySQL: apiv1.MySQLSpec{
 						ClusterType: apiv1.ClusterTypeAsync,
@@ -1070,22 +1277,16 @@ func TestGetBackupSource(t *testing.T) {
 			tt.cluster,
 			tt.cr,
 			&corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "ps-cluster1-mysql-0",
-					Namespace: "test-ns",
-				},
+				Name:      "ps-cluster1-mysql-0",
+				Namespace: "test-ns",
 			},
 			&corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "ps-cluster1-mysql-1",
-					Namespace: "test-ns",
-				},
+				Name:      "ps-cluster1-mysql-1",
+				Namespace: "test-ns",
 			},
 			&corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "ps-cluster1-mysql-2",
-					Namespace: "test-ns",
-				},
+				Name:      "ps-cluster1-mysql-2",
+				Namespace: "test-ns",
 			},
 		}
 
@@ -1253,33 +1454,27 @@ func TestRenewDowntime(t *testing.T) {
 	backupSource := "test-mysql-0.test-mysql.test-namespace"
 
 	cr := &apiv1.PerconaServerMySQLBackup{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-backup",
-			Namespace: namespace,
-		},
+		Name:      "test-backup",
+		Namespace: namespace,
 		Spec: apiv1.PerconaServerMySQLBackupSpec{
 			ClusterName: "test-cluster",
 		},
 	}
 
 	backupPod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-mysql-0",
-			Namespace: namespace,
-		},
+		Name:      "test-mysql-0",
+		Namespace: namespace,
 		Status: corev1.PodStatus{
 			Phase: corev1.PodRunning,
 		},
 	}
 
 	orchestratorPod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cluster-orc-0",
-			Namespace: namespace,
-			Labels: map[string]string{
-				naming.LabelInstance:  "test-cluster",
-				naming.LabelComponent: naming.ComponentOrchestrator,
-			},
+		Name:      "test-cluster-orc-0",
+		Namespace: namespace,
+		Labels: map[string]string{
+			naming.LabelInstance:  "test-cluster",
+			naming.LabelComponent: naming.ComponentOrchestrator,
 		},
 		Status: corev1.PodStatus{
 			Phase: corev1.PodRunning,
@@ -1294,10 +1489,8 @@ func TestRenewDowntime(t *testing.T) {
 
 	asyncWithOrc := func() *apiv1.PerconaServerMySQL {
 		return &apiv1.PerconaServerMySQL{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-cluster",
-				Namespace: namespace,
-			},
+			Name:      "test-cluster",
+			Namespace: namespace,
 			Spec: apiv1.PerconaServerMySQLSpec{
 				MySQL: apiv1.MySQLSpec{
 					ClusterType: apiv1.ClusterTypeAsync,
@@ -1355,10 +1548,8 @@ func TestRenewDowntime(t *testing.T) {
 		{
 			name: "skip with group replication cluster (no orchestrator needed)",
 			cluster: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-cluster",
-					Namespace: namespace,
-				},
+				Name:      "test-cluster",
+				Namespace: namespace,
 				Spec: apiv1.PerconaServerMySQLSpec{
 					MySQL: apiv1.MySQLSpec{
 						ClusterType: apiv1.ClusterTypeGR,
@@ -1374,10 +1565,8 @@ func TestRenewDowntime(t *testing.T) {
 		{
 			name: "skip with async cluster but orchestrator disabled",
 			cluster: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-cluster",
-					Namespace: namespace,
-				},
+				Name:      "test-cluster",
+				Namespace: namespace,
 				Spec: apiv1.PerconaServerMySQLSpec{
 					MySQL: apiv1.MySQLSpec{
 						ClusterType: apiv1.ClusterTypeAsync,
@@ -1452,10 +1641,8 @@ func TestGetBackupSourcePod(t *testing.T) {
 	podName := "test-mysql-0"
 
 	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      podName,
-			Namespace: namespace,
-		},
+		Name:      podName,
+		Namespace: namespace,
 		Status: corev1.PodStatus{
 			Phase: corev1.PodRunning,
 		},
@@ -1544,10 +1731,8 @@ func TestRunPostFinishTasks(t *testing.T) {
 	backupSource := "test-mysql-0.test-mysql.test-namespace"
 
 	cr := &apiv1.PerconaServerMySQLBackup{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-backup",
-			Namespace: namespace,
-		},
+		Name:      "test-backup",
+		Namespace: namespace,
 		Spec: apiv1.PerconaServerMySQLBackupSpec{
 			ClusterName: "test-cluster",
 		},
@@ -1557,13 +1742,11 @@ func TestRunPostFinishTasks(t *testing.T) {
 	}
 
 	orchestratorPod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cluster-orc-0",
-			Namespace: namespace,
-			Labels: map[string]string{
-				naming.LabelInstance:  "test-cluster",
-				naming.LabelComponent: naming.ComponentOrchestrator,
-			},
+		Name:      "test-cluster-orc-0",
+		Namespace: namespace,
+		Labels: map[string]string{
+			naming.LabelInstance:  "test-cluster",
+			naming.LabelComponent: naming.ComponentOrchestrator,
 		},
 		Status: corev1.PodStatus{
 			Phase: corev1.PodRunning,
@@ -1587,10 +1770,8 @@ func TestRunPostFinishTasks(t *testing.T) {
 		{
 			name: "success with async cluster and orchestrator enabled",
 			cluster: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-cluster",
-					Namespace: namespace,
-				},
+				Name:      "test-cluster",
+				Namespace: namespace,
 				Spec: apiv1.PerconaServerMySQLSpec{
 					MySQL: apiv1.MySQLSpec{
 						ClusterType: apiv1.ClusterTypeAsync,
@@ -1607,10 +1788,8 @@ func TestRunPostFinishTasks(t *testing.T) {
 		{
 			name: "skip with group replication cluster",
 			cluster: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-cluster",
-					Namespace: namespace,
-				},
+				Name:      "test-cluster",
+				Namespace: namespace,
 				Spec: apiv1.PerconaServerMySQLSpec{
 					MySQL: apiv1.MySQLSpec{
 						ClusterType: apiv1.ClusterTypeGR,
@@ -1627,10 +1806,8 @@ func TestRunPostFinishTasks(t *testing.T) {
 		{
 			name: "skip with async cluster but orchestrator disabled",
 			cluster: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-cluster",
-					Namespace: namespace,
-				},
+				Name:      "test-cluster",
+				Namespace: namespace,
 				Spec: apiv1.PerconaServerMySQLSpec{
 					MySQL: apiv1.MySQLSpec{
 						ClusterType: apiv1.ClusterTypeAsync,
@@ -1647,10 +1824,8 @@ func TestRunPostFinishTasks(t *testing.T) {
 		{
 			name: "error when orchestrator pod not ready",
 			cluster: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-cluster",
-					Namespace: namespace,
-				},
+				Name:      "test-cluster",
+				Namespace: namespace,
 				Spec: apiv1.PerconaServerMySQLSpec{
 					MySQL: apiv1.MySQLSpec{
 						ClusterType: apiv1.ClusterTypeAsync,
@@ -1668,10 +1843,8 @@ func TestRunPostFinishTasks(t *testing.T) {
 		{
 			name: "error when end downtime fails",
 			cluster: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-cluster",
-					Namespace: namespace,
-				},
+				Name:      "test-cluster",
+				Namespace: namespace,
 				Spec: apiv1.PerconaServerMySQLSpec{
 					MySQL: apiv1.MySQLSpec{
 						ClusterType: apiv1.ClusterTypeAsync,
@@ -1730,18 +1903,14 @@ func TestValidateStorage(t *testing.T) {
 	}
 
 	cluster := &apiv1.PerconaServerMySQL{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "cluster",
-			Namespace: "ns",
-		},
+		Name:      "cluster",
+		Namespace: "ns",
 	}
 
 	objects := []client.Object{
 		&corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "some-secret",
-				Namespace: cluster.Namespace,
-			},
+			Name:      "some-secret",
+			Namespace: cluster.Namespace,
 			Data: map[string][]byte{
 				"AWS_ACCESS_KEY_ID":     []byte("somekey"),
 				"AWS_SECRET_ACCESS_KEY": []byte("somekey"),

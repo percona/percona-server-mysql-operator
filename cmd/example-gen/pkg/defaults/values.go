@@ -1,8 +1,6 @@
 package defaults
 
 import (
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 )
@@ -40,5 +38,5 @@ var (
 	RuntimeClassName  = new("image-rc")
 	SchedulerName     = "default-scheduler"
 	PriorityClassName = "high-priority"
-	SourcePod         = mysql.PodName(&apiv1.PerconaServerMySQL{ObjectMeta: metav1.ObjectMeta{Name: NameCluster}}, 1)
+	SourcePod         = mysql.PodName(&apiv1.PerconaServerMySQL{Name: NameCluster}, 1)
 )

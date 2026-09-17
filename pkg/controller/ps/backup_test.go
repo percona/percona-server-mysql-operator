@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -19,13 +18,70 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/version"
 )
 
+func TestCreateScheduledBackup(t *testing.T) {
+	tests := map[string]struct {
+		clusterState apiv1.StatefulAppState
+		deadline     *int64
+		backupCount  int
+	}{
+		"skip while cluster is initializing": {
+			clusterState: apiv1.StateInitializing,
+			backupCount:  0,
+		},
+		"copy starting deadline": {
+			clusterState: apiv1.StateReady,
+			deadline:     new(int64(300)),
+			backupCount:  1,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			scheme := runtime.NewScheme()
+			require.NoError(t, clientgoscheme.AddToScheme(scheme))
+			require.NoError(t, apiv1.AddToScheme(scheme))
+
+			cluster := &apiv1.PerconaServerMySQL{
+				Name: "cluster1", Namespace: "test-ns",
+				Spec: apiv1.PerconaServerMySQLSpec{
+					CRVersion: version.Version(),
+					Backup: &apiv1.BackupSpec{
+						Enabled:                 true,
+						StartingDeadlineSeconds: tt.deadline,
+						Storages: map[string]*apiv1.BackupStorageSpec{
+							"s3": {Type: apiv1.BackupStorageS3},
+						},
+					},
+				},
+				Status: apiv1.PerconaServerMySQLStatus{State: tt.clusterState},
+			}
+			cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster).Build()
+			registry := NewCronRegistry()
+			t.Cleanup(func() { registry.crons.Stop() })
+
+			registry.createBackupJobFunc(t.Context(), cl, cluster, apiv1.BackupSchedule{
+				Name: "daily", Schedule: "0 0 * * *", StorageName: "s3",
+			})()
+
+			backups := &apiv1.PerconaServerMySQLBackupList{}
+			require.NoError(t, cl.List(t.Context(), backups))
+			require.Len(t, backups.Items, tt.backupCount)
+			if tt.backupCount == 0 {
+				return
+			}
+
+			assert.Equal(t, cluster.Name, backups.Items[0].Spec.ClusterName)
+			assert.Equal(t, "s3", backups.Items[0].Spec.StorageName)
+			assert.Equal(t, tt.deadline, backups.Items[0].Spec.StartingDeadlineSeconds)
+		})
+	}
+}
+
 func TestGenerateBackupName(t *testing.T) {
 	crMeta := func(name, ns string) *apiv1.PerconaServerMySQL {
 		return &apiv1.PerconaServerMySQL{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: ns,
-			},
+			Name:      name,
+			Namespace: ns,
 			Spec: apiv1.PerconaServerMySQLSpec{
 				CRVersion: "1.0.0",
 			},
@@ -151,11 +207,9 @@ func TestReconcileInternalEncryptionKeySecret(t *testing.T) {
 	require.NoError(t, apiv1.AddToScheme(scheme))
 
 	cr := &apiv1.PerconaServerMySQL{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "cluster1",
-			Namespace: "test-ns",
-			UID:       types.UID("cluster1-uid"),
-		},
+		Name:      "cluster1",
+		Namespace: "test-ns",
+		UID:       types.UID("cluster1-uid"),
 		Spec: apiv1.PerconaServerMySQLSpec{
 			CRVersion: version.Version(),
 			Backup: &apiv1.BackupSpec{
@@ -177,19 +231,15 @@ func TestReconcileInternalEncryptionKeySecret(t *testing.T) {
 		},
 	}
 	clusterKeySecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "cluster-key",
-			Namespace: cr.Namespace,
-		},
+		Name:      "cluster-key",
+		Namespace: cr.Namespace,
 		Data: map[string][]byte{
 			"encryptionKey": []byte("cluster-secret-key"),
 		},
 	}
 	storageKeySecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "storage-key",
-			Namespace: cr.Namespace,
-		},
+		Name:      "storage-key",
+		Namespace: cr.Namespace,
 		Data: map[string][]byte{
 			"custom-key": []byte("storage-secret-key"),
 		},

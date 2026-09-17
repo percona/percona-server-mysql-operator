@@ -145,16 +145,12 @@ func Job(
 	}
 
 	job := &batchv1.Job{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "batch/v1",
-			Kind:       "Job",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        JobName(cr),
-			Namespace:   cluster.Namespace,
-			Labels:      labels,
-			Annotations: util.SSMapMerge(cluster.GlobalAnnotations(), storage.Annotations),
-		},
+		APIVersion:  "batch/v1",
+		Kind:        "Job",
+		Name:        JobName(cr),
+		Namespace:   cluster.Namespace,
+		Labels:      labels,
+		Annotations: util.SSMapMerge(cluster.GlobalAnnotations(), storage.Annotations),
 		Spec: batchv1.JobSpec{
 			Parallelism:  &one,
 			Completions:  &one,
@@ -195,31 +191,23 @@ func Job(
 					DNSPolicy:                 corev1.DNSClusterFirst,
 					Volumes: []corev1.Volume{
 						{
-							Name: apiv1.BinVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								EmptyDir: &corev1.EmptyDirVolumeSource{},
-							},
+							Name:     apiv1.BinVolumeName,
+							EmptyDir: &corev1.EmptyDirVolumeSource{},
 						},
 						{
-							Name: dataVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								EmptyDir: &corev1.EmptyDirVolumeSource{},
-							},
+							Name:     dataVolumeName,
+							EmptyDir: &corev1.EmptyDirVolumeSource{},
 						},
 						{
 							Name: credsVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								Secret: &corev1.SecretVolumeSource{
-									SecretName: cluster.Spec.SecretsName,
-								},
+							Secret: &corev1.SecretVolumeSource{
+								SecretName: cluster.Spec.SecretsName,
 							},
 						},
 						{
 							Name: tlsVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								Secret: &corev1.SecretVolumeSource{
-									SecretName: cluster.Spec.SSLSecretName,
-								},
+							Secret: &corev1.SecretVolumeSource{
+								SecretName: cluster.Spec.SSLSecretName,
 							},
 						},
 					},
@@ -228,7 +216,7 @@ func Job(
 		},
 	}
 
-	k8s.PrepareJobWithS3CA(job, cluster, storage.S3)
+	k8s.PrepareJobWithS3CA(job, storage.S3)
 
 	return job, nil
 }
@@ -443,16 +431,12 @@ func RestoreJob(
 	labels := util.SSMapMerge(cluster.GlobalLabels(), storage.Labels, restore.Labels(appName, naming.ComponentRestore))
 
 	job := &batchv1.Job{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "batch/v1",
-			Kind:       "Job",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        RestoreJobName(cluster, restore),
-			Namespace:   cluster.Namespace,
-			Labels:      labels,
-			Annotations: util.SSMapMerge(cluster.GlobalAnnotations(), storage.Annotations),
-		},
+		APIVersion:  "batch/v1",
+		Kind:        "Job",
+		Name:        RestoreJobName(cluster, restore),
+		Namespace:   cluster.Namespace,
+		Labels:      labels,
+		Annotations: util.SSMapMerge(cluster.GlobalAnnotations(), storage.Annotations),
 		Spec: batchv1.JobSpec{
 			Parallelism: new(int32(1)),
 			Completions: new(int32(1)),
@@ -499,33 +483,25 @@ func RestoreJob(
 					SecurityContext:           storage.PodSecurityContext,
 					Volumes: []corev1.Volume{
 						{
-							Name: apiv1.BinVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								EmptyDir: &corev1.EmptyDirVolumeSource{},
-							},
+							Name:     apiv1.BinVolumeName,
+							EmptyDir: &corev1.EmptyDirVolumeSource{},
 						},
 						{
 							Name: dataVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-									ClaimName: pvcName,
-								},
+							PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+								ClaimName: pvcName,
 							},
 						},
 						{
 							Name: credsVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								Secret: &corev1.SecretVolumeSource{
-									SecretName: cluster.Spec.SecretsName,
-								},
+							Secret: &corev1.SecretVolumeSource{
+								SecretName: cluster.Spec.SecretsName,
 							},
 						},
 						{
 							Name: tlsVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								Secret: &corev1.SecretVolumeSource{
-									SecretName: cluster.Spec.SSLSecretName,
-								},
+							Secret: &corev1.SecretVolumeSource{
+								SecretName: cluster.Spec.SSLSecretName,
 							},
 						},
 					},
@@ -538,11 +514,9 @@ func RestoreJob(
 	if cluster.Spec.MySQL.VaultSecretName != "" {
 		job.Spec.Template.Spec.Volumes = append(job.Spec.Template.Spec.Volumes, corev1.Volume{
 			Name: vaultSecretVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: cluster.Spec.MySQL.VaultSecretName,
-					Optional:   new(true),
-				},
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: cluster.Spec.MySQL.VaultSecretName,
+				Optional:   new(true),
 			},
 		})
 	}
@@ -550,21 +524,19 @@ func RestoreJob(
 	if storage.EncryptionKeySecret != nil {
 		job.Spec.Template.Spec.Volumes = append(job.Spec.Template.Spec.Volumes, corev1.Volume{
 			Name: encryptionKeysVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: storage.EncryptionKeySecret.Name,
-					Items: []corev1.KeyToPath{
-						{
-							Key:  storage.EncryptionKeySecret.Key,
-							Path: "encryption-key",
-						},
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: storage.EncryptionKeySecret.Name,
+				Items: []corev1.KeyToPath{
+					{
+						Key:  storage.EncryptionKeySecret.Key,
+						Path: "encryption-key",
 					},
 				},
 			},
 		})
 	}
 
-	k8s.PrepareJobWithS3CA(job, cluster, storage.S3)
+	k8s.PrepareJobWithS3CA(job, storage.S3)
 
 	return job
 }
@@ -577,16 +549,12 @@ func GetDeleteJob(cluster *apiv1.PerconaServerMySQL, cr *apiv1.PerconaServerMySQ
 	labels := util.SSMapMerge(cluster.GlobalLabels(), storage.Labels, cr.Labels(appName, naming.ComponentBackup))
 
 	job := &batchv1.Job{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "batch/v1",
-			Kind:       "Job",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        DeleteJobName(cr),
-			Namespace:   cr.Namespace,
-			Labels:      labels,
-			Annotations: util.SSMapMerge(cluster.GlobalAnnotations(), storage.Annotations),
-		},
+		APIVersion:  "batch/v1",
+		Kind:        "Job",
+		Name:        DeleteJobName(cr),
+		Namespace:   cr.Namespace,
+		Labels:      labels,
+		Annotations: util.SSMapMerge(cluster.GlobalAnnotations(), storage.Annotations),
 		Spec: batchv1.JobSpec{
 			Parallelism: &one,
 			Completions: &one,
@@ -613,10 +581,8 @@ func GetDeleteJob(cluster *apiv1.PerconaServerMySQL, cr *apiv1.PerconaServerMySQ
 					DNSPolicy:                 corev1.DNSClusterFirst,
 					Volumes: []corev1.Volume{
 						{
-							Name: apiv1.BinVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								EmptyDir: &corev1.EmptyDirVolumeSource{},
-							},
+							Name:     apiv1.BinVolumeName,
+							EmptyDir: &corev1.EmptyDirVolumeSource{},
 						},
 					},
 				},
@@ -641,7 +607,7 @@ func GetDeleteJob(cluster *apiv1.PerconaServerMySQL, cr *apiv1.PerconaServerMySQ
 				nil,
 			),
 		}
-		k8s.PrepareJobWithS3CA(job, cluster, storage.S3)
+		k8s.PrepareJobWithS3CA(job, storage.S3)
 	}
 
 	return job
@@ -752,23 +718,19 @@ func PVC(cluster *apiv1.PerconaServerMySQL, cr *apiv1.PerconaServerMySQLBackup, 
 	}
 
 	return &corev1.PersistentVolumeClaim{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "batch/v1",
-			Kind:       "Job",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      JobName(cr),
-			Namespace: cluster.Namespace,
-		},
-		Spec: *storage.Volume.PersistentVolumeClaim,
+		APIVersion: "batch/v1",
+		Kind:       "Job",
+		Name:       JobName(cr),
+		Namespace:  cluster.Namespace,
+		Spec:       *storage.Volume.PersistentVolumeClaim,
 	}
 }
 
 func SetStoragePVC(job *batchv1.Job, pvc *corev1.PersistentVolumeClaim) error {
 	spec := &job.Spec.Template.Spec
 
-	vol := corev1.Volume{Name: appName}
-	vol.PersistentVolumeClaim = &corev1.PersistentVolumeClaimVolumeSource{ClaimName: pvc.Name}
+	vol := corev1.Volume{Name: appName,
+		PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: pvc.Name}}
 
 	spec.Volumes = append(spec.Volumes, vol)
 

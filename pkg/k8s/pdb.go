@@ -10,12 +10,10 @@ import (
 
 func podDisruptionBudget(cr *apiv1.PerconaServerMySQL, spec *apiv1.PodDisruptionBudgetSpec, ls, selector map[string]string) *policyv1.PodDisruptionBudget {
 	return &policyv1.PodDisruptionBudget{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        cr.Name + "-" + ls[naming.LabelName],
-			Namespace:   cr.Namespace,
-			Labels:      ls,
-			Annotations: cr.GlobalAnnotations(),
-		},
+		Name:        cr.Name + "-" + ls[naming.LabelName],
+		Namespace:   cr.Namespace,
+		Labels:      ls,
+		Annotations: cr.GlobalAnnotations(),
 		Spec: policyv1.PodDisruptionBudgetSpec{
 			MinAvailable:   spec.MinAvailable,
 			MaxUnavailable: spec.MaxUnavailable,
