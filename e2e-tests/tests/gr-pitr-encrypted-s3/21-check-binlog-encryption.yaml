@@ -20,6 +20,12 @@ commands:
           exit 1
       fi
 
+      # summarize captured binlogs up front so any check below fails with the full picture
+      dist=$(echo "${binlogs}" | jq -r 'group_by(.encryption.file_key_envelope.kek_id // "none") | map("\(.[0].encryption.file_key_envelope.kek_id // "none")=\(length)") | join(" ")')
+      per_binlog=$(echo "${binlogs}" | jq -c 'map({name, kek: (.encryption.file_key_envelope.kek_id // "none")})')
+      echo "KEK distribution: ${dist}"
+      echo "per binlog: ${per_binlog}"
+
       # every encrypted binlog must reference a KEK from the keyring
       unknown_kek=$(echo "${binlogs}" | jq -r '
           [
@@ -29,7 +35,7 @@ commands:
               | .name
           ] | join(" ")')
       if [[ -n ${unknown_kek} ]]; then
-          echo "encrypted binlogs without a keyring KEK: ${unknown_kek}"
+          echo "encrypted binlogs without a keyring KEK: ${unknown_kek} (distribution: ${dist})"
           exit 1
       fi
 
@@ -38,16 +44,15 @@ commands:
       for kek in alpha beta; do
           count=$(echo "${binlogs}" | jq --arg kek "${kek}" '[.[] | select(.encryption.file_key_envelope.kek_id == $kek)] | length')
           if [[ ${count} -eq 0 ]]; then
-              echo "no binlog is encrypted with KEK ${kek}"
+              echo "no binlog is encrypted with KEK ${kek} (distribution: ${dist}; per binlog: ${per_binlog})"
               exit 1
           fi
       done
 
       plaintext=$(echo "${binlogs}" | jq '[.[] | select(has("encryption") | not)] | length')
       if [[ ${plaintext} -eq 0 ]]; then
-          echo "no plaintext binlog in the restore set, encryption was never off"
+          echo "no plaintext binlog in the restore set, encryption was never off (distribution: ${dist})"
           exit 1
       fi
 
-      echo "${total} binlogs, ${plaintext} plaintext; KEK distribution:"
-      echo "${binlogs}" | jq -r 'group_by(.encryption.file_key_envelope.kek_id // "none") | map("\(.[0].encryption.file_key_envelope.kek_id // "none")=\(length)") | join(" ")'
+      echo "${total} binlogs, ${plaintext} plaintext; KEK distribution: ${dist}"
