@@ -17,5 +17,10 @@ commands:
           "INSERT myDB.myTable (id) VALUES (100504)" \
           "-h $(get_router_service $(get_cluster_name))"
 
+      # rotate so this phase's binlog is finalized in its own file
+      run_mysql \
+          "FLUSH BINARY LOGS" \
+          "-h $(get_router_service $(get_cluster_name))"
+
       # wait for binlog server upload
       sleep 35

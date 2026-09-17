@@ -17,5 +17,10 @@ commands:
           "INSERT myDB.myTable (id) VALUES (100502)" \
           "-h $(get_router_service $(get_cluster_name))"
 
+      # rotate so this window's binlog is finalized under the active KEK
+      run_mysql \
+          "FLUSH BINARY LOGS" \
+          "-h $(get_router_service $(get_cluster_name))"
+
       # let the binlog server checkpoint this data while alpha is still in effect
       sleep 35
