@@ -14,5 +14,5 @@ commands:
 
       deploy_tls_cluster_secrets
 
-      apply_minio_secret
-      deploy_minio
+      apply_s3_secret
+      deploy_s3_storage
