@@ -16,5 +16,8 @@ commands:
           "INSERT myDB.myTable (id) VALUES (100503)" \
           "-h $(get_router_service $(get_cluster_name))"
 
-      # let the binlog server checkpoint this data while beta is still in effect
+      # force a full rewrite-file roll so this window gets its own beta binlog
+      fill_binlog "-h $(get_router_service $(get_cluster_name))"
+
+      # let the binlog server checkpoint these files while beta is still in effect
       sleep 35
