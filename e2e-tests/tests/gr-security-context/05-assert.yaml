@@ -5,7 +5,7 @@ timeout: 300
 kind: PerconaServerMySQLBackup
 apiVersion: ps.percona.com/v1
 metadata:
-  name: gr-security-context-minio
+  name: gr-security-context-s3
 status:
   state: Succeeded
   storage:
@@ -19,6 +19,6 @@ status:
       - 1003
     s3:
       bucket: operator-testing
-      credentialsSecret: minio-secret
+      credentialsSecret: s3-secret
       region: us-east-1
     type: s3

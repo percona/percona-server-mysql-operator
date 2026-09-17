@@ -839,12 +839,10 @@ func (r *PerconaServerMySQLBackupReconciler) deleteBackup(ctx context.Context, c
 		}
 		if k8serrors.IsNotFound(err) {
 			initImage := ""
-			if cluster.CompareVersion("1.3.0") >= 0 {
-				if s := cr.Status.Storage; s.Type == apiv1.BackupStorageS3 && s.S3 != nil && s.S3.CABundle != nil {
-					initImage, err = k8s.OperatorImage(ctx, r.Client)
-					if err != nil {
-						return false, errors.Wrap(err, "get operator image for backup deletion")
-					}
+			if s := cr.Status.Storage; s.Type == apiv1.BackupStorageS3 && s.S3 != nil && s.S3.CABundle != nil {
+				initImage, err = k8s.OperatorImage(ctx, r.Client)
+				if err != nil {
+					return false, errors.Wrap(err, "get operator image for backup deletion")
 				}
 			}
 			job = xtrabackup.GetDeleteJob(cluster, cr, backupConf, initImage)
@@ -895,10 +893,8 @@ func getBackupSourcePod(ctx context.Context, cl client.Client, namespace, src st
 	podName := s[0]
 
 	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      podName,
-			Namespace: namespace,
-		},
+		Name:      podName,
+		Namespace: namespace,
 	}
 	err := cl.Get(ctx, client.ObjectKeyFromObject(pod), pod)
 	if err != nil {

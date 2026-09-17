@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	psv1 "github.com/percona/percona-server-mysql-operator/api/v1"
@@ -21,16 +20,12 @@ func TestAnnotateObject(t *testing.T) {
 
 	tests := []client.Object{
 		&corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-pod",
-				Namespace: "test-namespace",
-			},
+			Name:      "test-pod",
+			Namespace: "test-namespace",
 		},
 		&psv1.PerconaServerMySQL{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-cluster",
-				Namespace: "test-namespace",
-			},
+			Name:      "test-cluster",
+			Namespace: "test-namespace",
 		},
 	}
 
@@ -62,23 +57,19 @@ func TestDeannotateObject(t *testing.T) {
 
 	tests := []client.Object{
 		&corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-pod",
-				Namespace: "test-namespace",
-				Annotations: map[string]string{
-					string(naming.AnnotationConfigHash): "hash",
-					"other-annotation":                  "value",
-				},
+			Name:      "test-pod",
+			Namespace: "test-namespace",
+			Annotations: map[string]string{
+				string(naming.AnnotationConfigHash): "hash",
+				"other-annotation":                  "value",
 			},
 		},
 		&psv1.PerconaServerMySQL{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-cluster",
-				Namespace: "test-namespace",
-				Annotations: map[string]string{
-					string(naming.AnnotationConfigHash): "hash",
-					"other-annotation":                  "value",
-				},
+			Name:      "test-cluster",
+			Namespace: "test-namespace",
+			Annotations: map[string]string{
+				string(naming.AnnotationConfigHash): "hash",
+				"other-annotation":                  "value",
 			},
 		},
 	}

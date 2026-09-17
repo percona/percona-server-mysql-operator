@@ -21,7 +21,7 @@ func S3CertVolumes(selectors []apiv1.CABundleSecretSelector) []corev1.Volume {
 	for _, selector := range selectors {
 		projections = append(projections, corev1.VolumeProjection{
 			Secret: &corev1.SecretProjection{
-				LocalObjectReference: corev1.LocalObjectReference{Name: selector.Name},
+				Name: selector.Name,
 				Items: []corev1.KeyToPath{
 					{
 						Key:  selector.Key,
@@ -34,14 +34,14 @@ func S3CertVolumes(selectors []apiv1.CABundleSecretSelector) []corev1.Volume {
 
 	return []corev1.Volume{{
 		Name: naming.S3CertsInputVolumeName,
-		VolumeSource: corev1.VolumeSource{Projected: &corev1.ProjectedVolumeSource{
+		Projected: &corev1.ProjectedVolumeSource{
 			Sources: projections,
-		}},
+		},
 	}}
 }
 
-func PrepareJobWithS3CA(job *batchv1.Job, cluster *apiv1.PerconaServerMySQL, storage *apiv1.BackupStorageS3Spec) {
-	if storage == nil || storage.CABundle == nil || cluster.CompareVersion("1.3.0") < 0 {
+func PrepareJobWithS3CA(job *batchv1.Job, storage *apiv1.BackupStorageS3Spec) {
+	if storage == nil || storage.CABundle == nil {
 		return
 	}
 

@@ -25,9 +25,7 @@ import (
 )
 
 var baseClusterSet = &apiv1.PerconaServerMySQLClusterSet{
-	ObjectMeta: metav1.ObjectMeta{
-		Name: "test-cluster-set",
-	},
+	Name: "test-cluster-set",
 	Spec: apiv1.PerconaServerMySQLClusterSetSpec{
 		PrimaryCluster: "dc1",
 		Clusters: []apiv1.ClusterSetCluster{
@@ -446,10 +444,8 @@ func TestReconciler_trackSwitchover(t *testing.T) {
 		labels := naming.Labels(clusterset.ClusterSetReplicaManagerAppName, baseClusterSet.Name, "percona-server", clusterset.ClusterSetReplicaManagerComponent)
 		labels["command"] = clusterset.CmdSetPrimary
 		return &batchv1.Job{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:   name,
-				Labels: labels,
-			},
+			Name:   name,
+			Labels: labels,
 			Status: status,
 		}
 	}

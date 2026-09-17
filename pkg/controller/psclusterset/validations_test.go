@@ -7,7 +7,6 @@ import (
 	. "github.com/onsi/gomega"
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var _ = Describe("PerconaServerMySQLClusterSet CEL Validations", Ordered, func() {
@@ -15,10 +14,8 @@ var _ = Describe("PerconaServerMySQLClusterSet CEL Validations", Ordered, func()
 
 	const ns = "psclusterset-validations"
 	namespace := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      ns,
-			Namespace: ns,
-		},
+		Name:      ns,
+		Namespace: ns,
 	}
 
 	// validClusterSet returns a fully valid ClusterSet that satisfies every
@@ -26,10 +23,8 @@ var _ = Describe("PerconaServerMySQLClusterSet CEL Validations", Ordered, func()
 	// a single field to exercise one rule in isolation.
 	validClusterSet := func(name string) *apiv1.PerconaServerMySQLClusterSet {
 		return &apiv1.PerconaServerMySQLClusterSet{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: ns,
-			},
+			Name:      name,
+			Namespace: ns,
 			Spec: apiv1.PerconaServerMySQLClusterSetSpec{
 				PrimaryCluster: "dc1",
 				CredentialsSecret: corev1.SecretKeySelector{

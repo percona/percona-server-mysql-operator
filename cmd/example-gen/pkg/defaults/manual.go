@@ -65,10 +65,8 @@ func mysqlDefaults(spec *apiv1.MySQLSpec) {
 	spec.SidecarVolumes = []corev1.Volume{
 		{
 			Name: "memory-vol",
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{
-					Medium: corev1.StorageMediumMemory,
-				},
+			EmptyDir: &corev1.EmptyDirVolumeSource{
+				Medium: corev1.StorageMediumMemory,
 			},
 		},
 	}
