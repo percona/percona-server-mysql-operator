@@ -2,6 +2,15 @@ apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
 timeout: 500
 ---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: 06-renew-certs
+data:
+  reloaded: "true"
+  mysql_recycled: "false"
+  proxies_recycled: "true"
+---
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
@@ -45,10 +54,12 @@ status:
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  generation: 3
+  # The renewed leaf is applied in place, so the MySQL StatefulSet is never
+  # patched and its generation must stay at 1.
+  generation: 1
   name: tls-cert-manager-mysql
 status:
-  observedGeneration: 3
+  observedGeneration: 1
   replicas: 3
   readyReplicas: 3
 ---

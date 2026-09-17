@@ -8,12 +8,11 @@ config-router,9.7
 custom-users,9.7
 demand-backup,8.4
 demand-backup,9.7
-gr-pitr-minio,8.4
-gr-pitr-minio,9.7
-gr-pitr-encrypted-minio,9.7
+gr-pitr-s3,9.7
+gr-pitr-encrypted-s3,9.7
 gr-pitr-one-pod,9.7
-async-pitr-minio,8.4
-async-pitr-minio,9.7
+async-pitr-s3,8.4
+async-pitr-s3,9.7
 demand-backup-cloud,9.7
 demand-backup-retry,9.7
 demand-backup-incremental,9.7

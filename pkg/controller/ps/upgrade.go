@@ -256,7 +256,7 @@ func (r *PerconaServerMySQLReconciler) isBackupRunning(ctx context.Context, cr *
 			continue
 		}
 
-		if bcp.Status.State == apiv1.BackupRunning || bcp.Status.State == apiv1.BackupStarting {
+		if bcp.Status.State == apiv1.BackupRunning || bcp.Status.State == apiv1.BackupStarting || bcp.Status.State == apiv1.BackupSuspended {
 			return true, nil
 		}
 	}

@@ -10,3 +10,12 @@ metadata:
     - percona.com/delete-backup
 status:
   state: Succeeded
+---
+kind: PerconaServerMySQLBackup
+apiVersion: ps.percona.com/v1
+metadata:
+  name: demand-backup-parallel
+  finalizers:
+    - percona.com/delete-backup
+status:
+  state: Succeeded
