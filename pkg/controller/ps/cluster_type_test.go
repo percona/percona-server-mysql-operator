@@ -104,7 +104,7 @@ func TestReconcileClusterTypeChange(t *testing.T) {
 		assert.Equal(t, apiv1.ClusterTypeAsync, stored.Status.ClusterType)
 	})
 
-	t.Run("a switch deferred by a not-ready cluster survives the statefulset being re-applied", func(t *testing.T) {
+	t.Run("defers the switch and records the running type when the cluster is not ready", func(t *testing.T) {
 		cr := clusterTypeCR("cluster1", "ns", apiv1.ClusterTypeGR)
 		cr.Status.State = apiv1.StateError
 		cr.Spec.Orchestrator.Enabled = false
@@ -123,6 +123,43 @@ func TestReconcileClusterTypeChange(t *testing.T) {
 
 		require.NoError(t, cli.Get(t.Context(), client.ObjectKeyFromObject(sts), &appsv1.StatefulSet{}),
 			"the MySQL StatefulSet must not be torn down while the switch is deferred")
+	})
+
+	t.Run("records the running type when the cluster is paused", func(t *testing.T) {
+		cr := clusterTypeCR("cluster1", "ns", apiv1.ClusterTypeGR)
+		cr.Spec.Pause = true
+		sts := mysqlStsWithClusterType(cr, apiv1.ClusterTypeAsync)
+
+		cli := fake.NewClientBuilder().WithScheme(newScheme(t)).
+			WithObjects(cr, sts).WithStatusSubresource(cr).Build()
+		r := &PerconaServerMySQLReconciler{Client: cli}
+
+		require.NoError(t, r.reconcileClusterTypeChange(t.Context(), cr))
+
+		stored := new(apiv1.PerconaServerMySQL)
+		require.NoError(t, cli.Get(t.Context(), client.ObjectKeyFromObject(cr), stored))
+		assert.Equal(t, apiv1.ClusterTypeAsync, stored.Status.ClusterType)
+	})
+
+	t.Run("does not switch while the cluster is paused", func(t *testing.T) {
+		cr := clusterTypeCR("cluster1", "ns", apiv1.ClusterTypeGR)
+		cr.Spec.Pause = true
+		cr.Status.ClusterType = apiv1.ClusterTypeAsync
+		cr.Status.State = apiv1.StateReady
+		sts := mysqlStsWithClusterType(cr, apiv1.ClusterTypeAsync)
+
+		cli := fake.NewClientBuilder().WithScheme(newScheme(t)).
+			WithObjects(cr, sts).WithStatusSubresource(cr).Build()
+		r := &PerconaServerMySQLReconciler{Client: cli}
+
+		require.NoError(t, r.reconcileClusterTypeChange(t.Context(), cr))
+
+		stored := new(apiv1.PerconaServerMySQL)
+		require.NoError(t, cli.Get(t.Context(), client.ObjectKeyFromObject(cr), stored))
+		assert.Equal(t, apiv1.ClusterTypeAsync, stored.Status.ClusterType)
+
+		require.NoError(t, cli.Get(t.Context(), client.ObjectKeyFromObject(sts), &appsv1.StatefulSet{}),
+			"the MySQL StatefulSet must not be torn down while the cluster is paused")
 	})
 
 	t.Run("records the new type once the switch completes", func(t *testing.T) {

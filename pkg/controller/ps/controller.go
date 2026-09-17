@@ -763,10 +763,6 @@ func (r *PerconaServerMySQLReconciler) reconcileClusterTypeChange(
 	ctx context.Context,
 	cr *apiv1.PerconaServerMySQL,
 ) error {
-	if cr.Spec.Pause {
-		return nil
-	}
-
 	log := logf.FromContext(ctx)
 
 	desiredType := cr.Spec.MySQL.ClusterType
@@ -785,14 +781,15 @@ func (r *PerconaServerMySQLReconciler) reconcileClusterTypeChange(
 		return nil
 	}
 
-	// Both teardowns need a working cluster: teardownAsync stops and resets
+	// Both teardowns need a running cluster: teardownAsync stops and resets
 	// replication on every pod, teardownGR needs an online primary to dissolve
-	// the group. Leave the switch pending and retry once the cluster recovers.
-	// The status keeps it pending and AppliedClusterType keeps the workloads on
+	// the group. Pause scales the pods to zero, so neither can run then either.
+	// Leave the switch pending and retry once the cluster is back. The status
+	// keeps it pending and AppliedClusterType keeps the workloads on
 	// observedType in the meantime, so nothing moves until the teardown runs.
-	if cr.Status.State != apiv1.StateReady {
-		log.Info("Deferring clusterType switch until the cluster is ready",
-			"from", observedType, "to", desiredType, "state", cr.Status.State)
+	if cr.Spec.Pause || cr.Status.State != apiv1.StateReady {
+		log.Info("Deferring clusterType switch until the cluster is running and ready",
+			"from", observedType, "to", desiredType, "paused", cr.Spec.Pause, "state", cr.Status.State)
 		return nil
 	}
 
