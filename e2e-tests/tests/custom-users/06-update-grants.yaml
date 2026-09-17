@@ -1,0 +1,49 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 360
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster_name=$(get_cluster_name)
+      router_svc=$(get_router_service "${cluster_name}")
+      mysql_host="-h ${router_svc}"
+
+      kubectl -n "${NAMESPACE}" patch ps "${test_name}" --type=merge -p '{
+        "spec": {
+          "users": [
+            {
+              "name": "alice",
+              "dbs": ["myapp"],
+              "grants": ["SELECT", "INSERT", "UPDATE", "DELETE"],
+              "withGrantOption": true
+            },
+            {
+              "name": "bob",
+              "grants": ["SELECT"],
+              "passwordSecretRef": {
+                "name": "custom-users-bob-pwd",
+                "key": "password"
+              }
+            }
+          ]
+        }
+      }'
+
+      delete_added=fail
+      for i in $(seq 1 60); do
+          alice_grants=$(run_mysql "SHOW GRANTS FOR 'alice'@'%'" "${mysql_host}" 2>/dev/null || true)
+          if echo "${alice_grants}" | grep "myapp" | grep -q "DELETE"; then
+              delete_added=success
+              break
+          fi
+          echo "waiting for alice DELETE grant (${i})"
+          sleep 5
+      done
+
+      kubectl create configmap -n "${NAMESPACE}" 06-check-grants \
+          --from-literal=delete_added="${delete_added}"
+      kubectl get configmap -n "${NAMESPACE}" 06-check-grants -o yaml
