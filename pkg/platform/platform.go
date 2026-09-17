@@ -214,7 +214,7 @@ func detectAKS(ctx context.Context, cfg *rest.Config) bool {
 		log.V(1).Info("failed to dial API server", "error", err.Error())
 		return false
 	}
-	defer netConn.Close()
+	defer netConn.Close() //nolint:errcheck
 
 	conn, ok := netConn.(*tls.Conn)
 	if !ok {
