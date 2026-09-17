@@ -102,10 +102,8 @@ func (r *PerconaServerMySQLReconciler) ensureClusterUserSecret(ctx context.Conte
 	clusterPass := userSecret.Data[clusterUser]
 
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.Name + "-psuser-" + clusterUser,
-			Namespace: cr.Namespace,
-		},
+		Name:      cr.Name + "-psuser-" + clusterUser,
+		Namespace: cr.Namespace,
 	}
 
 	mysqlHost := mysqlPrimaryHost(ctx, cr, true)

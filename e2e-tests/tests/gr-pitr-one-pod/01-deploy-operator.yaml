@@ -12,8 +12,8 @@ commands:
       apply_s3_storage_secrets
       deploy_operator
       deploy_client
-      if has_minio_storage; then
-        deploy_minio
+      if has_s3_storage; then
+        deploy_s3_storage
       fi
 
       # Configmap used to define binlogs random prefix to avoid tests conflict

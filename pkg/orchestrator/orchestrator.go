@@ -118,16 +118,12 @@ func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, configHash, tlsHash st
 	}
 
 	return &appsv1.StatefulSet{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "apps/v1",
-			Kind:       "StatefulSet",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        Name(cr),
-			Namespace:   cr.Namespace,
-			Labels:      Labels(cr),
-			Annotations: cr.GlobalAnnotations(),
-		},
+		APIVersion:  "apps/v1",
+		Kind:        "StatefulSet",
+		Name:        Name(cr),
+		Namespace:   cr.Namespace,
+		Labels:      Labels(cr),
+		Annotations: cr.GlobalAnnotations(),
 		Spec: appsv1.StatefulSetSpec{
 			Replicas:    &Replicas,
 			ServiceName: Name(cr),
@@ -165,41 +161,29 @@ func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, configHash, tlsHash st
 func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 	return []corev1.Volume{
 		{
-			Name: apiv1.BinVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			},
+			Name:     apiv1.BinVolumeName,
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		},
 		{
-			Name: configVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			},
+			Name:     configVolumeName,
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		},
 		{
 			Name: credsVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: cr.InternalSecretName(),
-				},
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: cr.InternalSecretName(),
 			},
 		},
 		{
 			Name: tlsVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: cr.Spec.SSLSecretName,
-				},
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: cr.Spec.SSLSecretName,
 			},
 		},
 		{
 			Name: customConfigVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: ConfigMapName(cr),
-					},
-				},
+			ConfigMap: &corev1.ConfigMapVolumeSource{
+				Name: ConfigMapName(cr),
 			},
 		},
 	}
@@ -314,7 +298,10 @@ func apiProbe(cr *apiv1.PerconaServerMySQL, path string, initialDelay int32) *co
 }
 
 func sidecarContainers(cr *apiv1.PerconaServerMySQL) []corev1.Container {
-	serviceName := mysql.ServiceName(cr)
+	orcServiceName := mysql.ServiceName(cr)
+	if cr.CompareVersion("1.3.0") >= 0 {
+		orcServiceName = ServiceName(cr)
+	}
 
 	addNodesScript := "/usr/bin/add_mysql_nodes.sh"
 	if cr.CompareVersion("1.2.0") >= 0 {
@@ -329,11 +316,11 @@ func sidecarContainers(cr *apiv1.PerconaServerMySQL) []corev1.Container {
 			Env: append([]corev1.EnvVar{
 				{
 					Name:  "ORC_SERVICE",
-					Value: serviceName,
+					Value: orcServiceName,
 				},
 				{
 					Name:  "MYSQL_SERVICE",
-					Value: serviceName,
+					Value: mysql.ServiceName(cr),
 				},
 			}, apiAuthEnv(cr)...),
 			VolumeMounts: containerMounts(),
@@ -379,16 +366,12 @@ func containerMounts() []corev1.VolumeMount {
 
 func Service(cr *apiv1.PerconaServerMySQL) *corev1.Service {
 	return &corev1.Service{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "Service",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        ServiceName(cr),
-			Namespace:   cr.Namespace,
-			Labels:      util.SSMapMerge(cr.GlobalLabels(), MatchLabels(cr)),
-			Annotations: cr.GlobalAnnotations(),
-		},
+		APIVersion:  "v1",
+		Kind:        "Service",
+		Name:        ServiceName(cr),
+		Namespace:   cr.Namespace,
+		Labels:      util.SSMapMerge(cr.GlobalLabels(), MatchLabels(cr)),
+		Annotations: cr.GlobalAnnotations(),
 		Spec: corev1.ServiceSpec{
 			ClusterIP: "None",
 			Ports: []corev1.ServicePort{
@@ -430,16 +413,12 @@ func PodService(cr *apiv1.PerconaServerMySQL, t corev1.ServiceType, podName stri
 	}
 
 	return &corev1.Service{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "Service",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        podName,
-			Namespace:   cr.Namespace,
-			Labels:      labels,
-			Annotations: util.SSMapMerge(cr.GlobalAnnotations(), expose.Annotations),
-		},
+		APIVersion:  "v1",
+		Kind:        "Service",
+		Name:        podName,
+		Namespace:   cr.Namespace,
+		Labels:      labels,
+		Annotations: util.SSMapMerge(cr.GlobalAnnotations(), expose.Annotations),
 		Spec: corev1.ServiceSpec{
 			Type:     t,
 			Selector: selector,

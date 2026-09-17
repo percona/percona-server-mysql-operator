@@ -12,7 +12,7 @@ export VERSION=${VERSION:-$(echo "${GIT_BRANCH}" | sed -e 's^/^-^g; s^[.]^-^g;' 
 
 export PMM_SERVER_VERSION=${PMM_SERVER_VERSION:-"1.4.3"}
 export CERT_MANAGER_VER="1.20.3"
-export MINIO_VER="5.4.0"
+export SEAWEEDFS_VER="4.47.0"
 export CHAOS_MESH_VER="2.7.2"
 export VAULT_VER="0.16.1"
 
@@ -20,7 +20,7 @@ if [[ -z ${MYSQL_VERSION-} && -n ${IMAGE_MYSQL-} ]]; then
 	export MYSQL_VERSION=$(echo "$IMAGE_MYSQL" | sed -E 's/.*://; s/^[^0-9]*([0-9]+\.[0-9]+).*/\1/')
 fi
 
-export MYSQL_VERSION=${MYSQL_VERSION:-"8.4"}
+export MYSQL_VERSION=${MYSQL_VERSION:-"9.7"}
 
 export date=$(which gdate || which date)
 export sed=$(which gsed || which sed)
@@ -86,10 +86,17 @@ set_image() {
 }
 
 set_image IMAGE "perconalab/percona-server-mysql-operator:${VERSION}"
-set_image IMAGE_MYSQL "perconalab/percona-server-mysql-operator:main-psmysql${MYSQL_VERSION}"
-set_image IMAGE_BACKUP "perconalab/percona-server-mysql-operator:main-backup${MYSQL_VERSION}"
+# there are no operator builds of the MySQL 9.7 images yet, so use the upstream ones
+if [[ ${MYSQL_VERSION} == "9.7" ]]; then
+	set_image IMAGE_MYSQL "percona/percona-server:${MYSQL_VERSION}"
+	set_image IMAGE_BACKUP "percona/percona-xtrabackup:${MYSQL_VERSION}"
+	set_image IMAGE_ROUTER "percona/percona-mysql-router:${MYSQL_VERSION}"
+else
+	set_image IMAGE_MYSQL "perconalab/percona-server-mysql-operator:main-psmysql${MYSQL_VERSION}"
+	set_image IMAGE_BACKUP "perconalab/percona-server-mysql-operator:main-backup${MYSQL_VERSION}"
+	set_image IMAGE_ROUTER "perconalab/percona-server-mysql-operator:main-router${MYSQL_VERSION}"
+fi
 set_image IMAGE_ORCHESTRATOR "perconalab/percona-server-mysql-operator:main-orchestrator"
-set_image IMAGE_ROUTER "perconalab/percona-server-mysql-operator:main-router${MYSQL_VERSION}"
 set_image IMAGE_TOOLKIT "perconalab/percona-server-mysql-operator:main-toolkit"
 set_image IMAGE_HAPROXY "perconalab/percona-server-mysql-operator:main-haproxy"
 set_image IMAGE_BINLOG_SERVER "perconalab/percona-binlog-server:0.4.0"

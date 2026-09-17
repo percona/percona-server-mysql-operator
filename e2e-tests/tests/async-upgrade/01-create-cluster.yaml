@@ -25,8 +25,8 @@ commands:
           | yq eval '.spec.backup.pitr.enabled=false' - \
           | yq eval '.spec.backup.pitr.binlogServer.storage.s3.bucket="operator-testing"' - \
           | yq eval '.spec.backup.pitr.binlogServer.storage.s3.prefix="binlogs"' - \
-          | yq eval '.spec.backup.pitr.binlogServer.storage.s3.credentialsSecret="minio-secret"' - \
-          | yq eval ".spec.backup.pitr.binlogServer.storage.s3.endpointUrl=\"http://minio-service.${NAMESPACE}:9000\"" - \
+          | yq eval '.spec.backup.pitr.binlogServer.storage.s3.credentialsSecret="s3-secret"' - \
+          | yq eval ".spec.backup.pitr.binlogServer.storage.s3.endpointUrl=\"http://s3-storage-all-in-one.${NAMESPACE}:8333\"" - \
           | yq eval '.spec.backup.pitr.binlogServer.storage.s3.region="us-east-1"' - \
           | yq eval '.spec.backup.pitr.binlogServer.size=1' - \
           | yq eval '.spec.backup.pitr.binlogServer.serverId=100' - \

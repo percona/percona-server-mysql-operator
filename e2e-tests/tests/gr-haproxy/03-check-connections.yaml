@@ -1,7 +1,7 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
-  - timeout: 30
+  - timeout: 120
     script: |-
       set -o errexit
       set -o xtrace
@@ -27,3 +27,6 @@ commands:
       args="${args} --from-literal=mysql_admin=${mysql_admin}"
 
       kubectl create configmap -n "${NAMESPACE}" 03-check-connections $args
+
+      check_haproxy_backends "$(get_cluster_name)"
+

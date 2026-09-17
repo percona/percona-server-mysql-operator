@@ -166,12 +166,12 @@ deploy_client() {
 		| kubectl -n "${NAMESPACE}" apply -f -
 }
 
-apply_minio_secret() {
-	kubectl -n "${NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/minio-secret.yml"
+apply_s3_secret() {
+	kubectl -n "${NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/s3-secret.yml"
 }
 
 apply_s3_storage_secrets() {
-	apply_minio_secret
+	apply_s3_secret
 	kubectl -n "${NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/cloud-secret.yml"
 }
 
@@ -342,7 +342,7 @@ delete_pmm_server_token() {
 	fi
 }
 
-has_minio_storage() {
+has_s3_storage() {
 	local name_suffix=${1:-""}
 	local cr_name="${test_name}${name_suffix:+-$name_suffix}"
 	local cr="$(get_test_cr "$cr_name")"
@@ -352,74 +352,67 @@ has_minio_storage() {
 		return 1
 	fi
 
-	local has_minio="$(yq eval '
+	local has_s3="$(yq eval '
 		(.spec.backup.storages // {})
 		| keys
-		| map(select(test("^minio")))
+		| map(select(test("^local-s3")))
 		| length > 0
 	' "$cr")"
 
-	if [[ $has_minio == "true" ]]; then
-		echo "MinIO enabled in $cr"
+	if [[ $has_s3 == "true" ]]; then
+		echo "In-cluster S3 storage enabled in $cr"
 		return 0
 	else
-		echo "MinIO NOT enabled in $cr"
+		echo "In-cluster S3 storage NOT enabled in $cr"
 		return 1
 	fi
 }
 
-deploy_minio() {
+deploy_s3_storage() {
 	local storage="${1:-2G}"
 	local access_key
 	local secret_key
-	access_key="$(kubectl -n "${NAMESPACE}" get secret minio-secret -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' | base64 -d)"
-	secret_key="$(kubectl -n "${NAMESPACE}" get secret minio-secret -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}' | base64 -d)"
+	access_key="$(kubectl -n "${NAMESPACE}" get secret s3-secret -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' | base64 -d)"
+	secret_key="$(kubectl -n "${NAMESPACE}" get secret s3-secret -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}' | base64 -d)"
 
-	helm uninstall -n "${NAMESPACE}" minio-service || :
-	helm repo remove minio || :
-	helm repo add minio https://charts.min.io/
-	retry 10 60 helm install minio-service \
+	helm uninstall -n "${NAMESPACE}" s3-storage || :
+	helm repo remove seaweedfs || :
+	helm repo add seaweedfs https://seaweedfs.github.io/seaweedfs/helm
+	retry 10 60 helm install s3-storage \
 		-n "${NAMESPACE}" \
-		--version "${MINIO_VER}" \
-		--set replicas=1 \
-		--set mode=standalone \
-		--set resources.requests.memory=256Mi \
-		--set rootUser=rootuser \
-		--set rootPassword=rootpass123 \
-		--set "users[0].accessKey"="$(printf '%q' "$(printf '%q' "$access_key")")" \
-		--set "users[0].secretKey"="$(printf '%q' "$(printf '%q' "$secret_key")")" \
-		--set "users[0].policy"=consoleAdmin \
-		--set service.type=ClusterIP \
-		--set configPathmc=/tmp/.minio/ \
-		--set persistence.size=$storage \
-		--set securityContext.enabled=false \
-		minio/minio
-	MINIO_POD=$(kubectl -n "${NAMESPACE}" get pods --selector=release=minio-service -o 'jsonpath={.items[].metadata.name}')
-	wait_pod $MINIO_POD
+		--version "${SEAWEEDFS_VER}" \
+		-f "${TESTS_CONFIG_DIR}/seaweedfs-values.yaml" \
+		--set allInOne.data.type=persistentVolumeClaim \
+		--set allInOne.data.size="$storage" \
+		--set-string "s3.credentials.admin.accessKey"="$(printf '%q' "$(printf '%q' "$access_key")")" \
+		--set-string "s3.credentials.admin.secretKey"="$(printf '%q' "$(printf '%q' "$secret_key")")" \
+		seaweedfs/seaweedfs
+	kubectl -n "${NAMESPACE}" rollout status deployment/s3-storage-all-in-one --timeout=300s
+	S3_POD=$(kubectl -n "${NAMESPACE}" get pods --selector=app.kubernetes.io/instance=s3-storage,app.kubernetes.io/component=seaweedfs-all-in-one -o 'jsonpath={.items[].metadata.name}')
+	wait_pod $S3_POD
 
 	# create bucket
 	kubectl -n "${NAMESPACE}" run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
 		bash -c "AWS_ACCESS_KEY_ID='$access_key' AWS_SECRET_ACCESS_KEY='$secret_key' AWS_DEFAULT_REGION=us-east-1 \
-        /usr/bin/aws --endpoint-url http://minio-service:9000 s3 mb s3://operator-testing"
+        /usr/bin/aws --endpoint-url http://s3-storage-all-in-one:8333 s3 mb s3://operator-testing"
 }
 
-deploy_minio_tls() {
+deploy_s3_storage_tls() {
 	local storage="${1:-2G}"
 	local access_key
 	local secret_key
 	local cert_dir
-	access_key="$(kubectl -n "${NAMESPACE}" get secret minio-secret -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' | base64 -d)"
-	secret_key="$(kubectl -n "${NAMESPACE}" get secret minio-secret -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}' | base64 -d)"
+	access_key="$(kubectl -n "${NAMESPACE}" get secret s3-secret -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' | base64 -d)"
+	secret_key="$(kubectl -n "${NAMESPACE}" get secret s3-secret -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}' | base64 -d)"
 	cert_dir="$(mktemp -d)"
 
 	openssl req -x509 -newkey rsa:2048 -nodes -days 2 \
 		-keyout "${cert_dir}/ca.key" -out "${cert_dir}/ca.crt" \
-		-subj '/CN=minio-e2e-ca'
+		-subj '/CN=s3-e2e-ca'
 	openssl req -newkey rsa:2048 -nodes \
 		-keyout "${cert_dir}/private.key" -out "${cert_dir}/server.csr" \
-		-subj '/CN=minio-service'
-	printf 'subjectAltName=DNS:minio-service,DNS:minio-service.%s,DNS:minio-service.%s.svc' \
-		"${NAMESPACE}" "${NAMESPACE}" >"${cert_dir}/server.ext"
+		-subj '/CN=s3-storage-all-in-one'
+	printf 'subjectAltName=DNS:s3-storage-all-in-one,DNS:s3-storage-all-in-one.%s,DNS:s3-storage-all-in-one.%s.svc' "${NAMESPACE}" "${NAMESPACE}" >"${cert_dir}/server.ext"
 	openssl x509 -req -days 2 \
 		-in "${cert_dir}/server.csr" \
 		-CA "${cert_dir}/ca.crt" -CAkey "${cert_dir}/ca.key" -CAcreateserial \
@@ -427,48 +420,41 @@ deploy_minio_tls() {
 		-extfile "${cert_dir}/server.ext"
 	cat "${cert_dir}/server.crt" "${cert_dir}/ca.crt" >"${cert_dir}/public.crt"
 
-	kubectl -n "${NAMESPACE}" create secret generic minio-tls \
-		--from-file=private.key="${cert_dir}/private.key" \
-		--from-file=public.crt="${cert_dir}/public.crt" \
-		--dry-run=client -o yaml | kubectl apply -f -
-	kubectl -n "${NAMESPACE}" create secret generic minio-ca-bundle \
+	kubectl -n "${NAMESPACE}" create secret tls s3-tls \
+		--cert="${cert_dir}/public.crt" \
+		--key="${cert_dir}/private.key" \
+		--dry-run=client -o yaml | kubectl -n "${NAMESPACE}" apply -f -
+	kubectl -n "${NAMESPACE}" create secret generic s3-ca-bundle \
 		--from-file=ca.crt="${cert_dir}/ca.crt" \
 		--dry-run=client -o yaml | kubectl apply -f -
-	kubectl -n "${NAMESPACE}" create secret generic minio-restore-ca-bundle \
+	kubectl -n "${NAMESPACE}" create secret generic s3-restore-ca-bundle \
 		--from-file=ca.crt="${cert_dir}/ca.crt" \
 		--dry-run=client -o yaml | kubectl apply -f -
-	kubectl -n "${NAMESPACE}" create secret generic minio-pitr-restore-ca-bundle \
+	kubectl -n "${NAMESPACE}" create secret generic s3-pitr-restore-ca-bundle \
 		--from-file=ca.crt="${cert_dir}/ca.crt" \
 		--dry-run=client -o yaml | kubectl apply -f -
 	rm -r "${cert_dir}"
 
-	helm uninstall -n "${NAMESPACE}" minio-service || :
-	helm repo remove minio || :
-	helm repo add minio https://charts.min.io/
-	retry 10 60 helm install minio-service \
+	helm uninstall -n "${NAMESPACE}" s3-storage || :
+	helm repo remove seaweedfs || :
+	helm repo add seaweedfs https://seaweedfs.github.io/seaweedfs/helm
+	retry 10 60 helm install s3-storage \
 		-n "${NAMESPACE}" \
-		--version "${MINIO_VER}" \
-		--set replicas=1 \
-		--set mode=standalone \
-		--set resources.requests.memory=256Mi \
-		--set rootUser=rootuser \
-		--set rootPassword=rootpass123 \
-		--set "users[0].accessKey"="$(printf '%q' "$(printf '%q' "$access_key")")" \
-		--set "users[0].secretKey"="$(printf '%q' "$(printf '%q' "$secret_key")")" \
-		--set "users[0].policy"=consoleAdmin \
-		--set service.type=ClusterIP \
-		--set configPathmc=/tmp/.minio/ \
-		--set persistence.size="$storage" \
-		--set securityContext.enabled=false \
-		--set tls.enabled=true \
-		--set tls.certSecret=minio-tls \
-		minio/minio
-	MINIO_POD=$(kubectl -n "${NAMESPACE}" get pods --selector=release=minio-service -o 'jsonpath={.items[].metadata.name}')
-	wait_pod "$MINIO_POD"
+		--version "${SEAWEEDFS_VER}" \
+		-f "${TESTS_CONFIG_DIR}/seaweedfs-values.yaml" \
+		-f "${TESTS_CONFIG_DIR}/seaweedfs-tls-values.yaml" \
+		--set allInOne.data.type=persistentVolumeClaim \
+		--set allInOne.data.size="$storage" \
+		--set-string "s3.credentials.admin.accessKey"="$(printf '%q' "$(printf '%q' "$access_key")")" \
+		--set-string "s3.credentials.admin.secretKey"="$(printf '%q' "$(printf '%q' "$secret_key")")" \
+		seaweedfs/seaweedfs
+	kubectl -n "${NAMESPACE}" rollout status deployment/s3-storage-all-in-one --timeout=300s
+	S3_POD=$(kubectl -n "${NAMESPACE}" get pods --selector=app.kubernetes.io/instance=s3-storage,app.kubernetes.io/component=seaweedfs-all-in-one -o 'jsonpath={.items[].metadata.name}')
+	wait_pod "$S3_POD"
 
 	kubectl -n "${NAMESPACE}" run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
 		bash -c "AWS_ACCESS_KEY_ID='$access_key' AWS_SECRET_ACCESS_KEY='$secret_key' AWS_DEFAULT_REGION=us-east-1 \
-        /usr/bin/aws --no-verify-ssl --endpoint-url https://minio-service:9000 s3 mb s3://operator-testing"
+        /usr/bin/aws --no-verify-ssl --endpoint-url https://s3-storage-all-in-one:8443 s3 mb s3://operator-testing"
 }
 
 prepare_vault_tls() {
@@ -1131,11 +1117,19 @@ get_mysql_pod_names() {
 		--sort-by=.metadata.name -o jsonpath='{.items[*].metadata.name}'
 }
 
+get_component_pod_uids() {
+	local cluster_name=$1
+	local component=$2
+
+	kubectl get pod -n "${NAMESPACE}" \
+		--selector="app.kubernetes.io/instance=${cluster_name},app.kubernetes.io/name=${component}" \
+		--sort-by=.metadata.name -o jsonpath='{.items[*].metadata.uid}'
+}
+
 get_mysql_pod_uids() {
 	local cluster_name=$1
 
-	kubectl get pod -n "${NAMESPACE}" --selector="$(mysql_pod_selector "${cluster_name}")" \
-		--sort-by=.metadata.name -o jsonpath='{.items[*].metadata.uid}'
+	get_component_pod_uids "${cluster_name}" mysql
 }
 
 # Prints the global value of a MySQL variable from every database pod of the
@@ -1187,18 +1181,27 @@ wait_for_mysql_variable() {
 	done
 }
 
-# Waits until every database pod of the given cluster has been replaced,
-# comparing against a UID list captured with get_mysql_pod_uids before the
-# change that should restart them.
 wait_for_mysql_pods_restart() {
 	local cluster_name=$1
 	local uids_before=$2
 	local timeout=${3:-600}
+
+	wait_for_component_pods_restart "${cluster_name}" mysql "${uids_before}" "${timeout}"
+}
+
+# Waits until every pod of the given component has been replaced, comparing
+# against a UID list captured with get_component_pod_uids before the change that
+# should restart them.
+wait_for_component_pods_restart() {
+	local cluster_name=$1
+	local component=$2
+	local uids_before=$3
+	local timeout=${4:-600}
 	local elapsed=0
 	local expected_count=$(echo "${uids_before}" | wc -w)
 
 	while :; do
-		local uids_now=$(get_mysql_pod_uids "${cluster_name}")
+		local uids_now=$(get_component_pod_uids "${cluster_name}" "${component}")
 		local replaced=true
 		local uid
 
@@ -1216,14 +1219,70 @@ wait_for_mysql_pods_restart() {
 			return 0
 		fi
 		if ((elapsed >= timeout)); then
-			echo "Timeout (${timeout}s) exceeded while waiting for ${cluster_name} mysql pods to be replaced"
+			echo "Timeout (${timeout}s) exceeded while waiting for ${cluster_name} ${component} pods to be replaced"
 			echo "uids before: ${uids_before}"
 			echo "uids now:    ${uids_now}"
 			return 1
 		fi
-		echo "waiting for ${cluster_name} mysql pods to be replaced"
+		echo "waiting for ${cluster_name} ${component} pods to be replaced"
 		sleep 10
 		elapsed=$((elapsed + 10))
+	done
+}
+
+# Prints the notBefore date of the certificate mysqld currently serves from every
+# database pod, in pod name order. Spaces inside a date become underscores so
+# that every pod stays one word; unreachable pods print "unavailable".
+get_mysql_cert_not_before_on_pods() {
+	local cluster_name=$1
+	local values=()
+
+	for pod in $(get_mysql_pod_names "${cluster_name}"); do
+		values+=("$(kubectl -n "${NAMESPACE}" exec "${pod}" -c mysql -- bash -c \
+			'mysql -uroot -p"$(cat /etc/mysql/mysql-users-secret/root)" -NB -e "SHOW GLOBAL STATUS LIKE \"Ssl_server_not_before\"" | cut -f2 | tr " " "_"' \
+			2>/dev/null || echo 'unavailable')")
+	done
+
+	echo "${values[*]}"
+}
+
+# Waits until every database pod serves a certificate other than the one in the
+# list captured with get_mysql_cert_not_before_on_pods before the rotation.
+wait_for_mysql_cert_reload() {
+	local cluster_name=$1
+	local not_before_before=$2
+	local timeout=${3:-300}
+	local elapsed=0
+
+	local before=(${not_before_before})
+
+	while :; do
+		local now=($(get_mysql_cert_not_before_on_pods "${cluster_name}"))
+		local reloaded=true
+		local i
+
+		if [[ ${#now[@]} -ne ${#before[@]} ]]; then
+			reloaded=false
+		else
+			for i in "${!now[@]}"; do
+				if [[ ${now[$i]} == "unavailable" || ${now[$i]} == "${before[$i]}" ]]; then
+					reloaded=false
+				fi
+			done
+		fi
+
+		if [[ ${reloaded} == true ]]; then
+			return 0
+		fi
+		if ((elapsed >= timeout)); then
+			echo "Timeout (${timeout}s) exceeded while waiting for ${cluster_name} mysql pods to reload their certificate"
+			echo "not before, before: ${before[*]}"
+			echo "not before, now:    ${now[*]}"
+			return 1
+		fi
+		echo "waiting for ${cluster_name} mysql pods to reload their certificate"
+		sleep 5
+		elapsed=$((elapsed + 5))
 	done
 }
 
@@ -1419,6 +1478,83 @@ get_primary_from_haproxy() {
 	local haproxy_pod_ip=$(kubectl -n "${NAMESPACE}" get pods ${haproxy_pod} -o jsonpath="{.status.podIP}")
 
 	run_mysql "SHOW VARIABLES LIKE '%hostname%';" "-h ${haproxy_pod_ip} -P3306" | awk '{print $2}'
+}
+
+# Verifies the backends HAProxy generated for the given cluster: every server is
+# listed on its backend's own port, every backend runs the check that matches the
+# roles it holds, and the x-protocol and admin ports reach a writable primary.
+check_haproxy_backends() {
+	local cluster=$1
+	local haproxy_size=${2:-3}
+
+	local primary_pod=$(get_primary_from_label)
+	local primary_srv=$(kubectl -n "${NAMESPACE}" get pod "${primary_pod}" -o jsonpath='{.status.podIP}' | tr '.' '-')
+
+	local i
+	for i in $(seq 0 $((haproxy_size - 1))); do
+		local pod="${cluster}-haproxy-${i}"
+
+		# '<backend> <kind> <name> <value>' per check and server line
+		local layout=$(kubectl -n "${NAMESPACE}" exec "${pod}" -c haproxy -- \
+			awk '/backend /{b=$2}
+			     /external-check command/{print b, "check", "-", $3}
+			     /^server /{split($3,a,":"); print b, "server", $2, a[2]}' \
+			/etc/haproxy/mysql/haproxy.cfg)
+
+		local backend='' kind='' name='' value='' expected=''
+		while read -r backend kind name value; do
+			case "${backend}" in
+				mysql-primary | mysql-replicas) expected=3306 ;;
+				mysql-x) expected=33060 ;;
+				mysql-admin) expected=33062 ;;
+				*) continue ;;
+			esac
+
+			if [ "${kind}" = "server" ] && [ "${value}" != "${expected}" ]; then
+				echo "${pod}: server ${name} in backend ${backend} uses port ${value}, expected ${expected}"
+				echo "${layout}"
+				exit 1
+			fi
+
+			if [ "${kind}" = "check" ]; then
+				local expected_check='/opt/percona/haproxy_check_primary.sh'
+				if [ "${backend}" = "mysql-replicas" ]; then
+					expected_check='/opt/percona/haproxy_check_replicas.sh'
+				fi
+				if [ "${value}" != "${expected_check}" ]; then
+					echo "${pod}: backend ${backend} is checked by ${value}, expected ${expected_check}"
+					exit 1
+				fi
+			fi
+		done <<<"${layout}"
+
+		local not_up=$(kubectl -n "${NAMESPACE}" exec "${pod}" -c haproxy -- \
+			bash -c "echo 'show stat' | socat stdio /etc/haproxy/mysql/haproxy.sock" \
+			| awk -F, -v p="${primary_srv}" '$1 ~ /^mysql-(x|admin)$/ && $2 == p && $18 !~ /^UP/ {print $1, $2, $18}')
+		if [ -n "${not_up}" ]; then
+			echo "${pod}: primary ${primary_pod} is not UP in the x-protocol/admin backends:"
+			echo "${not_up}"
+			exit 1
+		fi
+	done
+
+	local svc=$(get_haproxy_svc "${cluster}")
+
+	local host_via_x=$(run_mysqlsh "SELECT @@hostname" "--mysqlx -h ${svc} -P 33060")
+	if [ "${host_via_x}" != "${primary_pod}" ]; then
+		echo "x-protocol port 33060 landed on '${host_via_x}', expected primary '${primary_pod}'"
+		exit 1
+	fi
+
+	local host_via_admin=$(run_mysql "SELECT @@hostname" "-h ${svc} -P 33062")
+	if [ "${host_via_admin}" != "${primary_pod}" ]; then
+		echo "admin port 33062 landed on '${host_via_admin}', expected primary '${primary_pod}'"
+		exit 1
+	fi
+
+	# reaching the primary is not enough, x-protocol has to be writable
+	run_mysqlsh "CREATE DATABASE IF NOT EXISTS check_haproxy_x" "--mysqlx -h ${svc} -P 33060"
+	run_mysqlsh "DROP DATABASE check_haproxy_x" "--mysqlx -h ${svc} -P 33060"
 }
 
 get_primary_from_group_replication() {
@@ -2197,11 +2333,17 @@ verify_all_backups_deletion() {
 					"secret_name=\($s.credentialsSecret // "")",
 					"endpoint=\($s.endpointUrl // "")",
 					"region=\($s.region // "")",
-					"destination=\(.status.destination // "")"
+					"destination=\(.status.destination // "")",
+					"backup_state=\(.status.state // "")"
 				'
 		)"
 
 		kubectl delete ps-backup "$backup" -n "$NAMESPACE"
+		# The delete-backup finalizer removes storage only for successful backups.
+		if [[ $backup_state != "Succeeded" ]]; then
+			echo "Skipping storage verification for backup $backup in state $backup_state"
+			continue
+		fi
 
 		local prefix="${destination#*://}"
 		prefix="${prefix#*/}"

@@ -19,19 +19,19 @@ commands:
       fi
 
       get_cr \
-          | yq eval '.spec.backup.storages.minio.type="s3"' - \
-          | yq eval '.spec.backup.storages.minio.s3.bucket="operator-testing"' - \
-          | yq eval '.spec.backup.storages.minio.s3.credentialsSecret="minio-secret"' - \
-          | yq eval ".spec.backup.storages.minio.s3.endpointUrl=\"http://minio-service.${NAMESPACE}:9000\"" - \
-          | yq eval '.spec.backup.storages.minio.s3.region="us-east-1"' - \
-          | yq eval ".spec.backup.storages.minio.podSecurityContext.supplementalGroups |= [1001, 1002, 1003]" - \
+          | yq eval '.spec.backup.storages.local-s3.type="s3"' - \
+          | yq eval '.spec.backup.storages.local-s3.s3.bucket="operator-testing"' - \
+          | yq eval '.spec.backup.storages.local-s3.s3.credentialsSecret="s3-secret"' - \
+          | yq eval ".spec.backup.storages.local-s3.s3.endpointUrl=\"http://s3-storage-all-in-one.${NAMESPACE}:8333\"" - \
+          | yq eval '.spec.backup.storages.local-s3.s3.region="us-east-1"' - \
+          | yq eval ".spec.backup.storages.local-s3.podSecurityContext.supplementalGroups |= [1001, 1002, 1003]" - \
           | yq eval '.spec.mysql.clusterType="group-replication"' - \
           | yq eval ".spec.mysql.podSecurityContext.supplementalGroups |= [1001, 1002, 1003]" - \
           | yq eval ".spec.proxy.router.enabled=false" - \
           | yq eval ".spec.proxy.haproxy.enabled=true" - \
           | yq eval ".spec.proxy.haproxy.podSecurityContext.supplementalGroups |= [1001, 1002, 1003]" - \
-          | yq eval ".spec.backup.storages.minio.containerSecurityContext.privileged=true" - \
-          | yq eval ".spec.backup.storages.minio.podSecurityContext.fsGroup=1001" - \
+          | yq eval ".spec.backup.storages.local-s3.containerSecurityContext.privileged=true" - \
+          | yq eval ".spec.backup.storages.local-s3.podSecurityContext.fsGroup=1001" - \
           | yq eval ".spec.backup.containerSecurityContext.privileged=false" - \
           | yq eval ".spec.mysql.containerSecurityContext.privileged=true" - \
           | yq eval ".spec.mysql.podSecurityContext.fsGroup=1001" - \

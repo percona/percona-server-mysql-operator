@@ -13,4 +13,5 @@ commands:
       deploy_operator
       deploy_tls_cluster_secrets
       deploy_client
-      deploy_minio
+      deploy_s3_storage
+

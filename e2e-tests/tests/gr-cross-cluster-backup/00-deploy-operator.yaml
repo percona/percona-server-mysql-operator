@@ -14,6 +14,6 @@ commands:
       deploy_tls_cluster_secrets
       deploy_client
       deploy_cluster_secrets
-      if has_minio_storage dc1; then
-        deploy_minio
+      if has_s3_storage dc1; then
+        deploy_s3_storage
       fi

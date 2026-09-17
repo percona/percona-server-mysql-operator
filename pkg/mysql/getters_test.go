@@ -21,19 +21,15 @@ func TestGetReadyPod(t *testing.T) {
 	require.NoError(t, apiv1.AddToScheme(scheme))
 
 	cluster := &apiv1.PerconaServerMySQL{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cluster",
-			Namespace: "test-ns",
-		},
+		Name:      "test-cluster",
+		Namespace: "test-ns",
 	}
 
 	t.Run("returns ready pod", func(t *testing.T) {
 		readyPod := &corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "mysql-ready",
-				Namespace: "test-ns",
-				Labels:    MatchLabels(cluster),
-			},
+			Name:      "mysql-ready",
+			Namespace: "test-ns",
+			Labels:    MatchLabels(cluster),
 			Status: corev1.PodStatus{
 				Phase: corev1.PodRunning,
 				Conditions: []corev1.PodCondition{
@@ -53,11 +49,9 @@ func TestGetReadyPod(t *testing.T) {
 
 	t.Run("returns first ready pod when multiple available", func(t *testing.T) {
 		readyPod1 := &corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "mysql-ready-0",
-				Namespace: "test-ns",
-				Labels:    MatchLabels(cluster),
-			},
+			Name:      "mysql-ready-0",
+			Namespace: "test-ns",
+			Labels:    MatchLabels(cluster),
 			Status: corev1.PodStatus{
 				Phase: corev1.PodRunning,
 				Conditions: []corev1.PodCondition{
@@ -79,11 +73,9 @@ func TestGetReadyPod(t *testing.T) {
 
 	t.Run("skips non-ready pods and returns ready one", func(t *testing.T) {
 		notReady := &corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "mysql-not-ready",
-				Namespace: "test-ns",
-				Labels:    MatchLabels(cluster),
-			},
+			Name:      "mysql-not-ready",
+			Namespace: "test-ns",
+			Labels:    MatchLabels(cluster),
 			Status: corev1.PodStatus{
 				Phase: corev1.PodPending,
 				Conditions: []corev1.PodCondition{
@@ -93,11 +85,9 @@ func TestGetReadyPod(t *testing.T) {
 			},
 		}
 		ready := &corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "mysql-ready",
-				Namespace: "test-ns",
-				Labels:    MatchLabels(cluster),
-			},
+			Name:      "mysql-ready",
+			Namespace: "test-ns",
+			Labels:    MatchLabels(cluster),
 			Status: corev1.PodStatus{
 				Phase: corev1.PodRunning,
 				Conditions: []corev1.PodCondition{
@@ -117,11 +107,9 @@ func TestGetReadyPod(t *testing.T) {
 
 	t.Run("returns error when no ready pods found", func(t *testing.T) {
 		notReady := &corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "mysql-not-ready",
-				Namespace: "test-ns",
-				Labels:    MatchLabels(cluster),
-			},
+			Name:      "mysql-not-ready",
+			Namespace: "test-ns",
+			Labels:    MatchLabels(cluster),
 			Status: corev1.PodStatus{
 				Phase: corev1.PodPending,
 				Conditions: []corev1.PodCondition{
@@ -142,13 +130,11 @@ func TestGetReadyPod(t *testing.T) {
 	t.Run("skips pods with deletion timestamp", func(t *testing.T) {
 		now := metav1.Now()
 		deleting := &corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:              "mysql-deleting",
-				Namespace:         "test-ns",
-				Labels:            MatchLabels(cluster),
-				DeletionTimestamp: &now,
-				Finalizers:        []string{"test/finalizer"},
-			},
+			Name:              "mysql-deleting",
+			Namespace:         "test-ns",
+			Labels:            MatchLabels(cluster),
+			DeletionTimestamp: &now,
+			Finalizers:        []string{"test/finalizer"},
 			Status: corev1.PodStatus{
 				Phase: corev1.PodRunning,
 				Conditions: []corev1.PodCondition{
@@ -175,19 +161,15 @@ func TestGetMySQLPod(t *testing.T) {
 	require.NoError(t, apiv1.AddToScheme(scheme))
 
 	cluster := &apiv1.PerconaServerMySQL{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cluster",
-			Namespace: "test-ns",
-		},
+		Name:      "test-cluster",
+		Namespace: "test-ns",
 	}
 
 	t.Run("gets pod by index (0)", func(t *testing.T) {
 		name := PodName(cluster, 0)
 		p := &corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: "test-ns",
-			},
+			Name:      name,
+			Namespace: "test-ns",
 		}
 
 		cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(p).Build()
@@ -210,10 +192,8 @@ func TestGetMySQLPod(t *testing.T) {
 	t.Run("different index -> not found", func(t *testing.T) {
 		name0 := PodName(cluster, 0)
 		p0 := &corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name0,
-				Namespace: "test-ns",
-			},
+			Name:      name0,
+			Namespace: "test-ns",
 		}
 
 		cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(p0).Build()
@@ -231,21 +211,17 @@ func TestGetAppliedCRVersion(t *testing.T) {
 	require.NoError(t, apiv1.AddToScheme(scheme))
 
 	cluster := &apiv1.PerconaServerMySQL{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cluster",
-			Namespace: "test-ns",
-		},
+		Name:      "test-cluster",
+		Namespace: "test-ns",
 	}
 
 	const updateRevision = "rev-2"
 
 	newStatefulSet := func(crVersion string) *appsv1.StatefulSet {
 		return &appsv1.StatefulSet{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:       NamespacedName(cluster).Name,
-				Namespace:  cluster.Namespace,
-				Generation: 2,
-			},
+			Name:       NamespacedName(cluster).Name,
+			Namespace:  cluster.Namespace,
+			Generation: 2,
 			Spec: appsv1.StatefulSetSpec{
 				Replicas: new(int32(3)),
 				Template: corev1.PodTemplateSpec{
@@ -280,11 +256,9 @@ func TestGetAppliedCRVersion(t *testing.T) {
 		}
 
 		return &corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      PodName(cluster, idx),
-				Namespace: cluster.Namespace,
-				Labels:    labels,
-			},
+			Name:      PodName(cluster, idx),
+			Namespace: cluster.Namespace,
+			Labels:    labels,
 			Status: corev1.PodStatus{
 				Phase: corev1.PodRunning,
 				Conditions: []corev1.PodCondition{

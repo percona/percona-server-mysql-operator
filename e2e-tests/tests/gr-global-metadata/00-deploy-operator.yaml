@@ -11,5 +11,5 @@ commands:
 
       deploy_operator
       deploy_client
-      apply_minio_secret
-      deploy_minio
+      apply_s3_secret
+      deploy_s3_storage

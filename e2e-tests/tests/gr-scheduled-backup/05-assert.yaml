@@ -68,7 +68,7 @@ metadata:
     percona.com/cluster: gr-scheduled-backup
 spec:
   clusterName: gr-scheduled-backup
-  storageName: minio
+  storageName: local-s3
 status:
   state: Succeeded
 ---
@@ -83,6 +83,6 @@ metadata:
     percona.com/cluster: gr-scheduled-backup
 spec:
   clusterName: gr-scheduled-backup
-  storageName: minio
+  storageName: local-s3
 status:
   state: Succeeded

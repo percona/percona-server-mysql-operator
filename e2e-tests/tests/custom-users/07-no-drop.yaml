@@ -1,0 +1,54 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 360
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster_name=$(get_cluster_name)
+      router_svc=$(get_router_service "${cluster_name}")
+      mysql_host="-h ${router_svc}"
+
+      alice_hash_before=$(kubectl -n "${NAMESPACE}" get secret "${cluster_name}-internal-custom-users" \
+          -o jsonpath='{.data.alice\.md5}' | base64 --decode)
+
+      kubectl -n "${NAMESPACE}" patch ps "${test_name}" --type=merge -p '{
+        "spec": {
+          "users": [
+            {
+              "name": "alice",
+              "dbs": ["myapp"],
+              "grants": ["SELECT", "UPDATE", "DELETE"],
+              "withGrantOption": true
+            }
+          ]
+        }
+      }'
+
+      insert_kept=fail
+      bob_kept=fail
+      for i in $(seq 1 60); do
+          alice_hash_now=$(kubectl -n "${NAMESPACE}" get secret "${cluster_name}-internal-custom-users" \
+              -o jsonpath='{.data.alice\.md5}' | base64 --decode)
+          if [[ -n "${alice_hash_now}" && "${alice_hash_now}" != "${alice_hash_before}" ]]; then
+              alice_grants=$(run_mysql "SHOW GRANTS FOR 'alice'@'%'" "${mysql_host}" 2>/dev/null || true)
+              if echo "${alice_grants}" | grep "myapp" | grep -q "INSERT"; then
+                  insert_kept=success
+              fi
+              bob_count=$(run_mysql "SELECT COUNT(*) FROM mysql.user WHERE user='bob'" "${mysql_host}" 2>/dev/null || true)
+              if [[ "${bob_count}" == "1" ]]; then
+                  bob_kept=success
+              fi
+              break
+          fi
+          echo "waiting for alice grant reconcile (${i})"
+          sleep 5
+      done
+
+      kubectl create configmap -n "${NAMESPACE}" 07-check-no-drop \
+          --from-literal=insert_kept="${insert_kept}" \
+          --from-literal=bob_kept="${bob_kept}"
+      kubectl get configmap -n "${NAMESPACE}" 07-check-no-drop -o yaml

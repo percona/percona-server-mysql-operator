@@ -20,10 +20,8 @@ const (
 // sidecar works under readOnlyRootFilesystem.
 func TmpVolume() corev1.Volume {
 	return corev1.Volume{
-		Name: pmmTmpVolumeName,
-		VolumeSource: corev1.VolumeSource{
-			EmptyDir: &corev1.EmptyDirVolumeSource{},
-		},
+		Name:     pmmTmpVolumeName,
+		EmptyDir: &corev1.EmptyDirVolumeSource{},
 	}
 }
 
@@ -89,11 +87,9 @@ func Container(
 			InitialDelaySeconds: 60,
 			TimeoutSeconds:      5,
 			PeriodSeconds:       10,
-			ProbeHandler: corev1.ProbeHandler{
-				HTTPGet: &corev1.HTTPGetAction{
-					Port: intstr.FromInt32(7777),
-					Path: "/local/Status",
-				},
+			HTTPGet: &corev1.HTTPGetAction{
+				Port: intstr.FromInt32(7777),
+				Path: "/local/Status",
 			},
 		}
 

@@ -442,6 +442,7 @@ type CABundleSecretSelector struct {
 }
 
 type BackupSpec struct {
+	AllowParallel            *bool                         `json:"allowParallel,omitempty"`
 	Enabled                  bool                          `json:"enabled,omitempty"`
 	SourcePod                string                        `json:"sourcePod,omitempty"`
 	Image                    string                        `json:"image,omitempty"`
@@ -450,10 +451,15 @@ type BackupSpec struct {
 	ServiceAccountName       string                        `json:"serviceAccountName,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext       `json:"containerSecurityContext,omitempty"`
 	Resources                corev1.ResourceRequirements   `json:"resources,omitempty"`
-	Storages                 map[string]*BackupStorageSpec `json:"storages,omitempty"`
-	BackoffLimit             *int32                        `json:"backoffLimit,omitempty"`
-	PiTR                     PiTRSpec                      `json:"pitr,omitempty"`
-	Schedule                 []BackupSchedule              `json:"schedule,omitempty"`
+	// +kubebuilder:validation:MaxProperties=100
+	Storages     map[string]*BackupStorageSpec `json:"storages,omitempty"`
+	BackoffLimit *int32                        `json:"backoffLimit,omitempty"`
+	// +kubebuilder:validation:Minimum=0
+	StartingDeadlineSeconds *int64 `json:"startingDeadlineSeconds,omitempty"`
+	// +kubebuilder:validation:Minimum=0
+	SuspendedDeadlineSeconds *int64           `json:"suspendedDeadlineSeconds,omitempty"`
+	PiTR                     PiTRSpec         `json:"pitr,omitempty"`
+	Schedule                 []BackupSchedule `json:"schedule,omitempty"`
 
 	// Deprecated: not supported since v0.12.0. Use initContainer instead
 	InitImage     string             `json:"initImage,omitempty"`
@@ -461,6 +467,13 @@ type BackupSpec struct {
 
 	// EncryptionKeySecret is the secret key selector for the backup encryption key.
 	EncryptionKeySecret *EncryptionKeySecretSelector `json:"encryptionKeySecret,omitempty"`
+}
+
+func (s *BackupSpec) GetAllowParallel() bool {
+	if s.AllowParallel == nil {
+		return false
+	}
+	return *s.AllowParallel
 }
 
 func (s *BackupSpec) GetEncryptionEnabled(storage *BackupStorageSpec) bool {
@@ -567,6 +580,10 @@ func (args BackupContainerArgs) GetXtrabackupFlagValue(flag string) string {
 }
 
 type BackupContainerArgs struct {
+	// XtraBackup requires --defaults-file to precede every other option.
+	// +kubebuilder:validation:MaxItems=100
+	// +kubebuilder:validation:items:MaxLength=1024
+	// +kubebuilder:validation:XValidation:rule="!self.exists(arg, arg == '--defaults-file' || arg.startsWith('--defaults-file=')) || (self[0].startsWith('--defaults-file=') && self[0] != '--defaults-file=')",message="--defaults-file must use --defaults-file=<path> syntax and be the first xtrabackup argument"
 	Xtrabackup []string `json:"xtrabackup,omitempty"`
 	Xbcloud    []string `json:"xbcloud,omitempty"`
 	Xbstream   []string `json:"xbstream,omitempty"`
