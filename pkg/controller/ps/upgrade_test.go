@@ -770,9 +770,9 @@ func TestOrchestratorRaftLeader(t *testing.T) {
 	followerResp, _ := json.Marshal("Follower")
 
 	pods := []corev1.Pod{
-		{ObjectMeta: metav1.ObjectMeta{Name: orchestrator.PodName(cr, 0), Namespace: cr.Namespace}},
-		{ObjectMeta: metav1.ObjectMeta{Name: orchestrator.PodName(cr, 1), Namespace: cr.Namespace}},
-		{ObjectMeta: metav1.ObjectMeta{Name: orchestrator.PodName(cr, 2), Namespace: cr.Namespace}},
+		{Name: orchestrator.PodName(cr, 0), Namespace: cr.Namespace},
+		{Name: orchestrator.PodName(cr, 1), Namespace: cr.Namespace},
+		{Name: orchestrator.PodName(cr, 2), Namespace: cr.Namespace},
 	}
 
 	tests := []struct {
@@ -842,10 +842,8 @@ func TestOrchestratorRaftLeader(t *testing.T) {
 func TestPodToUpdate(t *testing.T) {
 	pod := func(name, revision string) corev1.Pod {
 		return corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:   name,
-				Labels: map[string]string{controllerRevisionHash: revision},
-			},
+			Name:   name,
+			Labels: map[string]string{controllerRevisionHash: revision},
 		}
 	}
 
@@ -947,11 +945,9 @@ func TestSmartUpdateOrchestrator(t *testing.T) {
 		}
 
 		return &appsv1.StatefulSet{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      stsName,
-				Namespace: cr.Namespace,
-				Labels:    map[string]string{naming.LabelComponent: component},
-			},
+			Name:      stsName,
+			Namespace: cr.Namespace,
+			Labels:    map[string]string{naming.LabelComponent: component},
 			Spec: appsv1.StatefulSetSpec{
 				Selector: &metav1.LabelSelector{MatchLabels: selector},
 			},
@@ -1108,11 +1104,9 @@ func TestSmartUpdateMySQL(t *testing.T) {
 
 	newSts := func(replicas int32) *appsv1.StatefulSet {
 		return &appsv1.StatefulSet{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      mysql.Name(cr),
-				Namespace: cr.Namespace,
-				Labels:    map[string]string{naming.LabelComponent: naming.ComponentDatabase},
-			},
+			Name:      mysql.Name(cr),
+			Namespace: cr.Namespace,
+			Labels:    map[string]string{naming.LabelComponent: naming.ComponentDatabase},
 			Spec: appsv1.StatefulSetSpec{
 				Selector: &metav1.LabelSelector{MatchLabels: selector},
 			},
@@ -1125,19 +1119,17 @@ func TestSmartUpdateMySQL(t *testing.T) {
 	}
 
 	operatorSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.InternalSecretName(),
-			Namespace: cr.Namespace,
-		},
+		Name:      cr.InternalSecretName(),
+		Namespace: cr.Namespace,
 		Data: map[string][]byte{
 			string(apiv1.UserOperator): []byte("test-pass"),
 		},
 	}
 
 	runningBackup := &apiv1.PerconaServerMySQLBackup{
-		ObjectMeta: metav1.ObjectMeta{Name: "backup1", Namespace: cr.Namespace},
-		Spec:       apiv1.PerconaServerMySQLBackupSpec{ClusterName: cr.Name},
-		Status:     apiv1.PerconaServerMySQLBackupStatus{State: apiv1.BackupRunning},
+		Name: "backup1", Namespace: cr.Namespace,
+		Spec:   apiv1.PerconaServerMySQLBackupSpec{ClusterName: cr.Name},
+		Status: apiv1.PerconaServerMySQLBackupStatus{State: apiv1.BackupRunning},
 	}
 
 	primaryFromOrchestrator := func(idx int) []byte {
@@ -1149,7 +1141,7 @@ func TestSmartUpdateMySQL(t *testing.T) {
 	}
 
 	primaryFromGR := func(idx int) []byte {
-		pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: mysql.PodName(cr, idx)}}
+		pod := &corev1.Pod{Name: mysql.PodName(cr, idx)}
 		return []byte("host\n" + mysql.PodFQDN(cr, pod) + "\n")
 	}
 
