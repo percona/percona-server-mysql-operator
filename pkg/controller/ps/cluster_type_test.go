@@ -201,7 +201,10 @@ func TestReconcileClusterTypeChange(t *testing.T) {
 			WithObjects(cr, sts).WithStatusSubresource(cr).Build()
 		r := &PerconaServerMySQLReconciler{Client: cli}
 
-		require.Error(t, r.reconcileClusterTypeChange(t.Context(), cr))
+		err := r.reconcileClusterTypeChange(t.Context(), cr)
+		require.Error(t, err)
+		require.ErrorContains(t, err,
+			"cannot switch clusterType from async while orchestrator is enabled; set spec.orchestrator.enabled=false first")
 
 		stored := new(apiv1.PerconaServerMySQL)
 		require.NoError(t, cli.Get(t.Context(), client.ObjectKeyFromObject(cr), stored))
