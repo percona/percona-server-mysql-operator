@@ -91,6 +91,7 @@ generate: controller-gen mockgen ## Generate code containing DeepCopy, DeepCopyI
 	$(CONTROLLER_GEN) object:headerFile="LICENSE-HEADER" paths="./..." ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	go generate ./...
 	$(MAKE) fix
+	$(MAKE) check-deadcode
 
 fmt: ## Run go fmt against code.
 	go fmt ./...
