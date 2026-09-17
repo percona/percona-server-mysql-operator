@@ -882,7 +882,7 @@ func (r *PerconaServerMySQLReconciler) updateClusterTypeStatus(
 	if err := writeStatus(ctx, r.Client, client.ObjectKeyFromObject(cr), mutate); err != nil {
 		return errors.Wrap(err, "write cluster type status")
 	}
-	mutate(&cr.Status)
+	mutate(&cr.Status) //nolint:errcheck
 	return nil
 }
 
@@ -907,7 +907,7 @@ func (r *PerconaServerMySQLReconciler) markClusterTypeSwitchInProgress(
 		return errors.Wrap(err, "write cluster type switch condition")
 	}
 
-	mutate(&cr.Status)
+	mutate(&cr.Status) //nolint:errcheck
 	return nil
 }
 
@@ -924,7 +924,7 @@ func (r *PerconaServerMySQLReconciler) clearClusterTypeSwitchInProgress(
 		return errors.Wrap(err, "clear cluster type switch condition")
 	}
 
-	mutate(&cr.Status)
+	mutate(&cr.Status) //nolint:errcheck
 	return nil
 }
 
@@ -1878,7 +1878,8 @@ func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context
 		Labels:      cr.GlobalLabels(),
 		Annotations: cr.GlobalAnnotations(),
 
-		Data: make(map[string][]byte)}
+		Data: make(map[string][]byte),
+	}
 
 	configBytes, err := json.Marshal(config)
 	if err != nil {
