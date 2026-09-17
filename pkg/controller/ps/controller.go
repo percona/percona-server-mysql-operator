@@ -598,7 +598,11 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 		log.Error(err, "failed to reconcile versions")
 	}
 	if err := r.reconcileClusterTypeChange(ctx, cr); err != nil {
-		return errors.Wrap(err, "failed to reconcile cluster type change")
+		// log and swallow the error here, otherwise the status
+		// moves to error and reconcileClusterTypeChange returns early
+		// in the next pass.
+		log.Error(err, "failed to reconcile cluster type change")
+		return nil
 	}
 	userSecret, err := r.ensureUserSecrets(ctx, cr)
 	if err != nil {

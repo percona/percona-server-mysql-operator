@@ -10748,6 +10748,10 @@ spec:
               rule: '!has(self.proxy) || !(has(self.proxy.router) && has(self.proxy.router.enabled)
                 && self.proxy.router.enabled && has(self.proxy.haproxy) && has(self.proxy.haproxy.enabled)
                 && self.proxy.haproxy.enabled)'
+            - message: spec.orchestrator.enabled should be false when switching from
+                async cluster type
+              rule: (oldSelf.mysql.clusterType == self.mysql.clusterType) || self.mysql.clusterType
+                == 'async' || (!has(self.orchestrator) || !self.orchestrator.enabled)
           status:
             properties:
               backupVersion:
