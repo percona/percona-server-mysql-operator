@@ -322,7 +322,7 @@ func (d *DB) Clone(ctx context.Context, donor, user, pass string, port int32, cl
 	if stallTimeoutSeconds > 0 {
 		stop := make(chan struct{})
 		defer close(stop)
-		go d.watchCloneProgress(ctx, cancel, time.Duration(stallTimeoutSeconds)*time.Second, stop)
+		go d.watchCloneProgress(ctx, cancel, time.Duration(stallTimeoutSeconds)*time.Second, stop, d.cloneProgress)
 	}
 
 	_, err = cloneDB.ExecContext(cloneCtx, "CLONE INSTANCE FROM ?@?:? IDENTIFIED BY ?", user, donor, port, pass)
@@ -370,36 +370,49 @@ func (d *DB) Clone(ctx context.Context, donor, user, pass string, port int32, cl
 	return nil
 }
 
-// cloneBytesTransferred returns the total bytes moved by the running clone
-// (data written plus bytes received over the network) from the recipient's
-// performance_schema.clone_progress. It uses a separate pooled connection, so
-// it works while the main connection is blocked in CLONE INSTANCE.
-func (d *DB) cloneBytesTransferred(ctx context.Context) (int64, error) {
-	var data, network sql.NullInt64
-	err := d.db.QueryRowContext(ctx, "SELECT COALESCE(SUM(DATA), 0), COALESCE(SUM(NETWORK), 0) FROM clone_progress").Scan(&data, &network)
+// cloneProgress reports how far the running clone has gotten, read from the
+// recipient's performance_schema.clone_progress over a separate pooled
+// connection so it works while the main connection is blocked in CLONE INSTANCE.
+// It returns both the bytes moved (grows only during DATA/PAGE/REDO copy) and
+// the count of finished stages, so byte-less stages like DROP DATA, FILE SYNC
+// and RECOVERY still register as progress instead of looking like a stall.
+func (d *DB) cloneProgress(ctx context.Context) (bytes, completedStages int64, err error) {
+	var data, network, completed sql.NullInt64
+	err = d.db.QueryRowContext(ctx,
+		"SELECT COALESCE(SUM(DATA), 0), COALESCE(SUM(NETWORK), 0), COALESCE(SUM(STATE = 'Completed'), 0) FROM clone_progress").
+		Scan(&data, &network, &completed)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
-	return data.Int64 + network.Int64, nil
+	return data.Int64 + network.Int64, completed.Int64, nil
 }
 
-// watchCloneProgress polls how many bytes the clone has transferred and calls
-// cancel to stop the clone if that number does not grow for the whole stall
-// duration. Short outages (the mysqld restart at the end of a clone, a transient
-// error) are tolerated, but if the clone cannot be observed at all for a whole
-// stall duration - so we can neither confirm progress nor a stall - it is stopped
-// too, rather than waiting indefinitely.
-func (d *DB) watchCloneProgress(ctx context.Context, cancel context.CancelFunc, stall time.Duration, stop <-chan struct{}) {
+// watchCloneProgress polls the clone's progress and calls cancel to stop the
+// clone if it does not advance for the whole stall duration. Progress is either
+// more bytes moved or another stage finished, so byte-less tail stages (FILE
+// SYNC, RECOVERY, ...) are not mistaken for a stall. Short outages (the mysqld
+// restart at the end of a clone, a transient error) are tolerated, but if the
+// clone cannot be observed at all for a whole stall duration - so we can neither
+// confirm progress nor a stall - it is stopped too, rather than waiting forever.
+// cloneProgressPollInterval is how often the watchdog samples progress. It is a
+// var (not a const) so tests can shrink it.
+var cloneProgressPollInterval = 30 * time.Second
+
+// cloneProgressFunc reports (bytesTransferred, completedStages). It is injected
+// so the watchdog loop can be tested without a live clone.
+type cloneProgressFunc func(ctx context.Context) (bytes, completedStages int64, err error)
+
+func (d *DB) watchCloneProgress(ctx context.Context, cancel context.CancelFunc, stall time.Duration, stop <-chan struct{}, progress cloneProgressFunc) {
 	log := logf.FromContext(ctx)
 
-	const pollInterval = 30 * time.Second
-	ticker := time.NewTicker(pollInterval)
+	ticker := time.NewTicker(cloneProgressPollInterval)
 	defer ticker.Stop()
 
 	now := time.Now()
 	lastBytes := int64(-1)
-	lastProgress := now // last time the transferred-byte count grew
-	lastMeasured := now // last time we successfully read the byte count
+	lastStages := int64(-1)
+	lastProgress := now // last time bytes moved or a stage finished
+	lastMeasured := now // last time we successfully read progress
 
 	for {
 		select {
@@ -409,7 +422,7 @@ func (d *DB) watchCloneProgress(ctx context.Context, cancel context.CancelFunc, 
 			return
 		case <-ticker.C:
 			qCtx, qCancel := context.WithTimeout(ctx, 10*time.Second)
-			bytes, err := d.cloneBytesTransferred(qCtx)
+			bytes, stages, err := progress(qCtx)
 			qCancel()
 			if err != nil {
 				// Could not read progress this tick (the mysqld restart at the end
@@ -427,14 +440,15 @@ func (d *DB) watchCloneProgress(ctx context.Context, cancel context.CancelFunc, 
 			}
 			lastMeasured = time.Now()
 
-			if lastBytes < 0 || bytes > lastBytes {
+			if lastBytes < 0 || bytes > lastBytes || stages > lastStages {
 				lastBytes = bytes
+				lastStages = stages
 				lastProgress = time.Now()
 				continue
 			}
 
 			if time.Since(lastProgress) >= stall {
-				log.Info("clone made no progress, aborting", "stall", stall.String(), "bytesTransferred", bytes)
+				log.Info("clone made no progress, aborting", "stall", stall.String(), "bytesTransferred", bytes, "completedStages", stages)
 				cancel()
 				return
 			}
