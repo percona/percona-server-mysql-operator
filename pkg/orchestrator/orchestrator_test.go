@@ -95,9 +95,8 @@ func TestStatefulSet(t *testing.T) {
 		assert.Equal(t, "cluster-orc", sts.Spec.ServiceName)
 		assert.Equal(t, MatchLabels(cluster), sts.Spec.Selector.MatchLabels)
 		assert.Equal(t, Labels(cluster), sts.Spec.Template.Labels)
-		assert.Equal(t, appsv1.RollingUpdateStatefulSetStrategyType, sts.Spec.UpdateStrategy.Type)
-		require.NotNil(t, sts.Spec.UpdateStrategy.RollingUpdate)
-		assert.Equal(t, int32(0), *sts.Spec.UpdateStrategy.RollingUpdate.Partition)
+		assert.Equal(t, appsv1.OnDeleteStatefulSetStrategyType, sts.Spec.UpdateStrategy.Type)
+		assert.Nil(t, sts.Spec.UpdateStrategy.RollingUpdate)
 
 		initContainers := sts.Spec.Template.Spec.InitContainers
 		assert.Len(t, initContainers, 1)
@@ -110,9 +109,9 @@ func TestStatefulSet(t *testing.T) {
 		}, sts.Spec.Template.Annotations)
 	})
 
-	t.Run("update strategy", func(t *testing.T) {
+	t.Run("smart update strategy", func(t *testing.T) {
 		cluster := cr.DeepCopy()
-		cluster.Spec.UpdateStrategy = appsv1.OnDeleteStatefulSetStrategyType
+		cluster.Spec.UpdateStrategy = apiv1.SmartUpdateStatefulSetStrategyType
 
 		sts := StatefulSet(cluster, initImage, configHash, tlsHash)
 
@@ -120,6 +119,16 @@ func TestStatefulSet(t *testing.T) {
 		assert.Nil(t, sts.Spec.UpdateStrategy.RollingUpdate)
 	})
 
+	t.Run("smart update strategy before 1.3.0", func(t *testing.T) {
+		cluster := cr.DeepCopy()
+		cluster.Spec.UpdateStrategy = apiv1.SmartUpdateStatefulSetStrategyType
+		cluster.Spec.CRVersion = "1.2.0"
+
+		sts := StatefulSet(cluster, initImage, configHash, tlsHash)
+
+		assert.Equal(t, appsv1.RollingUpdateStatefulSetStrategyType, sts.Spec.UpdateStrategy.Type)
+		assert.Equal(t, int32(0), *sts.Spec.UpdateStrategy.RollingUpdate.Partition)
+	})
 	t.Run("volumes", func(t *testing.T) {
 		cluster := cr.DeepCopy()
 		sts := StatefulSet(cluster, initImage, configHash, tlsHash)
