@@ -2133,8 +2133,8 @@ get_telemetry_report_by_id() {
 		fi
 
 		if [[ $rows =~ ^[1-9][0-9]*$ ]]; then
-			echo "Report data found:"
-			echo "$body" | jq '.data'
+			# Compact JSON only on stdout so callers can capture it reliably.
+			echo "$body" | jq -c '.data'
 			return 0
 		fi
 
