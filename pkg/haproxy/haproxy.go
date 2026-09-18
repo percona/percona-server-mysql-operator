@@ -298,7 +298,7 @@ func haproxyContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 	env := []corev1.EnvVar{
 		{
 			Name:  "CLUSTER_TYPE",
-			Value: string(cr.Spec.MySQL.ClusterType),
+			Value: string(cr.AppliedClusterType()),
 		},
 	}
 	env = append(env, spec.Env...)
@@ -414,7 +414,7 @@ func mysqlMonitContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 		cluserTypeEnv := []corev1.EnvVar{
 			{
 				Name:  "CLUSTER_TYPE",
-				Value: string(cr.Spec.MySQL.ClusterType),
+				Value: string(cr.AppliedClusterType()),
 			},
 		}
 		env = append(env, cluserTypeEnv...)
