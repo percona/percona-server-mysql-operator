@@ -34,7 +34,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -1033,7 +1032,8 @@ func (r *PerconaServerMySQLReconciler) teardownAsync(
 func (r *PerconaServerMySQLReconciler) reconcileDatabase(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("reconcileDatabase")
 
-	if err := r.reconcileMySQLAutoConfig(ctx, cr); err != nil {
+	autoConf, err := r.reconcileMySQLAutoConfig(ctx, cr)
+	if err != nil {
 		return errors.Wrap(err, "reconcile MySQL auto-config")
 	}
 
@@ -1072,7 +1072,7 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(ctx context.Context, cr
 			return errors.Wrap(err, "smart update")
 		}
 	}
-	if err := r.reconcileMySQLConfig(ctx, cr, sts); err != nil {
+	if err := r.reconcileMySQLConfig(ctx, cr, sts, autoConf); err != nil {
 		return errors.Wrap(err, "reconcile MySQL config")
 	}
 
@@ -1144,20 +1144,15 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLServices(ctx context.Contex
 }
 
 // reconcileMySQLAutoConfig reconciles the ConfigMap for MySQL auto-tuning parameters and
-// sets read_only=0 for single-node clusters without Orchestrator
-func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
+// sets read_only=0 for single-node clusters without Orchestrator. It returns the
+// configuration it put in the ConfigMap.
+func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Context, cr *apiv1.PerconaServerMySQL) (string, error) {
 	log := logf.FromContext(ctx).WithName("reconcileMySQLAutoConfig")
-	var memory *resource.Quantity
 	var err error
 
-	if res := cr.Spec.MySQL.Resources; res.Size() > 0 {
-		if _, ok := res.Requests[corev1.ResourceMemory]; ok {
-			memory = res.Requests.Memory()
-		}
-		if _, ok := res.Limits[corev1.ResourceMemory]; ok {
-			memory = res.Limits.Memory()
-		}
-	}
+	res := cr.Spec.MySQL.Resources
+	memory := mysql.EffectiveResource(res, corev1.ResourceMemory)
+	cpu := mysql.EffectiveResource(res, corev1.ResourceCPU)
 
 	nn := types.NamespacedName{
 		Name:      mysql.AutoConfigMapName(cr),
@@ -1166,7 +1161,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 
 	currentConfigMap := new(corev1.ConfigMap)
 	if err = r.Client.Get(ctx, nn, currentConfigMap); client.IgnoreNotFound(err) != nil {
-		return errors.Wrapf(err, "get ConfigMap/%s", nn.Name)
+		return "", errors.Wrapf(err, "get ConfigMap/%s", nn.Name)
 	}
 
 	setWriteMode := cr.MySQLSpec().Size == 1 && !cr.Spec.Orchestrator.Enabled
@@ -1177,17 +1172,21 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 			exists = false
 		}
 
-		if !exists || !metav1.IsControlledBy(currentConfigMap, cr) {
-			return nil
+		if !exists {
+			return "", nil
+		}
+
+		if !metav1.IsControlledBy(currentConfigMap, cr) {
+			return currentConfigMap.Data[mysql.CustomConfigKey], nil
 		}
 
 		if err := r.Client.Delete(ctx, currentConfigMap); err != nil {
-			return errors.Wrapf(err, "delete ConfigMaps/%s", currentConfigMap.Name)
+			return "", errors.Wrapf(err, "delete ConfigMaps/%s", currentConfigMap.Name)
 		}
 
 		log.Info("ConfigMap deleted", "name", currentConfigMap.Name)
 
-		return nil
+		return "", nil
 	}
 
 	config := ""
@@ -1198,21 +1197,71 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 	}
 
 	if memory != nil {
-		autotuneParams, err := mysql.GetAutoTuneParams(cr, memory)
-		if err != nil {
-			return err
+		var params string
+
+		// autoconfig derives a full configuration from the calculator when it is
+		// enabled and we have everything it needs (a CPU allocation and a known
+		// MySQL version). Otherwise we keep the legacy buffer-pool +
+		// max_connections autotune, which only requires memory. The fallback is
+		// recomputed on every pass, so correcting the spec brings the calculated
+		// configuration back without any further intervention.
+		autotune := func(reason string) (string, error) {
+			log.Info("falling back to autotune", "reason", reason)
+			r.Recorder.Event(cr, corev1.EventTypeWarning, "AutoConfigFallback",
+				fmt.Sprintf("falling back to autotune: %s", reason))
+			return mysql.GetAutoTuneParams(cr, memory)
 		}
-		config += autotuneParams
+
+		version := strings.TrimSpace(cr.Spec.MySQL.AutoConfig.Version)
+
+		var userConfig bool
+		userConfig, err = mysql.HasUserConfig(ctx, r.Client, cr)
+		if err != nil {
+			return "", errors.Wrap(err, "check for a user configuration")
+		}
+
+		switch {
+		case !cr.Spec.MySQL.AutoConfig.IsEnabled():
+			params, err = mysql.GetAutoTuneParams(cr, memory)
+		case userConfig:
+			log.Info("a user configuration is set, skipping autoconfig")
+			params, err = mysql.GetAutoTuneParams(cr, memory)
+		case cpu == nil:
+			// Enabled but the user set no CPU request/limit: we cannot size the
+			// configuration.
+			params, err = autotune("autoconfig is enabled but no CPU request/limit is set")
+		case version == "":
+			// The CRD requires the version whenever autoconfig is enabled, so
+			// this only happens against an outdated CRD.
+			params, err = autotune("autoconfig is enabled but mysql.autoConfig.version is not set")
+		default:
+			params, err = mysql.GetAutoConfigParams(cr, version, cpu, memory)
+			if errors.Is(err, mysql.ErrInsufficientStorage) {
+				r.Recorder.Event(cr, corev1.EventTypeWarning, "AutoConfigInsufficientStorage", err.Error())
+				return "", errors.Wrap(err, "calculate autoconfig parameters")
+			}
+			if err != nil {
+				log.Error(err, "failed to calculate autoconfig parameters, falling back to autotune")
+				params, err = autotune(err.Error())
+			}
+		}
+		if err != nil {
+			log.Error(err, "failed to calculate MySQL tuning parameters, starting without them")
+			r.Recorder.Event(cr, corev1.EventTypeWarning, "AutoConfigFailed",
+				fmt.Sprintf("failed to calculate MySQL tuning parameters, starting without them: %v", err))
+			params = ""
+		}
+		config += params
 	}
 
 	configMap := k8s.ConfigMap(cr, mysql.AutoConfigMapName(cr), mysql.CustomConfigKey, config, naming.ComponentDatabase)
 	if !k8s.EqualConfigMaps(currentConfigMap, configMap) {
 		if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, configMap, r.Scheme); err != nil {
-			return errors.Wrapf(err, "ensure ConfigMap/%s", configMap.Name)
+			return "", errors.Wrapf(err, "ensure ConfigMap/%s", configMap.Name)
 		}
 		log.Info("ConfigMap updated", "name", configMap.Name, "data", configMap.Data)
 	}
-	return nil
+	return config, nil
 }
 
 func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {

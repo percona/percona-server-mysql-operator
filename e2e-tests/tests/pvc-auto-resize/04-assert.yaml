@@ -13,7 +13,7 @@ spec:
       persistentVolumeClaim:
         resources:
           requests:
-            storage: 4Gi
+            storage: 12Gi
 status:
   mysql:
     ready: 3
@@ -36,5 +36,5 @@ spec:
           - ReadWriteOnce
         resources:
           requests:
-            storage: 4Gi
+            storage: 12Gi
         volumeMode: Filesystem

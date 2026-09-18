@@ -1,6 +1,5 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
-timeout: 10
 commands:
   - script: |-
       set -o errexit
@@ -8,6 +7,31 @@ commands:
 
       source ../../functions
 
-      kubectl -n "${NAMESPACE}" patch ps "$(get_cluster_name)" \
+      cluster=$(get_cluster_name)
+      generation_before=$(kubectl -n "${NAMESPACE}" get sts "${cluster}-mysql" -o jsonpath='{.metadata.generation}')
+      uids_before=$(get_mysql_pod_uids "${cluster}")
+
+      kubectl -n "${NAMESPACE}" patch ps "${cluster}" \
           --type=merge \
           -p '{"spec": {"mysql": {"configuration": ""}}}'
+
+      # Dropping max_connections from the user configuration does not remove the
+      # variable: autotune stops yielding it and emits its own value, 8Gi/12Mi,
+      # which is dynamic and needs no restart.
+      wait_for_mysql_variable "${cluster}" max_connections 682 120 || true
+
+      # Let a few reconcile loops pass to be sure no restart is triggered late.
+      sleep 15
+
+      generation_after=$(kubectl -n "${NAMESPACE}" get sts "${cluster}-mysql" -o jsonpath='{.metadata.generation}')
+      uids_after=$(get_mysql_pod_uids "${cluster}")
+
+      restarted="false"
+      [[ ${uids_before} == "${uids_after}" ]] || restarted="true"
+      [[ ${generation_before} == "${generation_after}" ]] || restarted="true"
+
+      kubectl -n "${NAMESPACE}" create configmap 04-remove-config \
+          --from-literal=restarted="${restarted}" \
+          --from-literal=max_connections="$(get_mysql_variable_on_pods "${cluster}" max_connections)" \
+          --from-literal=generation="${generation_before} ${generation_after}"
+    timeout: 420

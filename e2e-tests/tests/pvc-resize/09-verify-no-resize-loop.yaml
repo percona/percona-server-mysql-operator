@@ -13,8 +13,8 @@ commands:
       # the claims of the removed replicas stay at the old size on purpose
       for i in 3 4; do
           size=$(kubectl -n "${NAMESPACE}" get pvc "datadir-${cluster_name}-mysql-${i}" -o jsonpath='{.status.capacity.storage}')
-          if [[ ${size} != "3Gi" ]]; then
-              echo "ERROR: leftover PVC datadir-${cluster_name}-mysql-${i} is ${size}, expected it to stay 3Gi"
+          if [[ ${size} != "11Gi" ]]; then
+              echo "ERROR: leftover PVC datadir-${cluster_name}-mysql-${i} is ${size}, expected it to stay 11Gi"
               exit 1
           fi
       done

@@ -3,6 +3,7 @@ package gr
 import (
 	"bytes"
 	"io"
+	"os"
 	"testing"
 
 	"github.com/go-ini/ini"
@@ -213,4 +214,85 @@ func TestGetConfigureInstanceOpts(t *testing.T) {
 			assert.Equal(t, tt.expected.applierWorkerThreads, opts.applierWorkerThreads)
 		})
 	}
+}
+
+func TestReadMyCnf(t *testing.T) {
+	const (
+		userConf = "[mysqld]\nreplica_parallel_workers=9\n"
+		autoConf = "\nreplica_parallel_workers=5\n"
+	)
+
+	tests := map[string]struct {
+		setup func(t *testing.T) []string
+
+		wantWorkers string
+		wantNil     bool
+		wantErrMsg  string
+	}{
+		"neither file exists": {
+			setup:   func(t *testing.T) []string { return []string{"/nonexistent/my.cnf", "/nonexistent/auto.cnf"} },
+			wantNil: true,
+		},
+		"only the auto-config exists": {
+			setup: func(t *testing.T) []string {
+				dir := t.TempDir()
+				return []string{dir + "/my.cnf", writeCnf(t, dir+"/auto.cnf", autoConf)}
+			},
+			wantWorkers: "5",
+		},
+		"only the user configuration exists": {
+			setup: func(t *testing.T) []string {
+				dir := t.TempDir()
+				return []string{writeCnf(t, dir+"/my.cnf", userConf), dir + "/auto.cnf"}
+			},
+			wantWorkers: "9",
+		},
+		"the user configuration wins over the auto-config": {
+			setup: func(t *testing.T) []string {
+				dir := t.TempDir()
+				return []string{writeCnf(t, dir+"/my.cnf", userConf), writeCnf(t, dir+"/auto.cnf", autoConf)}
+			},
+			wantWorkers: "9",
+		},
+		"an unreadable file is an error rather than a silent fallback": {
+			setup: func(t *testing.T) []string {
+				dir := t.TempDir()
+				notADir := writeCnf(t, dir+"/my.cnf", userConf)
+				return []string{notADir + "/nested.cnf", writeCnf(t, dir+"/auto.cnf", autoConf)}
+			},
+			wantErrMsg: "open",
+		},
+		"a malformed file is an error": {
+			setup: func(t *testing.T) []string {
+				dir := t.TempDir()
+				return []string{writeCnf(t, dir+"/my.cnf", "[mysqld\nbroken")}
+			},
+			wantErrMsg: "failed to parse",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			got, err := readMyCnf(tc.setup(t)...)
+			if tc.wantErrMsg != "" {
+				require.ErrorContains(t, err, tc.wantErrMsg)
+				return
+			}
+			require.NoError(t, err)
+			if tc.wantNil {
+				assert.Nil(t, got)
+				return
+			}
+			require.NotNil(t, got)
+			value, err := config.GetKeyValue(got, "replica_parallel_workers")
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantWorkers, value)
+		})
+	}
+}
+
+func writeCnf(t *testing.T, path, content string) string {
+	t.Helper()
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+	return path
 }
