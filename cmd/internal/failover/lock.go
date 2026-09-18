@@ -1,10 +1,12 @@
 package failover
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	"syscall"
+	"time"
 )
 
 const LockPath = "/var/lib/mysql/failover.lock"
@@ -28,6 +30,45 @@ func Lock(path string) (*os.File, error) {
 	}
 
 	return f, nil
+}
+
+// LockWait takes the lock at path like Lock does, waiting up to wait for the
+// holder to release it. It returns ErrLocked once the wait is spent.
+//
+// The wait polls instead of blocking in flock so that it can be cancelled.
+func LockWait(ctx context.Context, path string, wait, poll time.Duration) (*os.File, error) {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		return nil, fmt.Errorf("open lock file %s: %w", path, err)
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, wait)
+	defer cancel()
+
+	ticker := time.NewTicker(poll)
+	defer ticker.Stop()
+
+	for {
+		err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+		if err == nil {
+			return f, nil
+		}
+		if !errors.Is(err, syscall.EWOULDBLOCK) {
+			f.Close() //nolint:errcheck
+			return nil, fmt.Errorf("lock %s: %w", path, err)
+		}
+
+		select {
+		case <-ctx.Done():
+			f.Close() //nolint:errcheck
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				return nil, ErrLocked
+			}
+
+			return nil, ctx.Err()
+		case <-ticker.C:
+		}
+	}
 }
 
 // InProgress reports whether a failover job currently holds the lock at path.
