@@ -483,7 +483,7 @@ func TestReconcileMySQLConfig(t *testing.T) {
 			expectedConfig: `{"max_connections":"200"}`,
 		},
 		{
-			// The copy is a record of what was applied, not a licence to skip
+			// The copy is a record of what was applied, not a license to skip
 			// the diff: a change made while the set was being recreated still
 			// reaches mysql.
 			desc:           "config changed during the recreate is still applied",

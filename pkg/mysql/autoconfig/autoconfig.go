@@ -26,7 +26,7 @@ const (
 var (
 	ErrMemoryRequired = errors.New("memory is required")
 	ErrCPURequired    = errors.New("cpu is required")
-	// ErrVersionUnsupported guards the calculator's silent behaviour outside its
+	// ErrVersionUnsupported guards the calculator's silent behavior outside its
 	// supported range: it returns an empty configuration instead of an error.
 	ErrVersionUnsupported = errors.New("mysql version is out of the supported range")
 )
