@@ -42,7 +42,7 @@ commands:
           local expected_data data restored_data
           expected_data=$(kubectl get configmap "${expected_data_configmap}" -n "${NAMESPACE}" -o json | jq -c '.data')
 
-          data=$(retry_run_mysql_query_file "${query_file}" "-h $(get_router_service "${cluster_name}")")
+          data=$(run_mysql_query_file "${query_file}" "-h $(get_router_service "${cluster_name}")")
           kubectl create configmap -n "${NAMESPACE}" "${restored_data_configmap}" --from-literal=data="${data}" --dry-run=client -o yaml \
             | kubectl apply -n "${NAMESPACE}" -f -
 

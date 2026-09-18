@@ -32,7 +32,7 @@ commands:
       wait_for_restore "${restore_name}" "${backup_name}"
       wait_cluster_consistency_async "${cluster_name}" 3 3
 
-      data=$(retry_run_mysql_query_file "conf/data-query.sql" "-h $(get_haproxy_svc "${cluster_name}")")
+      data=$(run_mysql_query_file "conf/data-query.sql" "-h $(get_haproxy_svc "${cluster_name}")")
       kubectl create configmap -n "${NAMESPACE}" "${restored_data_configmap}" --from-literal=data="${data}"
 
       restored_data=$(kubectl get configmap "${restored_data_configmap}" -n "${NAMESPACE}" -o json | jq -c '.data')
