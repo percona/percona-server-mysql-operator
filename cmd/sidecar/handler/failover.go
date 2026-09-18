@@ -24,7 +24,7 @@ func FailoverStream() http.Handler {
 	return &FailoverHandler{DataDir: dataDir}
 }
 
-type streamConfig struct {
+type StreamConfig struct {
 	BinaryLog string `json:"binary_log"`
 	Position  int64  `json:"position"`
 }
@@ -164,7 +164,7 @@ func (h *FailoverHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 	defer req.Body.Close() //nolint:errcheck
 
-	conf := streamConfig{}
+	conf := StreamConfig{}
 	if err := json.Unmarshal(data, &conf); err != nil {
 		log.Printf("ERROR: failed to unmarshal request body: %v", err)
 		http.Error(w, "streaming failed", http.StatusBadRequest)
