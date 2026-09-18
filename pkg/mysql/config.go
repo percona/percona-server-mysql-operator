@@ -21,6 +21,7 @@ import (
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/config"
+	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql/autoconfig"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
@@ -369,29 +370,36 @@ func HasUserConfig(
 	return false, nil
 }
 
+// GetConfig merges the configuration mysqld runs with, in order: autoConf, the
+// user configuration and the user secret.
 func GetConfig(
 	ctx context.Context,
 	cl client.Reader,
 	cr *apiv1.PerconaServerMySQL,
+	autoConf string,
 ) (config.Section, error) {
 	configurable := Configurable(*cr)
 	cmName := configurable.GetConfigMapName()
 	nn := types.NamespacedName{Name: cmName, Namespace: cr.Namespace}
 	parts := make([]string, 0, 3)
 
-	autoCM := &corev1.ConfigMap{}
-	autoNN := types.NamespacedName{Name: AutoConfigMapName(cr), Namespace: cr.Namespace}
-	if err := cl.Get(ctx, autoNN, autoCM); client.IgnoreNotFound(err) != nil {
-		return config.EmptySection, errors.Wrap(err, "get auto configmap")
-	} else if err == nil {
-		parts = append(parts, readConfig(autoCM, configurable))
+	if autoConf != "" {
+		parts = append(parts, autoConf)
 	}
 
-	cm := &corev1.ConfigMap{}
-	if err := cl.Get(ctx, nn, cm); client.IgnoreNotFound(err) != nil {
-		return config.EmptySection, errors.Wrap(err, "get configmap")
-	} else if err == nil {
-		parts = append(parts, readConfig(cm, configurable))
+	// Rendered from the cr, not read back from the ConfigMap generated from it:
+	// the cache can still hold the revision from before this reconcile wrote it.
+	if rendered, err := k8s.RenderConfiguration(&configurable); err != nil {
+		return config.EmptySection, errors.Wrap(err, "render user configuration")
+	} else if rendered != "" {
+		parts = append(parts, rendered)
+	} else {
+		cm := &corev1.ConfigMap{}
+		if err := cl.Get(ctx, nn, cm); client.IgnoreNotFound(err) != nil {
+			return config.EmptySection, errors.Wrap(err, "get configmap")
+		} else if err == nil {
+			parts = append(parts, readConfig(cm, configurable))
+		}
 	}
 
 	secret := &corev1.Secret{}

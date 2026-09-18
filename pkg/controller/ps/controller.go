@@ -1032,7 +1032,8 @@ func (r *PerconaServerMySQLReconciler) teardownAsync(
 func (r *PerconaServerMySQLReconciler) reconcileDatabase(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("reconcileDatabase")
 
-	if err := r.reconcileMySQLAutoConfig(ctx, cr); err != nil {
+	autoConf, err := r.reconcileMySQLAutoConfig(ctx, cr)
+	if err != nil {
 		return errors.Wrap(err, "reconcile MySQL auto-config")
 	}
 
@@ -1071,7 +1072,7 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(ctx context.Context, cr
 			return errors.Wrap(err, "smart update")
 		}
 	}
-	if err := r.reconcileMySQLConfig(ctx, cr, sts); err != nil {
+	if err := r.reconcileMySQLConfig(ctx, cr, sts, autoConf); err != nil {
 		return errors.Wrap(err, "reconcile MySQL config")
 	}
 
@@ -1143,8 +1144,9 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLServices(ctx context.Contex
 }
 
 // reconcileMySQLAutoConfig reconciles the ConfigMap for MySQL auto-tuning parameters and
-// sets read_only=0 for single-node clusters without Orchestrator
-func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
+// sets read_only=0 for single-node clusters without Orchestrator. It returns the
+// configuration it put in the ConfigMap.
+func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Context, cr *apiv1.PerconaServerMySQL) (string, error) {
 	log := logf.FromContext(ctx).WithName("reconcileMySQLAutoConfig")
 	var err error
 
@@ -1159,7 +1161,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 
 	currentConfigMap := new(corev1.ConfigMap)
 	if err = r.Client.Get(ctx, nn, currentConfigMap); client.IgnoreNotFound(err) != nil {
-		return errors.Wrapf(err, "get ConfigMap/%s", nn.Name)
+		return "", errors.Wrapf(err, "get ConfigMap/%s", nn.Name)
 	}
 
 	setWriteMode := cr.MySQLSpec().Size == 1 && !cr.Spec.Orchestrator.Enabled
@@ -1170,17 +1172,21 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 			exists = false
 		}
 
-		if !exists || !metav1.IsControlledBy(currentConfigMap, cr) {
-			return nil
+		if !exists {
+			return "", nil
+		}
+
+		if !metav1.IsControlledBy(currentConfigMap, cr) {
+			return currentConfigMap.Data[mysql.CustomConfigKey], nil
 		}
 
 		if err := r.Client.Delete(ctx, currentConfigMap); err != nil {
-			return errors.Wrapf(err, "delete ConfigMaps/%s", currentConfigMap.Name)
+			return "", errors.Wrapf(err, "delete ConfigMaps/%s", currentConfigMap.Name)
 		}
 
 		log.Info("ConfigMap deleted", "name", currentConfigMap.Name)
 
-		return nil
+		return "", nil
 	}
 
 	config := ""
@@ -1211,7 +1217,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 		var userConfig bool
 		userConfig, err = mysql.HasUserConfig(ctx, r.Client, cr)
 		if err != nil {
-			return errors.Wrap(err, "check for a user configuration")
+			return "", errors.Wrap(err, "check for a user configuration")
 		}
 
 		switch {
@@ -1232,7 +1238,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 			params, err = mysql.GetAutoConfigParams(cr, version, cpu, memory)
 			if errors.Is(err, mysql.ErrInsufficientStorage) {
 				r.Recorder.Event(cr, corev1.EventTypeWarning, "AutoConfigInsufficientStorage", err.Error())
-				return errors.Wrap(err, "calculate autoconfig parameters")
+				return "", errors.Wrap(err, "calculate autoconfig parameters")
 			}
 			if err != nil {
 				log.Error(err, "failed to calculate autoconfig parameters, falling back to autotune")
@@ -1251,11 +1257,11 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 	configMap := k8s.ConfigMap(cr, mysql.AutoConfigMapName(cr), mysql.CustomConfigKey, config, naming.ComponentDatabase)
 	if !k8s.EqualConfigMaps(currentConfigMap, configMap) {
 		if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, configMap, r.Scheme); err != nil {
-			return errors.Wrapf(err, "ensure ConfigMap/%s", configMap.Name)
+			return "", errors.Wrapf(err, "ensure ConfigMap/%s", configMap.Name)
 		}
 		log.Info("ConfigMap updated", "name", configMap.Name, "data", configMap.Data)
 	}
-	return nil
+	return config, nil
 }
 
 func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {

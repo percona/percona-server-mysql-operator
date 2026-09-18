@@ -83,13 +83,6 @@ func TestReconcileMySQLConfig(t *testing.T) {
 		}
 	}
 
-	newAutoConfigMap := func(cr *apiv1.PerconaServerMySQL, data string) *corev1.ConfigMap {
-		return &corev1.ConfigMap{
-			Name: mysql.AutoConfigMapName(cr), Namespace: cr.Namespace,
-			Data: map[string]string{mysql.CustomConfigKey: data},
-		}
-	}
-
 	newSecret := func(cr *apiv1.PerconaServerMySQL) *corev1.Secret {
 		return &corev1.Secret{
 			Name: cr.InternalSecretName(), Namespace: cr.Namespace,
@@ -521,9 +514,6 @@ func TestReconcileMySQLConfig(t *testing.T) {
 			if tt.currentConfig != "" {
 				objs = append(objs, newConfigMap(cr, tt.currentConfig))
 			}
-			if tt.autoConfig != "" {
-				objs = append(objs, newAutoConfigMap(cr, tt.autoConfig))
-			}
 			if tt.object != nil {
 				objs = append(objs, tt.object...)
 			} else {
@@ -582,7 +572,7 @@ func TestReconcileMySQLConfig(t *testing.T) {
 
 			r := &PerconaServerMySQLReconciler{Client: cl, Scheme: scheme, ClientCmd: cliCmd}
 
-			err := r.reconcileMySQLConfig(ctx, cr, sts)
+			err := r.reconcileMySQLConfig(ctx, cr, sts, tt.autoConfig)
 			if tt.expectedError != nil {
 				require.ErrorContains(t, err, tt.expectedError.Error())
 			} else {

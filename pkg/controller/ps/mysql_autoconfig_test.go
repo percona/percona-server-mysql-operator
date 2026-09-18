@@ -120,7 +120,8 @@ func TestReconcileMySQLAutoConfig(t *testing.T) {
 			cr.Spec.MySQL.Configuration = tt.userConf
 			r := newReconciler(t, cr)
 
-			require.NoError(t, r.reconcileMySQLAutoConfig(t.Context(), cr))
+			_, err := r.reconcileMySQLAutoConfig(t.Context(), cr)
+			require.NoError(t, err)
 
 			config := autoConfig(t, r, cr)
 			assert.Contains(t, config, "innodb_buffer_pool_size=", "both paths size the buffer pool")
@@ -151,7 +152,8 @@ func TestReconcileMySQLAutoConfig(t *testing.T) {
 			cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr, userConfig(cr)).Build()
 			r := &PerconaServerMySQLReconciler{Client: cl, Scheme: scheme, Recorder: record.NewFakeRecorder(100)}
 
-			require.NoError(t, r.reconcileMySQLAutoConfig(t.Context(), cr))
+			_, err := r.reconcileMySQLAutoConfig(t.Context(), cr)
+			require.NoError(t, err)
 
 			config := autoConfig(t, r, cr)
 			assert.Contains(t, config, "innodb_buffer_pool_size=", "autotune still sizes the buffer pool")
@@ -175,7 +177,7 @@ func TestReconcileMySQLAutoConfig(t *testing.T) {
 			}).Build()
 		r := &PerconaServerMySQLReconciler{Client: cl, Scheme: scheme, Recorder: record.NewFakeRecorder(100)}
 
-		err := r.reconcileMySQLAutoConfig(t.Context(), cr)
+		_, err := r.reconcileMySQLAutoConfig(t.Context(), cr)
 		require.ErrorIs(t, err, errBoom)
 		assert.ErrorContains(t, err, "check for a user configuration")
 
@@ -190,7 +192,8 @@ func TestReconcileMySQLAutoConfig(t *testing.T) {
 		withDataVolume(cr, "32Gi")
 		r := newReconciler(t, cr)
 
-		require.NoError(t, r.reconcileMySQLAutoConfig(ctx, cr))
+		_, err := r.reconcileMySQLAutoConfig(ctx, cr)
+		require.NoError(t, err)
 
 		assert.Contains(t, autoConfig(t, r, cr), "innodb_redo_log_capacity=")
 	})
@@ -201,7 +204,7 @@ func TestReconcileMySQLAutoConfig(t *testing.T) {
 		withDataVolume(cr, "2Gi")
 		r := newReconciler(t, cr)
 
-		err := r.reconcileMySQLAutoConfig(ctx, cr)
+		_, err := r.reconcileMySQLAutoConfig(ctx, cr)
 		assert.ErrorIs(t, err, mysql.ErrInsufficientStorage)
 		// The message has to name the knob, since the cluster stays down until
 		// the user acts on it.
@@ -219,11 +222,13 @@ func TestReconcileMySQLAutoConfig(t *testing.T) {
 		cr := newCR(true, "5.7")
 		r := newReconciler(t, cr)
 
-		require.NoError(t, r.reconcileMySQLAutoConfig(ctx, cr))
+		_, err := r.reconcileMySQLAutoConfig(ctx, cr)
+		require.NoError(t, err)
 		require.NotContains(t, autoConfig(t, r, cr), calculatedKey)
 
 		cr.Spec.MySQL.AutoConfig.Version = "8.4"
-		require.NoError(t, r.reconcileMySQLAutoConfig(ctx, cr))
+		_, err = r.reconcileMySQLAutoConfig(ctx, cr)
+		require.NoError(t, err)
 		assert.Contains(t, autoConfig(t, r, cr), calculatedKey)
 	})
 
@@ -236,11 +241,13 @@ func TestReconcileMySQLAutoConfig(t *testing.T) {
 		cr := newCR(true, "8.0.46")
 		r := newReconciler(t, cr)
 
-		require.NoError(t, r.reconcileMySQLAutoConfig(ctx, cr))
+		_, err := r.reconcileMySQLAutoConfig(ctx, cr)
+		require.NoError(t, err)
 		require.Contains(t, autoConfig(t, r, cr), removedIn84, "precondition: the wrong version emits the removed parameter")
 
 		cr.Spec.MySQL.AutoConfig.Version = "8.4.6"
-		require.NoError(t, r.reconcileMySQLAutoConfig(ctx, cr))
+		_, err = r.reconcileMySQLAutoConfig(ctx, cr)
+		require.NoError(t, err)
 
 		config := autoConfig(t, r, cr)
 		assert.NotContains(t, config, removedIn84, "stale parameter survived the correction:\n%s", config)

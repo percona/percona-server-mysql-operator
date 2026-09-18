@@ -28,13 +28,14 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfig(
 	ctx context.Context,
 	cr *apiv1.PerconaServerMySQL,
 	sts *appsv1.StatefulSet,
+	autoConf string,
 ) error {
 	if cr.CompareVersion("1.2.0") <= 0 {
 		return nil
 	}
 
 	log := logf.FromContext(ctx)
-	conf, err := mysql.GetConfig(ctx, r.Client, cr)
+	conf, err := mysql.GetConfig(ctx, r.Client, cr, autoConf)
 	if err != nil {
 		return errors.Wrap(err, "get MySQL config")
 	}

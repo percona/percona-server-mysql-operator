@@ -19,6 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/pkg/config"
 )
 
 func TestGetConfig(t *testing.T) {
@@ -37,9 +38,12 @@ func TestGetConfig(t *testing.T) {
 	tests := []struct {
 		desc       string
 		autoConfig *string
+		specConfig string
+		memory     string
 		configMap  *string
 		secret     *string
 		want       map[string]string
+		wantErrMsg string
 	}{
 		{
 			desc: "no configmap and no secret is an empty config",
@@ -177,16 +181,54 @@ func TestGetConfig(t *testing.T) {
 			autoConfig: new("\nloose_group_replication_member_expel_timeout=5"),
 			want:       map[string]string{"loose_group_replication_member_expel_timeout": "5"},
 		},
+		{
+			desc:       "the spec configuration is preferred over the generated configmap",
+			specConfig: "max_connections=250",
+			configMap:  new("[mysqld]\nmax_connections=100\n"),
+			want:       map[string]string{"max_connections": "250"},
+		},
+		{
+			desc:       "a variable moved from the auto-config to the spec is still present",
+			autoConfig: new("\ninnodb_buffer_pool_size=4294967296"),
+			specConfig: "max_connections=250",
+			want: map[string]string{
+				"innodb_buffer_pool_size": "4294967296",
+				"max_connections":         "250",
+			},
+		},
+		{
+			desc:       "the secret still overrides the spec configuration",
+			specConfig: "max_connections=250",
+			secret:     new("[mysqld]\nmax_connections=99\n"),
+			want:       map[string]string{"max_connections": "99"},
+		},
+		{
+			desc:       "a template in the spec configuration is rendered against the memory limit",
+			specConfig: "max_heap_table_size={{ containerMemoryLimit }}",
+			memory:     "1Gi",
+			want:       map[string]string{"max_heap_table_size": "1073741824"},
+		},
+		{
+			desc:       "a template without a memory limit is an error",
+			specConfig: "max_heap_table_size={{ containerMemoryLimit }}",
+			wantErrMsg: "resources.limits[memory] or resources.requests[memory] should be specified",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
+			cr := cr.DeepCopy()
+			cr.Spec.MySQL.Configuration = tt.specConfig
+			if tt.memory != "" {
+				cr.Spec.MySQL.Resources = corev1.ResourceRequirements{
+					Limits: corev1.ResourceList{corev1.ResourceMemory: resource.MustParse(tt.memory)},
+				}
+			}
+
 			objs := []client.Object{}
+			autoConf := ""
 			if tt.autoConfig != nil {
-				objs = append(objs, &corev1.ConfigMap{
-					Name: AutoConfigMapName(cr), Namespace: ns,
-					Data: map[string]string{CustomConfigKey: *tt.autoConfig},
-				})
+				autoConf = *tt.autoConfig
 			}
 			if tt.configMap != nil {
 				objs = append(objs, &corev1.ConfigMap{
@@ -203,7 +245,12 @@ func TestGetConfig(t *testing.T) {
 
 			cl := fake.NewClientBuilder().WithObjects(objs...).Build()
 
-			section, err := GetConfig(context.Background(), cl, cr)
+			section, err := GetConfig(t.Context(), cl, cr, autoConf)
+			if tt.wantErrMsg != "" {
+				require.ErrorContains(t, err, tt.wantErrMsg)
+				assert.Equal(t, config.EmptySection, section)
+				return
+			}
 			require.NoError(t, err)
 
 			want := tt.want
