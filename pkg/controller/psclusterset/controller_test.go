@@ -1,6 +1,7 @@
 package psclusterset
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -605,6 +606,233 @@ func TestReconciler_trackSwitchover(t *testing.T) {
 			tc.asserts(t, observed)
 		})
 	}
+}
+
+func TestReconciler_reconcileRejoin(t *testing.T) {
+	rejoinJob := func(name string, status batchv1.JobStatus) *batchv1.Job {
+		return &batchv1.Job{
+			Name:   name,
+			Status: status,
+		}
+	}
+
+	pcs := baseClusterSet.DeepCopy()
+	pcs.Annotations = map[string]string{
+		naming.AnnotationClusterSetRejoinCluster.String(): "dc2",
+	}
+	pcs.Status.Conditions = []metav1.Condition{{
+		Type:   apiv1.ConditionClusterSetRejoinInProgress,
+		Status: metav1.ConditionTrue,
+		Reason: "RejoinInProgress",
+	}}
+
+	job := rejoinJob("test-cluster-set-dc2-rejoin-cluster", batchv1.JobStatus{
+		Succeeded: 1,
+		Conditions: []batchv1.JobCondition{{
+			Type:   batchv1.JobComplete,
+			Status: corev1.ConditionTrue,
+		}},
+	})
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(scheme))
+	require.NoError(t, apiv1.AddToScheme(scheme))
+
+	cl := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(pcs, job).
+		WithStatusSubresource(pcs).
+		Build()
+
+	manager := &psmock.ClusterSetManager{}
+	manager.On("Status", t.Context()).Return(clusterset.Status{
+		Clusters: clusterset.ClusterStatuses{
+			"dc2": {
+				ClusterRole:  clusterset.ClusterRoleReplica,
+				GlobalStatus: "OK",
+			},
+		},
+	}, nil)
+
+	recorder := &psmock.EventRecorder{}
+	recorder.On("Eventf", mock.IsType(&apiv1.PerconaServerMySQLClusterSet{}), nil, corev1.EventTypeNormal,
+		apiv1.EventTypeClusterSetMemberRejoined, apiv1.EventTypeClusterSetMemberRejoined,
+		"Cluster %s rejoined to ClusterSet", "dc2").Return()
+
+	r := &PerconaServerMySQLClusterSetReconciler{
+		Client:   cl,
+		Scheme:   scheme,
+		Recorder: recorder,
+		getClusterSetManager: func(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet) (ClusterSetManager, error) {
+			return manager, nil
+		},
+	}
+
+	require.NoError(t, r.reconcileRejoin(t.Context(), pcs))
+
+	observed := &apiv1.PerconaServerMySQLClusterSet{}
+	require.NoError(t, cl.Get(t.Context(), client.ObjectKeyFromObject(baseClusterSet), observed))
+	assert.NotContains(t, observed.Annotations, naming.AnnotationClusterSetRejoinCluster.String())
+	assert.Nil(t, meta.FindStatusCondition(observed.Status.Conditions, apiv1.ConditionClusterSetRejoinInProgress))
+	manager.AssertExpectations(t)
+	recorder.AssertExpectations(t)
+}
+
+func TestReconciler_reconcileRejoin_JobSucceededButClusterStillUnhealthy(t *testing.T) {
+	rejoinJob := func(name string, status batchv1.JobStatus) *batchv1.Job {
+		return &batchv1.Job{
+			Name:   name,
+			Status: status,
+		}
+	}
+
+	pcs := baseClusterSet.DeepCopy()
+	pcs.Annotations = map[string]string{
+		naming.AnnotationClusterSetRejoinCluster.String(): "dc2",
+	}
+	pcs.Status.Conditions = []metav1.Condition{{
+		Type:   apiv1.ConditionClusterSetRejoinInProgress,
+		Status: metav1.ConditionTrue,
+		Reason: "RejoinInProgress",
+	}}
+
+	job := rejoinJob("test-cluster-set-dc2-rejoin-cluster", batchv1.JobStatus{
+		Succeeded: 1,
+		Conditions: []batchv1.JobCondition{{
+			Type:   batchv1.JobComplete,
+			Status: corev1.ConditionTrue,
+		}},
+	})
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(scheme))
+	require.NoError(t, apiv1.AddToScheme(scheme))
+
+	cl := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(pcs, job).
+		WithStatusSubresource(pcs).
+		Build()
+
+	manager := &psmock.ClusterSetManager{}
+	manager.On("Status", t.Context()).Return(clusterset.Status{
+		Clusters: clusterset.ClusterStatuses{
+			"dc2": {
+				ClusterRole:  clusterset.ClusterRoleReplica,
+				GlobalStatus: "OK_NOT_REPLICATING",
+			},
+		},
+	}, nil)
+
+	recorder := &psmock.EventRecorder{}
+	recorder.On("Eventf", mock.IsType(&apiv1.PerconaServerMySQLClusterSet{}), nil, corev1.EventTypeWarning,
+		apiv1.EventTypeClusterSetMemberRejoinFailed, apiv1.EventTypeClusterSetMemberRejoinFailed,
+		mock.Anything, mock.Anything, mock.Anything).Return()
+
+	r := &PerconaServerMySQLClusterSetReconciler{
+		Client:   cl,
+		Scheme:   scheme,
+		Recorder: recorder,
+		getClusterSetManager: func(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet) (ClusterSetManager, error) {
+			return manager, nil
+		},
+	}
+
+	require.NoError(t, r.reconcileRejoin(t.Context(), pcs))
+
+	observed := &apiv1.PerconaServerMySQLClusterSet{}
+	require.NoError(t, cl.Get(t.Context(), client.ObjectKeyFromObject(baseClusterSet), observed))
+
+	assert.NotContains(t, observed.Annotations, naming.AnnotationClusterSetRejoinCluster.String())
+
+	cond := meta.FindStatusCondition(observed.Status.Conditions, apiv1.ConditionClusterSetRejoinInProgress)
+	require.NotNil(t, cond, "RejoinClusterInProgress condition should still be present, reflecting the failure")
+	assert.Equal(t, metav1.ConditionFalse, cond.Status)
+	assert.Equal(t, "RejoinFailed", cond.Reason)
+	assert.Contains(t, cond.Message, "OK_NOT_REPLICATING")
+
+	manager.AssertExpectations(t)
+	recorder.AssertExpectations(t)
+	recorder.AssertNotCalled(t, "Eventf", mock.IsType(&apiv1.PerconaServerMySQLClusterSet{}), nil, corev1.EventTypeNormal,
+		apiv1.EventTypeClusterSetMemberRejoined, apiv1.EventTypeClusterSetMemberRejoined, mock.Anything, mock.Anything)
+}
+
+func TestReconciler_reconcileRejoin_JobFailed_DoesNotLoop(t *testing.T) {
+	rejoinJob := func(name string, status batchv1.JobStatus) *batchv1.Job {
+		return &batchv1.Job{
+			Name:   name,
+			Status: status,
+		}
+	}
+
+	pcs := baseClusterSet.DeepCopy()
+	pcs.Annotations = map[string]string{
+		naming.AnnotationClusterSetRejoinCluster.String(): "dc2",
+	}
+	pcs.Status.Conditions = []metav1.Condition{{
+		Type:   apiv1.ConditionClusterSetRejoinInProgress,
+		Status: metav1.ConditionTrue,
+		Reason: "RejoinInProgress",
+	}}
+
+	job := rejoinJob("test-cluster-set-dc2-rejoin-cluster", batchv1.JobStatus{
+		Failed: 1,
+		Conditions: []batchv1.JobCondition{{
+			Type:   batchv1.JobFailed,
+			Status: corev1.ConditionTrue,
+		}},
+	})
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(scheme))
+	require.NoError(t, apiv1.AddToScheme(scheme))
+	require.NoError(t, batchv1.AddToScheme(scheme))
+
+	cl := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(pcs, job).
+		WithStatusSubresource(pcs).
+		Build()
+
+	recorder := &psmock.EventRecorder{}
+	recorder.On("Eventf", mock.IsType(&apiv1.PerconaServerMySQLClusterSet{}), nil, corev1.EventTypeWarning,
+		apiv1.EventTypeClusterSetMemberRejoinFailed, apiv1.EventTypeClusterSetMemberRejoinFailed,
+		mock.Anything, mock.Anything, mock.Anything).Return()
+
+	r := &PerconaServerMySQLClusterSetReconciler{
+		Client:   cl,
+		Scheme:   scheme,
+		Recorder: recorder,
+	}
+
+	require.NoError(t, r.reconcileRejoin(t.Context(), pcs))
+
+	observed := &apiv1.PerconaServerMySQLClusterSet{}
+	require.NoError(t, cl.Get(t.Context(), client.ObjectKeyFromObject(baseClusterSet), observed))
+
+	assert.NotContains(t, observed.Annotations, naming.AnnotationClusterSetRejoinCluster.String())
+
+	cond := meta.FindStatusCondition(observed.Status.Conditions, apiv1.ConditionClusterSetRejoinInProgress)
+	require.NotNil(t, cond)
+	assert.Equal(t, metav1.ConditionFalse, cond.Status)
+	assert.Equal(t, "RejoinFailed", cond.Reason)
+
+	remainingJobs := &batchv1.JobList{}
+	require.NoError(t, cl.List(t.Context(), remainingJobs))
+	assert.Empty(t, remainingJobs.Items, "failed rejoin job should have been deleted")
+
+	recorder.AssertExpectations(t)
+
+	// Simulate the controller's *next* reconcile: since the annotation was removed
+	// and no new Job exists, reconcileRejoin must be a no-op (no new Job created),
+	// proving there is no infinite create-fail-recreate loop.
+	require.NoError(t, r.reconcileRejoin(t.Context(), observed))
+
+	jobsAfterSecondReconcile := &batchv1.JobList{}
+	require.NoError(t, cl.List(t.Context(), jobsAfterSecondReconcile))
+	assert.Empty(t, jobsAfterSecondReconcile.Items, "no new rejoin job should be created without explicit re-annotation")
+
+	recorder.AssertNumberOfCalls(t, "Eventf", 1)
 }
 
 func TestReconciler_reconcileReplicas(t *testing.T) {

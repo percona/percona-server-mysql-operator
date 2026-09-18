@@ -30,6 +30,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/clusterset"
 	csmanager "github.com/percona/percona-server-mysql-operator/pkg/clusterset/manager"
+	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	k8sutil "github.com/percona/percona-server-mysql-operator/pkg/util/k8s"
@@ -439,7 +440,38 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileRejoin(ctx context.Con
 	if err == nil {
 		switch {
 		case jobConditionTrue(existingJob, batchv1.JobComplete):
-			log.Info("Rejoin job completed successfully", "cluster", rejoinClusterName)
+			log.Info("Rejoin job completed, validating replica health", "cluster", rejoinClusterName)
+
+			manager, err := r.getClusterSetManager(ctx, pcs)
+			if err != nil {
+				log.Error(err, "failed to get cluster set manager for post-rejoin validation", "cluster", rejoinClusterName)
+				return errors.Wrap(err, "get cluster set manager for rejoin validation")
+			}
+
+			currentStatus, err := manager.Status(ctx)
+			if err != nil {
+				log.Error(err, "failed to query cluster set status after rejoin job completion", "cluster", rejoinClusterName)
+				return errors.Wrap(err, "query cluster set status after rejoin")
+			}
+
+			clusterStatus, exists := currentStatus.Clusters[rejoinClusterName]
+			if !exists {
+				log.Info("Rejoin job completed but cluster not found in status", "cluster", rejoinClusterName)
+				r.handleRejoinFailure(ctx, pcs, rejoinClusterName, "Cluster not found in ClusterSet status after rejoin")
+				return nil
+			}
+
+			// Check if the cluster is healthy and replicating.
+			if clusterStatus.GlobalStatus != string(innodbcluster.ClusterStatusOK) {
+				log.Info("Rejoin job completed but cluster remains unhealthy", "cluster", rejoinClusterName,
+					"globalStatus", clusterStatus.GlobalStatus)
+
+				r.handleRejoinFailure(ctx, pcs, rejoinClusterName,
+					fmt.Sprintf("Rejoin completed but cluster remains %s; manual intervention required", clusterStatus.GlobalStatus))
+				return nil
+			}
+
+			log.Info("Rejoin validation successful, cluster is healthy", "cluster", rejoinClusterName)
 
 			orig := pcs.DeepCopy()
 			delete(pcs.Annotations, naming.AnnotationClusterSetRejoinCluster.String())
@@ -460,23 +492,13 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileRejoin(ctx context.Con
 			return nil
 
 		case jobConditionTrue(existingJob, batchv1.JobFailed):
-			log.Info("Rejoin job failed, deleting failed job", "cluster", rejoinClusterName)
+			log.Info("Rejoin job failed", "cluster", rejoinClusterName)
 
 			if err := r.Delete(ctx, existingJob, client.PropagationPolicy(metav1.DeletePropagationBackground)); err != nil && !k8serrors.IsNotFound(err) {
 				return errors.Wrap(err, "delete failed rejoin job")
 			}
 
-			if err := pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) error {
-				meta.SetStatusCondition(&status.Conditions, metav1.Condition{
-					Type:    apiv1.ConditionClusterSetRejoinInProgress,
-					Status:  metav1.ConditionFalse,
-					Reason:  "RejoinFailed",
-					Message: fmt.Sprintf("Rejoin job for cluster %s failed", rejoinClusterName),
-				})
-				return nil
-			}); err != nil {
-				return errors.Wrap(err, "update status after rejoin failure")
-			}
+			r.handleRejoinFailure(ctx, pcs, rejoinClusterName, fmt.Sprintf("Rejoin job for cluster %s failed", rejoinClusterName))
 			return nil
 
 		default:
@@ -504,6 +526,31 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileRejoin(ctx context.Con
 	}
 
 	return nil
+}
+
+func (r *PerconaServerMySQLClusterSetReconciler) handleRejoinFailure(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet, clusterName, failureMessage string) {
+	log := logf.FromContext(ctx)
+
+	orig := pcs.DeepCopy()
+	delete(pcs.Annotations, naming.AnnotationClusterSetRejoinCluster.String())
+	if err := r.Patch(ctx, pcs, client.MergeFrom(orig)); err != nil {
+		log.Error(err, "failed to remove rejoin annotation after failure", "cluster", clusterName)
+	}
+
+	if err := pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) error {
+		meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+			Type:    apiv1.ConditionClusterSetRejoinInProgress,
+			Status:  metav1.ConditionFalse,
+			Reason:  "RejoinFailed",
+			Message: failureMessage,
+		})
+		return nil
+	}); err != nil {
+		log.Error(err, "failed to update status after rejoin failure", "cluster", clusterName)
+	}
+
+	r.Recorder.Eventf(pcs, nil, corev1.EventTypeWarning, apiv1.EventTypeClusterSetMemberRejoinFailed,
+		apiv1.EventTypeClusterSetMemberRejoinFailed, "Rejoin failed for cluster %s: %s", clusterName, failureMessage)
 }
 
 func (r *PerconaServerMySQLClusterSetReconciler) trackSwitchover(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet) error {
