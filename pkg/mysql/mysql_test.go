@@ -537,6 +537,10 @@ func expectedVolumes() []corev1.Volume {
 			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		},
 		{
+			Name:     backupTmpVolumeName,
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		},
+		{
 			Name: "vault-keyring-secret",
 			Secret: &corev1.SecretVolumeSource{
 				SecretName: "",
@@ -756,6 +760,7 @@ func TestBackupVolumeMounts(t *testing.T) {
 		{Name: DataVolumeName, MountPath: DataMountPath},
 		{Name: credsVolumeName, MountPath: naming.CredsMountPath},
 		{Name: "backup-logs", MountPath: BackupLogDir},
+		{Name: backupTmpVolumeName, MountPath: backupTmpMountPath},
 		{Name: vaultSecretVolumeName, MountPath: vaultSecretMountPath},
 		{Name: configVolumeName, MountPath: configMountPath},
 		{Name: "backup-encryption-keys", MountPath: "/etc/mysql/encryption-keys"},
