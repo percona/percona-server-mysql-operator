@@ -142,7 +142,7 @@ func TestRun(t *testing.T) {
 
 		after, err := os.ReadFile(j.relay.target)
 		require.NoError(t, err)
-		assert.Equal(t, string(before)+"four-tail"+"whole-five"+"whole-six", string(after))
+		assert.Equal(t, string(before)+binlogEvent("four-tail")+binlogEvent("whole-five")+binlogEvent("whole-six"), string(after))
 		j.relay.assertUntouched(t)
 	})
 
@@ -190,7 +190,7 @@ func TestRun(t *testing.T) {
 
 		after, err := os.ReadFile(j.relay.target)
 		require.NoError(t, err)
-		assert.Equal(t, string(before)+"four-tail"+"whole-five"+"whole-six", string(after),
+		assert.Equal(t, string(before)+binlogEvent("four-tail")+binlogEvent("whole-five")+binlogEvent("whole-six"), string(after),
 			"the splice must land even when the job does not wait for it")
 	})
 
@@ -205,7 +205,7 @@ func TestRun(t *testing.T) {
 	t.Run("a caught-up replica succeeds without touching the relay logs", func(t *testing.T) {
 		j := newJobFixture(t)
 		j.fake.positions.SourceLog = "binlog.000006"
-		j.fake.positions.SourcePos = uint64(len(magic + "whole-six"))
+		j.fake.positions.SourcePos = uint64(len(magic + binlogEvent("whole-six")))
 		before, err := os.ReadFile(j.relay.target)
 		require.NoError(t, err)
 
@@ -354,6 +354,42 @@ func TestRun(t *testing.T) {
 			assert.NotContains(t, j.fake.ops, "StartSQLThread")
 		})
 	}
+
+	t.Run("a partial event at the end of the newest log is dropped", func(t *testing.T) {
+		j := newJobFixture(t)
+		require.NoError(t, os.WriteFile(filepath.Join(j.src.dir, "binlog.000006"),
+			[]byte(magic+binlogEvent("whole-six")+tornEvent("half-six")), 0o644))
+		before, err := os.ReadFile(j.relay.target)
+		require.NoError(t, err)
+
+		require.NoError(t, run(t.Context(), j.cfg))
+
+		assert.Equal(t, wantOps, j.fake.ops)
+
+		after, err := os.ReadFile(j.relay.target)
+		require.NoError(t, err)
+		assert.Equal(t, string(before)+binlogEvent("four-tail")+binlogEvent("whole-five")+binlogEvent("whole-six"),
+			string(after), "everything up to the last whole event must still be spliced")
+		j.relay.assertUntouched(t)
+	})
+
+	t.Run("a partial event in an earlier log stops the splice", func(t *testing.T) {
+		j := newJobFixture(t)
+		require.NoError(t, os.WriteFile(filepath.Join(j.src.dir, "binlog.000005"),
+			[]byte(magic+binlogEvent("whole-five")+tornEvent("half-five")), 0o644))
+		before, err := os.ReadFile(j.relay.target)
+		require.NoError(t, err)
+
+		err = run(t.Context(), j.cfg)
+
+		require.ErrorIs(t, err, errTornBinlog)
+		assert.NotContains(t, j.fake.ops, "StartSQLThread")
+
+		after, err := os.ReadFile(j.relay.target)
+		require.NoError(t, err)
+		assert.Equal(t, before, after, "a gap in the middle of the stream may not reach the relay log")
+		j.relay.assertUntouched(t)
+	})
 
 	t.Run("START REPLICA SQL_THREAD fails", func(t *testing.T) {
 		j := newJobFixture(t)
