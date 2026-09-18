@@ -158,6 +158,8 @@ spec:
           name: users
         - mountPath: /var/log/xtrabackup
           name: backup-logs
+        - mountPath: /tmp
+          name: xtrabackup-tmp
         - mountPath: /etc/mysql/vault-keyring-secret
           name: vault-keyring-secret
         - mountPath: /etc/mysql/config
@@ -233,6 +235,8 @@ spec:
               optional: true
       - emptyDir: {}
         name: backup-logs
+      - emptyDir: {}
+        name: xtrabackup-tmp
       - name: vault-keyring-secret
         secret:
           defaultMode: 420
