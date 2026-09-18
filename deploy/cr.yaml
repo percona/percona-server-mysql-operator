@@ -119,10 +119,10 @@ spec:
 #      minAvailable: 0
     resources:
       limits:
-        cpu: "1"
+        cpu: "4"
         memory: 8Gi
       requests:
-        cpu: 500m
+        cpu: "2"
         memory: 4Gi
 #    startupProbe:
 #      failureThreshold: 1
