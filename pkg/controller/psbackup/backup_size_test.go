@@ -154,7 +154,7 @@ func TestBackupSize(t *testing.T) {
 
 			r := PerconaServerMySQLBackupReconciler{
 				Scheme:        scheme,
-				ServerVersion: &platform.ServerVersion{Platform: platform.PlatformKubernetes},
+				ServerVersion: &platform.ServerVersion{Platform: platform.Kubernetes},
 			}
 
 			if tt.needsMySQLPod {

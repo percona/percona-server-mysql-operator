@@ -2550,3 +2550,46 @@ check_connect_user() {
   kubectl -n "${NAMESPACE}" exec mysql-client -- \
       env MYSQL_PWD="${pass}" mysql -sN -h "${host}" -u"${user}" -e "SELECT 1" >/dev/null 2>&1
 }
+
+# create_service_accounts creates ServiceAccounts for the given components
+# (e.g. mysql, haproxy, orc, router). For orc, also creates Role/RoleBinding
+# with the same rules as pkg/orchestrator.
+create_service_accounts() {
+	local cr_name=$1
+	shift
+
+	for component in "$@"; do
+		kubectl -n "${NAMESPACE}" create serviceaccount "${cr_name}-${component}" \
+			--dry-run=client -o yaml | kubectl apply -f -
+
+		if [[ ${component} == "orc" ]]; then
+			kubectl -n "${NAMESPACE}" apply -f - <<-YAML
+				apiVersion: rbac.authorization.k8s.io/v1
+				kind: Role
+				metadata:
+				  name: ${cr_name}-orc
+				rules:
+				- apiGroups: [""]
+				  resources: ["pods"]
+				  verbs: ["list", "patch"]
+				- apiGroups: ["ps.percona.com"]
+				  resources: ["perconaservermysqls"]
+				  verbs: ["get"]
+				---
+				apiVersion: rbac.authorization.k8s.io/v1
+				kind: RoleBinding
+				metadata:
+				  name: ${cr_name}-orc
+				roleRef:
+				  apiGroup: rbac.authorization.k8s.io
+				  kind: Role
+				  name: ${cr_name}-orc
+				subjects:
+				- kind: ServiceAccount
+				  name: ${cr_name}-orc
+				  namespace: ${NAMESPACE}
+			YAML
+		fi
+	done
+}
+
