@@ -30,7 +30,6 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/clusterset"
 	csmanager "github.com/percona/percona-server-mysql-operator/pkg/clusterset/manager"
-	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	k8sutil "github.com/percona/percona-server-mysql-operator/pkg/util/k8s"
@@ -462,7 +461,7 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileRejoin(ctx context.Con
 			}
 
 			// Check if the cluster is healthy and replicating.
-			if clusterStatus.GlobalStatus != string(innodbcluster.ClusterStatusOK) {
+			if clusterStatus.GlobalStatus != clusterset.GlobalStatusOK {
 				log.Info("Rejoin job completed but cluster remains unhealthy", "cluster", rejoinClusterName,
 					"globalStatus", clusterStatus.GlobalStatus)
 

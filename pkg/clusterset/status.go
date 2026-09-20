@@ -9,8 +9,9 @@ import (
 )
 
 const (
-	StatusHealthy string = "HEALTHY"
-	StatusUnknown string = "UNKNOWN"
+	StatusHealthy  string = "HEALTHY"
+	StatusUnknown  string = "UNKNOWN"
+	GlobalStatusOK string = "OK"
 )
 
 const (
