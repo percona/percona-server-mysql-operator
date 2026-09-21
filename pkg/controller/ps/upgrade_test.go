@@ -1255,7 +1255,7 @@ func TestSmartUpdateMySQL(t *testing.T) {
 				Client:        cli,
 				Scheme:        s,
 				ClientCmd:     fc,
-				ServerVersion: &platform.ServerVersion{Platform: platform.PlatformKubernetes},
+				ServerVersion: &platform.ServerVersion{Platform: platform.Kubernetes},
 				Recorder:      new(record.FakeRecorder),
 			}
 
