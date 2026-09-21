@@ -29,7 +29,7 @@ type fullClusterCrashPods struct {
 func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("Crash recovery")
 
-	if cr.Spec.MySQL.IsAsync() {
+	if cr.AppliedIsAsync() {
 		return nil
 	}
 

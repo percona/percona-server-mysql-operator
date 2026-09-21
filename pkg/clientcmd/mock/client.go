@@ -18,6 +18,26 @@ type Client struct {
 	mock.Mock
 }
 
+// Config provides a mock function with no fields
+func (_m *Client) Config() *rest.Config {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for Config")
+	}
+
+	var r0 *rest.Config
+	if rf, ok := ret.Get(0).(func() *rest.Config); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*rest.Config)
+		}
+	}
+
+	return r0
+}
+
 // Exec provides a mock function with given fields: ctx, pod, containerName, command, stdin, stdout, stderr, tty
 func (_m *Client) Exec(ctx context.Context, pod *v1.Pod, containerName string, command []string, stdin io.Reader, stdout io.Writer, stderr io.Writer, tty bool) error {
 	ret := _m.Called(ctx, pod, containerName, command, stdin, stdout, stderr, tty)
