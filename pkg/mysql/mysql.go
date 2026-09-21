@@ -61,6 +61,8 @@ const (
 
 	DefaultAsyncSourceRetryCount   = 3
 	DefaultAsyncSourceConnectRetry = 60
+
+	DatetimeFormat = "2006-01-02 15:04:05"
 )
 
 type User struct {
