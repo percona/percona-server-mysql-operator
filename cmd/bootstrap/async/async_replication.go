@@ -96,6 +96,23 @@ func Bootstrap(ctx context.Context) error {
 	}
 	params.CloneTimeoutSeconds = cloneTimeout
 
+	// From crVersion 1.3.0 the operator sets BOOTSTRAP_CLONE_STALL_TIMEOUT, which
+	// switches on a progress watchdog instead of a fixed clone timeout: the clone
+	// is aborted only if it stops transferring bytes for this long (0 = disabled).
+	cloneStallTimeout, stallSet, err := utils.GetCloneStallTimeout()
+	if err != nil {
+		return errors.Wrap(err, "get clone stall timeout")
+	}
+	if stallSet {
+		// From 1.3.0 the progress watchdog fully governs clone termination, so
+		// ignore any fixed BOOTSTRAP_CLONE_TIMEOUT here: a healthy clone should run
+		// as long as it keeps making progress (and BOOTSTRAP_CLONE_STALL_TIMEOUT=0
+		// means no timeout at all). The fixed timeout stays in effect only for
+		// pre-1.3.0 clusters, which do not set BOOTSTRAP_CLONE_STALL_TIMEOUT.
+		params.CloneTimeoutSeconds = 0
+		log.Printf("Clone progress watchdog stall timeout: %ds (0 = disabled); fixed clone timeout ignored", cloneStallTimeout)
+	}
+
 	sourceRetryCount, err := utils.GetSourceRetryCount()
 	if err != nil {
 		return errors.Wrap(err, "get source retry count")
@@ -167,7 +184,7 @@ func Bootstrap(ctx context.Context) error {
 
 		timer.Start("clone")
 		log.Printf("Cloning from %s", donor)
-		err = db.Clone(ctx, donor, string(apiv1.UserOperator), operatorPass, mysql.DefaultAdminPort, params.CloneTimeoutSeconds)
+		err = db.Clone(ctx, donor, string(apiv1.UserOperator), operatorPass, mysql.DefaultAdminPort, params.CloneTimeoutSeconds, cloneStallTimeout)
 		timer.Stop("clone")
 		if err != nil && !errors.Is(err, database.ErrRestartAfterClone) {
 			return errors.Wrapf(err, "clone from donor %s", donor)
