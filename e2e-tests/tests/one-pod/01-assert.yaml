@@ -6,6 +6,11 @@ kind: StatefulSet
 apiVersion: apps/v1
 metadata:
   name: one-pod-mysql
+spec:
+  template:
+    spec:
+      serviceAccount: one-pod-mysql
+      serviceAccountName: one-pod-mysql
 status:
   observedGeneration: 1
   replicas: 1
@@ -18,6 +23,11 @@ kind: StatefulSet
 apiVersion: apps/v1
 metadata:
   name: one-pod-orc
+spec:
+  template:
+    spec:
+      serviceAccount: one-pod-orc
+      serviceAccountName: one-pod-orc
 status:
   observedGeneration: 1
   replicas: 1
@@ -30,6 +40,11 @@ kind: StatefulSet
 apiVersion: apps/v1
 metadata:
   name: one-pod-haproxy
+spec:
+  template:
+    spec:
+      serviceAccount: one-pod-haproxy
+      serviceAccountName: one-pod-haproxy
 status:
   observedGeneration: 1
   replicas: 1
@@ -37,6 +52,21 @@ status:
   currentReplicas: 1
   updatedReplicas: 1
   collisionCount: 0
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: one-pod-mysql
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: one-pod-haproxy
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: one-pod-orc
 ---
 apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQL
@@ -48,8 +78,13 @@ spec:
   mysql:
     clusterType: async
     size: 1
+    serviceAccountName: one-pod-mysql
   orchestrator:
     size: 1
+    serviceAccountName: one-pod-orc
+  proxy:
+    haproxy:
+      serviceAccountName: one-pod-haproxy
 status:
   haproxy:
     ready: 1

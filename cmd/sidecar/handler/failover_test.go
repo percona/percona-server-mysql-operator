@@ -435,7 +435,7 @@ func threeBinlogs(t *testing.T) *FailoverHandler {
 func streamRequest(t *testing.T, binlog string, position int64) []byte {
 	t.Helper()
 
-	body, err := json.Marshal(streamConfig{BinaryLog: binlog, Position: position})
+	body, err := json.Marshal(StreamConfig{BinaryLog: binlog, Position: position})
 	require.NoError(t, err)
 
 	return body
