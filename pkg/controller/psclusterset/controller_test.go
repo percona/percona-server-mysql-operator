@@ -12,6 +12,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/mock"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -833,6 +834,107 @@ func TestReconciler_reconcileRejoin_JobFailed_DoesNotLoop(t *testing.T) {
 	assert.Empty(t, jobsAfterSecondReconcile.Items, "no new rejoin job should be created without explicit re-annotation")
 
 	recorder.AssertNumberOfCalls(t, "Eventf", 1)
+}
+
+func TestReconciler_reconcileRejoin_JobFailed_WriteErrorDoesNotRecreateJob(t *testing.T) {
+	failedJob := func() *batchv1.Job {
+		return &batchv1.Job{
+			Name: "test-cluster-set-dc2-rejoin-cluster",
+			Status: batchv1.JobStatus{
+				Failed: 1,
+				Conditions: []batchv1.JobCondition{{
+					Type:   batchv1.JobFailed,
+					Status: corev1.ConditionTrue,
+				}},
+			},
+		}
+	}
+
+	newClusterSet := func() *apiv1.PerconaServerMySQLClusterSet {
+		pcs := baseClusterSet.DeepCopy()
+		pcs.Annotations = map[string]string{
+			naming.AnnotationClusterSetRejoinCluster.String(): "dc2",
+		}
+		pcs.Status.Conditions = []metav1.Condition{{
+			Type:   apiv1.ConditionClusterSetRejoinInProgress,
+			Status: metav1.ConditionTrue,
+			Reason: "RejoinInProgress",
+		}}
+		return pcs
+	}
+
+	writeErr := errors.New("simulated API failure")
+
+	testCases := []struct {
+		name         string
+		interceptors interceptor.Funcs
+	}{
+		{
+			name: "status update fails",
+			interceptors: interceptor.Funcs{
+				SubResourceUpdate: func(ctx context.Context, c client.Client, subResourceName string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+					if _, ok := obj.(*apiv1.PerconaServerMySQLClusterSet); ok {
+						return writeErr
+					}
+					return c.SubResource(subResourceName).Update(ctx, obj, opts...)
+				},
+			},
+		},
+		{
+			name: "annotation patch fails",
+			interceptors: interceptor.Funcs{
+				Patch: func(ctx context.Context, c client.WithWatch, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+					if _, ok := obj.(*apiv1.PerconaServerMySQLClusterSet); ok {
+						return writeErr
+					}
+					return c.Patch(ctx, obj, patch, opts...)
+				},
+			},
+		},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			pcs := newClusterSet()
+
+			scheme := runtime.NewScheme()
+			require.NoError(t, clientgoscheme.AddToScheme(scheme))
+			require.NoError(t, apiv1.AddToScheme(scheme))
+			require.NoError(t, batchv1.AddToScheme(scheme))
+
+			cl := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(pcs, failedJob()).
+				WithStatusSubresource(pcs).
+				WithInterceptorFuncs(tt.interceptors).
+				Build()
+
+			recorder := &psmock.EventRecorder{}
+			recorder.On("Eventf", mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+				mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+
+			r := &PerconaServerMySQLClusterSetReconciler{
+				Client:   cl,
+				Scheme:   scheme,
+				Recorder: recorder,
+			}
+
+			// The write failure must be surfaced so the controller requeues.
+			require.Error(t, r.reconcileRejoin(t.Context(), pcs))
+
+			// A second reconcile simulates that requeue.
+			observed := &apiv1.PerconaServerMySQLClusterSet{}
+			require.NoError(t, cl.Get(t.Context(), client.ObjectKeyFromObject(baseClusterSet), observed))
+			_ = r.reconcileRejoin(t.Context(), observed)
+
+			jobs := &batchv1.JobList{}
+			require.NoError(t, cl.List(t.Context(), jobs))
+			require.Len(t, jobs.Items, 1, "no additional rejoin job should have been created")
+
+			assert.True(t, jobConditionTrue(&jobs.Items[0], batchv1.JobFailed),
+				"the original failed job should still be present, not deleted and recreated")
+		})
+	}
 }
 
 func TestReconciler_reconcileReplicas(t *testing.T) {

@@ -489,13 +489,17 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileRejoin(ctx context.Con
 			return nil
 
 		case jobConditionTrue(existingJob, batchv1.JobFailed):
-			log.Info("Rejoin job failed, deleting failed job", "cluster", rejoinClusterName)
+			log.Info("Rejoin job failed", "cluster", rejoinClusterName)
+
+			if err := r.handleRejoinFailure(ctx, pcs, rejoinClusterName,
+				fmt.Sprintf("Rejoin job for cluster %s failed", rejoinClusterName)); err != nil {
+				return err
+			}
 
 			if err := r.Delete(ctx, existingJob, client.PropagationPolicy(metav1.DeletePropagationBackground)); err != nil && !k8serrors.IsNotFound(err) {
 				return errors.Wrap(err, "delete failed rejoin job")
 			}
-
-			return r.handleRejoinFailure(ctx, pcs, rejoinClusterName, fmt.Sprintf("Rejoin job for cluster %s failed", rejoinClusterName))
+			return nil
 		default:
 			log.Info("Rejoin job is still running", "cluster", rejoinClusterName)
 			return nil
@@ -524,6 +528,8 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileRejoin(ctx context.Con
 }
 
 func (r *PerconaServerMySQLClusterSetReconciler) handleRejoinFailure(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet, clusterName, failureMessage string) error {
+	var errs []error
+
 	if err := pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) error {
 		meta.SetStatusCondition(&status.Conditions, metav1.Condition{
 			Type:    apiv1.ConditionClusterSetRejoinInProgress,
@@ -533,19 +539,23 @@ func (r *PerconaServerMySQLClusterSetReconciler) handleRejoinFailure(ctx context
 		})
 		return nil
 	}); err != nil {
-		return errors.Wrap(err, "update status after rejoin failure")
+		errs = append(errs, errors.Wrap(err, "update status after rejoin failure"))
 	}
 
+	annotationRemoved := true
 	orig := pcs.DeepCopy()
 	delete(pcs.Annotations, naming.AnnotationClusterSetRejoinCluster.String())
 	if err := r.Patch(ctx, pcs, client.MergeFrom(orig)); err != nil {
-		return errors.Wrap(err, "remove rejoin annotation after failure")
+		annotationRemoved = false
+		errs = append(errs, errors.Wrap(err, "remove rejoin annotation after failure"))
 	}
 
-	r.Recorder.Eventf(pcs, nil, corev1.EventTypeWarning, apiv1.EventTypeClusterSetMemberRejoinFailed,
-		apiv1.EventTypeClusterSetMemberRejoinFailed, "Rejoin failed for cluster %s: %s", clusterName, failureMessage)
+	if annotationRemoved {
+		r.Recorder.Eventf(pcs, nil, corev1.EventTypeWarning, apiv1.EventTypeClusterSetMemberRejoinFailed,
+			apiv1.EventTypeClusterSetMemberRejoinFailed, "Rejoin failed for cluster %s: %s", clusterName, failureMessage)
+	}
 
-	return nil
+	return stderrors.Join(errs...)
 }
 
 func (r *PerconaServerMySQLClusterSetReconciler) trackSwitchover(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet) error {
