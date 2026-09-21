@@ -2,6 +2,7 @@
 
 # set root repo relatively to a test dir
 ROOT_REPO=${ROOT_REPO:-$(realpath ../../..)}
+CERT_MANAGER_TEST_LABEL="e2e.percona.com/managed-by=percona-server-mysql-operator-tests"
 test_name=$(basename "$(pwd)")
 source "${ROOT_REPO}/e2e-tests/vars.sh"
 sed=$(which gsed || which sed)
@@ -1475,15 +1476,45 @@ deploy_version_service() {
 	sleep 5
 }
 
+is_cert_manager_installed() {
+	kubectl get deployment cert-manager -n cert-manager >/dev/null 2>&1
+}
+
+is_cert_manager_installed_by_test() {
+	local namespace
+	is_cert_manager_installed || return 1
+
+	namespace="$(kubectl get namespace \
+		--selector "${CERT_MANAGER_TEST_LABEL}" -o name 2>/dev/null || true)"
+
+	[[ ${namespace} == "namespace/cert-manager" ]]
+}
+
 deploy_cert_manager() {
+	if [[ ${PLATFORM} == "rancher" ]] && is_cert_manager_installed && ! is_cert_manager_installed_by_test; then
+		echo 'cert-manager is present without the test label; leaving it unchanged'
+		return
+	fi
+
+	destroy_cert_manager
+
 	kubectl create namespace cert-manager || :
 	kubectl label namespace cert-manager certmanager.k8s.io/disable-validation=true || :
 	kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v${CERT_MANAGER_VER}/cert-manager.yaml --validate=false || : 2>/dev/null
+	kubectl label namespace cert-manager "${CERT_MANAGER_TEST_LABEL}" --overwrite || :
+	kubectl label deployment -n cert-manager \
+		cert-manager cert-manager-webhook cert-manager-cainjector \
+		"${CERT_MANAGER_TEST_LABEL}" --overwrite
 }
 
 destroy_cert_manager() {
+	if [[ ${PLATFORM} == "rancher" ]] && ! is_cert_manager_installed_by_test; then
+		echo 'cert-manager was not installed by this test'
+		return
+	fi
+
 	kubectl delete -f https://github.com/cert-manager/cert-manager/releases/download/v${CERT_MANAGER_VER}/cert-manager.yaml --validate=false || : 2>/dev/null
-	kubectl delete --grace-period=0 --force=true namespace cert-manager
+	kubectl delete --grace-period=0 --force=true --ignore-not-found namespace cert-manager
 }
 
 get_primary_from_label() {
