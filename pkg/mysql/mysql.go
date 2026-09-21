@@ -31,7 +31,7 @@ const (
 	mysqlshVolumeName     = "mysqlsh"
 	mysqlshMountPath      = "/.mysqlsh"
 	tlsVolumeName         = "tls"
-	tlsMountPath          = "/etc/mysql/mysql-tls-secret"
+	TLSMountPath          = "/etc/mysql/mysql-tls-secret"
 	BackupLogDir          = "/var/log/xtrabackup"
 	vaultSecretVolumeName = "vault-keyring-secret"
 	vaultSecretMountPath  = "/etc/mysql/vault-keyring-secret"
@@ -627,7 +627,7 @@ func mysqldVolumeMounts(cr *apiv1.PerconaServerMySQL) []corev1.VolumeMount {
 		},
 		{
 			Name:      tlsVolumeName,
-			MountPath: tlsMountPath,
+			MountPath: TLSMountPath,
 		},
 		{
 			Name:      configVolumeName,
@@ -675,7 +675,7 @@ func mysqldContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 		},
 		{
 			Name:  naming.EnvMySQLClusterType,
-			Value: string(cr.Spec.MySQL.ClusterType),
+			Value: string(cr.AppliedClusterType()),
 		},
 		{
 			Name:  naming.EnvMySQLNotifySocket,
@@ -829,7 +829,7 @@ func backupContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 	if cr.CompareVersion("0.12.0") >= 0 {
 		container.Env = append(container.Env, corev1.EnvVar{
 			Name:  "CLUSTER_TYPE",
-			Value: string(cr.Spec.MySQL.ClusterType),
+			Value: string(cr.AppliedClusterType()),
 		})
 	}
 

@@ -13,6 +13,8 @@ MYSQL_PORT=3306
 MYSQLX_PORT=33060
 MYSQL_ADMIN_PORT=33062
 primary_mysql_node=''
+primary_mysqlx_node=''
+primary_admin_node=''
 primary_mysql_host=''
 
 function main() {
@@ -40,6 +42,8 @@ function main() {
 		if /opt/percona/haproxy_check_primary.sh '' '' "$mysql_host";then
 			primary_mysql_host="$mysql_host"
 			primary_mysql_node="server ${node_name} ${mysql_host}:${MYSQL_PORT} ${send_proxy} ${SERVER_OPTIONS} on-marked-up shutdown-backup-sessions"
+			primary_mysqlx_node="server ${node_name} ${mysql_host}:${MYSQLX_PORT} ${send_proxy} ${SERVER_OPTIONS} on-marked-up shutdown-backup-sessions"
+			primary_admin_node="server ${node_name} ${mysql_host}:${MYSQL_ADMIN_PORT} ${SERVER_OPTIONS} on-marked-up shutdown-backup-sessions"
 			continue
 		fi
 
@@ -67,12 +71,12 @@ function main() {
 	if [ -n "$primary_mysql_host" ]; then
 		if [[ "${#NODE_LIST[@]}" -ne 0 ]]; then
 			NODE_LIST=("$primary_mysql_node" "$(printf '%s\n' "${NODE_LIST[@]}" | sort --version-sort -r | uniq)")
-			NODE_LIST_ADMIN=("$primary_mysql_node" "$(printf '%s\n' "${NODE_LIST_ADMIN[@]}" | sort --version-sort -r | uniq)")
-			NODE_LIST_MYSQLX=("$primary_mysql_node" "$(printf '%s\n' "${NODE_LIST_MYSQLX[@]}" | sort --version-sort -r | uniq)")
+			NODE_LIST_ADMIN=("$primary_admin_node" "$(printf '%s\n' "${NODE_LIST_ADMIN[@]}" | sort --version-sort -r | uniq)")
+			NODE_LIST_MYSQLX=("$primary_mysqlx_node" "$(printf '%s\n' "${NODE_LIST_MYSQLX[@]}" | sort --version-sort -r | uniq)")
 		else
 			NODE_LIST=("$primary_mysql_node")
-			NODE_LIST_ADMIN=("$primary_mysql_node")
-			NODE_LIST_MYSQLX=("$primary_mysql_node")
+			NODE_LIST_ADMIN=("$primary_admin_node")
+			NODE_LIST_MYSQLX=("$primary_mysqlx_node")
 		fi
 	else
 		if [[ "${#NODE_LIST[@]}" -ne 0 ]]; then
@@ -85,11 +89,6 @@ function main() {
 
 	echo "${#NODE_LIST_REPL[@]}" >$path_to_haproxy_cfg/AVAILABLE_NODES
 	log "number of available nodes are ${#NODE_LIST_REPL[@]}"
-
-	haproxy_check_script='haproxy_check_primary.sh'
-	if [ "${#NODE_LIST_REPL[@]}" -gt 1 ]; then
-		haproxy_check_script='haproxy_check_replicas.sh'
-	fi
 
 	cat <<-EOF >"$path_to_haproxy_cfg/haproxy.cfg"
 		    backend mysql-primary
@@ -119,13 +118,16 @@ function main() {
 		echo "${NODE_LIST_REPL[*]}"
 	) >>"$path_to_haproxy_cfg/haproxy.cfg"
 
+	# the primary is the only node mysql-x and mysql-admin check: their replicas
+	# track mysql-replicas or stay idle as backups. haproxy_check_replicas.sh
+	# would always mark it down, so check these backends as primary.
 	cat <<-EOF >>"$path_to_haproxy_cfg/haproxy.cfg"
 		    backend mysql-x
 		      mode tcp
 		      option srvtcpka
 		      balance roundrobin
 		      option external-check
-		      external-check command /opt/percona/$haproxy_check_script
+		      external-check command /opt/percona/haproxy_check_primary.sh
 	EOF
 
 	(
@@ -139,7 +141,7 @@ function main() {
 		      option srvtcpka
 		      balance roundrobin
 		      option external-check
-		      external-check command /opt/percona/$haproxy_check_script
+		      external-check command /opt/percona/haproxy_check_primary.sh
 	EOF
 	(
 		IFS=$'\n'

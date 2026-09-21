@@ -228,7 +228,7 @@ func main() {
 		"starting manager",
 		"GitCommit", GitCommit,
 		"BuildTime", BuildTime,
-		"Platform", serverVersion.Platform,
+		"Platform", serverVersion.String(),
 		"Version", serverVersion.Info,
 	)
 	if err := mgr.Start(ctx); err != nil {

@@ -30,7 +30,7 @@ func (r *PerconaServerMySQLReconciler) getClusterSetMemberCondition(
 	cr *apiv1.PerconaServerMySQL,
 ) (*metav1.Condition, error) {
 	log := logf.FromContext(ctx)
-	if cr.Spec.MySQL.ClusterType != apiv1.ClusterTypeGR {
+	if !cr.AppliedIsGR() {
 		return nil, nil
 	}
 
