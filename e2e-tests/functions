@@ -176,6 +176,11 @@ apply_s3_storage_secrets() {
 	kubectl -n "${NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/cloud-secret.yml"
 }
 
+pmm_curl() {
+	kubectl -n "${NAMESPACE}" exec mysql-client -- \
+		curl --insecure --silent "$@"
+}
+
 deploy_pmm_server() {
 	helm uninstall -n "${NAMESPACE}" monitoring || :
 	helm repo remove percona || :
@@ -208,6 +213,16 @@ deploy_pmm_server() {
 		--set service.type=LoadBalancer \
 		$additional_params \
 		--force
+
+	kubectl rollout status statefulset/monitoring -n "${NAMESPACE}" --timeout=180s
+	kubectl wait endpoints/monitoring-service -n "${NAMESPACE}" \
+		--for=create \
+		--timeout=60s
+	kubectl wait endpoints/monitoring-service -n "${NAMESPACE}" \
+		--for=jsonpath='{.subsets[0].addresses[0].ip}' \
+		--timeout=180s
+	retry 30 5 pmm_curl --fail --show-error \
+		https://monitoring-service/graph/api/health >/dev/null
 }
 
 get_pmm_server_token() {
@@ -226,10 +241,10 @@ get_pmm_server_token() {
 	fi
 
 	local create_response create_status_code create_json_response
-	create_response=$(curl --insecure -s -X POST -H 'Content-Type: application/json' -H 'Accept: application/json' \
+	create_response=$(pmm_curl -X POST -H 'Content-Type: application/json' -H 'Accept: application/json' \
 		-d "{\"name\":\"${key_name}\", \"role\":\"Admin\", \"isDisabled\":false}" \
 		--user "admin:${ADMIN_PASSWORD}" \
-		"https://$(get_service_ip monitoring-service)/graph/api/serviceaccounts" \
+		https://monitoring-service/graph/api/serviceaccounts \
 		-w "\n%{http_code}")
 
 	create_status_code=$(echo "$create_response" | tail -n1)
@@ -250,10 +265,10 @@ get_pmm_server_token() {
 	fi
 
 	local token_response token_status_code token_json_response
-	token_response=$(curl --insecure -s -X POST -H 'Content-Type: application/json' \
+	token_response=$(pmm_curl -X POST -H 'Content-Type: application/json' \
 		-d "{\"name\":\"${key_name}\"}" \
 		--user "admin:${ADMIN_PASSWORD}" \
-		"https://$(get_service_ip monitoring-service)/graph/api/serviceaccounts/${service_account_id}/tokens" \
+		"https://monitoring-service/graph/api/serviceaccounts/${service_account_id}/tokens" \
 		-w "\n%{http_code}")
 
 	token_status_code=$(echo "$token_response" | tail -n1)
@@ -286,8 +301,8 @@ delete_pmm_server_token() {
 	local user_credentials="admin:${ADMIN_PASSWORD}"
 
 	local service_accounts_response service_accounts_status
-	service_accounts_response=$(curl --insecure -s -X GET --user "${user_credentials}" \
-		"https://$(get_service_ip monitoring-service)/graph/api/serviceaccounts/search" \
+	service_accounts_response=$(pmm_curl -X GET --user "${user_credentials}" \
+		https://monitoring-service/graph/api/serviceaccounts/search \
 		-w "\n%{http_code}")
 
 	service_accounts_status=$(echo "$service_accounts_response" | tail -n1)
@@ -308,8 +323,8 @@ delete_pmm_server_token() {
 	fi
 
 	local tokens_response tokens_status tokens_json
-	tokens_response=$(curl --insecure -s -X GET --user "${user_credentials}" \
-		"https://$(get_service_ip monitoring-service)/graph/api/serviceaccounts/${service_account_id}/tokens" \
+	tokens_response=$(pmm_curl -X GET --user "${user_credentials}" \
+		"https://monitoring-service/graph/api/serviceaccounts/${service_account_id}/tokens" \
 		-w "\n%{http_code}")
 
 	tokens_status=$(echo "$tokens_response" | tail -n1)
@@ -330,8 +345,8 @@ delete_pmm_server_token() {
 	fi
 
 	local delete_response delete_status
-	delete_response=$(curl --insecure -s -X DELETE --user "${user_credentials}" \
-		"https://$(get_service_ip monitoring-service)/graph/api/serviceaccounts/${service_account_id}/tokens/${token_id}" \
+	delete_response=$(pmm_curl -X DELETE --user "${user_credentials}" \
+		"https://monitoring-service/graph/api/serviceaccounts/${service_account_id}/tokens/${token_id}" \
 		-w "\n%{http_code}")
 
 	delete_status=$(echo "$delete_response" | tail -n1)
