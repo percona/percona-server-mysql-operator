@@ -18,10 +18,8 @@ package psrestore
 
 import (
 	"context"
-	"crypto/md5"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -158,8 +156,8 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 		if err := cluster.CheckNSetDefaults(ctx, r.ServerVersion); err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "check n set defaults")
 		}
-		if err := r.cleanupBackupSourceBinlogServer(ctx, cr, cluster); err != nil {
-			return ctrl.Result{}, errors.Wrap(err, "cleanup backup source binlog server")
+		if err := r.cleanupPITRConfigSecret(ctx, cr, cluster); err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "cleanup pitr config secret")
 		}
 		return ctrl.Result{}, nil
 	}
@@ -208,6 +206,10 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	}
 
 	if restoreJobCompleted {
+		if err := r.reconcilePITRConfigSecret(ctx, cr, cluster); err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "reconcile pitr config secret")
+		}
+
 		if state, err := r.reconcilePrepareJob(ctx, cr, cluster); err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "reconcile prepare job")
 		} else if state != apiv1.RestoreSucceeded {
@@ -243,8 +245,8 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 		}
 
-		if err := r.cleanupBackupSourceBinlogServer(ctx, cr, cluster); err != nil {
-			return ctrl.Result{}, errors.Wrap(err, "cleanup backup source binlog server")
+		if err := r.cleanupPITRConfigSecret(ctx, cr, cluster); err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "cleanup pitr config secret")
 		}
 		status.State = apiv1.RestoreSucceeded
 		log.Info("PerconaServerMySQLRestore is finished", "restore", cr.Name, "cluster", cluster.Name)
@@ -285,33 +287,16 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 
 		status.State = apiv1.RestoreStarting
 
-		pitrConfigExists, err := r.pitrConfigExists(ctx, cr, cluster)
-		if err != nil {
-			return ctrl.Result{}, errors.Wrap(err, "check pitr config")
+		if err := r.reconcilePITRConfigSecret(ctx, cr, cluster); err != nil {
+			status.State = apiv1.RestoreError
+			status.StateDesc = errors.Wrap(err, "reconcile pitr config secret").Error()
+			return ctrl.Result{}, nil
 		}
-		if !pitrConfigExists {
-			if err := r.reconcileBackupSourceBinlogServer(ctx, cr, cluster); err != nil {
-				status.State = apiv1.RestoreError
-				status.StateDesc = errors.Wrap(err, "reconcile backup source binlog server").Error()
-				return ctrl.Result{}, nil
-			}
 
-			running, err := r.isBinlogServerRunning(ctx, cr, cluster)
-			if err != nil {
-				return ctrl.Result{}, errors.Wrap(err, "is binlog server running")
-			}
-			if !running {
-				log.Info("Waiting for binlog server pod")
-				return ctrl.Result{
-					RequeueAfter: 5 * time.Second,
-				}, nil
-			}
-
-			if err := r.reconcilePITRConfig(ctx, cr, cluster); err != nil {
-				status.State = apiv1.RestoreError
-				status.StateDesc = errors.Wrap(err, "reconcile pitr config").Error()
-				return ctrl.Result{}, nil
-			}
+		if err := r.validatePITRTarget(ctx, cr, cluster); err != nil {
+			status.State = apiv1.RestoreError
+			status.StateDesc = errors.Wrap(err, "validate pitr target").Error()
+			return ctrl.Result{}, nil
 		}
 		status.StateDesc = ""
 	}
@@ -378,39 +363,15 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	return ctrl.Result{}, nil
 }
 
-func (r *PerconaServerMySQLRestoreReconciler) isBinlogServerRunning(ctx context.Context,
-	cr *apiv1.PerconaServerMySQLRestore,
-	cluster *apiv1.PerconaServerMySQL,
-) (bool, error) {
-	nn := types.NamespacedName{
-		Namespace: cluster.Namespace,
-		Name:      binlogserver.BinlogServerPodName(cluster, cr),
-	}
-
-	pod := &corev1.Pod{}
-	err := r.Get(ctx, nn, pod)
-	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			return false, nil
-		}
-		return false, err
-	}
-
-	return k8s.IsPodReady(*pod), nil
-}
-
-func (r *PerconaServerMySQLRestoreReconciler) reconcileBackupSourceBinlogServer(ctx context.Context,
+func (r *PerconaServerMySQLRestoreReconciler) reconcilePITRConfigSecret(ctx context.Context,
 	cr *apiv1.PerconaServerMySQLRestore,
 	cluster *apiv1.PerconaServerMySQL,
 ) error {
-	if cr.Spec.PITR == nil || restoreBinlogServer(cr) == nil {
+	if cr.Spec.PITR == nil || binlogserver.RestoreSpec(cluster, cr) == nil {
 		return nil
 	}
 
-	spec := restoreBinlogServer(cr).DeepCopy()
-	if spec.Image == "" && cluster.Spec.Backup.PiTR.BinlogServer != nil {
-		spec.Image = cluster.Spec.Backup.PiTR.BinlogServer.Image
-	}
+	spec := binlogserver.RestoreSpec(cluster, cr)
 	if spec.Image == "" {
 		return errors.New("binlogServer.image is not specified")
 	}
@@ -446,35 +407,15 @@ func (r *PerconaServerMySQLRestoreReconciler) reconcileBackupSourceBinlogServer(
 		return errors.Wrap(err, "reconcile secret")
 	}
 
-	initImage, err := k8s.InitImage(ctx, r.Client, cluster, &spec.PodSpec)
-	if err != nil {
-		return errors.Wrap(err, "get init image")
-	}
-
-	sts := binlogserver.StatefulSet(cluster, spec, binlogserver.RestoreMatchLabels(cluster, cr), initImage, fmt.Sprintf("%x", md5.Sum(configBytes)), binlogserver.RestoreConfigSecretName(cluster, cr))
-	sts.Name = binlogserver.RestoreName(cluster, cr)
-	if spec.Storage.S3 != nil && spec.Storage.S3.CABundle != nil && cluster.CompareVersion("1.3.0") >= 0 {
-		sts.Spec.Template.Spec.Containers[0].Args = []string{"sleep", "infinity"}
-	} else {
-		sts.Spec.Template.Spec.Containers[0].Command = []string{"sleep"}
-		sts.Spec.Template.Spec.Containers[0].Args = []string{"infinity"}
-	}
-	sts.Spec.Template.Spec.TerminationGracePeriodSeconds = new(int64(5))
-
-	err = k8s.EnsureObjectWithHash(ctx, r.Client, cr, sts, r.Scheme)
-	if err != nil {
-		return errors.Wrap(err, "reconcile statefulset")
-	}
-
 	return nil
 }
 
-func (r *PerconaServerMySQLRestoreReconciler) cleanupBackupSourceBinlogServer(
+func (r *PerconaServerMySQLRestoreReconciler) cleanupPITRConfigSecret(
 	ctx context.Context,
 	cr *apiv1.PerconaServerMySQLRestore,
 	cluster *apiv1.PerconaServerMySQL,
 ) error {
-	if restoreBinlogServer(cr) == nil {
+	if cr.Spec.PITR == nil {
 		return nil
 	}
 
@@ -506,56 +447,52 @@ func restoreBinlogServer(cr *apiv1.PerconaServerMySQLRestore) *apiv1.BinlogServe
 	return cr.Spec.PITR.BackupSource.BinlogServer
 }
 
-func (r *PerconaServerMySQLRestoreReconciler) pitrConfigExists(
-	ctx context.Context,
-	cr *apiv1.PerconaServerMySQLRestore,
-	cluster *apiv1.PerconaServerMySQL,
-) (bool, error) {
-	cm := pitr.BinlogsConfigMap(cluster, cr)
-	err := r.Get(ctx, client.ObjectKeyFromObject(cm), new(corev1.ConfigMap))
-	if err == nil {
-		return true, nil
-	}
-	if k8serrors.IsNotFound(err) {
-		return false, nil
-	}
-	return false, err
-}
-
-func (r *PerconaServerMySQLRestoreReconciler) reconcilePITRConfig(
+func (r *PerconaServerMySQLRestoreReconciler) validatePITRTarget(
 	ctx context.Context,
 	cr *apiv1.PerconaServerMySQLRestore,
 	cluster *apiv1.PerconaServerMySQL,
 ) error {
-	cm := pitr.BinlogsConfigMap(cluster, cr)
-	if err := r.Get(ctx, client.ObjectKeyFromObject(cm), new(corev1.ConfigMap)); err == nil {
+	log := logf.FromContext(ctx)
+
+	if _, _, err := binlogserver.SearchArgs(cr); err != nil {
+		return err
+	}
+
+	st, err := r.binlogArchiveStorage(ctx, cr, cluster)
+	if err != nil {
+		log.Info("Skipping PITR target validation", "error", err.Error())
 		return nil
 	}
 
-	binlogs, err := r.searchBinlogs(ctx, cr, cluster)
-	if err != nil {
-		return errors.Wrap(err, "search binlogs")
+	if err := binlogserver.ValidateTarget(ctx, st, cr); err != nil {
+		if errors.Is(err, binlogserver.ErrTargetNotCovered) || errors.Is(err, binlogserver.ErrInvalidTarget) {
+			return err
+		}
+		log.Info("Skipping PITR target validation", "error", err.Error())
+		return nil
 	}
-	if len(binlogs) == 0 {
-		return errors.New("no binlogs found for the given PITR target")
-	}
-
-	data, err := json.Marshal(binlogs)
-	if err != nil {
-		return errors.Wrap(err, "marshal binlog entries")
-	}
-
-	cm.Data = make(map[string]string)
-	cm.Data[pitr.BinlogsConfigKey] = string(data)
-
-	if err := controllerutil.SetControllerReference(cr, cm, r.Scheme); err != nil {
-		return errors.Wrapf(err, "set controller reference to ConfigMap %s/%s", cm.Namespace, cm.Name)
-	}
-	if err := r.Create(ctx, cm); err != nil {
-		return errors.Wrapf(err, "create binlogs configmap %s/%s", cm.Namespace, cm.Name)
-	}
-
 	return nil
+}
+
+func (r *PerconaServerMySQLRestoreReconciler) binlogArchiveStorage(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQLRestore,
+	cluster *apiv1.PerconaServerMySQL,
+) (storage.Storage, error) {
+	if r.NewStorageClient == nil {
+		return nil, errors.New("storage client is not configured")
+	}
+
+	spec := binlogserver.RestoreSpec(cluster, cr)
+	if spec == nil || spec.Storage.S3 == nil {
+		return nil, errors.New("binlog server S3 storage is not configured")
+	}
+
+	opts, err := storage.GetS3OptionsFromSpec(ctx, r.Client, cluster.Namespace, spec.Storage.S3)
+	if err != nil {
+		return nil, err
+	}
+	return r.NewStorageClient(ctx, opts)
 }
 
 func (r *PerconaServerMySQLRestoreReconciler) reconcilePrepareJob(
@@ -669,38 +606,6 @@ func (r *PerconaServerMySQLRestoreReconciler) reconcilePITRJob(
 	}
 
 	return apiv1.RestoreRunning, nil
-}
-
-func (r *PerconaServerMySQLRestoreReconciler) searchBinlogs(
-	ctx context.Context,
-	cr *apiv1.PerconaServerMySQLRestore,
-	cluster *apiv1.PerconaServerMySQL,
-) ([]binlogserver.BinlogEntry, error) {
-	if cr.Spec.PITR == nil {
-		return nil, errors.New("pitr spec is not set")
-	}
-
-	var resp *binlogserver.SearchResponse
-	var err error
-
-	switch cr.Spec.PITR.Type {
-	case apiv1.PITRDate:
-		ts := strings.Replace(cr.Spec.PITR.Date, " ", "T", 1)
-		resp, err = binlogserver.SearchByTimestamp(ctx, r.Client, r.ClientCmd, cluster, cr, ts)
-	case apiv1.PITRGtid:
-		resp, err = binlogserver.SearchByGTID(ctx, r.Client, r.ClientCmd, cluster, cr, cr.Spec.PITR.GTID)
-	default:
-		return nil, errors.Errorf("unknown PITR type: %s", cr.Spec.PITR.Type)
-	}
-	if err != nil {
-		return nil, errors.Wrap(err, "search binlogs")
-	}
-
-	if resp.Status != "success" {
-		return nil, errors.Errorf("binlog search failed with status: %s", resp.Status)
-	}
-
-	return resp.Result, nil
 }
 
 func (r *PerconaServerMySQLRestoreReconciler) deletePVCs(ctx context.Context, cluster *apiv1.PerconaServerMySQL) error {

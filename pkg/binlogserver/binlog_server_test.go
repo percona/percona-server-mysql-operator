@@ -30,7 +30,7 @@ func TestStatefulSetS3CABundle(t *testing.T) {
 
 	container := sts.Spec.Template.Spec.Containers[0]
 	assert.Equal(t, []string{"/opt/percona/binlog-server-entrypoint.sh"}, container.Command)
-	assert.Equal(t, []string{binlogServerBinary, "pull", configMountPath + "/" + ConfigKey}, container.Args)
+	assert.Equal(t, []string{BinlogServerBinary, "pull", ConfigMountPath + "/" + ConfigKey}, container.Args)
 	assert.Contains(t, container.VolumeMounts, corev1.VolumeMount{
 		Name: naming.S3CertsVolumeName, MountPath: naming.SystemCABundlePath, SubPath: "ca-bundle.crt", ReadOnly: true,
 	})
@@ -150,9 +150,9 @@ func TestStatefulSet(t *testing.T) {
 				container := sts.Spec.Template.Spec.Containers[0]
 				assert.Equal(t, []string{"/opt/percona/binlog-server-entrypoint.sh"}, container.Command)
 				assert.Equal(t, []string{
-					binlogServerBinary,
+					BinlogServerBinary,
 					"pull",
-					configMountPath + "/" + ConfigKey,
+					ConfigMountPath + "/" + ConfigKey,
 				}, container.Args)
 			},
 		},
@@ -183,7 +183,7 @@ func TestStatefulSet(t *testing.T) {
 				assert.True(t, volumeNames[credsVolumeName], "missing creds volume")
 				assert.True(t, volumeNames[tlsVolumeName], "missing tls volume")
 				assert.True(t, volumeNames[storageCredsVolumeName], "missing storage volume")
-				assert.True(t, volumeNames[configVolumeName], "missing config volume")
+				assert.True(t, volumeNames[ConfigVolumeName], "missing config volume")
 			},
 		},
 		"tls volume and mount absent when ssl disabled": {
@@ -288,7 +288,7 @@ func TestStatefulSet(t *testing.T) {
 			verify: func(t *testing.T, cr *apiv1.PerconaServerMySQL) {
 				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, MatchLabels(cr), "init:latest", "", "")
 				for _, v := range sts.Spec.Template.Spec.Volumes {
-					if v.Name == configVolumeName {
+					if v.Name == ConfigVolumeName {
 						assert.NotNil(t, v.Projected)
 						var hasConfigSecret bool
 						for _, src := range v.Projected.Sources {
@@ -344,22 +344,8 @@ func TestStatefulSet(t *testing.T) {
 				assert.True(t, mountNames[apiv1.BinVolumeName], "missing bin volume mount")
 				assert.True(t, mountNames[credsVolumeName], "missing creds volume mount")
 				assert.True(t, mountNames[tlsVolumeName], "missing tls volume mount")
-				assert.True(t, mountNames[configVolumeName], "missing config volume mount")
+				assert.True(t, mountNames[ConfigVolumeName], "missing config volume mount")
 				assert.True(t, mountNames[bufferVolumeName], "missing buffer volume mount")
-			},
-		},
-		"container env includes CONFIG_PATH and CUSTOM_CONFIG_PATH": {
-			cr:        newTestCR("cluster", "ns"),
-			initImage: "init:latest",
-			verify: func(t *testing.T, cr *apiv1.PerconaServerMySQL) {
-				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, MatchLabels(cr), "init:latest", "", "")
-				container := sts.Spec.Template.Spec.Containers[0]
-				envMap := make(map[string]string)
-				for _, e := range container.Env {
-					envMap[e.Name] = e.Value
-				}
-				assert.Contains(t, envMap, "CONFIG_PATH")
-				assert.Contains(t, envMap, "CUSTOM_CONFIG_PATH")
 			},
 		},
 		"custom env vars from spec are appended": {

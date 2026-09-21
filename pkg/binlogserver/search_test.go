@@ -40,24 +40,14 @@ func (f *fakeExecClient) Exec(_ context.Context, _ *corev1.Pod, _ string, cmd []
 	return nil
 }
 
-func (f *fakeExecClient) REST() restclient.Interface {
-	return nil
-}
+func (f *fakeExecClient) REST() restclient.Interface { return nil }
 
 func newReadyBinlogServerPod(cr *apiv1.PerconaServerMySQL) *corev1.Pod {
 	return &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      Name(cr) + "-0",
-			Namespace: cr.Namespace,
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: Name(cr) + "-0", Namespace: cr.Namespace},
 		Status: corev1.PodStatus{
-			Phase: corev1.PodRunning,
-			Conditions: []corev1.PodCondition{
-				{
-					Type:   corev1.ContainersReady,
-					Status: corev1.ConditionTrue,
-				},
-			},
+			Phase:      corev1.PodRunning,
+			Conditions: []corev1.PodCondition{{Type: corev1.ContainersReady, Status: corev1.ConditionTrue}},
 		},
 	}
 }
@@ -74,162 +64,148 @@ func newSearchTestClient(t *testing.T, pod *corev1.Pod) *fake.ClientBuilder {
 	return cb
 }
 
-func TestSearchByGTID(t *testing.T) {
-	cr := newTestCR("my-cluster", "test-ns")
-
-	successResponse := &SearchResponse{
-		Version: 1,
-		Status:  "OK",
-		Result: []BinlogEntry{
-			{
-				Name:          "binlog.000001",
-				PreviousGTIDs: "00000000-0000-0000-0000-000000000000:1-10",
-				AddedGTIDs:    "00000000-0000-0000-0000-000000000000:11",
-			},
-		},
-	}
-
+func TestSearchArgs(t *testing.T) {
 	tests := map[string]struct {
-		pod              *corev1.Pod
-		cliCmd           clientcmd.Client
-		gtidSet          string
-		expectedResponse *SearchResponse
-		expectedError    string
+		pitr               *apiv1.RestorePITRSpec
+		expectedSubcommand string
+		expectedArg        string
+		expectedErr        string
 	}{
-		"success": {
-			pod:              newReadyBinlogServerPod(cr),
-			cliCmd:           &fakeExecClient{response: successResponse},
-			gtidSet:          "00000000-0000-0000-0000-000000000000:1-10",
-			expectedResponse: successResponse,
+		// the CR takes the MySQL form, the binlog server wants ISO-8601
+		"date": {
+			pitr:               &apiv1.RestorePITRSpec{Type: apiv1.PITRDate, Date: "2026-09-09 12:45:00"},
+			expectedSubcommand: SearchByTimestampCommand,
+			expectedArg:        "2026-09-09T12:45:00",
 		},
-		"pod not found": {
-			cliCmd:        &fakeExecClient{},
-			gtidSet:       "some-gtid",
-			expectedError: "get binlog server pod",
+		"gtid": {
+			pitr:               &apiv1.RestorePITRSpec{Type: apiv1.PITRGtid, GTID: "3E11FA47-71CA-11E1-9E33-C80AA9429562:1-5"},
+			expectedSubcommand: SearchByGTIDCommand,
+			expectedArg:        "3E11FA47-71CA-11E1-9E33-C80AA9429562:1-5",
 		},
-		"pod not ready": {
-			pod: &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      Name(cr) + "-0",
-					Namespace: cr.Namespace,
-				},
-				Status: corev1.PodStatus{Phase: corev1.PodPending},
-			},
-			cliCmd:        &fakeExecClient{},
-			gtidSet:       "some-gtid",
-			expectedError: "is not ready",
+		"empty gtid": {
+			pitr:        &apiv1.RestorePITRSpec{Type: apiv1.PITRGtid},
+			expectedErr: "GTID set is empty",
 		},
-		"exec error": {
-			pod:           newReadyBinlogServerPod(cr),
-			cliCmd:        &fakeExecClient{execErr: fmt.Errorf("exec failed")},
-			gtidSet:       "some-gtid",
-			expectedError: "exec binlog_server search_by_gtid_set",
+		"malformed gtid": {
+			pitr:        &apiv1.RestorePITRSpec{Type: apiv1.PITRGtid, GTID: "not-a-uuid:1-5"},
+			expectedErr: "malformed GTID source",
 		},
-		"invalid json response": {
-			pod:           newReadyBinlogServerPod(cr),
-			cliCmd:        &fakeExecClient{response: nil},
-			gtidSet:       "some-gtid",
-			expectedError: "unmarshal response",
+		"date in an unsupported format": {
+			pitr:        &apiv1.RestorePITRSpec{Type: apiv1.PITRDate, Date: "2026-09-09 12:45:00 UTC"},
+			expectedErr: `invalid pitr date "2026-09-09 12:45:00 UTC"`,
+		},
+		"no pitr spec": {expectedErr: "pitr spec is not set"},
+		"unknown type": {
+			pitr:        &apiv1.RestorePITRSpec{Type: "latest"},
+			expectedErr: "unknown PITR type: latest",
 		},
 	}
-
-	configPath := configMountPath + "/" + ConfigKey
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			cl := newSearchTestClient(t, tt.pod).Build()
+			restore := &apiv1.PerconaServerMySQLRestore{
+				Spec: apiv1.PerconaServerMySQLRestoreSpec{PITR: tt.pitr},
+			}
 
-			execClient, _ := tt.cliCmd.(*fakeExecClient)
-			resp, err := SearchByGTID(t.Context(), cl, tt.cliCmd, cr, nil, tt.gtidSet)
-			if tt.expectedError != "" {
+			subcommand, arg, err := SearchArgs(restore)
+			if tt.expectedErr != "" {
 				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.expectedError)
-				assert.Nil(t, resp)
+				assert.Contains(t, err.Error(), tt.expectedErr)
 				return
 			}
 			require.NoError(t, err)
-			assert.Equal(t, tt.expectedResponse, resp)
-			assert.Equal(t, []string{binlogServerBinary, "search_by_gtid_set", configPath, tt.gtidSet}, execClient.capturedCmd)
+			assert.Equal(t, tt.expectedSubcommand, subcommand)
+			assert.Equal(t, tt.expectedArg, arg)
 		})
 	}
 }
 
-func TestSearchByTimestamp(t *testing.T) {
-	cr := newTestCR("my-cluster", "test-ns")
-
-	successResponse := &SearchResponse{
-		Version: 1,
-		Status:  "OK",
-		Result: []BinlogEntry{
-			{
-				Name:         "binlog.000002",
-				MinTimestamp: "2024-01-01 00:00:00",
-				MaxTimestamp: "2024-01-01 01:00:00",
-			},
+func TestSearchResponseError(t *testing.T) {
+	tests := map[string]struct {
+		response    SearchResponse
+		expectedErr string
+	}{
+		"success": {response: SearchResponse{Status: "success"}},
+		"failure with a message": {
+			response:    SearchResponse{Status: "failure", Message: "Timestamp is too old"},
+			expectedErr: "binlog search failed: Timestamp is too old",
+		},
+		"failure without a message": {
+			response:    SearchResponse{Status: "failure"},
+			expectedErr: "binlog search failed with status: failure",
 		},
 	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			err := tt.response.Error()
+			if tt.expectedErr == "" {
+				assert.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			assert.Equal(t, tt.expectedErr, err.Error())
+		})
+	}
+}
+
+func TestSearchCommands(t *testing.T) {
+	cr := newTestCR("my-cluster", "test-ns")
+	success := &SearchResponse{Version: 1, Status: "success", Result: []BinlogEntry{{Name: "binlog.000001"}}}
 
 	tests := map[string]struct {
 		pod              *corev1.Pod
-		cliCmd           clientcmd.Client
-		timestamp        string
-		expectedResponse *SearchResponse
+		exec             *fakeExecClient
+		subcommand       string
+		arg              string
 		expectedError    string
+		expectedResponse *SearchResponse
 	}{
-		"success": {
-			pod:              newReadyBinlogServerPod(cr),
-			cliCmd:           &fakeExecClient{response: successResponse},
-			timestamp:        "2024-01-01 00:30:00",
-			expectedResponse: successResponse,
+		"gtid": {
+			pod: newReadyBinlogServerPod(cr), exec: &fakeExecClient{response: success},
+			subcommand: SearchByGTIDCommand, arg: "uuid:1-10", expectedResponse: success,
+		},
+		"timestamp": {
+			pod: newReadyBinlogServerPod(cr), exec: &fakeExecClient{response: success},
+			subcommand: SearchByTimestampCommand, arg: "2024-01-01T00:30:00", expectedResponse: success,
 		},
 		"pod not found": {
-			cliCmd:        &fakeExecClient{},
-			timestamp:     "2024-01-01 00:30:00",
-			expectedError: "get binlog server pod",
+			exec: &fakeExecClient{}, subcommand: SearchByGTIDCommand, arg: "uuid:1", expectedError: "get binlog server pod",
 		},
 		"pod not ready": {
-			pod: &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      Name(cr) + "-0",
-					Namespace: cr.Namespace,
-				},
-				Status: corev1.PodStatus{Phase: corev1.PodPending},
-			},
-			cliCmd:        &fakeExecClient{},
-			timestamp:     "2024-01-01 00:30:00",
-			expectedError: "is not ready",
+			pod:  &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: Name(cr) + "-0", Namespace: cr.Namespace}},
+			exec: &fakeExecClient{}, subcommand: SearchByGTIDCommand, arg: "uuid:1", expectedError: "is not ready",
 		},
 		"exec error": {
-			pod:           newReadyBinlogServerPod(cr),
-			cliCmd:        &fakeExecClient{execErr: fmt.Errorf("exec failed")},
-			timestamp:     "2024-01-01 00:30:00",
-			expectedError: "exec binlog_server search_by_timestamp",
+			pod: newReadyBinlogServerPod(cr), exec: &fakeExecClient{execErr: fmt.Errorf("exec failed")},
+			subcommand: SearchByGTIDCommand, arg: "uuid:1", expectedError: "exec binlog_server search_by_gtid_set",
 		},
-		"invalid json response": {
-			pod:           newReadyBinlogServerPod(cr),
-			cliCmd:        &fakeExecClient{response: nil},
-			timestamp:     "2024-01-01 00:30:00",
-			expectedError: "unmarshal response",
+		"invalid response": {
+			pod: newReadyBinlogServerPod(cr), exec: &fakeExecClient{},
+			subcommand: SearchByGTIDCommand, arg: "uuid:1", expectedError: "unmarshal response",
 		},
 	}
-
-	configPath := configMountPath + "/" + ConfigKey
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			cl := newSearchTestClient(t, tt.pod).Build()
-
-			execClient, _ := tt.cliCmd.(*fakeExecClient)
-			resp, err := SearchByTimestamp(t.Context(), cl, tt.cliCmd, cr, nil, tt.timestamp)
+			var (
+				resp *SearchResponse
+				err  error
+			)
+			if tt.subcommand == SearchByTimestampCommand {
+				resp, err = SearchByTimestamp(t.Context(), cl, tt.exec, cr, nil, tt.arg)
+			} else {
+				resp, err = SearchByGTID(t.Context(), cl, tt.exec, cr, nil, tt.arg)
+			}
 			if tt.expectedError != "" {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.expectedError)
+				require.ErrorContains(t, err, tt.expectedError)
 				assert.Nil(t, resp)
 				return
 			}
 			require.NoError(t, err)
 			assert.Equal(t, tt.expectedResponse, resp)
-			assert.Equal(t, []string{binlogServerBinary, "search_by_timestamp", configPath, tt.timestamp}, execClient.capturedCmd)
+			assert.Equal(t, []string{BinlogServerBinary, tt.subcommand, ConfigMountPath + "/" + ConfigKey, tt.arg}, tt.exec.capturedCmd)
 		})
 	}
 }

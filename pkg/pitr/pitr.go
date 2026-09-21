@@ -2,6 +2,7 @@ package pitr
 
 import (
 	"fmt"
+	"path"
 	"path/filepath"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -9,6 +10,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/pkg/binlogserver"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
@@ -24,11 +26,12 @@ const (
 	credsMountPath    = "/etc/mysql/mysql-users-secret"
 	tlsVolumeName     = "tls"
 	tlsMountPath      = "/etc/mysql/mysql-tls-secret"
-	binlogsVolumeName = "binlogs"
-	binlogsMountPath  = "/etc/pitr"
-	BinlogsConfigKey  = "binlogs.json"
 	keyringVolumeName = "keyring"
 	keyringMountPath  = "/etc/binlog_server/keyring"
+
+	binlogsVolumeName = "binlogs"
+	binlogsMountPath  = "/var/lib/pitr-binlogs"
+	binlogsFileName   = "binlogs.json"
 
 	vaultSecretVolumeName = "vault-keyring-secret"
 	vaultSecretMountPath  = "/etc/mysql/vault-keyring-secret"
@@ -36,23 +39,6 @@ const (
 
 func JobName(restore *apiv1.PerconaServerMySQLRestore) string {
 	return fmt.Sprintf("pitr-restore-%s", restore.Name)
-}
-
-func BinlogsConfigMap(cluster *apiv1.PerconaServerMySQL, restore *apiv1.PerconaServerMySQLRestore) *corev1.ConfigMap {
-	labels := util.SSMapMerge(cluster.GlobalLabels(), restore.Labels(appName, naming.ComponentPITR))
-
-	return &corev1.ConfigMap{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "ConfigMap",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        binlogsConfigMapName(restore),
-			Namespace:   cluster.Namespace,
-			Labels:      labels,
-			Annotations: cluster.GlobalAnnotations(),
-		},
-	}
 }
 
 func getKeyringSecretRef(
@@ -77,6 +63,8 @@ func RestoreJob(
 	initImage string,
 ) *batchv1.Job {
 	labels := util.SSMapMerge(cluster.GlobalLabels(), storage.Labels, restore.Labels(appName, naming.ComponentPITR))
+	binlogServer := binlogserver.RestoreSpec(cluster, restore)
+	subcommand, arg, _ := binlogserver.SearchArgs(restore)
 
 	pvcName := fmt.Sprintf("%s-%s-mysql-0", mysql.DataVolumeName, cluster.Name)
 
@@ -126,6 +114,7 @@ func RestoreJob(
 								},
 							},
 						),
+						binlogserver.SearchContainer(binlogServer, subcommand, arg, binlogsVolumeName, binlogsMountPath, binlogsFileName),
 					},
 					Containers: []corev1.Container{
 						restoreContainer(cluster, restore, storage),
@@ -173,11 +162,7 @@ func RestoreJob(
 						{
 							Name: binlogsVolumeName,
 							VolumeSource: corev1.VolumeSource{
-								ConfigMap: &corev1.ConfigMapVolumeSource{
-									LocalObjectReference: corev1.LocalObjectReference{
-										Name: binlogsConfigMapName(restore),
-									},
-								},
+								EmptyDir: &corev1.EmptyDirVolumeSource{},
 							},
 						},
 					},
@@ -187,12 +172,25 @@ func RestoreJob(
 		},
 	}
 
-	binlogServer := cluster.Spec.Backup.PiTR.BinlogServer
-	if restore.Spec.PITR != nil && restore.Spec.PITR.BackupSource != nil && restore.Spec.PITR.BackupSource.BinlogServer != nil {
-		binlogServer = restore.Spec.PITR.BackupSource.BinlogServer
-	}
 	if binlogServer != nil {
+		job.Spec.Template.Spec.Volumes = append(job.Spec.Template.Spec.Volumes,
+			binlogserver.SearchVolumes(cluster, binlogServer, binlogserver.RestoreConfigSecretName(cluster, restore))...)
+
+		var imagePullSecrets []corev1.LocalObjectReference
+		seen := make(map[string]struct{})
+		for _, list := range [][]corev1.LocalObjectReference{job.Spec.Template.Spec.ImagePullSecrets, binlogServer.ImagePullSecrets} {
+			for _, secret := range list {
+				if _, ok := seen[secret.Name]; ok {
+					continue
+				}
+				seen[secret.Name] = struct{}{}
+				imagePullSecrets = append(imagePullSecrets, secret)
+			}
+		}
+		job.Spec.Template.Spec.ImagePullSecrets = imagePullSecrets
+
 		k8s.PrepareJobWithS3CA(job, cluster, binlogServer.Storage.S3)
+		k8s.PrepareInitContainersWithS3CA(job, cluster, binlogServer.Storage.S3)
 	}
 
 	if keyringSecretRef := getKeyringSecretRef(cluster, restore); keyringSecretRef != nil {
@@ -228,10 +226,7 @@ func restoreContainer(
 	restore *apiv1.PerconaServerMySQLRestore,
 	storage *apiv1.BackupStorageSpec,
 ) corev1.Container {
-	binlogServer := cluster.Spec.Backup.PiTR.BinlogServer
-	if restore.Spec.PITR != nil && restore.Spec.PITR.BackupSource != nil && restore.Spec.PITR.BackupSource.BinlogServer != nil {
-		binlogServer = restore.Spec.PITR.BackupSource.BinlogServer
-	}
+	binlogServer := binlogserver.RestoreSpec(cluster, restore)
 
 	envs := []corev1.EnvVar{
 		{
@@ -240,7 +235,7 @@ func restoreContainer(
 		},
 		{
 			Name:  "BINLOGS_PATH",
-			Value: fmt.Sprintf("%s/%s", binlogsMountPath, BinlogsConfigKey),
+			Value: path.Join(binlogsMountPath, binlogsFileName),
 		},
 	}
 
@@ -371,8 +366,4 @@ func restoreContainer(
 	}
 
 	return c
-}
-
-func binlogsConfigMapName(restore *apiv1.PerconaServerMySQLRestore) string {
-	return fmt.Sprintf("pitr-binlogs-%s", restore.Name)
 }

@@ -142,6 +142,37 @@ func TestGetOptionsFromBackupStatus(t *testing.T) {
 	}
 }
 
+func TestGetS3OptionsFromSpec(t *testing.T) {
+	const namespace = "test"
+	credentials := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "credentials", Namespace: namespace},
+		Data: map[string][]byte{
+			secret.CredentialsAWSAccessKey: []byte("access-key"),
+			secret.CredentialsAWSSecretKey: []byte("secret-key"),
+		},
+	}
+	ca := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "ca", Namespace: namespace},
+		Data:       map[string][]byte{"ca.crt": []byte("test-ca")},
+	}
+	scheme := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(scheme))
+	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(credentials, ca).Build()
+
+	opts, err := GetS3OptionsFromSpec(t.Context(), cl, namespace, &apiv1.BackupStorageS3Spec{
+		Bucket:            "bucket/prefix",
+		CredentialsSecret: credentials.Name,
+		Region:            "region",
+		EndpointURL:       "https://s3.example",
+		CABundle:          &apiv1.CABundleSecretSelector{Name: ca.Name, Key: "ca.crt"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "bucket", opts.BucketName)
+	assert.Equal(t, "prefix/", opts.Prefix)
+	assert.Equal(t, []byte("test-ca"), opts.CABundle)
+	assert.True(t, opts.VerifyTLS)
+}
+
 func TestNewClientRejectsInvalidS3CABundle(t *testing.T) {
 	tests := []struct {
 		name     string

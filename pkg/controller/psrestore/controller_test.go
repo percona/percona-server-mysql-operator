@@ -23,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/pkg/binlogserver"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
@@ -534,6 +535,79 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCompletedBaseRestoreReconcilesPITRConfigSecret(t *testing.T) {
+	const (
+		namespace   = "some-namespace"
+		clusterName = "ps-cluster"
+		restoreName = "restore"
+	)
+
+	ctx := t.Context()
+	cluster := readDefaultCluster(t, clusterName, namespace)
+	cluster.Spec.Backup.PiTR = apiv1.PiTRSpec{
+		Enabled: true,
+		BinlogServer: &apiv1.BinlogServerSpec{
+			PodSpec: apiv1.PodSpec{ContainerSpec: apiv1.ContainerSpec{Image: "binlog-server:latest"}},
+			Storage: apiv1.BinlogServerStorageSpec{S3: &apiv1.BackupStorageS3Spec{
+				Bucket:            "binlogs",
+				CredentialsSecret: "binlog-s3",
+			}},
+		},
+	}
+
+	restore := readDefaultRestore(t, restoreName, namespace)
+	restore.UID = types.UID("restore-uid")
+	restore.Spec.ClusterName = clusterName
+	restore.Spec.PITR = &apiv1.RestorePITRSpec{
+		Type: apiv1.PITRDate,
+		Date: "2026-09-09 12:45:00",
+	}
+
+	restoreJob := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      xtrabackup.RestoreJobName(cluster, restore),
+			Namespace: namespace,
+		},
+		Status: batchv1.JobStatus{Conditions: []batchv1.JobCondition{{
+			Type:   batchv1.JobComplete,
+			Status: corev1.ConditionTrue,
+		}}},
+	}
+	prepareJob := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      xtrabackup.PrepareJobName(restore),
+			Namespace: namespace,
+		},
+		Status: batchv1.JobStatus{Active: 1},
+	}
+	internalSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: cluster.InternalSecretName(), Namespace: namespace},
+		Data:       map[string][]byte{string(apiv1.UserReplication): []byte("replication-password")},
+	}
+	s3Secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "binlog-s3", Namespace: namespace},
+		Data: map[string][]byte{
+			"AWS_ACCESS_KEY_ID":     []byte("access-key"),
+			"AWS_SECRET_ACCESS_KEY": []byte("secret-key"),
+		},
+	}
+
+	cl := buildFakeClient(t, cluster, restore, restoreJob, prepareJob, internalSecret, s3Secret)
+	r := reconciler(cl)
+	_, err := r.Reconcile(ctx, controllerruntime.Request{
+		NamespacedName: client.ObjectKeyFromObject(restore),
+	})
+	require.NoError(t, err)
+
+	configSecret := new(corev1.Secret)
+	err = cl.Get(ctx, types.NamespacedName{
+		Name:      binlogserver.RestoreConfigSecretName(cluster, restore),
+		Namespace: namespace,
+	}, configSecret)
+	require.NoError(t, err)
+	assert.NotEmpty(t, configSecret.Data[binlogserver.ConfigKey])
 }
 
 func TestRestoreFinishesWhenClusterIsReady(t *testing.T) {

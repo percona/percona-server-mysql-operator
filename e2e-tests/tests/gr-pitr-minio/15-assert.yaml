@@ -1,0 +1,19 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 60
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster_name=$(get_cluster_name)
+
+      # deleting the restore cleans up the binlog server config it owned
+      for restore_name in gr-pitr-minio-restore-too-old gr-pitr-minio-restore-bad-date; do
+          if kubectl -n "${NAMESPACE}" get secret "${cluster_name}-binlog-server-config-restore-${restore_name}" >/dev/null 2>&1; then
+              echo "secret ${cluster_name}-binlog-server-config-restore-${restore_name} exists, expected it to be removed with the restore"
+              exit 1
+          fi
+      done

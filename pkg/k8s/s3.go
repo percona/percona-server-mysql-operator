@@ -59,6 +59,35 @@ func PrepareJobWithS3CA(job *batchv1.Job, cluster *apiv1.PerconaServerMySQL, sto
 	})
 }
 
+func PrepareInitContainersWithS3CA(job *batchv1.Job, cluster *apiv1.PerconaServerMySQL, storage *apiv1.BackupStorageS3Spec) {
+	if storage == nil || storage.CABundle == nil || cluster.CompareVersion("1.3.0") < 0 {
+		return
+	}
+
+	if len(job.Spec.Template.Spec.InitContainers) == 0 {
+		return
+	}
+
+	job.Spec.Template.Spec.Volumes = append(job.Spec.Template.Spec.Volumes, corev1.Volume{
+		Name:         naming.S3CertsVolumeName,
+		VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+	})
+
+	initContainers := job.Spec.Template.Spec.InitContainers
+	initContainers[0].VolumeMounts = append(initContainers[0].VolumeMounts,
+		corev1.VolumeMount{Name: naming.S3CertsInputVolumeName, MountPath: naming.S3CertsInputMountPath, ReadOnly: true},
+		corev1.VolumeMount{Name: naming.S3CertsVolumeName, MountPath: naming.S3CertsMountPath},
+	)
+	for i := 1; i < len(initContainers); i++ {
+		initContainers[i].VolumeMounts = append(initContainers[i].VolumeMounts, corev1.VolumeMount{
+			Name:      naming.S3CertsVolumeName,
+			MountPath: naming.SystemCABundlePath,
+			SubPath:   "ca-bundle.crt",
+			ReadOnly:  true,
+		})
+	}
+}
+
 func S3CAPath(selector apiv1.CABundleSecretSelector) string {
 	return path.Join(naming.S3CertsInputMountPath, s3CertFileName(selector))
 }
