@@ -36,6 +36,10 @@ func (m *mockExecClient) REST() restclient.Interface {
 	return nil
 }
 
+func (m *mockExecClient) Config() *restclient.Config {
+	return nil
+}
+
 func autoscalingCR(t *testing.T) *apiv1.PerconaServerMySQL {
 	t.Helper()
 
@@ -355,7 +359,7 @@ func TestReconcileStorageAutoscalingSkips(t *testing.T) {
 
 			r := &PerconaServerMySQLReconciler{
 				Client:        cl,
-				ServerVersion: &platform.ServerVersion{Platform: platform.PlatformKubernetes},
+				ServerVersion: &platform.ServerVersion{Platform: platform.Kubernetes},
 				ClientCmd: &mockExecClient{
 					execFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error {
 						_, _ = stdout.Write([]byte(dfOutput))
@@ -392,7 +396,7 @@ func TestReconcileStorageAutoscalingTriggersResize(t *testing.T) {
 
 	r := &PerconaServerMySQLReconciler{
 		Client:        cl,
-		ServerVersion: &platform.ServerVersion{Platform: platform.PlatformKubernetes},
+		ServerVersion: &platform.ServerVersion{Platform: platform.Kubernetes},
 		ClientCmd: &mockExecClient{
 			execFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error {
 				_, _ = stdout.Write([]byte(dfOutput))
@@ -432,7 +436,7 @@ func TestReconcileStorageAutoscalingBelowThreshold(t *testing.T) {
 
 	r := &PerconaServerMySQLReconciler{
 		Client:        cl,
-		ServerVersion: &platform.ServerVersion{Platform: platform.PlatformKubernetes},
+		ServerVersion: &platform.ServerVersion{Platform: platform.Kubernetes},
 		ClientCmd: &mockExecClient{
 			execFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error {
 				_, _ = stdout.Write([]byte(dfOutput))
@@ -468,7 +472,7 @@ func TestReconcileStorageAutoscalingPodNotRunning(t *testing.T) {
 	execCalled := false
 	r := &PerconaServerMySQLReconciler{
 		Client:        cl,
-		ServerVersion: &platform.ServerVersion{Platform: platform.PlatformKubernetes},
+		ServerVersion: &platform.ServerVersion{Platform: platform.Kubernetes},
 		ClientCmd: &mockExecClient{
 			execFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error {
 				execCalled = true
@@ -488,7 +492,7 @@ func TestUpdateAutoscalingStatusResizeCount(t *testing.T) {
 
 	r := &PerconaServerMySQLReconciler{
 		Client:        cl,
-		ServerVersion: &platform.ServerVersion{Platform: platform.PlatformKubernetes},
+		ServerVersion: &platform.ServerVersion{Platform: platform.Kubernetes},
 	}
 
 	ctx := context.Background()

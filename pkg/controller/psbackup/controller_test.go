@@ -31,6 +31,7 @@ import (
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
+	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
@@ -369,7 +370,7 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 			r := PerconaServerMySQLBackupReconciler{
 				Client:           cb.Build(),
 				Scheme:           scheme,
-				ServerVersion:    &platform.ServerVersion{Platform: platform.PlatformKubernetes},
+				ServerVersion:    &platform.ServerVersion{Platform: platform.Kubernetes},
 				NewStorageClient: fakeValidateStorageClient,
 			}
 			_, err := r.Reconcile(t.Context(), controllerruntime.Request{
@@ -512,7 +513,7 @@ func TestStateDescCleanup(t *testing.T) {
 			r := PerconaServerMySQLBackupReconciler{
 				Client:        cb.Build(),
 				Scheme:        scheme,
-				ServerVersion: &platform.ServerVersion{Platform: platform.PlatformKubernetes},
+				ServerVersion: &platform.ServerVersion{Platform: platform.Kubernetes},
 			}
 
 			_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(cr)})
@@ -835,7 +836,7 @@ func TestCheckFinalizers(t *testing.T) {
 			r := PerconaServerMySQLBackupReconciler{
 				Client:        cb.Build(),
 				Scheme:        scheme,
-				ServerVersion: &platform.ServerVersion{Platform: platform.PlatformKubernetes},
+				ServerVersion: &platform.ServerVersion{Platform: platform.Kubernetes},
 			}
 
 			require.NoError(t, r.Delete(t.Context(), cr))
@@ -941,7 +942,7 @@ func TestRunningState(t *testing.T) {
 			r := PerconaServerMySQLBackupReconciler{
 				Client:        cb.Build(),
 				Scheme:        scheme,
-				ServerVersion: &platform.ServerVersion{Platform: platform.PlatformKubernetes},
+				ServerVersion: &platform.ServerVersion{Platform: platform.Kubernetes},
 				NewSidecarClient: func(srcNode string) xtrabackup.SidecarClient {
 					return tt.sidecarClient
 				},
@@ -1036,7 +1037,7 @@ func TestReconcileDeadlineReleasesLease(t *testing.T) {
 			r := PerconaServerMySQLBackupReconciler{
 				Client:        cl,
 				Scheme:        scheme,
-				ServerVersion: &platform.ServerVersion{Platform: platform.PlatformKubernetes},
+				ServerVersion: &platform.ServerVersion{Platform: platform.Kubernetes},
 			}
 
 			_, err = r.Reconcile(t.Context(), reconcile.Request{NamespacedName: client.ObjectKeyFromObject(backup)})
@@ -1088,7 +1089,7 @@ func TestBackupStateFollowsJobSuspension(t *testing.T) {
 	r := PerconaServerMySQLBackupReconciler{
 		Client:        cl,
 		Scheme:        scheme,
-		ServerVersion: &platform.ServerVersion{Platform: platform.PlatformKubernetes},
+		ServerVersion: &platform.ServerVersion{Platform: platform.Kubernetes},
 	}
 
 	request := reconcile.Request{NamespacedName: client.ObjectKeyFromObject(backup)}
@@ -1158,7 +1159,7 @@ func TestRunningBackupDoesNotAcquireLease(t *testing.T) {
 	r := PerconaServerMySQLBackupReconciler{
 		Client:        cl,
 		Scheme:        scheme,
-		ServerVersion: &platform.ServerVersion{Platform: platform.PlatformKubernetes},
+		ServerVersion: &platform.ServerVersion{Platform: platform.Kubernetes},
 	}
 
 	_, err = r.Reconcile(t.Context(), reconcile.Request{NamespacedName: client.ObjectKeyFromObject(backup)})
@@ -1296,7 +1297,7 @@ func TestGetBackupSource(t *testing.T) {
 			r := PerconaServerMySQLBackupReconciler{
 				Client:        cb.Build(),
 				Scheme:        scheme,
-				ServerVersion: &platform.ServerVersion{Platform: platform.PlatformKubernetes},
+				ServerVersion: &platform.ServerVersion{Platform: platform.Kubernetes},
 			}
 
 			got, err := r.getBackupSource(ctx, tt.cr, tt.cluster)
@@ -1440,6 +1441,10 @@ func (f *fakeClientCmd) REST() restclient.Interface {
 	return nil
 }
 
+func (f *fakeClientCmd) Config() *restclient.Config {
+	return nil
+}
+
 func TestRenewDowntime(t *testing.T) {
 	ctx := context.Background()
 	scheme := runtime.NewScheme()
@@ -1503,12 +1508,14 @@ func TestRenewDowntime(t *testing.T) {
 	}
 
 	// instanceJSON renders an orchestrator api/instance/ response with the given
-	// downtime state. endTimestamp is the RFC3339 DowntimeEndTimestamp.
+	// downtime state.
 	instanceJSON := func(isDowntimed bool, endTimestamp string) string {
 		return fmt.Sprintf(`{"IsDowntimed":%t,"DowntimeEndTimestamp":%q}`, isDowntimed, endTimestamp)
 	}
 
-	now := time.Now()
+	orcTimestamp := func(in time.Duration) string {
+		return time.Now().UTC().Add(in).Format(mysql.DatetimeFormat)
+	}
 
 	tests := []struct {
 		name string
@@ -1533,17 +1540,35 @@ func TestRenewDowntime(t *testing.T) {
 		},
 		{
 			name:              "downtime near completion is renewed",
-			instanceResp:      instanceJSON(true, now.Add(30*time.Second).Format(time.RFC3339)),
+			instanceResp:      instanceJSON(true, orcTimestamp(30*time.Second)),
 			cluster:           asyncWithOrc(),
 			pods:              []client.Object{backupPod, orchestratorPod},
 			wantBeginDowntime: true,
 		},
 		{
 			name:              "downtime far from completion is left untouched",
-			instanceResp:      instanceJSON(true, now.Add(10*time.Minute).Format(time.RFC3339)),
+			instanceResp:      instanceJSON(true, orcTimestamp(10*time.Minute)),
 			cluster:           asyncWithOrc(),
 			pods:              []client.Object{backupPod, orchestratorPod},
 			wantBeginDowntime: false,
+		},
+		{
+			name:              "rfc3339 timestamp is not accepted",
+			instanceResp:      instanceJSON(true, time.Now().UTC().Add(10*time.Minute).Format(time.RFC3339)),
+			cluster:           asyncWithOrc(),
+			pods:              []client.Object{backupPod, orchestratorPod},
+			wantBeginDowntime: false,
+			wantErr:           true,
+			errorMsg:          "parse downtime end timestamp",
+		},
+		{
+			name:              "unparsable timestamp is reported",
+			instanceResp:      instanceJSON(true, "not-a-timestamp"),
+			cluster:           asyncWithOrc(),
+			pods:              []client.Object{backupPod, orchestratorPod},
+			wantBeginDowntime: false,
+			wantErr:           true,
+			errorMsg:          "parse downtime end timestamp",
 		},
 		{
 			name: "skip with group replication cluster (no orchestrator needed)",
@@ -1611,7 +1636,7 @@ func TestRenewDowntime(t *testing.T) {
 			r := PerconaServerMySQLBackupReconciler{
 				Client:        cb.Build(),
 				Scheme:        scheme,
-				ServerVersion: &platform.ServerVersion{Platform: platform.PlatformKubernetes},
+				ServerVersion: &platform.ServerVersion{Platform: platform.Kubernetes},
 				ClientCmd:     clientCmd,
 			}
 
@@ -1871,7 +1896,7 @@ func TestRunPostFinishTasks(t *testing.T) {
 			r := PerconaServerMySQLBackupReconciler{
 				Client:        cb.Build(),
 				Scheme:        scheme,
-				ServerVersion: &platform.ServerVersion{Platform: platform.PlatformKubernetes},
+				ServerVersion: &platform.ServerVersion{Platform: platform.Kubernetes},
 				ClientCmd:     tt.clientCmd,
 			}
 

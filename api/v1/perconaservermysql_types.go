@@ -65,6 +65,7 @@ const (
 // +kubebuilder:validation:XValidation:rule="self.unsafeFlags.orchestratorSize || !(self.mysql.clusterType == 'async' && has(self.orchestrator) && has(self.orchestrator.size) && (self.orchestrator.size < 3 || self.orchestrator.size % 2 == 0) && self.orchestrator.size > 0)",message="Invalid configuration: For 'async' replication, Orchestrator size must be 3 or greater and odd unless 'unsafeFlags.orchestratorSize' is enabled"
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async' && self.updateStrategy == 'SmartUpdate') || (has(self.orchestrator) && self.orchestrator.enabled)",message="Invalid configuration: For 'async' replication, SmartUpdate requires Orchestrator to be enabled"
 // +kubebuilder:validation:XValidation:rule="!has(self.proxy) || !(has(self.proxy.router) && has(self.proxy.router.enabled) && self.proxy.router.enabled && has(self.proxy.haproxy) && has(self.proxy.haproxy.enabled) && self.proxy.haproxy.enabled)",message="Invalid configuration: MySQL Router and HAProxy can't be enabled at the same time"
+// +kubebuilder:validation:XValidation:rule="(oldSelf.mysql.clusterType == self.mysql.clusterType) || self.mysql.clusterType == 'async' || !self.?orchestrator.?enabled.orValue(false)",message="spec.orchestrator.enabled should be false when switching from async cluster type"
 type PerconaServerMySQLSpec struct {
 	Metadata  *Metadata `json:"metadata,omitempty"`
 	CRVersion string    `json:"crVersion,omitempty"`
@@ -957,6 +958,7 @@ type PerconaServerMySQLStatus struct { // INSERT ADDITIONAL STATUS FIELD - defin
 	Router         StatefulAppStatus  `json:"router,omitempty"`
 	BinlogServer   StatefulAppStatus  `json:"binlogServer,omitempty"`
 	State          StatefulAppState   `json:"state,omitempty"`
+	ClusterType    ClusterType        `json:"clusterType,omitempty"`
 	BackupVersion  string             `json:"backupVersion,omitempty"`
 	PMMVersion     string             `json:"pmmVersion,omitempty"`
 	ToolkitVersion string             `json:"toolkitVersion,omitempty"`
@@ -1020,10 +1022,11 @@ func (s *PerconaServerMySQLStatus) CompareMySQLVersion(ver string) int {
 }
 
 const (
-	ConditionInnoDBClusterBootstrapped string = "InnoDBClusterBootstrapped"
-	ConditionClusterSetMember          string = "ClusterSetMember"
-	ConditionAwaitingExternalBootstrap string = "AwaitingExternalBootstrap"
-	ConditionMySQLConfigSynced                = "MySQLConfigSynced"
+	ConditionInnoDBClusterBootstrapped   string = "InnoDBClusterBootstrapped"
+	ConditionClusterSetMember            string = "ClusterSetMember"
+	ConditionAwaitingExternalBootstrap   string = "AwaitingExternalBootstrap"
+	ConditionMySQLConfigSynced                  = "MySQLConfigSynced"
+	ConditionClusterTypeSwitchInProgress string = "ClusterTypeSwitchInProgress"
 
 	// Deprecated, preserved only for backward compatibility
 	ConditionClusterSetReplicationRunning string = "ClusterSetReplicationRunning"
@@ -1262,7 +1265,18 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 		cr.Spec.MySQL.StartupProbe.SuccessThreshold = 1
 	}
 	if cr.Spec.MySQL.StartupProbe.TimeoutSeconds == 0 {
-		cr.Spec.MySQL.StartupProbe.TimeoutSeconds = 12 * 60 * 60
+		// The startup probe runs the bootstrap (including the clone), so its
+		// timeout caps how long a clone may take. From 1.3.0 a clone may run for
+		// as long as it keeps making progress (the stall watchdog aborts only a
+		// frozen clone), so we give it a much larger cap: 7 days. Only an
+		// explicitly older crVersion keeps the previous 12 hours - an empty
+		// crVersion is defaulted to the current version, so it uses the new cap
+		// too (and this also avoids CompareVersion panicking on an empty value).
+		if cr.Spec.CRVersion == "" || cr.CompareVersion("1.3.0") >= 0 {
+			cr.Spec.MySQL.StartupProbe.TimeoutSeconds = 7 * 24 * 60 * 60
+		} else {
+			cr.Spec.MySQL.StartupProbe.TimeoutSeconds = 12 * 60 * 60
+		}
 	}
 
 	if cr.Spec.MySQL.LivenessProbe.InitialDelaySeconds == 0 {
@@ -1383,7 +1397,7 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 	}
 
 	var fsgroup *int64
-	if serverVersion != nil && serverVersion.Platform != platform.PlatformOpenshift {
+	if serverVersion != nil && serverVersion.Platform != platform.Openshift {
 		var tp int64 = 1001
 		fsgroup = &tp
 	}
@@ -1704,6 +1718,22 @@ func (cr *PerconaServerMySQL) PiTREnabled() bool {
 	return cr.Spec.Backup != nil &&
 		cr.Spec.Backup.PiTR.Enabled &&
 		cr.Spec.Backup.PiTR.BinlogServer != nil
+}
+
+func (cr *PerconaServerMySQL) AppliedClusterType() ClusterType {
+	if cr.Status.ClusterType != "" {
+		return cr.Status.ClusterType
+	}
+
+	return cr.Spec.MySQL.ClusterType
+}
+
+func (cr *PerconaServerMySQL) AppliedIsAsync() bool {
+	return cr.AppliedClusterType() == ClusterTypeAsync
+}
+
+func (cr *PerconaServerMySQL) AppliedIsGR() bool {
+	return cr.AppliedClusterType() == ClusterTypeGR
 }
 
 // OrchestratorEnabled determines if the orchestrator is enabled,

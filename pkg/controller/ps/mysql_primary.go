@@ -24,7 +24,7 @@ import (
 func (r *PerconaServerMySQLReconciler) reconcileGRMySQLPrimaryLabel(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	logger := logf.FromContext(ctx)
 
-	if !cr.Spec.MySQL.IsGR() {
+	if !cr.AppliedIsGR() {
 		return nil
 	}
 

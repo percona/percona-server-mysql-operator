@@ -305,7 +305,7 @@ func TestReconcileVersions(t *testing.T) {
 				Client: cb.Build(),
 				Scheme: scheme,
 				ServerVersion: &platform.ServerVersion{
-					Platform: platform.PlatformKubernetes,
+					Platform: platform.Kubernetes,
 					Info: k8sversion.Info{
 						GitVersion: "kube-version",
 					},
@@ -528,7 +528,7 @@ func TestGetVersion(t *testing.T) {
 				Client: cb.Build(),
 				Scheme: scheme,
 				ServerVersion: &platform.ServerVersion{
-					Platform: platform.PlatformKubernetes,
+					Platform: platform.Kubernetes,
 					Info: k8sversion.Info{
 						GitVersion: "kube-version",
 					},
@@ -575,6 +575,10 @@ func (f *fakeVersionClientCmd) REST() restclient.Interface {
 	return nil
 }
 
+func (f *fakeVersionClientCmd) Config() *restclient.Config {
+	return nil
+}
+
 func (vs *fakeVS) Apply(_ context.Context, req any) (any, error) {
 	if vs.unimplemented {
 		return nil, errors.New("unimplemented")
@@ -607,7 +611,7 @@ func (vs *fakeVS) Apply(_ context.Context, req any) (any, error) {
 		KubeVersion:       "kube-version",
 		OperatorVersion:   version.Version(),
 		Product:           "ps-operator",
-		Platform:          string(platform.PlatformKubernetes),
+		Platform:          string(platform.Kubernetes),
 		HaproxyVersion:    "haproxy-version",
 		PmmVersion:        "pmm-version",
 	}

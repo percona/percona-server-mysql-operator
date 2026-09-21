@@ -224,7 +224,7 @@ func defaultCR() *apiv1.PerconaServerMySQL {
 
 func defaultServerVersion() *platform.ServerVersion {
 	return &platform.ServerVersion{
-		Platform: platform.PlatformKubernetes,
+		Platform: platform.Kubernetes,
 		Info: k8sversion.Info{
 			GitVersion: "v1.28.0",
 		},
