@@ -32,8 +32,7 @@
   ],
   "PostUnsuccessfulFailoverProcesses": [],
   "PreFailoverProcesses": [
-    "echo 'Will recover from {failureType} on {failureCluster}'",
-    "echo 'PreFailoverProcesses:' && /opt/percona/orc-handler failover -source {failedHost} -failure-type '{failureType}'"
+    "echo 'Will recover from {failureType} on {failureCluster}'"
   ],
   "ProcessesShellCommand": "sh",
   "RaftAdvertise": "127.0.0.1",
