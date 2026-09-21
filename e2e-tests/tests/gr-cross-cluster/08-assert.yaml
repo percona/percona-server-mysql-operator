@@ -37,7 +37,6 @@ commands:
           .clusters.grcrossclusterdc2.clusterRole == "PRIMARY" and
           .clusters.grcrossclusterdc2.globalStatus == "OK"
       '
-    timeout: 420
 ---
 kind: PerconaServerMySQLClusterSet
 apiVersion: ps.percona.com/v1

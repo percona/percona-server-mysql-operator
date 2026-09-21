@@ -48,5 +48,4 @@ commands:
       # Restore dc1 to size 3 and auto mode for subsequent steps
       kubectl patch -n "${NAMESPACE}" ps gr-cross-cluster-dc1 --type=merge \
         -p '{"spec":{"unsafeFlags":{"mysqlSize":false},"mysql":{"size":3,"bootstrap":{"mode":"auto"}}}}'
-    timeout: 600
 

@@ -23,8 +23,7 @@ assertAll:
 - celExpr: base.status.destination.contains(incr1.metadata.annotations["percona.com/base-backup-name"])
   message: "Base backup annotation should reference the correct base backup"
 commands:
-  - timeout: 60
-    script: |-
+  - script: |-
       set -o errexit
 
       source ../../functions

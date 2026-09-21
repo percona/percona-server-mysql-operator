@@ -1,7 +1,8 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
-  - script: |-
+  - timeout: 60
+    script: |-
       set -o errexit
       set -o xtrace
 
@@ -17,4 +18,3 @@ commands:
       done
 
       kubectl create configmap -n "${NAMESPACE}" 04-read-from-clusterip ${args}
-    timeout: 60

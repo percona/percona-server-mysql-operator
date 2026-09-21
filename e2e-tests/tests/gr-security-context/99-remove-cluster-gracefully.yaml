@@ -6,7 +6,8 @@ delete:
     metadata:
       name: gr-security-context
 commands:
-  - script: |-
+  - timeout: 60
+    script: |-
       set -o errexit
       set -o xtrace
 
@@ -17,4 +18,3 @@ commands:
       fi
 
       destroy_operator
-    timeout: 60

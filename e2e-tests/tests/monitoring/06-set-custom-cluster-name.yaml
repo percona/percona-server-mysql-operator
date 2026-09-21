@@ -1,7 +1,8 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
-  - script: |-
+  - timeout: 900
+    script: |-
       set -o errexit
       set -o xtrace
 
@@ -27,4 +28,3 @@ commands:
           "${NAMESPACE}-monitoring-mysql-0" \
           "${NAMESPACE}-monitoring-mysql-1" \
           "${NAMESPACE}-monitoring-mysql-2"
-    timeout: 900

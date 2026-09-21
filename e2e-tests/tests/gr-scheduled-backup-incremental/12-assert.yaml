@@ -14,7 +14,6 @@ commands:
 
         backup_count=$(count_backups_in_schedule "incr" "$(get_cluster_name)")
       done
-    timeout: 420
   - script: |-
       set -o errexit
 
@@ -27,4 +26,3 @@ commands:
 
         backup_count=$(count_backups_in_schedule "full" "$(get_cluster_name)")
       done
-    timeout: 420

@@ -1,8 +1,8 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
-timeout: 10
 commands:
-  - script: |-
+  - timeout: 120
+    script: |-
       set -o errexit
       set -o xtrace
 
@@ -16,7 +16,6 @@ commands:
           | yq eval '.spec.proxy.haproxy.size=1' - \
           | yq eval '.spec.secretsName="test-secrets"' - \
           | kubectl -n "${NAMESPACE}" apply -f -
-
       get_cr "dc2" \
           | yq eval '.spec.mysql.clusterType="group-replication"' - \
           | yq eval '.spec.proxy.router.enabled=false' - \

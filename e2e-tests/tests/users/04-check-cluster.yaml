@@ -1,7 +1,8 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
-  - script: |-
+  - timeout: 300
+    script: |-
       set -o pipefail
       set -o errexit
       set -o xtrace
@@ -53,4 +54,3 @@ commands:
           | $sed 's/ *//')
 
       kubectl create configmap -n "${NAMESPACE}" 04-check-replication --from-literal=replicating="${replicating}"
-    timeout: 300

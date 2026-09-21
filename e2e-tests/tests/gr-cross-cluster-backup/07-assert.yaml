@@ -42,7 +42,6 @@ commands:
           .clusters.grcrossclusterbackupdc2.clusterRole == "REPLICA" and
           .clusters.grcrossclusterbackupdc2.globalStatus == "OK"
       '
-    timeout: 420
 ---
 apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQL

@@ -36,7 +36,6 @@ commands:
           .clusters.grcrossclustersinglenode.clusterRole == "REPLICA" and
           .clusters.grcrossclustersinglenode.globalStatus == "OK"
       '
-    timeout: 420
 ---
 apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQL

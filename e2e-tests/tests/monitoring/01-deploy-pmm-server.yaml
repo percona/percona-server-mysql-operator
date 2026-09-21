@@ -1,7 +1,8 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
-  - script: |-
+  - timeout: 240
+    script: |-
       set -o errexit
       set -o xtrace
 
@@ -11,4 +12,3 @@ commands:
       sleep 120 # wait for PMM Server to start
       TOKEN=$(get_pmm_server_token)
       kubectl patch -n "${NAMESPACE}" secret test-secrets --type merge --patch "$(jq -n --arg token "$TOKEN" '{"stringData": {"pmmservertoken": $token}}')"
-    timeout: 240

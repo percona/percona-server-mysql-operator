@@ -1,6 +1,5 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
-timeout: 120
 delete:
 - apiVersion: ps.percona.com/v1
   kind: PerconaServerMySQL
@@ -15,7 +14,8 @@ delete:
   metadata:
     name: gr-cross-cluster-backup-fresh
 commands:
-  - script: |-
+  - timeout: 60
+    script: |-
       set -o errexit
       set -o xtrace
 
@@ -23,4 +23,3 @@ commands:
 
       kubectl delete ps-backup --all -n "${NAMESPACE}"
       destroy_operator
-    timeout: 60

@@ -6,11 +6,11 @@ delete:
     metadata:
       name: gr-data-at-rest-encryption
 commands:
-  - script: |-
+  - timeout: 120
+    script: |-
       set -o errexit
       set -o xtrace
 
       source ../../functions
 
       destroy_operator
-    timeout: 120

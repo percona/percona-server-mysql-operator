@@ -1,7 +1,8 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
-  - script: |-
+  - timeout: 100
+    script: |-
       set -o errexit
       set -o xtrace
 
@@ -24,4 +25,3 @@ commands:
           | yq eval '.metadata.annotations += {"async-annotations-to-ignore-orc": "true", "async-annotations-not-to-ignore-orc": "true" }' - \
           | yq eval '.metadata.labels += {"async-labels-to-ignore-orc": "true", "async-labels-not-to-ignore-orc": "true" }' - \
           | kubectl -n "${NAMESPACE}" apply -f -
-    timeout: 100

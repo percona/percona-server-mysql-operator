@@ -1,7 +1,8 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
-  - script: |-
+  - timeout: 120
+    script: |-
       set -o errexit
       set -o xtrace
 
@@ -28,4 +29,3 @@ commands:
       kubectl create configmap -n "${NAMESPACE}" 03-check-connections $args
 
       check_haproxy_backends "$(get_cluster_name)"
-    timeout: 120

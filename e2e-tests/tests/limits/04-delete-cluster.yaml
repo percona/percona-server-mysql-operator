@@ -1,7 +1,8 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
-  - script: |-
+  - timeout: 300
+    script: |-
       set -o errexit
       set -o xtrace
 
@@ -9,4 +10,3 @@ commands:
 
       get_cr "no-requests" \
           | kubectl -n "${NAMESPACE}" delete -f -
-    timeout: 300

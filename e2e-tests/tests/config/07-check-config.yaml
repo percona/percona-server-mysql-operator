@@ -1,7 +1,8 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
-  - script: |-
+  - timeout: 420
+    script: |-
       set -o errexit
       set -o xtrace
 
@@ -20,4 +21,3 @@ commands:
       kubectl create configmap -n "${NAMESPACE}" 07-check-config \
           --from-literal=max_connections="$(get_mysql_variable_on_pods "${cluster}" max_connections)" \
           --from-literal=max_connect_errors="$(get_mysql_variable_on_pods "${cluster}" max_connect_errors)"
-    timeout: 420

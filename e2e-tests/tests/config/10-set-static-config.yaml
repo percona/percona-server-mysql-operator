@@ -1,7 +1,8 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
-  - script: |-
+  - timeout: 1200
+    script: |-
       set -o errexit
       set -o xtrace
 
@@ -29,4 +30,3 @@ commands:
           --from-literal=innodb_buffer_pool_instances="$(get_mysql_variable_on_pods "${cluster}" innodb_buffer_pool_instances)" \
           --from-literal=max_connections="$(get_mysql_variable_on_pods "${cluster}" max_connections)" \
           --from-literal=generation="${generation_before} ${generation_after}"
-    timeout: 1200
