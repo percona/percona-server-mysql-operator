@@ -317,14 +317,13 @@ func TestRestoreJob(t *testing.T) {
 					Backup: &apiv1.BackupSpec{
 						PiTR: apiv1.PiTRSpec{
 							BinlogServer: &apiv1.BinlogServerSpec{
-								PodSpec: apiv1.PodSpec{ContainerSpec: apiv1.ContainerSpec{
-									Image: "binlog-server:latest",
-									Env: []corev1.EnvVar{
-										{Name: "SEARCH_SUBCOMMAND", Value: binlogserver.SearchByGTIDCommand},
-										{Name: "SEARCH_ARG", Value: "wrong-target"},
-										{Name: "HTTP_PROXY", Value: "http://proxy.example"},
-									},
-								}},
+
+								Image: "binlog-server:latest",
+								Env: []corev1.EnvVar{
+									{Name: "SEARCH_SUBCOMMAND", Value: binlogserver.SearchByGTIDCommand},
+									{Name: "SEARCH_ARG", Value: "wrong-target"},
+									{Name: "HTTP_PROXY", Value: "http://proxy.example"},
+								},
 							},
 						},
 					},
