@@ -609,6 +609,7 @@ type BackupContainerArgs struct {
 	// +kubebuilder:validation:MaxItems=100
 	// +kubebuilder:validation:items:MaxLength=1024
 	// +kubebuilder:validation:XValidation:rule="!self.exists(arg, arg == '--defaults-file' || arg.startsWith('--defaults-file=')) || (self[0].startsWith('--defaults-file=') && self[0] != '--defaults-file=')",message="--defaults-file must use --defaults-file=<path> syntax and be the first xtrabackup argument"
+	// +kubebuilder:validation:XValidation:rule="!self.exists(arg, arg == '--defaults-extra-file' || arg.startsWith('--defaults-extra-file='))",message="--defaults-extra-file is managed by the operator and cannot be specified"
 	Xtrabackup []string `json:"xtrabackup,omitempty"`
 	Xbcloud    []string `json:"xbcloud,omitempty"`
 	Xbstream   []string `json:"xbstream,omitempty"`
