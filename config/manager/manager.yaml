@@ -38,6 +38,16 @@ spec:
           value: "false"
         - name: MAX_CONCURRENT_RECONCILES
           value: "1"
+        - name: PSO_LEADER_ELECTION_ENABLED
+          value: "true"
+        - name: PSO_LEADER_ELECTION_LEASE_NAME
+          value: ""
+        - name: PSO_LEADER_ELECTION_LEASE_DURATION
+          value: "60s"
+        - name: PSO_LEADER_ELECTION_RENEW_DEADLINE
+          value: "40s"
+        - name: PSO_LEADER_ELECTION_RETRY_PERIOD
+          value: "10s"
         - name: POD_NAME
           valueFrom:
             fieldRef:
