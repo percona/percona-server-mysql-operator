@@ -659,21 +659,30 @@ func (r *PerconaServerMySQLBackupReconciler) renewDowntime(
 
 	log := logf.FromContext(ctx)
 	renewalThreshold := 1 * time.Minute
-	downtimeEnd, _ := time.Parse(time.RFC3339, instance.DowntimeEndTimestamp)
-	if !instance.IsDowntimed || time.Until(downtimeEnd) < renewalThreshold {
-		owner := controllerName
-		reason := fmt.Sprintf("ps-backup-%s", cr.Name)
 
-		duration := 600
-
-		log.Info("Starting downtime for backup source", "source", backupSource, "owner", owner, "reason", reason, "durationSeconds", duration)
-		err = orchestrator.BeginDowntime(
-			ctx, r.ClientCmd, orcPod,
-			backupSource, mysql.DefaultPort,
-			owner, reason, duration)
+	if instance.IsDowntimed {
+		downtimeEnd, err := time.Parse(mysql.DatetimeFormat, instance.DowntimeEndTimestamp)
 		if err != nil {
-			return errors.Wrapf(err, "begin downtime for %s", backupSource)
+			return errors.Wrap(err, "parse downtime end timestamp")
 		}
+
+		if time.Until(downtimeEnd) >= renewalThreshold {
+			return nil
+		}
+	}
+
+	owner := controllerName
+	reason := fmt.Sprintf("ps-backup-%s", cr.Name)
+
+	duration := 600
+
+	log.Info("Starting downtime for backup source", "source", backupSource, "owner", owner, "reason", reason, "durationSeconds", duration)
+	err = orchestrator.BeginDowntime(
+		ctx, r.ClientCmd, orcPod,
+		backupSource, mysql.DefaultPort,
+		owner, reason, duration)
+	if err != nil {
+		return errors.Wrapf(err, "begin downtime for %s", backupSource)
 	}
 
 	return nil
