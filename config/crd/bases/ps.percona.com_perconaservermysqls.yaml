@@ -10704,6 +10704,9 @@ spec:
                   - name
                   type: object
                 type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
             type: object
             x-kubernetes-validations:
             - message: 'Invalid configuration: When ''mysql.clusterType'' is set to

@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -26,17 +27,20 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 )
 
-const sourceLogsDir = "/var/lib/mysql/source-logs"
-
-// stagingMarker marks the staging directory as this job's own. Emptying the
-// directory is a recursive delete, so one without the marker is one we did not
-// create and must not touch.
-const stagingMarker = ".failover-staging"
+const (
+	// stagingMarker marks the staging directory as this job's own. Emptying the
+	// directory is a recursive delete, so one without the marker is one we did not
+	// create and must not touch.
+	stagingMarker = ".failover-staging"
+	sourceLogsDir = "/var/lib/mysql/source-logs"
+	lockPath      = "/var/lib/mysql/failover.lock"
+)
 
 const (
 	relayLogApplyTimeout = 6 * time.Minute
 	relayLogApplyPoll    = time.Second
 	sourceFetchTimeout   = 2 * time.Minute
+	jobTimeout           = 10 * time.Minute
 )
 
 var binlogMagic = []byte{0xfe, 'b', 'i', 'n'}
@@ -59,6 +63,7 @@ type failoverConfig struct {
 	sourceURL    func(host string) string
 	source       string
 	stagingDir   string
+	lockPath     string
 	wait         bool
 	applyPoll    time.Duration
 	applyTimeout time.Duration
@@ -71,6 +76,7 @@ type flags struct {
 	wait         bool
 	waitTimeout  time.Duration
 	fetchTimeout time.Duration
+	timeout      time.Duration
 }
 
 func parseFlags() flags {
@@ -80,6 +86,7 @@ func parseFlags() flags {
 	flag.BoolVar(&f.wait, "wait", true, "Wait for the applier to work through the fetched logs. With -wait=false the job returns as soon as the SQL thread is started.")
 	flag.DurationVar(&f.waitTimeout, "wait-timeout", relayLogApplyTimeout, "How long to wait for the applier to work through the fetched logs. Ignored with -wait=false.")
 	flag.DurationVar(&f.fetchTimeout, "fetch-timeout", sourceFetchTimeout, "How long the source has to stream the binary logs, headers and body included.")
+	flag.DurationVar(&f.timeout, "timeout", jobTimeout, "How long the whole job may take, fetching the logs from the source included. Zero or less means no limit.")
 	flag.Parse()
 
 	return f
@@ -91,6 +98,7 @@ func config(f flags) failoverConfig {
 		sourceURL:    sourceStreamURL,
 		source:       f.source,
 		stagingDir:   f.stagingDir,
+		lockPath:     lockPath,
 		wait:         f.wait,
 		applyPoll:    relayLogApplyPoll,
 		applyTimeout: f.waitTimeout,
@@ -99,7 +107,18 @@ func config(f flags) failoverConfig {
 }
 
 func main() {
-	if err := run(context.Background(), config(parseFlags())); err != nil {
+	f := parseFlags()
+
+	// Nothing else bounds the fetch, and the job runs from a failover hook that
+	// holds up the promotion for as long as it takes.
+	ctx := context.Background()
+	if f.timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, f.timeout)
+		defer cancel()
+	}
+
+	if err := run(ctx, config(f)); err != nil {
 		log.Fatalf("ERROR: %v", err)
 	}
 
@@ -119,6 +138,7 @@ func run(ctx context.Context, cfg failoverConfig) error {
 	if cfg.fetchTimeout <= 0 {
 		return fmt.Errorf("-fetch-timeout must be positive, got %s", cfg.fetchTimeout)
 	}
+
 	stagingDir, err := stagingPath(cfg.stagingDir)
 	if err != nil {
 		return err
@@ -126,6 +146,13 @@ func run(ctx context.Context, cfg failoverConfig) error {
 	if err := checkStagingDir(stagingDir); err != nil {
 		return err
 	}
+
+	lock, err := lockSplice(cfg.lockPath)
+	if err != nil {
+		return err
+	}
+	defer lock.Close() //nolint:errcheck
+
 	log.Printf("Fetching binary logs from %s", host)
 
 	d, err := cfg.newDatabase(ctx)
@@ -139,6 +166,15 @@ func run(ctx context.Context, cfg failoverConfig) error {
 			log.Printf("ERROR: failed to close database connection: %v", err)
 		}
 	}()
+
+	if _, err := d.ShowReplicaStatus(ctx); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			log.Printf("Not a replica, nothing to apply")
+			return nil
+		}
+
+		return fmt.Errorf("show replica status: %w", err)
+	}
 
 	if err := d.StopReplication(ctx); err != nil {
 		return fmt.Errorf("stop replica: %w", err)
@@ -636,6 +672,11 @@ func waitForRelayLogsApplied(
 	for {
 		status, err := s.ShowReplicaStatus(ctx)
 		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				log.Printf("Replication channel is gone; the instance was already promoted")
+				return nil
+			}
+
 			return fmt.Errorf("show replica status: %w", err)
 		}
 
