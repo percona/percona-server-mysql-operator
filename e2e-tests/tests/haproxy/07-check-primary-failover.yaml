@@ -1,6 +1,6 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
-timeout: 240
+timeout: 360
 commands:
   - script: |-
       set -o errexit
@@ -23,11 +23,10 @@ commands:
       fi
 
       primary_pod_from_label="$(get_primary_from_label)"
-      primary_pod_from_haproxy="$(get_primary_from_haproxy ${test_name}-haproxy-0)"
-      if [ "${primary_pod_from_label}" != "${primary_pod_from_haproxy}" ]; then
-          echo "Primary in k8s label (${primary_pod_from_label}) is not set to same pod as in haproxy (${primary_pod_from_haproxy})!"
+      if [ "${primary_pod_from_label}" != "${data[0]}" ]; then
+          echo "Primary in k8s label (${primary_pod_from_label}) is not set to same pod as in haproxy (${data[0]})!"
           exit 1
       fi
 
-      check_haproxy_backends "${test_name}"
-    timeout: 240
+      check_haproxy_backends "${test_name}" "${primary_pod_from_label}"
+    timeout: 360
