@@ -1221,6 +1221,26 @@ var _ = Describe("CR validations", Ordered, func() {
 				Expect(createErr.Error()).To(ContainSubstring("growthStep must be a positive quantity"))
 			})
 		})
+
+		When("duplicate users provided", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-duplicate-users", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.Users = []psv1.User{
+				{
+					Name: "some-user",
+				},
+				{
+					Name: "some-user",
+				},
+			}
+
+			It("should fail with error", func() {
+				createErr := k8sClient.Create(ctx, cr)
+				Expect(createErr).To(HaveOccurred())
+				Expect(createErr.Error()).To(ContainSubstring("PerconaServerMySQL.ps.percona.com \"cr-validations-duplicate-users\" is invalid: spec.users[1]: Duplicate value: {\"name\":\"some-user\"}"))
+			})
+		})
 	})
 
 	Context("PITR validation rules", Ordered, func() {

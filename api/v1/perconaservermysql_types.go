@@ -94,6 +94,8 @@ type PerconaServerMySQLSpec struct {
 	InitImage     string            `json:"initImage,omitempty"`
 	InitContainer InitContainerSpec `json:"initContainer,omitempty"`
 
+	// +listType=map
+	// +listMapKey=name
 	Users []User `json:"users,omitempty"`
 }
 
