@@ -259,7 +259,7 @@ system_user_grants() {
 
 	cat <<-EOSQL
 		CREATE USER IF NOT EXISTS 'xtrabackup'@'localhost' IDENTIFIED BY '$(escape_special "${XTRABACKUP_PASSWORD}")' PASSWORD EXPIRE NEVER;
-		GRANT SYSTEM_USER, BACKUP_ADMIN, PROCESS, RELOAD, GROUP_REPLICATION_ADMIN, REPLICATION_SLAVE_ADMIN, LOCK TABLES, REPLICATION CLIENT ON *.* TO 'xtrabackup'@'localhost';
+		GRANT SYSTEM_USER, SYSTEM_VARIABLES_ADMIN, BACKUP_ADMIN, PROCESS, RELOAD, GROUP_REPLICATION_ADMIN, REPLICATION_SLAVE_ADMIN, LOCK TABLES, REPLICATION CLIENT ON *.* TO 'xtrabackup'@'localhost';
 		GRANT SELECT ON performance_schema.replication_group_members TO 'xtrabackup'@'localhost';
 		GRANT SELECT ON performance_schema.log_status TO 'xtrabackup'@'localhost';
 		GRANT SELECT ON performance_schema.keyring_component_status TO 'xtrabackup'@'localhost';
