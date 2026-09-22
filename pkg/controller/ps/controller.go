@@ -350,7 +350,7 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 		}
 	}
 
-	if cr.Spec.MySQL.IsAsync() {
+	if cr.AppliedIsAsync() {
 		orcPod, err := getReadyOrcPod(ctx, r.Client, cr)
 		if err != nil {
 			return nil
@@ -1730,7 +1730,7 @@ func (r *PerconaServerMySQLReconciler) cleanupOutdatedServices(ctx context.Conte
 
 // cleanupOutdatedGRPrimaryService cleans up the outdated mysql primary service when group replication is enabled.
 func (r *PerconaServerMySQLReconciler) cleanupOutdatedGRPrimaryService(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
-	if !cr.Spec.MySQL.IsGR() {
+	if !cr.AppliedIsGR() {
 		return nil
 	}
 	if !cr.Spec.MySQL.ExposePrimary.Enabled {

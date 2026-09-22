@@ -612,7 +612,7 @@ func (r *PerconaServerMySQLBackupReconciler) getBackupSource(ctx context.Context
 		return fmt.Sprintf("%s.%s.%s", sourcePod, mysql.ServiceName(cluster), cluster.Namespace), nil
 	}
 
-	if cluster.Spec.MySQL.ClusterType == apiv1.ClusterTypeAsync && !cluster.Spec.Orchestrator.Enabled {
+	if cluster.AppliedIsAsync() && !cluster.OrchestratorEnabled() {
 		return "", errors.New("Orchestrator is disabled. Please specify the backup source explicitly using either spec.backup.sourcePod in the cluster CR or spec.sourcePod in the PerconaServerMySQLBackup resource.")
 	}
 
