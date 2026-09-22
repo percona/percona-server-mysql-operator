@@ -1,4 +1,4 @@
-FROM --platform=${BUILDPLATFORM} golang:1.26 AS go_builder
+FROM --platform=${BUILDPLATFORM} golang:1.27 AS go_builder
 WORKDIR /go/src/github.com/percona/percona-server-mysql-operator
 
 COPY go.mod go.sum ./
@@ -35,6 +35,11 @@ RUN GOOS=$GOOS GOARCH=$TARGETARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAG
     -o build/_output/bin/sidecar \
     ./cmd/sidecar \
     && cp -r build/_output/bin/sidecar /usr/local/bin/sidecar
+RUN GOOS=$GOOS GOARCH=$TARGETARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
+    go build -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.GitBranch=$GIT_BRANCH -X main.BuildTime=$BUILD_TIME" \
+    -o build/_output/bin/failover \
+    ./cmd/failover/ \
+    && cp -r build/_output/bin/failover /usr/local/bin/failover
 RUN GOOS=$GOOS GOARCH=$TARGETARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
     go build -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.GitBranch=$GIT_BRANCH -X main.BuildTime=$BUILD_TIME" \
     -o build/_output/bin/peer-list \
@@ -77,6 +82,7 @@ COPY --from=go_builder /usr/local/bin/percona-server-mysql-operator /usr/local/b
 COPY --from=go_builder /usr/local/bin/bootstrap /opt/percona-server-mysql-operator/bootstrap
 COPY --from=go_builder /usr/local/bin/healthcheck /opt/percona-server-mysql-operator/healthcheck
 COPY --from=go_builder /usr/local/bin/sidecar /opt/percona-server-mysql-operator/sidecar
+COPY --from=go_builder /usr/local/bin/failover /opt/percona-server-mysql-operator/failover
 COPY --from=go_builder /usr/local/bin/peer-list /opt/percona-server-mysql-operator/peer-list
 COPY --from=go_builder /usr/local/bin/orc-handler /opt/percona-server-mysql-operator/orc-handler
 COPY --from=go_builder /usr/local/bin/mysql-state-monitor /opt/percona-server-mysql-operator/mysql-state-monitor

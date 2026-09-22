@@ -42,6 +42,10 @@ func (f *fakeExecClient) Exec(_ context.Context, _ *corev1.Pod, _ string, cmd []
 
 func (f *fakeExecClient) REST() restclient.Interface { return nil }
 
+func (f *fakeExecClient) Config() *restclient.Config {
+	return nil
+}
+
 func newReadyBinlogServerPod(cr *apiv1.PerconaServerMySQL) *corev1.Pod {
 	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: Name(cr) + "-0", Namespace: cr.Namespace},

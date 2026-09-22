@@ -1,0 +1,97 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 360
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster_name=$(get_cluster_name)
+      router_svc=$(get_router_service "${cluster_name}")
+      mysql_host="-h ${router_svc}"
+
+      kubectl -n "${NAMESPACE}" patch ps "${test_name}" --type=merge -p '{
+        "spec": {
+          "users": [
+            {
+              "name": "alice",
+              "dbs": ["myapp"],
+              "grants": ["SELECT", "UPDATE", "DELETE"],
+              "withGrantOption": true
+            },
+            {
+              "name": "carol",
+              "hosts": ["127.0.0.1"],
+              "grants": ["SELECT"]
+            },
+            {
+              "name": "root",
+              "grants": ["SELECT"]
+            }
+          ]
+        }
+      }'
+
+      carol_created=fail
+      for i in $(seq 1 60); do
+          carol_count=$(run_mysql "SELECT COUNT(*) FROM mysql.user WHERE user='carol' AND host='127.0.0.1'" "${mysql_host}" 2>/dev/null || true)
+          if [[ "${carol_count}" == "1" ]]; then
+              carol_created=success
+              break
+          fi
+          echo "waiting for carol@127.0.0.1 (${i})"
+          sleep 5
+      done
+
+      carol_no_percent=fail
+      carol_percent=$(run_mysql "SELECT COUNT(*) FROM mysql.user WHERE user='carol' AND host='%'" "${mysql_host}" 2>/dev/null || true)
+      if [[ "${carol_percent}" == "0" ]]; then
+          carol_no_percent=success
+      fi
+
+      carol_router_denied=fail
+      carol_pass=$(kubectl -n "${NAMESPACE}" get secret "${cluster_name}-user-carol" -o jsonpath='{.data.password}' | base64 --decode)
+      set +o errexit
+      check_connect_user carol "${carol_pass}" "${router_svc}"
+      carol_connect=$?
+      set -o errexit
+      if [[ ${carol_connect} -ne 0 ]]; then
+          carol_router_denied=success
+      fi
+
+      root_unchanged=fail
+      root_pass=$(get_user_pass root)
+      set +o errexit
+      check_connect_user root "${root_pass}" "${router_svc}"
+      root_connect=$?
+      set -o errexit
+      if [[ ${root_connect} -eq 0 ]]; then
+          root_unchanged=success
+      fi
+
+      root_secret_absent=fail
+      if ! kubectl -n "${NAMESPACE}" get secret "${cluster_name}-user-root" >/dev/null 2>&1; then
+          root_secret_absent=success
+      fi
+
+      root_skipped=fail
+      for i in $(seq 1 60); do
+          if kubectl -n "${OPERATOR_NS:-$NAMESPACE}" logs deploy/percona-server-mysql-operator \
+              | grep -F "Skipping system user" | grep -Fq "root"; then
+              root_skipped=success
+              break
+          fi
+          echo "waiting for skip-system-user log (${i})"
+          sleep 5
+      done
+
+      kubectl create configmap -n "${NAMESPACE}" 08-check-hosts \
+          --from-literal=carol_created="${carol_created}" \
+          --from-literal=carol_no_percent="${carol_no_percent}" \
+          --from-literal=carol_router_denied="${carol_router_denied}" \
+          --from-literal=root_unchanged="${root_unchanged}" \
+          --from-literal=root_secret_absent="${root_secret_absent}" \
+          --from-literal=root_skipped="${root_skipped}"
+      kubectl get configmap -n "${NAMESPACE}" 08-check-hosts -o yaml

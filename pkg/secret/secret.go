@@ -9,7 +9,6 @@ import (
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
@@ -24,12 +23,10 @@ func GenerateCertsSecret(ctx context.Context, cr *apiv1.PerconaServerMySQL) (*co
 	}
 
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        cr.Spec.SSLSecretName,
-			Namespace:   cr.Namespace,
-			Labels:      util.SSMapMerge(cr.GlobalLabels(), cr.Labels("certificate", naming.ComponentTLS)),
-			Annotations: cr.GlobalAnnotations(),
-		},
+		Name:        cr.Spec.SSLSecretName,
+		Namespace:   cr.Namespace,
+		Labels:      util.SSMapMerge(cr.GlobalLabels(), cr.Labels("certificate", naming.ComponentTLS)),
+		Annotations: cr.GlobalAnnotations(),
 		Data: map[string][]byte{
 			"ca.crt":  ca,
 			"tls.crt": cert,

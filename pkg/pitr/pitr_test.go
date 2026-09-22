@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/binlogserver"
@@ -18,7 +17,7 @@ import (
 
 func TestRestoreJobS3CABundle(t *testing.T) {
 	cluster := &apiv1.PerconaServerMySQL{
-		ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "ns"},
+		Name: "cluster", Namespace: "ns",
 		Spec: apiv1.PerconaServerMySQLSpec{
 			CRVersion:     "1.3.0",
 			SecretsName:   "users",
@@ -30,7 +29,7 @@ func TestRestoreJobS3CABundle(t *testing.T) {
 			}}},
 		},
 	}
-	restore := &apiv1.PerconaServerMySQLRestore{ObjectMeta: metav1.ObjectMeta{Name: "restore", Namespace: "ns"}}
+	restore := &apiv1.PerconaServerMySQLRestore{Name: "restore", Namespace: "ns"}
 	job := RestoreJob(cluster, restore, &apiv1.BackupStorageSpec{}, "init-image")
 
 	container := job.Spec.Template.Spec.Containers[0]
@@ -57,10 +56,8 @@ func TestRestoreJob(t *testing.T) {
 	}{
 		"basic job metadata": {
 			cluster: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-cluster",
-					Namespace: "test-ns",
-				},
+				Name:      "my-cluster",
+				Namespace: "test-ns",
 				Spec: apiv1.PerconaServerMySQLSpec{
 					SecretsName:   "my-cluster-secrets",
 					SSLSecretName: "my-cluster-ssl",
@@ -72,10 +69,8 @@ func TestRestoreJob(t *testing.T) {
 				},
 			},
 			restore: &apiv1.PerconaServerMySQLRestore{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-restore",
-					Namespace: "test-ns",
-				},
+				Name:      "my-restore",
+				Namespace: "test-ns",
 			},
 			storage:   &apiv1.BackupStorageSpec{},
 			initImage: "init:latest",
@@ -88,7 +83,7 @@ func TestRestoreJob(t *testing.T) {
 		},
 		"job spec parallelism and completions": {
 			cluster: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "ns"},
+				Name: "cluster", Namespace: "ns",
 				Spec: apiv1.PerconaServerMySQLSpec{
 					SecretsName:   "cluster-secrets",
 					SSLSecretName: "cluster-ssl",
@@ -100,7 +95,7 @@ func TestRestoreJob(t *testing.T) {
 				},
 			},
 			restore: &apiv1.PerconaServerMySQLRestore{
-				ObjectMeta: metav1.ObjectMeta{Name: "restore", Namespace: "ns"},
+				Name: "restore", Namespace: "ns",
 			},
 			storage:   &apiv1.BackupStorageSpec{},
 			initImage: "init:latest",
@@ -112,7 +107,7 @@ func TestRestoreJob(t *testing.T) {
 		},
 		"backoff limit from cluster spec": {
 			cluster: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "ns"},
+				Name: "cluster", Namespace: "ns",
 				Spec: apiv1.PerconaServerMySQLSpec{
 					SecretsName:   "cluster-secrets",
 					SSLSecretName: "cluster-ssl",
@@ -125,7 +120,7 @@ func TestRestoreJob(t *testing.T) {
 				},
 			},
 			restore: &apiv1.PerconaServerMySQLRestore{
-				ObjectMeta: metav1.ObjectMeta{Name: "restore", Namespace: "ns"},
+				Name: "restore", Namespace: "ns",
 			},
 			storage:   &apiv1.BackupStorageSpec{},
 			initImage: "init:latest",
@@ -135,7 +130,7 @@ func TestRestoreJob(t *testing.T) {
 		},
 		"pvc name uses cluster name": {
 			cluster: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{Name: "mycluster", Namespace: "ns"},
+				Name: "mycluster", Namespace: "ns",
 				Spec: apiv1.PerconaServerMySQLSpec{
 					SecretsName:   "mycluster-secrets",
 					SSLSecretName: "mycluster-ssl",
@@ -147,7 +142,7 @@ func TestRestoreJob(t *testing.T) {
 				},
 			},
 			restore: &apiv1.PerconaServerMySQLRestore{
-				ObjectMeta: metav1.ObjectMeta{Name: "restore", Namespace: "ns"},
+				Name: "restore", Namespace: "ns",
 			},
 			storage:   &apiv1.BackupStorageSpec{},
 			initImage: "init:latest",
@@ -166,7 +161,7 @@ func TestRestoreJob(t *testing.T) {
 		},
 		"volumes include all expected volumes": {
 			cluster: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "ns"},
+				Name: "cluster", Namespace: "ns",
 				Spec: apiv1.PerconaServerMySQLSpec{
 					SecretsName:   "my-secrets",
 					SSLSecretName: "my-ssl",
@@ -178,7 +173,7 @@ func TestRestoreJob(t *testing.T) {
 				},
 			},
 			restore: &apiv1.PerconaServerMySQLRestore{
-				ObjectMeta: metav1.ObjectMeta{Name: "my-restore", Namespace: "ns"},
+				Name: "my-restore", Namespace: "ns",
 			},
 			storage:   &apiv1.BackupStorageSpec{},
 			initImage: "init:latest",
@@ -195,7 +190,7 @@ func TestRestoreJob(t *testing.T) {
 		},
 		"secrets volume uses cluster secrets name": {
 			cluster: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "ns"},
+				Name: "cluster", Namespace: "ns",
 				Spec: apiv1.PerconaServerMySQLSpec{
 					SecretsName:   "custom-secrets",
 					SSLSecretName: "custom-ssl",
@@ -207,7 +202,7 @@ func TestRestoreJob(t *testing.T) {
 				},
 			},
 			restore: &apiv1.PerconaServerMySQLRestore{
-				ObjectMeta: metav1.ObjectMeta{Name: "restore", Namespace: "ns"},
+				Name: "restore", Namespace: "ns",
 			},
 			storage:   &apiv1.BackupStorageSpec{},
 			initImage: "init:latest",
@@ -293,7 +288,7 @@ func TestRestoreJob(t *testing.T) {
 		},
 		"binlogs path is handed to the restore container": {
 			cluster: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "ns"},
+				Name: "cluster", Namespace: "ns",
 				Spec: apiv1.PerconaServerMySQLSpec{
 					SecretsName:   "secrets",
 					SSLSecretName: "ssl",
@@ -305,7 +300,7 @@ func TestRestoreJob(t *testing.T) {
 				},
 			},
 			restore: &apiv1.PerconaServerMySQLRestore{
-				ObjectMeta: metav1.ObjectMeta{Name: "my-restore", Namespace: "ns"},
+				Name: "my-restore", Namespace: "ns",
 			},
 			storage:   &apiv1.BackupStorageSpec{},
 			initImage: "init:latest",
@@ -356,7 +351,7 @@ func TestRestoreJob(t *testing.T) {
 		},
 		"storage scheduling fields propagated to pod spec": {
 			cluster: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "ns"},
+				Name: "cluster", Namespace: "ns",
 				Spec: apiv1.PerconaServerMySQLSpec{
 					SecretsName:   "secrets",
 					SSLSecretName: "ssl",
@@ -368,7 +363,7 @@ func TestRestoreJob(t *testing.T) {
 				},
 			},
 			restore: &apiv1.PerconaServerMySQLRestore{
-				ObjectMeta: metav1.ObjectMeta{Name: "restore", Namespace: "ns"},
+				Name: "restore", Namespace: "ns",
 			},
 			storage: &apiv1.BackupStorageSpec{
 				NodeSelector:      map[string]string{"disktype": "ssd"},
@@ -390,7 +385,7 @@ func TestRestoreJob(t *testing.T) {
 		},
 		"image pull secrets from backup spec": {
 			cluster: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "ns"},
+				Name: "cluster", Namespace: "ns",
 				Spec: apiv1.PerconaServerMySQLSpec{
 					SecretsName:   "secrets",
 					SSLSecretName: "ssl",
@@ -403,7 +398,7 @@ func TestRestoreJob(t *testing.T) {
 				},
 			},
 			restore: &apiv1.PerconaServerMySQLRestore{
-				ObjectMeta: metav1.ObjectMeta{Name: "restore", Namespace: "ns"},
+				Name: "restore", Namespace: "ns",
 			},
 			storage:   &apiv1.BackupStorageSpec{},
 			initImage: "init:latest",
@@ -413,7 +408,7 @@ func TestRestoreJob(t *testing.T) {
 		},
 		"sleep forever annotation sets SLEEP_FOREVER env var": {
 			cluster: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "ns"},
+				Name: "cluster", Namespace: "ns",
 				Spec: apiv1.PerconaServerMySQLSpec{
 					SecretsName:   "secrets",
 					SSLSecretName: "ssl",
@@ -425,11 +420,9 @@ func TestRestoreJob(t *testing.T) {
 				},
 			},
 			restore: &apiv1.PerconaServerMySQLRestore{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:        "my-restore",
-					Namespace:   "ns",
-					Annotations: map[string]string{"percona.com/pitr-sleep-forever": "true"},
-				},
+				Name:        "my-restore",
+				Namespace:   "ns",
+				Annotations: map[string]string{"percona.com/pitr-sleep-forever": "true"},
 			},
 			storage:   &apiv1.BackupStorageSpec{},
 			initImage: "init:latest",
@@ -441,7 +434,7 @@ func TestRestoreJob(t *testing.T) {
 		},
 		"no sleep forever annotation omits SLEEP_FOREVER env var": {
 			cluster: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "ns"},
+				Name: "cluster", Namespace: "ns",
 				Spec: apiv1.PerconaServerMySQLSpec{
 					SecretsName:   "secrets",
 					SSLSecretName: "ssl",
@@ -453,7 +446,7 @@ func TestRestoreJob(t *testing.T) {
 				},
 			},
 			restore: &apiv1.PerconaServerMySQLRestore{
-				ObjectMeta: metav1.ObjectMeta{Name: "my-restore", Namespace: "ns"},
+				Name: "my-restore", Namespace: "ns",
 			},
 			storage:   &apiv1.BackupStorageSpec{},
 			initImage: "init:latest",
@@ -465,7 +458,7 @@ func TestRestoreJob(t *testing.T) {
 		},
 		"restore container has correct env vars without pitr spec": {
 			cluster: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "ns"},
+				Name: "cluster", Namespace: "ns",
 				Spec: apiv1.PerconaServerMySQLSpec{
 					SecretsName:   "secrets",
 					SSLSecretName: "ssl",
@@ -477,8 +470,8 @@ func TestRestoreJob(t *testing.T) {
 				},
 			},
 			restore: &apiv1.PerconaServerMySQLRestore{
-				ObjectMeta: metav1.ObjectMeta{Name: "my-restore", Namespace: "ns"},
-				Spec:       apiv1.PerconaServerMySQLRestoreSpec{},
+				Name: "my-restore", Namespace: "ns",
+				Spec: apiv1.PerconaServerMySQLRestoreSpec{},
 			},
 			storage:   &apiv1.BackupStorageSpec{},
 			initImage: "init:latest",
@@ -494,7 +487,7 @@ func TestRestoreJob(t *testing.T) {
 		},
 		"restore container has pitr date env vars": {
 			cluster: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "ns"},
+				Name: "cluster", Namespace: "ns",
 				Spec: apiv1.PerconaServerMySQLSpec{
 					SecretsName:   "secrets",
 					SSLSecretName: "ssl",
@@ -506,7 +499,7 @@ func TestRestoreJob(t *testing.T) {
 				},
 			},
 			restore: &apiv1.PerconaServerMySQLRestore{
-				ObjectMeta: metav1.ObjectMeta{Name: "my-restore", Namespace: "ns"},
+				Name: "my-restore", Namespace: "ns",
 				Spec: apiv1.PerconaServerMySQLRestoreSpec{
 					PITR: &apiv1.RestorePITRSpec{
 						Type: apiv1.PITRDate,
@@ -526,7 +519,7 @@ func TestRestoreJob(t *testing.T) {
 		},
 		"restore container has pitr gtid env vars": {
 			cluster: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "ns"},
+				Name: "cluster", Namespace: "ns",
 				Spec: apiv1.PerconaServerMySQLSpec{
 					SecretsName:   "secrets",
 					SSLSecretName: "ssl",
@@ -538,7 +531,7 @@ func TestRestoreJob(t *testing.T) {
 				},
 			},
 			restore: &apiv1.PerconaServerMySQLRestore{
-				ObjectMeta: metav1.ObjectMeta{Name: "my-restore", Namespace: "ns"},
+				Name: "my-restore", Namespace: "ns",
 				Spec: apiv1.PerconaServerMySQLRestoreSpec{
 					PITR: &apiv1.RestorePITRSpec{
 						Type: apiv1.PITRGtid,
@@ -559,7 +552,7 @@ func TestRestoreJob(t *testing.T) {
 		},
 		"restore container has PITR_FORCE env var when force is true": {
 			cluster: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "ns"},
+				Name: "cluster", Namespace: "ns",
 				Spec: apiv1.PerconaServerMySQLSpec{
 					SecretsName:   "secrets",
 					SSLSecretName: "ssl",
@@ -571,7 +564,7 @@ func TestRestoreJob(t *testing.T) {
 				},
 			},
 			restore: &apiv1.PerconaServerMySQLRestore{
-				ObjectMeta: metav1.ObjectMeta{Name: "my-restore", Namespace: "ns"},
+				Name: "my-restore", Namespace: "ns",
 				Spec: apiv1.PerconaServerMySQLRestoreSpec{
 					PITR: &apiv1.RestorePITRSpec{
 						Type:  apiv1.PITRDate,
@@ -590,7 +583,7 @@ func TestRestoreJob(t *testing.T) {
 		},
 		"restore container omits PITR_FORCE env var when force is false": {
 			cluster: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "ns"},
+				Name: "cluster", Namespace: "ns",
 				Spec: apiv1.PerconaServerMySQLSpec{
 					SecretsName:   "secrets",
 					SSLSecretName: "ssl",
@@ -602,7 +595,7 @@ func TestRestoreJob(t *testing.T) {
 				},
 			},
 			restore: &apiv1.PerconaServerMySQLRestore{
-				ObjectMeta: metav1.ObjectMeta{Name: "my-restore", Namespace: "ns"},
+				Name: "my-restore", Namespace: "ns",
 				Spec: apiv1.PerconaServerMySQLRestoreSpec{
 					PITR: &apiv1.RestorePITRSpec{
 						Type: apiv1.PITRGtid,
@@ -620,7 +613,7 @@ func TestRestoreJob(t *testing.T) {
 		},
 		"restore container has s3 env vars when binlog server has s3 storage": {
 			cluster: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "ns"},
+				Name: "cluster", Namespace: "ns",
 				Spec: apiv1.PerconaServerMySQLSpec{
 					SecretsName:   "secrets",
 					SSLSecretName: "ssl",
@@ -641,7 +634,7 @@ func TestRestoreJob(t *testing.T) {
 				},
 			},
 			restore: &apiv1.PerconaServerMySQLRestore{
-				ObjectMeta: metav1.ObjectMeta{Name: "restore", Namespace: "ns"},
+				Name: "restore", Namespace: "ns",
 			},
 			storage:   &apiv1.BackupStorageSpec{},
 			initImage: "init:latest",
@@ -667,7 +660,7 @@ func TestRestoreJob(t *testing.T) {
 		},
 		"restore container command and volume mounts": {
 			cluster: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "ns"},
+				Name: "cluster", Namespace: "ns",
 				Spec: apiv1.PerconaServerMySQLSpec{
 					SecretsName:   "secrets",
 					SSLSecretName: "ssl",
@@ -680,7 +673,7 @@ func TestRestoreJob(t *testing.T) {
 				},
 			},
 			restore: &apiv1.PerconaServerMySQLRestore{
-				ObjectMeta: metav1.ObjectMeta{Name: "restore", Namespace: "ns"},
+				Name: "restore", Namespace: "ns",
 			},
 			storage:   &apiv1.BackupStorageSpec{},
 			initImage: "init:latest",
@@ -702,7 +695,7 @@ func TestRestoreJob(t *testing.T) {
 		},
 		"keyring secret from cluster is mounted": {
 			cluster: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "ns"},
+				Name: "cluster", Namespace: "ns",
 				Spec: apiv1.PerconaServerMySQLSpec{
 					SecretsName:   "secrets",
 					SSLSecretName: "ssl",
@@ -720,7 +713,7 @@ func TestRestoreJob(t *testing.T) {
 				},
 			},
 			restore: &apiv1.PerconaServerMySQLRestore{
-				ObjectMeta: metav1.ObjectMeta{Name: "restore", Namespace: "ns"},
+				Name: "restore", Namespace: "ns",
 			},
 			storage:   &apiv1.BackupStorageSpec{},
 			initImage: "init:latest",
@@ -748,7 +741,7 @@ func TestRestoreJob(t *testing.T) {
 		},
 		"restore keyring secret overrides cluster keyring": {
 			cluster: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "ns"},
+				Name: "cluster", Namespace: "ns",
 				Spec: apiv1.PerconaServerMySQLSpec{
 					SecretsName:   "secrets",
 					SSLSecretName: "ssl",
@@ -766,7 +759,7 @@ func TestRestoreJob(t *testing.T) {
 				},
 			},
 			restore: &apiv1.PerconaServerMySQLRestore{
-				ObjectMeta: metav1.ObjectMeta{Name: "restore", Namespace: "ns"},
+				Name: "restore", Namespace: "ns",
 				Spec: apiv1.PerconaServerMySQLRestoreSpec{
 					PITR: &apiv1.RestorePITRSpec{
 						KeyringSecret: &apiv1.BinlogServerKeyringSecretSelector{
@@ -796,7 +789,7 @@ func TestRestoreJob(t *testing.T) {
 		},
 		"init containers run in order": {
 			cluster: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "ns"},
+				Name: "cluster", Namespace: "ns",
 				Spec: apiv1.PerconaServerMySQLSpec{
 					SecretsName:   "secrets",
 					SSLSecretName: "ssl",
@@ -808,7 +801,7 @@ func TestRestoreJob(t *testing.T) {
 				},
 			},
 			restore: &apiv1.PerconaServerMySQLRestore{
-				ObjectMeta: metav1.ObjectMeta{Name: "restore", Namespace: "ns"},
+				Name: "restore", Namespace: "ns",
 			},
 			storage:   &apiv1.BackupStorageSpec{},
 			initImage: "percona/init:1.0",
@@ -821,7 +814,7 @@ func TestRestoreJob(t *testing.T) {
 		},
 		"vault secret is mounted when data at rest encryption is configured": {
 			cluster: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "ns"},
+				Name: "cluster", Namespace: "ns",
 				Spec: apiv1.PerconaServerMySQLSpec{
 					SecretsName:   "secrets",
 					SSLSecretName: "ssl",
@@ -836,7 +829,7 @@ func TestRestoreJob(t *testing.T) {
 				},
 			},
 			restore: &apiv1.PerconaServerMySQLRestore{
-				ObjectMeta: metav1.ObjectMeta{Name: "restore", Namespace: "ns"},
+				Name: "restore", Namespace: "ns",
 			},
 			storage:   &apiv1.BackupStorageSpec{},
 			initImage: "init:latest",
@@ -866,7 +859,7 @@ func TestRestoreJob(t *testing.T) {
 		},
 		"vault secret is not mounted when unset": {
 			cluster: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "ns"},
+				Name: "cluster", Namespace: "ns",
 				Spec: apiv1.PerconaServerMySQLSpec{
 					SecretsName:   "secrets",
 					SSLSecretName: "ssl",
@@ -879,7 +872,7 @@ func TestRestoreJob(t *testing.T) {
 				},
 			},
 			restore: &apiv1.PerconaServerMySQLRestore{
-				ObjectMeta: metav1.ObjectMeta{Name: "restore", Namespace: "ns"},
+				Name: "restore", Namespace: "ns",
 			},
 			storage:   &apiv1.BackupStorageSpec{},
 			initImage: "init:latest",
@@ -935,7 +928,7 @@ func TestJobName(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			restore := &apiv1.PerconaServerMySQLRestore{
-				ObjectMeta: metav1.ObjectMeta{Name: tt.restoreName},
+				Name: tt.restoreName,
 			}
 			assert.Equal(t, tt.expected, JobName(restore))
 		})

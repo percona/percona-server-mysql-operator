@@ -82,17 +82,15 @@ func TestStatefulSet(t *testing.T) {
 	const tlsHash = "config-hash"
 
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "some-secret",
-			Namespace: ns,
-		},
+		Name:       "some-secret",
+		Namespace:  ns,
 		StringData: map[string]string{},
 	}
 
 	cr := readDefaultCluster(t, "cluster", ns)
 	cr.Spec.CRVersion = version.Version()
 	if err := cr.CheckNSetDefaults(t.Context(), &platform.ServerVersion{
-		Platform: platform.PlatformKubernetes,
+		Platform: platform.Kubernetes,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -242,6 +240,96 @@ func TestStatefulSet(t *testing.T) {
 	})
 }
 
+func TestHeartbeatCloneTimeoutEnvGate(t *testing.T) {
+	// Before 1.3.0 the sidecar honored CLONE_TIMEOUT_SECONDS; from 1.3.0 it waits
+	// without a timeout and the env is dropped. Older clusters must keep it so an
+	// operator-only upgrade does not change their pod template.
+	find := func(c corev1.Container, name string) (string, bool) {
+		for _, e := range c.Env {
+			if e.Name == name {
+				return e.Value, true
+			}
+		}
+		return "", false
+	}
+
+	t.Run("present before 1.3.0", func(t *testing.T) {
+		cr := &apiv1.PerconaServerMySQL{}
+		cr.Spec.CRVersion = "1.2.0"
+		cr.Spec.Toolkit = &apiv1.ToolkitSpec{}
+		v, ok := find(heartbeatContainer(cr), "CLONE_TIMEOUT_SECONDS")
+		assert.True(t, ok, "CLONE_TIMEOUT_SECONDS must stay for crVersion < 1.3.0")
+		assert.Equal(t, "3600", v)
+	})
+
+	t.Run("dropped from 1.3.0", func(t *testing.T) {
+		cr := &apiv1.PerconaServerMySQL{}
+		cr.Spec.CRVersion = "1.3.0"
+		cr.Spec.Toolkit = &apiv1.ToolkitSpec{}
+		_, ok := find(heartbeatContainer(cr), "CLONE_TIMEOUT_SECONDS")
+		assert.False(t, ok, "CLONE_TIMEOUT_SECONDS must be dropped for crVersion >= 1.3.0")
+	})
+}
+
+func TestCloneStallWatchdogGate(t *testing.T) {
+	const ns = "mysql-ns"
+	secret := &corev1.Secret{
+		Name: "some-secret", Namespace: ns,
+		StringData: map[string]string{},
+	}
+
+	// A defaulted cluster (defaults run at the current crVersion), then override
+	// crVersion to exercise the gate.
+	defaulted := func(t *testing.T, crVersion string) *apiv1.PerconaServerMySQL {
+		t.Helper()
+		cr := readDefaultCluster(t, "cluster", ns)
+		cr.Spec.CRVersion = crVersion
+		if err := cr.CheckNSetDefaults(t.Context(), &platform.ServerVersion{
+			Platform: platform.Kubernetes,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return cr
+	}
+
+	mysqldEnv := func(t *testing.T, cr *apiv1.PerconaServerMySQL, name string) (string, bool) {
+		t.Helper()
+		sts := StatefulSet(cr, "init-image", "cfg", "tls", secret)
+		for _, c := range sts.Spec.Template.Spec.Containers {
+			if c.Name != AppName {
+				continue
+			}
+			for _, e := range c.Env {
+				if e.Name == name {
+					return e.Value, true
+				}
+			}
+			return "", false
+		}
+		t.Fatal("mysql container not found")
+		return "", false
+	}
+
+	t.Run("clone stall env present from 1.3.0", func(t *testing.T) {
+		v, ok := mysqldEnv(t, defaulted(t, "1.3.0"), naming.EnvBootstrapCloneStallTimeout)
+		assert.True(t, ok, "BOOTSTRAP_CLONE_STALL_TIMEOUT must be set for crVersion >= 1.3.0")
+		assert.Equal(t, "900", v)
+	})
+
+	t.Run("clone stall env absent before 1.3.0", func(t *testing.T) {
+		_, ok := mysqldEnv(t, defaulted(t, "1.2.0"), naming.EnvBootstrapCloneStallTimeout)
+		assert.False(t, ok, "BOOTSTRAP_CLONE_STALL_TIMEOUT must not be set for crVersion < 1.3.0")
+	})
+
+	t.Run("startup probe backstop raised from 1.3.0", func(t *testing.T) {
+		assert.Equal(t, int32(7*24*60*60), defaulted(t, "1.3.0").Spec.MySQL.StartupProbe.TimeoutSeconds)
+	})
+
+	t.Run("startup probe backstop stays 12h before 1.3.0", func(t *testing.T) {
+		assert.Equal(t, int32(12*60*60), defaulted(t, "1.2.0").Spec.MySQL.StartupProbe.TimeoutSeconds)
+	})
+}
+
 func TestStatefulsetVolumes(t *testing.T) {
 	configHash := "123abc"
 	tlsHash := "123abc"
@@ -254,9 +342,7 @@ func TestStatefulsetVolumes(t *testing.T) {
 
 	expectedPVCs := []corev1.PersistentVolumeClaim{
 		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "datadir",
-			},
+			Name: "datadir",
 			Spec: corev1.PersistentVolumeClaimSpec{
 				Resources: corev1.VolumeResourceRequirements{
 					Requests: corev1.ResourceList{
@@ -343,10 +429,8 @@ func TestStatefulsetVolumes(t *testing.T) {
 							TerminationGracePeriodSeconds: new(int64(30)),
 							Volumes: append(expectedVolumes(),
 								corev1.Volume{
-									Name: "datadir",
-									VolumeSource: corev1.VolumeSource{
-										HostPath: &corev1.HostPathVolumeSource{},
-									},
+									Name:     "datadir",
+									HostPath: &corev1.HostPathVolumeSource{},
 								},
 							),
 						},
@@ -385,10 +469,8 @@ func TestStatefulsetVolumes(t *testing.T) {
 							TerminationGracePeriodSeconds: new(int64(30)),
 							Volumes: append(expectedVolumes(),
 								corev1.Volume{
-									Name: "datadir",
-									VolumeSource: corev1.VolumeSource{
-										EmptyDir: &corev1.EmptyDirVolumeSource{},
-									},
+									Name:     "datadir",
+									EmptyDir: &corev1.EmptyDirVolumeSource{},
 								},
 							),
 						},
@@ -428,10 +510,8 @@ func TestStatefulsetVolumes(t *testing.T) {
 							TerminationGracePeriodSeconds: new(int64(30)),
 							Volumes: append(expectedVolumes(),
 								corev1.Volume{
-									Name: "datadir",
-									VolumeSource: corev1.VolumeSource{
-										HostPath: &corev1.HostPathVolumeSource{},
-									},
+									Name:     "datadir",
+									HostPath: &corev1.HostPathVolumeSource{},
 								},
 							),
 						},
@@ -445,10 +525,8 @@ func TestStatefulsetVolumes(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			cr := &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "ps-cluster1",
-					Namespace: "test-ns",
-				},
+				Name:      "ps-cluster1",
+				Namespace: "test-ns",
 				Spec: apiv1.PerconaServerMySQLSpec{
 					CRVersion: version.Version(),
 					MySQL:     tt.mysqlSpec,
@@ -482,106 +560,84 @@ func TestStatefulsetVolumes(t *testing.T) {
 func expectedVolumes() []corev1.Volume {
 	return []corev1.Volume{
 		{
-			Name: "bin",
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			},
+			Name:     "bin",
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		},
 		{
-			Name: "mysqlsh",
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			},
+			Name:     "mysqlsh",
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		},
 		{
 			Name: "users",
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: "internal-ps-cluster1",
-				},
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: "internal-ps-cluster1",
 			},
 		},
 		{
 			Name: "tls",
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: "",
-				},
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: "",
 			},
 		},
 		{
 			Name: "config",
-			VolumeSource: corev1.VolumeSource{
-				Projected: &corev1.ProjectedVolumeSource{
-					Sources: []corev1.VolumeProjection{
-						{
-							ConfigMap: &corev1.ConfigMapProjection{
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: "ps-cluster1-mysql",
+			Projected: &corev1.ProjectedVolumeSource{
+				Sources: []corev1.VolumeProjection{
+					{
+						ConfigMap: &corev1.ConfigMapProjection{
+							Name: "ps-cluster1-mysql",
+							Items: []corev1.KeyToPath{
+								{
+									Key:  "my.cnf",
+									Path: "my-config.cnf",
 								},
-								Items: []corev1.KeyToPath{
-									{
-										Key:  "my.cnf",
-										Path: "my-config.cnf",
-									},
-								},
-								Optional: new(true),
 							},
+							Optional: new(true),
 						},
-						{
-							ConfigMap: &corev1.ConfigMapProjection{
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: "auto-ps-cluster1-mysql",
+					},
+					{
+						ConfigMap: &corev1.ConfigMapProjection{
+							Name: "auto-ps-cluster1-mysql",
+							Items: []corev1.KeyToPath{
+								{
+									Key:  "my.cnf",
+									Path: "auto-config.cnf",
 								},
-								Items: []corev1.KeyToPath{
-									{
-										Key:  "my.cnf",
-										Path: "auto-config.cnf",
-									},
-								},
-								Optional: new(true),
 							},
+							Optional: new(true),
 						},
-						{
-							Secret: &corev1.SecretProjection{
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: "ps-cluster1-mysql",
+					},
+					{
+						Secret: &corev1.SecretProjection{
+							Name: "ps-cluster1-mysql",
+							Items: []corev1.KeyToPath{
+								{
+									Key:  "my.cnf",
+									Path: "my-secret.cnf",
 								},
-								Items: []corev1.KeyToPath{
-									{
-										Key:  "my.cnf",
-										Path: "my-secret.cnf",
-									},
-								},
-								Optional: new(true),
 							},
+							Optional: new(true),
 						},
 					},
 				},
 			},
 		},
 		{
-			Name: "backup-logs",
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			},
+			Name:     "backup-logs",
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		},
 		{
 			Name: "vault-keyring-secret",
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: "",
-					Optional:   new(true),
-				},
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: "",
+				Optional:   new(true),
 			},
 		},
 		{
 			Name: "backup-encryption-keys",
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: "internal-encryption-keys-ps-cluster1",
-					Optional:   new(true),
-				},
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: "internal-encryption-keys-ps-cluster1",
+				Optional:   new(true),
 			},
 		},
 	}
@@ -589,10 +645,8 @@ func expectedVolumes() []corev1.Volume {
 
 func TestPrimaryService_GroupReplication(t *testing.T) {
 	cr := &apiv1.PerconaServerMySQL{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cluster",
-			Namespace: "test-namespace",
-		},
+		Name:      "test-cluster",
+		Namespace: "test-namespace",
 		Spec: apiv1.PerconaServerMySQLSpec{
 			MySQL: apiv1.MySQLSpec{
 				ClusterType: apiv1.ClusterTypeGR,
@@ -682,10 +736,8 @@ func TestPodService(t *testing.T) {
 	podName := "test-pod"
 
 	cr := &apiv1.PerconaServerMySQL{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cluster",
-			Namespace: "test-namespace",
-		},
+		Name:      "test-cluster",
+		Namespace: "test-namespace",
 		Spec: apiv1.PerconaServerMySQLSpec{
 			MySQL: apiv1.MySQLSpec{
 				ClusterType: apiv1.ClusterTypeGR,
@@ -774,9 +826,7 @@ func TestPodService(t *testing.T) {
 
 func TestPrimaryServiceName(t *testing.T) {
 	cr := &apiv1.PerconaServerMySQL{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "my-cluster",
-		},
+		Name: "my-cluster",
 	}
 	serviceName := PrimaryServiceName(cr)
 	assert.Equal(t, "my-cluster-mysql-primary", serviceName)
@@ -784,10 +834,8 @@ func TestPrimaryServiceName(t *testing.T) {
 
 func TestBackupVolumeMounts(t *testing.T) {
 	cr := &apiv1.PerconaServerMySQL{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "ps-cluster1",
-			Namespace: "test-ns",
-		},
+		Name:      "ps-cluster1",
+		Namespace: "test-ns",
 		Spec: apiv1.PerconaServerMySQLSpec{
 			CRVersion: version.Version(),
 		},

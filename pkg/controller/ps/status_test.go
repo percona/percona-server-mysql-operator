@@ -190,16 +190,14 @@ func TestReconcileStatusAsync(t *testing.T) {
 				makeFakeReadyPods(cr, 3, "orchestrator"),
 				[]client.Object{
 					&corev1.Service{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      "cluster-service",
-							Namespace: cr.Namespace,
-							Labels:    cr.Labels("mysql", "database"),
-							OwnerReferences: []metav1.OwnerReference{
-								{
-									Name:       cr.GetName(),
-									UID:        cr.GetUID(),
-									Controller: &boolTrue,
-								},
+						Name:      "cluster-service",
+						Namespace: cr.Namespace,
+						Labels:    cr.Labels("mysql", "database"),
+						OwnerReferences: []metav1.OwnerReference{
+							{
+								Name:       cr.GetName(),
+								UID:        cr.GetUID(),
+								Controller: &boolTrue,
 							},
 						},
 						Spec: corev1.ServiceSpec{
@@ -250,10 +248,8 @@ func TestReconcileStatusAsync(t *testing.T) {
 					// cr has no LoadBalancer service provided.
 					// Let's pretend it is a LoadBalancer created by user in the same namespace.
 					&corev1.Service{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      "idk-service",
-							Namespace: cr.Namespace,
-						},
+						Name:      "idk-service",
+						Namespace: cr.Namespace,
 						Spec: corev1.ServiceSpec{
 							Type: corev1.ServiceTypeLoadBalancer,
 						},
@@ -389,17 +385,15 @@ func TestReconcileStatusAsync(t *testing.T) {
 				ClientCmd: cliCmd,
 				Recorder:  new(record.FakeRecorder),
 				ServerVersion: &platform.ServerVersion{
-					Platform: platform.PlatformKubernetes,
+					Platform: platform.Kubernetes,
 				},
 			}
 
 			// reconcileCRStatus should get the latest cr
 			// We can verify this by passing an empty cluster
 			cr = &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      cr.Name,
-					Namespace: cr.Namespace,
-				},
+				Name:      cr.Name,
+				Namespace: cr.Namespace,
 			}
 
 			err = r.reconcileCRStatus(ctx, cr, nil)
@@ -430,7 +424,7 @@ func TestConnectionHosts(t *testing.T) {
 
 	newCR := func() *apiv1.PerconaServerMySQL {
 		return &apiv1.PerconaServerMySQL{
-			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+			Name: name, Namespace: namespace,
 			Spec: apiv1.PerconaServerMySQLSpec{
 				ClusterServiceDNSSuffix: suffix,
 				Proxy: apiv1.ProxySpec{
@@ -474,7 +468,7 @@ func TestAppHost(t *testing.T) {
 
 	newCR := func() *apiv1.PerconaServerMySQL {
 		return &apiv1.PerconaServerMySQL{
-			ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "database"},
+			Name: "cluster", Namespace: "database",
 			Spec: apiv1.PerconaServerMySQLSpec{
 				Proxy: apiv1.ProxySpec{
 					Router:  &apiv1.MySQLRouterSpec{},
@@ -515,7 +509,7 @@ func TestAppHost(t *testing.T) {
 			}(),
 			objects: []client.Object{
 				&corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{Name: "cluster-router", Namespace: "database"},
+					Name: "cluster-router", Namespace: "database",
 					Status: corev1.ServiceStatus{LoadBalancer: corev1.LoadBalancerStatus{
 						Ingress: []corev1.LoadBalancerIngress{{IP: "192.0.2.10"}},
 					}},
@@ -533,7 +527,7 @@ func TestAppHost(t *testing.T) {
 			}(),
 			objects: []client.Object{
 				&corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{Name: "cluster-haproxy", Namespace: "database"},
+					Name: "cluster-haproxy", Namespace: "database",
 					Status: corev1.ServiceStatus{LoadBalancer: corev1.LoadBalancerStatus{
 						Ingress: []corev1.LoadBalancerIngress{{Hostname: "lb.example.com"}},
 					}},
@@ -576,10 +570,8 @@ func TestReconcileStatusHAProxyGR(t *testing.T) {
 
 	const operatorPass = "test"
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.InternalSecretName(),
-			Namespace: cr.Namespace,
-		},
+		Name:      cr.InternalSecretName(),
+		Namespace: cr.Namespace,
 		Data: map[string][]byte{
 			string(apiv1.UserOperator): []byte(operatorPass),
 		},
@@ -836,7 +828,7 @@ func TestReconcileStatusHAProxyGR(t *testing.T) {
 				Client: cb.Build(),
 				Scheme: scheme,
 				ServerVersion: &platform.ServerVersion{
-					Platform: platform.PlatformKubernetes,
+					Platform: platform.Kubernetes,
 				},
 				ClientCmd: cliCmd,
 				Recorder:  new(record.FakeRecorder),
@@ -872,10 +864,8 @@ func TestReconcileStatusRouterGR(t *testing.T) {
 
 	const operatorPass = "test"
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.InternalSecretName(),
-			Namespace: cr.Namespace,
-		},
+		Name:      cr.InternalSecretName(),
+		Namespace: cr.Namespace,
 		Data: map[string][]byte{
 			string(apiv1.UserOperator): []byte(operatorPass),
 		},
@@ -1102,7 +1092,7 @@ func TestReconcileStatusRouterGR(t *testing.T) {
 				Client: cb.Build(),
 				Scheme: scheme,
 				ServerVersion: &platform.ServerVersion{
-					Platform: platform.PlatformKubernetes,
+					Platform: platform.Kubernetes,
 				},
 				ClientCmd: cliCmd,
 				Recorder:  new(record.FakeRecorder),
@@ -1160,7 +1150,7 @@ func TestReconcileErrorStatus(t *testing.T) {
 		Scheme:   scheme,
 		Recorder: new(record.FakeRecorder),
 		ServerVersion: &platform.ServerVersion{
-			Platform: platform.PlatformKubernetes,
+			Platform: platform.Kubernetes,
 		},
 	}
 
@@ -1259,6 +1249,10 @@ func (c *fakeClient) Exec(_ context.Context, _ *corev1.Pod, _ string, command []
 }
 
 func (c *fakeClient) REST() restclient.Interface {
+	return nil
+}
+
+func (c *fakeClient) Config() *restclient.Config {
 	return nil
 }
 
@@ -1640,15 +1634,13 @@ func TestReconcileStatusBinlogServer(t *testing.T) {
 				ClientCmd: cliCmd,
 				Recorder:  new(record.FakeRecorder),
 				ServerVersion: &platform.ServerVersion{
-					Platform: platform.PlatformKubernetes,
+					Platform: platform.Kubernetes,
 				},
 			}
 
 			cr = &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      cr.Name,
-					Namespace: cr.Namespace,
-				},
+				Name:      cr.Name,
+				Namespace: cr.Namespace,
 			}
 
 			require.NoError(t, r.reconcileCRStatus(t.Context(), cr, nil))

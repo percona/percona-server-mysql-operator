@@ -30,7 +30,7 @@ func (r *PerconaServerMySQLReconciler) getClusterSetMemberCondition(
 	cr *apiv1.PerconaServerMySQL,
 ) (*metav1.Condition, error) {
 	log := logf.FromContext(ctx)
-	if cr.Spec.MySQL.ClusterType != apiv1.ClusterTypeGR {
+	if !cr.AppliedIsGR() {
 		return nil, nil
 	}
 
@@ -227,10 +227,8 @@ func (r *PerconaServerMySQLReconciler) recoverClustersetReplicaCluster(
 	// Scale down the statefulset to 0 replicas
 	// So that pods do not come up until the bootstrap mode has taken effect into the StatefulSet
 	sfs := &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      mysql.Name(cr),
-			Namespace: cr.Namespace,
-		},
+		Name:      mysql.Name(cr),
+		Namespace: cr.Namespace,
 	}
 	if err := r.Get(ctx, client.ObjectKeyFromObject(sfs), sfs); err != nil {
 		return errors.Wrapf(err, "get statefulset")
@@ -244,10 +242,8 @@ func (r *PerconaServerMySQLReconciler) recoverClustersetReplicaCluster(
 
 	// Delete all the pods, when they come up, GR bootstrap starts again with the new bootstrap mode
 	if err := r.DeleteAllOf(ctx, &corev1.Pod{}, &client.DeleteAllOfOptions{
-		ListOptions: client.ListOptions{
-			LabelSelector: labels.SelectorFromSet(mysql.MatchLabels(cr)),
-			Namespace:     cr.Namespace,
-		},
+		LabelSelector: labels.SelectorFromSet(mysql.MatchLabels(cr)),
+		Namespace:     cr.Namespace,
 	}); err != nil {
 		return errors.Wrapf(err, "delete mysql pods")
 	}

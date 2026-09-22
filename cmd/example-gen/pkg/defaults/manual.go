@@ -31,7 +31,7 @@ func ManualCluster(cr *apiv1.PerconaServerMySQL) {
 }
 
 func mysqlDefaults(spec *apiv1.MySQLSpec) {
-	podSpecDefaults(&spec.PodSpec, ImageMySQL, resources("2Gi", "", "4Gi", ""), configurationMySQL, 600, envList("BOOTSTRAP_READ_TIMEOUT", "600", "ASYNC_SOURCE_RETRY_COUNT", "3", "ASYNC_SOURCE_CONNECT_RETRY", "60"), envFromList("mysql-env-secret"))
+	podSpecDefaults(&spec.PodSpec, ImageMySQL, resources("2Gi", "", "4Gi", ""), configurationMySQL, 600, envList("BOOTSTRAP_READ_TIMEOUT", "600", "ASYNC_SOURCE_RETRY_COUNT", "3", "ASYNC_SOURCE_CONNECT_RETRY", "60", "BOOTSTRAP_CLONE_STALL_TIMEOUT", "900"), envFromList("mysql-env-secret"))
 
 	spec.AutoRecovery = true
 	spec.VolumeSpec = nil
@@ -65,10 +65,8 @@ func mysqlDefaults(spec *apiv1.MySQLSpec) {
 	spec.SidecarVolumes = []corev1.Volume{
 		{
 			Name: "memory-vol",
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{
-					Medium: corev1.StorageMediumMemory,
-				},
+			EmptyDir: &corev1.EmptyDirVolumeSource{
+				Medium: corev1.StorageMediumMemory,
 			},
 		},
 	}

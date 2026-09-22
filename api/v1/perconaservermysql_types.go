@@ -66,6 +66,7 @@ const (
 // +kubebuilder:validation:XValidation:rule="self.unsafeFlags.orchestratorSize || !(self.mysql.clusterType == 'async' && has(self.orchestrator) && has(self.orchestrator.size) && (self.orchestrator.size < 3 || self.orchestrator.size % 2 == 0) && self.orchestrator.size > 0)",message="Invalid configuration: For 'async' replication, Orchestrator size must be 3 or greater and odd unless 'unsafeFlags.orchestratorSize' is enabled"
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async' && self.updateStrategy == 'SmartUpdate') || (has(self.orchestrator) && self.orchestrator.enabled)",message="Invalid configuration: For 'async' replication, SmartUpdate requires Orchestrator to be enabled"
 // +kubebuilder:validation:XValidation:rule="!has(self.proxy) || !(has(self.proxy.router) && has(self.proxy.router.enabled) && self.proxy.router.enabled && has(self.proxy.haproxy) && has(self.proxy.haproxy.enabled) && self.proxy.haproxy.enabled)",message="Invalid configuration: MySQL Router and HAProxy can't be enabled at the same time"
+// +kubebuilder:validation:XValidation:rule="(oldSelf.mysql.clusterType == self.mysql.clusterType) || self.mysql.clusterType == 'async' || !self.?orchestrator.?enabled.orValue(false)",message="spec.orchestrator.enabled should be false when switching from async cluster type"
 type PerconaServerMySQLSpec struct {
 	Metadata  *Metadata `json:"metadata,omitempty"`
 	CRVersion string    `json:"crVersion,omitempty"`
@@ -442,6 +443,7 @@ type CABundleSecretSelector struct {
 }
 
 type BackupSpec struct {
+	AllowParallel            *bool                         `json:"allowParallel,omitempty"`
 	Enabled                  bool                          `json:"enabled,omitempty"`
 	SourcePod                string                        `json:"sourcePod,omitempty"`
 	Image                    string                        `json:"image,omitempty"`
@@ -450,10 +452,15 @@ type BackupSpec struct {
 	ServiceAccountName       string                        `json:"serviceAccountName,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext       `json:"containerSecurityContext,omitempty"`
 	Resources                corev1.ResourceRequirements   `json:"resources,omitempty"`
-	Storages                 map[string]*BackupStorageSpec `json:"storages,omitempty"`
-	BackoffLimit             *int32                        `json:"backoffLimit,omitempty"`
-	PiTR                     PiTRSpec                      `json:"pitr,omitempty"`
-	Schedule                 []BackupSchedule              `json:"schedule,omitempty"`
+	// +kubebuilder:validation:MaxProperties=100
+	Storages     map[string]*BackupStorageSpec `json:"storages,omitempty"`
+	BackoffLimit *int32                        `json:"backoffLimit,omitempty"`
+	// +kubebuilder:validation:Minimum=0
+	StartingDeadlineSeconds *int64 `json:"startingDeadlineSeconds,omitempty"`
+	// +kubebuilder:validation:Minimum=0
+	SuspendedDeadlineSeconds *int64           `json:"suspendedDeadlineSeconds,omitempty"`
+	PiTR                     PiTRSpec         `json:"pitr,omitempty"`
+	Schedule                 []BackupSchedule `json:"schedule,omitempty"`
 
 	// Deprecated: not supported since v0.12.0. Use initContainer instead
 	InitImage     string             `json:"initImage,omitempty"`
@@ -461,6 +468,13 @@ type BackupSpec struct {
 
 	// EncryptionKeySecret is the secret key selector for the backup encryption key.
 	EncryptionKeySecret *EncryptionKeySecretSelector `json:"encryptionKeySecret,omitempty"`
+}
+
+func (s *BackupSpec) GetAllowParallel() bool {
+	if s.AllowParallel == nil {
+		return false
+	}
+	return *s.AllowParallel
 }
 
 func (s *BackupSpec) GetEncryptionEnabled(storage *BackupStorageSpec) bool {
@@ -567,6 +581,10 @@ func (args BackupContainerArgs) GetXtrabackupFlagValue(flag string) string {
 }
 
 type BackupContainerArgs struct {
+	// XtraBackup requires --defaults-file to precede every other option.
+	// +kubebuilder:validation:MaxItems=100
+	// +kubebuilder:validation:items:MaxLength=1024
+	// +kubebuilder:validation:XValidation:rule="!self.exists(arg, arg == '--defaults-file' || arg.startsWith('--defaults-file=')) || (self[0].startsWith('--defaults-file=') && self[0] != '--defaults-file=')",message="--defaults-file must use --defaults-file=<path> syntax and be the first xtrabackup argument"
 	Xtrabackup []string `json:"xtrabackup,omitempty"`
 	Xbcloud    []string `json:"xbcloud,omitempty"`
 	Xbstream   []string `json:"xbstream,omitempty"`
@@ -948,6 +966,7 @@ type PerconaServerMySQLStatus struct { // INSERT ADDITIONAL STATUS FIELD - defin
 	Router         StatefulAppStatus  `json:"router,omitempty"`
 	BinlogServer   StatefulAppStatus  `json:"binlogServer,omitempty"`
 	State          StatefulAppState   `json:"state,omitempty"`
+	ClusterType    ClusterType        `json:"clusterType,omitempty"`
 	BackupVersion  string             `json:"backupVersion,omitempty"`
 	PMMVersion     string             `json:"pmmVersion,omitempty"`
 	ToolkitVersion string             `json:"toolkitVersion,omitempty"`
@@ -1011,10 +1030,11 @@ func (s *PerconaServerMySQLStatus) CompareMySQLVersion(ver string) int {
 }
 
 const (
-	ConditionInnoDBClusterBootstrapped string = "InnoDBClusterBootstrapped"
-	ConditionClusterSetMember          string = "ClusterSetMember"
-	ConditionAwaitingExternalBootstrap string = "AwaitingExternalBootstrap"
-	ConditionMySQLConfigSynced                = "MySQLConfigSynced"
+	ConditionInnoDBClusterBootstrapped   string = "InnoDBClusterBootstrapped"
+	ConditionClusterSetMember            string = "ClusterSetMember"
+	ConditionAwaitingExternalBootstrap   string = "AwaitingExternalBootstrap"
+	ConditionMySQLConfigSynced                  = "MySQLConfigSynced"
+	ConditionClusterTypeSwitchInProgress string = "ClusterTypeSwitchInProgress"
 
 	// Deprecated, preserved only for backward compatibility
 	ConditionClusterSetReplicationRunning string = "ClusterSetReplicationRunning"
@@ -1253,7 +1273,18 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 		cr.Spec.MySQL.StartupProbe.SuccessThreshold = 1
 	}
 	if cr.Spec.MySQL.StartupProbe.TimeoutSeconds == 0 {
-		cr.Spec.MySQL.StartupProbe.TimeoutSeconds = 12 * 60 * 60
+		// The startup probe runs the bootstrap (including the clone), so its
+		// timeout caps how long a clone may take. From 1.3.0 a clone may run for
+		// as long as it keeps making progress (the stall watchdog aborts only a
+		// frozen clone), so we give it a much larger cap: 7 days. Only an
+		// explicitly older crVersion keeps the previous 12 hours - an empty
+		// crVersion is defaulted to the current version, so it uses the new cap
+		// too (and this also avoids CompareVersion panicking on an empty value).
+		if cr.Spec.CRVersion == "" || cr.CompareVersion("1.3.0") >= 0 {
+			cr.Spec.MySQL.StartupProbe.TimeoutSeconds = 7 * 24 * 60 * 60
+		} else {
+			cr.Spec.MySQL.StartupProbe.TimeoutSeconds = 12 * 60 * 60
+		}
 	}
 
 	if cr.Spec.MySQL.LivenessProbe.InitialDelaySeconds == 0 {
@@ -1374,7 +1405,7 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 	}
 
 	var fsgroup *int64
-	if serverVersion != nil && serverVersion.Platform != platform.PlatformOpenshift {
+	if serverVersion != nil && serverVersion.Platform != platform.Openshift {
 		var tp int64 = 1001
 		fsgroup = &tp
 	}
@@ -1705,6 +1736,22 @@ func (cr *PerconaServerMySQL) PiTREnabled() bool {
 	return cr.Spec.Backup != nil &&
 		cr.Spec.Backup.PiTR.Enabled &&
 		cr.Spec.Backup.PiTR.BinlogServer != nil
+}
+
+func (cr *PerconaServerMySQL) AppliedClusterType() ClusterType {
+	if cr.Status.ClusterType != "" {
+		return cr.Status.ClusterType
+	}
+
+	return cr.Spec.MySQL.ClusterType
+}
+
+func (cr *PerconaServerMySQL) AppliedIsAsync() bool {
+	return cr.AppliedClusterType() == ClusterTypeAsync
+}
+
+func (cr *PerconaServerMySQL) AppliedIsGR() bool {
+	return cr.AppliedClusterType() == ClusterTypeGR
 }
 
 // OrchestratorEnabled determines if the orchestrator is enabled,

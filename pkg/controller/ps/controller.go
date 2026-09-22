@@ -169,10 +169,8 @@ func enqueueClusterFromSecretsName(c client.Client) handler.EventHandler {
 		var requests []reconcile.Request
 		for _, cluster := range clusters.Items {
 			requests = append(requests, reconcile.Request{
-				NamespacedName: types.NamespacedName{
-					Name:      cluster.Name,
-					Namespace: cluster.Namespace,
-				},
+				Name:      cluster.Name,
+				Namespace: cluster.Namespace,
 			})
 		}
 		return requests
@@ -198,10 +196,8 @@ func enqueueClusterFromEncryptionKeySecret(c client.Client) handler.EventHandler
 		var requests []reconcile.Request
 		for _, cluster := range clusters.Items {
 			requests = append(requests, reconcile.Request{
-				NamespacedName: types.NamespacedName{
-					Name:      cluster.Name,
-					Namespace: cluster.Namespace,
-				},
+				Name:      cluster.Name,
+				Namespace: cluster.Namespace,
 			})
 		}
 		return requests
@@ -602,7 +598,11 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 		log.Error(err, "failed to reconcile versions")
 	}
 	if err := r.reconcileClusterTypeChange(ctx, cr); err != nil {
-		return errors.Wrap(err, "failed to reconcile cluster type change")
+		// log and swallow the error here, otherwise the status
+		// moves to error and reconcileClusterTypeChange returns early
+		// in the next pass.
+		log.Error(err, "failed to reconcile cluster type change")
+		return nil
 	}
 	userSecret, err := r.ensureUserSecrets(ctx, cr)
 	if err != nil {
@@ -687,10 +687,8 @@ func validateVaultSecret(ctx context.Context, cl client.Client, cr *apiv1.Percon
 	}
 
 	vaultSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      vaultSecretName,
-			Namespace: cr.GetNamespace(),
-		},
+		Name:      vaultSecretName,
+		Namespace: cr.GetNamespace(),
 	}
 
 	if err := cl.Get(ctx, client.ObjectKeyFromObject(vaultSecret), vaultSecret); err != nil {
@@ -705,19 +703,24 @@ func validateVaultSecret(ctx context.Context, cl client.Client, cr *apiv1.Percon
 	return nil
 }
 
-// getObservedClusterType returns the MySQL cluster type recorded in the
-// StatefulSet's pod template (the CLUSTER_TYPE env var). Note this reflects the
-// spec the operator last applied, which is not guaranteed to match the cluster
-// type the running pods actually use until they are rolled out.
+// getObservedClusterType returns the MySQL cluster type the operator has
+// applied to the cluster. It is read from the status, which only advances once
+// a switch completes. Clusters created before that field existed have an empty
+// status, so it falls back to the CLUSTER_TYPE env var in the StatefulSet's pod
+// template; that fallback is only safe until reconcileDatabase re-applies the
+// StatefulSet, which is why reconcileClusterTypeChange records the type in the
+// status before anything else in doReconcile can overwrite it.
 func (r *PerconaServerMySQLReconciler) getObservedClusterType(
 	ctx context.Context,
 	cr *apiv1.PerconaServerMySQL,
 ) (apiv1.ClusterType, error) {
+	if cr.Status.ClusterType != "" {
+		return cr.Status.ClusterType, nil
+	}
+
 	sts := &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      mysql.Name(cr),
-			Namespace: cr.GetNamespace(),
-		},
+		Name:      mysql.Name(cr),
+		Namespace: cr.GetNamespace(),
 	}
 
 	if err := r.Get(ctx, client.ObjectKeyFromObject(sts), sts); err != nil {
@@ -760,9 +763,7 @@ func (r *PerconaServerMySQLReconciler) reconcileClusterTypeChange(
 	ctx context.Context,
 	cr *apiv1.PerconaServerMySQL,
 ) error {
-	if cr.Spec.Pause || cr.Status.State != apiv1.StateReady {
-		return nil
-	}
+	log := logf.FromContext(ctx)
 
 	desiredType := cr.Spec.MySQL.ClusterType
 	observedType, err := r.getObservedClusterType(ctx, cr)
@@ -770,21 +771,51 @@ func (r *PerconaServerMySQLReconciler) reconcileClusterTypeChange(
 		return client.IgnoreNotFound(err)
 	}
 
-	// observedType is read from the StatefulSet pod template (see
-	// getObservedClusterType), which reflects the spec the operator last applied
-	// rather than the cluster type the running pods actually use. This relies on
-	// reconcileClusterTypeChange running before the MySQL StatefulSet is
-	// re-applied with the new type later in doReconcile (reconcileDatabase). If
-	// it ran afterwards, the template would already carry desiredType and this
-	// early return would skip the switch while the live pods still run the old
-	// type.
+	if cr.Status.ClusterType == "" {
+		if err := r.updateClusterTypeStatus(ctx, cr, observedType); err != nil {
+			return errors.Wrap(err, "record observed cluster type")
+		}
+	}
+
+	switchInProgress := meta.IsStatusConditionTrue(cr.Status.Conditions, apiv1.ConditionClusterTypeSwitchInProgress)
+
 	if desiredType == observedType {
+		// Nothing left to switch. Drop a marker left behind by a switch that was
+		// reverted mid-flight so it can't bypass the readiness gate later on.
+		if switchInProgress {
+			if err := r.clearClusterTypeSwitchInProgress(ctx, cr); err != nil {
+				return errors.Wrap(err, "clear cluster type switch marker")
+			}
+		}
 		return nil
 	}
 
-	log := logf.FromContext(ctx)
+	// Pause scales the MySQL pods to zero, so no teardown can run at all.
+	if cr.Spec.Pause {
+		log.Info("Deferring clusterType switch while the cluster is paused",
+			"from", observedType, "to", desiredType)
+		return nil
+	}
+
+	// Switching requires tearing down the existing setup, and that needs the cluster
+	// to be ready.
+	// But once a cluster is already reported to be in the middle of switching, we ignore
+	// any unready status as it could have been caused due to the switch itself and must be retried.
+	if !switchInProgress && cr.Status.State != apiv1.StateReady {
+		log.Info("Deferring clusterType switch until the cluster is ready",
+			"from", observedType, "to", desiredType, "state", cr.Status.State)
+		return nil
+	}
 
 	log.Info("Switching clusterType", "from", observedType, "to", desiredType)
+
+	// Mark before the first destructive step so a teardown that fails partway is
+	// retried regardless of the state the half-torn-down cluster reports.
+	if !switchInProgress {
+		if err := r.markClusterTypeSwitchInProgress(ctx, cr, observedType, desiredType); err != nil {
+			return errors.Wrap(err, "mark cluster type switch in progress")
+		}
+	}
 
 	switch observedType {
 	case apiv1.ClusterTypeAsync:
@@ -801,10 +832,8 @@ func (r *PerconaServerMySQLReconciler) reconcileClusterTypeChange(
 
 	// Delete mysql pods
 	if err := r.Delete(ctx, &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      mysql.Name(cr),
-			Namespace: cr.GetNamespace(),
-		},
+		Name:      mysql.Name(cr),
+		Namespace: cr.GetNamespace(),
 	}); client.IgnoreNotFound(err) != nil {
 		return errors.Wrap(err, "delete mysql statefulset")
 	}
@@ -812,10 +841,8 @@ func (r *PerconaServerMySQLReconciler) reconcileClusterTypeChange(
 	// Delete haproxy (if set)
 	if cr.Spec.Proxy.HAProxy.Enabled {
 		if err := r.Delete(ctx, &appsv1.StatefulSet{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      haproxy.Name(cr),
-				Namespace: cr.GetNamespace(),
-			},
+			Name:      haproxy.Name(cr),
+			Namespace: cr.GetNamespace(),
 		}); client.IgnoreNotFound(err) != nil {
 			return errors.Wrap(err, "delete haproxy statefulset")
 		}
@@ -824,16 +851,80 @@ func (r *PerconaServerMySQLReconciler) reconcileClusterTypeChange(
 	// Delete router (if set)
 	if cr.Spec.Proxy.Router.Enabled {
 		if err := r.Delete(ctx, &appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      router.Name(cr),
-				Namespace: cr.GetNamespace(),
-			},
+			Name:      router.Name(cr),
+			Namespace: cr.GetNamespace(),
 		}); client.IgnoreNotFound(err) != nil {
 			return errors.Wrap(err, "delete router deployment")
 		}
 	}
 
+	if err := r.updateClusterTypeStatus(ctx, cr, desiredType); err != nil {
+		return errors.Wrap(err, "record applied cluster type")
+	}
+
 	log.Info("Cluster type switch initiated", "to", desiredType)
+	return nil
+}
+
+// updateClusterTypeStatus records the cluster type the operator has applied. The
+// type only ever advances when a switch finishes, so this also ends any
+// in-progress switch, in the same status update.
+func (r *PerconaServerMySQLReconciler) updateClusterTypeStatus(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQL,
+	clusterType apiv1.ClusterType,
+) error {
+	mutate := func(status *apiv1.PerconaServerMySQLStatus) error {
+		status.ClusterType = clusterType
+		meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionClusterTypeSwitchInProgress)
+		return nil
+	}
+	if err := writeStatus(ctx, r.Client, client.ObjectKeyFromObject(cr), mutate); err != nil {
+		return errors.Wrap(err, "write cluster type status")
+	}
+	mutate(&cr.Status) //nolint:errcheck
+	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) markClusterTypeSwitchInProgress(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQL,
+	from, to apiv1.ClusterType,
+) error {
+	cond := metav1.Condition{
+		Type:    apiv1.ConditionClusterTypeSwitchInProgress,
+		Status:  metav1.ConditionTrue,
+		Reason:  "TeardownStarted",
+		Message: fmt.Sprintf("Switching clusterType from %s to %s", from, to),
+	}
+
+	mutate := func(status *apiv1.PerconaServerMySQLStatus) error {
+		meta.SetStatusCondition(&status.Conditions, cond)
+		return nil
+	}
+
+	if err := writeStatus(ctx, r.Client, client.ObjectKeyFromObject(cr), mutate); err != nil {
+		return errors.Wrap(err, "write cluster type switch condition")
+	}
+
+	mutate(&cr.Status) //nolint:errcheck
+	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) clearClusterTypeSwitchInProgress(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQL,
+) error {
+	mutate := func(status *apiv1.PerconaServerMySQLStatus) error {
+		meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionClusterTypeSwitchInProgress)
+		return nil
+	}
+
+	if err := writeStatus(ctx, r.Client, client.ObjectKeyFromObject(cr), mutate); err != nil {
+		return errors.Wrap(err, "clear cluster type switch condition")
+	}
+
+	mutate(&cr.Status) //nolint:errcheck
 	return nil
 }
 
@@ -983,6 +1074,10 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(ctx context.Context, cr
 	}
 	if err := r.reconcileMySQLConfig(ctx, cr, sts); err != nil {
 		return errors.Wrap(err, "reconcile MySQL config")
+	}
+
+	if err := r.reconcileTLSReload(ctx, cr, sts); err != nil {
+		return errors.Wrap(err, "reconcile TLS reload")
 	}
 
 	return nil
@@ -1228,10 +1323,8 @@ func (r *PerconaServerMySQLReconciler) reconcileInternalHAProxyConfigMap(ctx con
 	}
 
 	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      naming.InternalHAProxyConfigMapName(cr.Name),
-			Namespace: cr.Namespace,
-		},
+		Name:      naming.InternalHAProxyConfigMapName(cr.Name),
+		Namespace: cr.Namespace,
 	}
 
 	data := map[string]string{
@@ -1702,10 +1795,8 @@ func (r *PerconaServerMySQLReconciler) cleanupProxies(ctx context.Context, cr *a
 		}
 
 		if err := r.Delete(ctx, &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      naming.InternalHAProxyConfigMapName(cr.Name),
-				Namespace: cr.GetNamespace(),
-			},
+			Name:      naming.InternalHAProxyConfigMapName(cr.Name),
+			Namespace: cr.GetNamespace(),
 		}); client.IgnoreNotFound(err) != nil {
 			return errors.Wrap(err, "failed to delete internal HAProxy config map")
 		}
@@ -1782,14 +1873,13 @@ func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context
 	}
 
 	configSecret := corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        binlogserver.ConfigSecretName(cr),
-			Namespace:   cr.Namespace,
-			Labels:      cr.GlobalLabels(),
-			Annotations: cr.GlobalAnnotations(),
-		},
+		Name:        binlogserver.ConfigSecretName(cr),
+		Namespace:   cr.Namespace,
+		Labels:      cr.GlobalLabels(),
+		Annotations: cr.GlobalAnnotations(),
+
+		Data: make(map[string][]byte),
 	}
-	configSecret.Data = make(map[string][]byte)
 
 	configBytes, err := json.Marshal(config)
 	if err != nil {
@@ -1830,19 +1920,15 @@ func (r *PerconaServerMySQLReconciler) cleanupBinlogServer(ctx context.Context, 
 	}
 
 	if err := r.Delete(ctx, &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      binlogserver.Name(cr),
-			Namespace: cr.Namespace,
-		},
+		Name:      binlogserver.Name(cr),
+		Namespace: cr.Namespace,
 	}); err != nil && !k8serrors.IsNotFound(err) {
 		return errors.Wrap(err, "failed to delete binlog server statefulset")
 	}
 
 	if err := r.Delete(ctx, &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      binlogserver.ConfigSecretName(cr),
-			Namespace: cr.Namespace,
-		},
+		Name:      binlogserver.ConfigSecretName(cr),
+		Namespace: cr.Namespace,
 	}); err != nil && !k8serrors.IsNotFound(err) {
 		return errors.Wrap(err, "failed to delete binlog server config secret")
 	}
@@ -1908,7 +1994,7 @@ func (r *PerconaServerMySQLReconciler) getPrimaryFromGR(ctx context.Context, cr 
 func (r *PerconaServerMySQLReconciler) getPrimaryHost(ctx context.Context, cr *apiv1.PerconaServerMySQL) (string, error) {
 	log := logf.FromContext(ctx).WithName("getPrimaryHost")
 
-	if cr.Spec.MySQL.IsGR() {
+	if cr.AppliedIsGR() {
 		return r.getPrimaryFromGR(ctx, cr)
 	}
 
@@ -2163,10 +2249,8 @@ func (r *PerconaServerMySQLReconciler) reconcileInternalEncryptionKeySecret(ctx 
 	}
 
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      naming.EncryptionKeyInternalSecretName(cr.Name),
-			Namespace: cr.Namespace,
-		},
+		Name:      naming.EncryptionKeyInternalSecretName(cr.Name),
+		Namespace: cr.Namespace,
 	}
 
 	data, err := buildEncryptionKeySecretData(ctx, r.Client, cr)

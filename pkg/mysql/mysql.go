@@ -31,7 +31,7 @@ const (
 	mysqlshVolumeName     = "mysqlsh"
 	mysqlshMountPath      = "/.mysqlsh"
 	tlsVolumeName         = "tls"
-	tlsMountPath          = "/etc/mysql/mysql-tls-secret"
+	TLSMountPath          = "/etc/mysql/mysql-tls-secret"
 	BackupLogDir          = "/var/log/xtrabackup"
 	vaultSecretVolumeName = "vault-keyring-secret"
 	vaultSecretMountPath  = "/etc/mysql/vault-keyring-secret"
@@ -45,11 +45,24 @@ const (
 	DefaultXPort     = 33060
 	SidecarHTTPPort  = 6450
 
-	DefaultReadTimeoutSecondsSeconds  = 3600
-	DefaultCloneTimeoutSecondsSeconds = 3600
+	DefaultReadTimeoutSecondsSeconds = 3600
+
+	// DefaultCloneTimeoutSeconds is the default for the bootstrap clone timeout
+	// (BOOTSTRAP_CLONE_TIMEOUT) when it is not set via spec.mysql.env. It is
+	// generous (6h) because multi-TiB clones can run for hours; it is a safety
+	// net that lets a genuinely hung clone abort and retry, not a tuning knob.
+	DefaultCloneTimeoutSeconds = 21600
+
+	// DefaultCloneStallTimeoutSeconds is the default for the bootstrap clone
+	// progress watchdog (BOOTSTRAP_CLONE_STALL_TIMEOUT): the clone is aborted
+	// only if it transfers no bytes for this long. A progressing clone runs
+	// unbounded; set the env to 0 (via spec.mysql.env) to disable the watchdog.
+	DefaultCloneStallTimeoutSeconds = 900
 
 	DefaultAsyncSourceRetryCount   = 3
 	DefaultAsyncSourceConnectRetry = 60
+
+	DatetimeFormat = "2006-01-02 15:04:05"
 )
 
 type User struct {
@@ -157,16 +170,12 @@ func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, configHash, tlsHash st
 		annotations[string(naming.AnnotationTLSHash)] = tlsHash
 	}
 	sts := &appsv1.StatefulSet{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "apps/v1",
-			Kind:       "StatefulSet",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        Name(cr),
-			Namespace:   cr.Namespace,
-			Labels:      Labels(cr),
-			Annotations: util.SSMapMerge(cr.GlobalAnnotations(), spec.Annotations),
-		},
+		APIVersion:  "apps/v1",
+		Kind:        "StatefulSet",
+		Name:        Name(cr),
+		Namespace:   cr.Namespace,
+		Labels:      Labels(cr),
+		Annotations: util.SSMapMerge(cr.GlobalAnnotations(), spec.Annotations),
 		Spec: appsv1.StatefulSetSpec{
 			Replicas: &replicas,
 			Selector: &metav1.LabelSelector{
@@ -209,13 +218,13 @@ func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, configHash, tlsHash st
 	switch {
 	case spec.VolumeSpec.HostPath != nil:
 		dataVolume = &corev1.Volume{
-			Name:         DataVolumeName,
-			VolumeSource: corev1.VolumeSource{HostPath: spec.VolumeSpec.HostPath},
+			Name:     DataVolumeName,
+			HostPath: spec.VolumeSpec.HostPath,
 		}
 	case spec.VolumeSpec.EmptyDir != nil:
 		dataVolume = &corev1.Volume{
-			Name:         DataVolumeName,
-			VolumeSource: corev1.VolumeSource{EmptyDir: spec.VolumeSpec.EmptyDir},
+			Name:     DataVolumeName,
+			EmptyDir: spec.VolumeSpec.EmptyDir,
 		}
 	}
 
@@ -230,100 +239,80 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 
 	volumes := []corev1.Volume{
 		{
-			Name: apiv1.BinVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			},
+			Name:     apiv1.BinVolumeName,
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		},
 		{
-			Name: mysqlshVolumeName, // In OpenShift, we should use emptyDir for ./mysqlsh to avoid permission issues.
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			},
+			Name:     mysqlshVolumeName, // In OpenShift, we should use emptyDir for ./mysqlsh to avoid permission issues.
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		},
 		{
 			Name: credsVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: cr.InternalSecretName(),
-				},
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: cr.InternalSecretName(),
 			},
 		},
 		{
 			Name: tlsVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: cr.Spec.SSLSecretName,
-				},
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: cr.Spec.SSLSecretName,
 			},
 		},
 		{
 			Name: configVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				Projected: &corev1.ProjectedVolumeSource{
-					Sources: []corev1.VolumeProjection{
-						{
-							ConfigMap: &corev1.ConfigMapProjection{
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: conf.GetConfigMapName(),
+			Projected: &corev1.ProjectedVolumeSource{
+				Sources: []corev1.VolumeProjection{
+					{
+						ConfigMap: &corev1.ConfigMapProjection{
+							Name: conf.GetConfigMapName(),
+							Items: []corev1.KeyToPath{
+								{
+									Key:  conf.GetConfigMapKey(),
+									Path: "my-config.cnf",
 								},
-								Items: []corev1.KeyToPath{
-									{
-										Key:  conf.GetConfigMapKey(),
-										Path: "my-config.cnf",
-									},
-								},
-								Optional: new(true),
 							},
+							Optional: new(true),
 						},
-						{
-							ConfigMap: &corev1.ConfigMapProjection{
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: AutoConfigMapName(cr),
+					},
+					{
+						ConfigMap: &corev1.ConfigMapProjection{
+							Name: AutoConfigMapName(cr),
+							Items: []corev1.KeyToPath{
+								{
+									Key:  conf.GetConfigMapKey(),
+									Path: "auto-config.cnf",
 								},
-								Items: []corev1.KeyToPath{
-									{
-										Key:  conf.GetConfigMapKey(),
-										Path: "auto-config.cnf",
-									},
-								},
-								Optional: new(true),
 							},
+							Optional: new(true),
 						},
-						{
-							Secret: &corev1.SecretProjection{
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: conf.GetConfigMapName(),
+					},
+					{
+						Secret: &corev1.SecretProjection{
+							Name: conf.GetConfigMapName(),
+							Items: []corev1.KeyToPath{
+								{
+									Key:  conf.GetConfigMapKey(),
+									Path: "my-secret.cnf",
 								},
-								Items: []corev1.KeyToPath{
-									{
-										Key:  conf.GetConfigMapKey(),
-										Path: "my-secret.cnf",
-									},
-								},
-								Optional: new(true),
 							},
+							Optional: new(true),
 						},
 					},
 				},
 			},
 		},
 		{
-			Name: "backup-logs",
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			},
+			Name:     "backup-logs",
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		},
 	}
 
 	if cr.CompareVersion("0.11.0") >= 0 {
 		volumes = append(volumes, corev1.Volume{
 			Name: vaultSecretVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: cr.Spec.MySQL.VaultSecretName,
-					Optional:   new(true),
-				},
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: cr.Spec.MySQL.VaultSecretName,
+				Optional:   new(true),
 			},
 		})
 	}
@@ -339,11 +328,9 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 		// key data before starting xtrabackup.
 		volumes = append(volumes, corev1.Volume{
 			Name: "backup-encryption-keys",
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: naming.EncryptionKeyInternalSecretName(cr.Name),
-					Optional:   new(true),
-				},
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: naming.EncryptionKeyInternalSecretName(cr.Name),
+				Optional:   new(true),
 			},
 		})
 	}
@@ -410,8 +397,8 @@ func volumeClaimTemplates(cr *apiv1.PerconaServerMySQL, spec *apiv1.MySQLSpec) [
 
 	for _, p := range spec.SidecarPVCs {
 		pvcs = append(pvcs, corev1.PersistentVolumeClaim{
-			ObjectMeta: metav1.ObjectMeta{Name: p.Name},
-			Spec:       p.Spec,
+			Name: p.Name,
+			Spec: p.Spec,
 		})
 	}
 
@@ -472,16 +459,12 @@ func UnreadyService(cr *apiv1.PerconaServerMySQL) *corev1.Service {
 	selector := MatchLabels(cr)
 
 	return &corev1.Service{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "Service",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        UnreadyServiceName(cr),
-			Namespace:   cr.Namespace,
-			Labels:      Labels(cr),
-			Annotations: cr.GlobalAnnotations(),
-		},
+		APIVersion:  "v1",
+		Kind:        "Service",
+		Name:        UnreadyServiceName(cr),
+		Namespace:   cr.Namespace,
+		Labels:      Labels(cr),
+		Annotations: cr.GlobalAnnotations(),
 		Spec: corev1.ServiceSpec{
 			ClusterIP:                "None",
 			Ports:                    servicePorts(cr),
@@ -494,16 +477,12 @@ func UnreadyService(cr *apiv1.PerconaServerMySQL) *corev1.Service {
 func HeadlessService(cr *apiv1.PerconaServerMySQL) *corev1.Service {
 	selector := MatchLabels(cr)
 	return &corev1.Service{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "Service",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        ServiceName(cr),
-			Namespace:   cr.Namespace,
-			Labels:      Labels(cr),
-			Annotations: cr.GlobalAnnotations(),
-		},
+		APIVersion:  "v1",
+		Kind:        "Service",
+		Name:        ServiceName(cr),
+		Namespace:   cr.Namespace,
+		Labels:      Labels(cr),
+		Annotations: cr.GlobalAnnotations(),
 		Spec: corev1.ServiceSpec{
 			Type:                     corev1.ServiceTypeClusterIP,
 			ClusterIP:                "None",
@@ -517,16 +496,12 @@ func HeadlessService(cr *apiv1.PerconaServerMySQL) *corev1.Service {
 func ProxyService(cr *apiv1.PerconaServerMySQL) *corev1.Service {
 	selector := MatchLabels(cr)
 	return &corev1.Service{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "Service",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        ProxyServiceName(cr),
-			Namespace:   cr.Namespace,
-			Labels:      Labels(cr),
-			Annotations: cr.GlobalAnnotations(),
-		},
+		APIVersion:  "v1",
+		Kind:        "Service",
+		Name:        ProxyServiceName(cr),
+		Namespace:   cr.Namespace,
+		Labels:      Labels(cr),
+		Annotations: cr.GlobalAnnotations(),
 		Spec: corev1.ServiceSpec{
 			Type:                     corev1.ServiceTypeClusterIP,
 			ClusterIP:                "None",
@@ -560,16 +535,12 @@ func PodService(cr *apiv1.PerconaServerMySQL, t corev1.ServiceType, podName stri
 	}
 
 	return &corev1.Service{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "Service",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        podName,
-			Namespace:   cr.Namespace,
-			Labels:      labels,
-			Annotations: util.SSMapMerge(cr.GlobalAnnotations(), expose.Annotations),
-		},
+		APIVersion:  "v1",
+		Kind:        "Service",
+		Name:        podName,
+		Namespace:   cr.Namespace,
+		Labels:      labels,
+		Annotations: util.SSMapMerge(cr.GlobalAnnotations(), expose.Annotations),
 		Spec: corev1.ServiceSpec{
 			Type:                          t,
 			Selector:                      selector,
@@ -606,16 +577,12 @@ func PrimaryService(cr *apiv1.PerconaServerMySQL) *corev1.Service {
 	}
 
 	return &corev1.Service{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "Service",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        PrimaryServiceName(cr),
-			Namespace:   cr.Namespace,
-			Labels:      labels,
-			Annotations: util.SSMapMerge(cr.GlobalAnnotations(), expose.Annotations),
-		},
+		APIVersion:  "v1",
+		Kind:        "Service",
+		Name:        PrimaryServiceName(cr),
+		Namespace:   cr.Namespace,
+		Labels:      labels,
+		Annotations: util.SSMapMerge(cr.GlobalAnnotations(), expose.Annotations),
 		Spec: corev1.ServiceSpec{
 			Type:                          expose.Type,
 			Selector:                      selector,
@@ -673,7 +640,7 @@ func mysqldVolumeMounts(cr *apiv1.PerconaServerMySQL) []corev1.VolumeMount {
 		},
 		{
 			Name:      tlsVolumeName,
-			MountPath: tlsMountPath,
+			MountPath: TLSMountPath,
 		},
 		{
 			Name:      configVolumeName,
@@ -721,7 +688,7 @@ func mysqldContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 		},
 		{
 			Name:  naming.EnvMySQLClusterType,
-			Value: string(cr.Spec.MySQL.ClusterType),
+			Value: string(cr.AppliedClusterType()),
 		},
 		{
 			Name:  naming.EnvMySQLNotifySocket,
@@ -732,6 +699,18 @@ func mysqldContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 			Value: filepath.Join(DataMountPath, "mysql.state"),
 		},
 	}
+
+	if cr.CompareVersion("1.3.0") >= 0 {
+		// Enable the bootstrap clone progress watchdog. Set before spec.Env so a
+		// user can override the stall window, or disable it with 0, via
+		// spec.mysql.env. Gated on 1.3.0 so upgrading only the operator does not
+		// change the pod template of existing clusters.
+		env = append(env, corev1.EnvVar{
+			Name:  naming.EnvBootstrapCloneStallTimeout,
+			Value: strconv.Itoa(DefaultCloneStallTimeoutSeconds),
+		})
+	}
+
 	env = append(env, spec.Env...)
 
 	if cr.CompareVersion("1.2.0") >= 0 {
@@ -875,7 +854,7 @@ func backupContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 	if cr.CompareVersion("0.12.0") >= 0 {
 		container.Env = append(container.Env, corev1.EnvVar{
 			Name:  "CLUSTER_TYPE",
-			Value: string(cr.Spec.MySQL.ClusterType),
+			Value: string(cr.AppliedClusterType()),
 		})
 	}
 
@@ -908,10 +887,16 @@ func heartbeatContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 		},
 	}
 
-	if cr.CompareVersion("1.0.0") >= 0 {
+	// The current sidecar script ignores CLONE_TIMEOUT_SECONDS (it waits without a
+	// timeout for every version). We still emit the env for pre-1.3.0 clusters -
+	// with the same value main produced - purely to keep their pod template
+	// unchanged, so upgrading only the operator image does not roll them. This
+	// does not preserve the old wait-timeout behavior (the script no longer reads
+	// it); from 1.3.0 the env is dropped entirely.
+	if cr.CompareVersion("1.3.0") < 0 && cr.CompareVersion("1.0.0") >= 0 {
 		t, err := utils.GetCloneTimeout()
-		if err != nil || t <= 0 {
-			t = DefaultCloneTimeoutSecondsSeconds
+		if err != nil || t == 0 {
+			t = 3600
 		}
 		env = append(env, corev1.EnvVar{
 			Name:  "CLONE_TIMEOUT_SECONDS",

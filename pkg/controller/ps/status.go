@@ -91,7 +91,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 		mysqlStatus.ImageID = status.MySQL.ImageID
 
 		if mysqlStatus.State == apiv1.StateReady {
-			if cr.Spec.MySQL.IsGR() {
+			if cr.AppliedIsGR() {
 				ready, err := r.isGRReady(ctx, cr)
 				if err != nil {
 					return errors.Wrap(err, "check if GR is ready")
@@ -102,7 +102,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 				}
 			}
 
-			if cr.Spec.MySQL.IsAsync() && cr.OrchestratorEnabled() {
+			if cr.AppliedIsAsync() && cr.OrchestratorEnabled() {
 				ready, msg, err := r.isAsyncReady(ctx, cr)
 				if err != nil {
 					return errors.Wrap(err, "check if async is ready")
@@ -118,7 +118,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 		status.MySQL = mysqlStatus
 
 		orcStatus := apiv1.StatefulAppStatus{}
-		if cr.OrchestratorEnabled() && cr.Spec.MySQL.IsAsync() {
+		if cr.OrchestratorEnabled() && cr.AppliedIsAsync() {
 			orcStatus, err = r.appStatus(ctx, cr, orchestrator.Name(cr), cr.OrchestratorSpec().Size, orchestrator.MatchLabels(cr), status.Orchestrator.Version)
 			if err != nil {
 				return errors.Wrap(err, "get Orchestrator status")
@@ -155,14 +155,14 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 		status.BinlogServer = binlogServerStatus
 
 		status.State = apiv1.StateReady
-		if cr.Spec.MySQL.IsAsync() {
+		if cr.AppliedIsAsync() {
 			if cr.OrchestratorEnabled() && status.Orchestrator.State != apiv1.StateReady {
 				status.State = status.Orchestrator.State
 			}
 			if cr.HAProxyEnabled() && status.HAProxy.State != apiv1.StateReady {
 				status.State = status.HAProxy.State
 			}
-		} else if cr.Spec.MySQL.IsGR() {
+		} else if cr.AppliedIsGR() {
 			if cr.RouterEnabled() && status.Router.State != apiv1.StateReady {
 				status.State = status.Router.State
 			}
@@ -179,7 +179,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 			status.State = status.MySQL.State
 		}
 
-		if cr.Spec.MySQL.IsGR() {
+		if cr.AppliedIsGR() {
 			pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr), cr.Namespace)
 			if err != nil {
 				return errors.Wrap(err, "get pods")
@@ -568,10 +568,8 @@ func loadBalancerHost(ctx context.Context, cl client.Reader, cr *apiv1.PerconaSe
 	}
 
 	svc := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      proxyServiceName(cr),
-			Namespace: cr.Namespace,
-		},
+		Name:      proxyServiceName(cr),
+		Namespace: cr.Namespace,
 	}
 	if err := cl.Get(ctx, client.ObjectKeyFromObject(svc), svc); err != nil {
 		if k8serrors.IsNotFound(err) {

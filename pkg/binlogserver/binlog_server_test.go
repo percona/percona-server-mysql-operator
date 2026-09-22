@@ -6,7 +6,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
@@ -45,10 +44,8 @@ func TestStatefulSetS3CABundle(t *testing.T) {
 
 func newTestCR(name, namespace string) *apiv1.PerconaServerMySQL {
 	return &apiv1.PerconaServerMySQL{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
+		Name:      name,
+		Namespace: namespace,
 		Spec: apiv1.PerconaServerMySQLSpec{
 			SSLSecretName: name + "-ssl",
 			SecretsName:   name + "-secrets",

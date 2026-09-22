@@ -183,10 +183,8 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	}
 
 	job := &batchv1.Job{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      xtrabackup.RestoreJobName(cluster, cr),
-			Namespace: req.Namespace,
-		},
+		Name:      xtrabackup.RestoreJobName(cluster, cr),
+		Namespace: req.Namespace,
 	}
 	err = r.Get(ctx, client.ObjectKeyFromObject(job), job)
 	if client.IgnoreNotFound(err) != nil {
@@ -383,12 +381,10 @@ func (r *PerconaServerMySQLRestoreReconciler) reconcilePITRConfigSecret(ctx cont
 	}
 
 	configSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        binlogserver.RestoreConfigSecretName(cluster, cr),
-			Namespace:   cluster.Namespace,
-			Labels:      cluster.GlobalLabels(),
-			Annotations: cluster.GlobalAnnotations(),
-		},
+		Name:        binlogserver.RestoreConfigSecretName(cluster, cr),
+		Namespace:   cluster.Namespace,
+		Labels:      cluster.GlobalLabels(),
+		Annotations: cluster.GlobalAnnotations(),
 	}
 
 	configBytes, err := json.Marshal(config)
@@ -420,19 +416,15 @@ func (r *PerconaServerMySQLRestoreReconciler) cleanupPITRConfigSecret(
 	}
 
 	if err := r.Delete(ctx, &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      binlogserver.RestoreName(cluster, cr),
-			Namespace: cluster.Namespace,
-		},
+		Name:      binlogserver.RestoreName(cluster, cr),
+		Namespace: cluster.Namespace,
 	}); err != nil && !k8serrors.IsNotFound(err) {
 		return errors.Wrap(err, "delete statefulset")
 	}
 
 	if err := r.Delete(ctx, &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      binlogserver.RestoreConfigSecretName(cluster, cr),
-			Namespace: cluster.Namespace,
-		},
+		Name:      binlogserver.RestoreConfigSecretName(cluster, cr),
+		Namespace: cluster.Namespace,
 	}); err != nil && !k8serrors.IsNotFound(err) {
 		return errors.Wrap(err, "delete config secret")
 	}

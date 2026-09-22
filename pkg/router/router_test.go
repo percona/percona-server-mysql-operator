@@ -7,7 +7,6 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/yaml"
@@ -25,7 +24,7 @@ func TestDeployment(t *testing.T) {
 
 	cr := readDefaultCluster(t, "cluster", ns)
 	if err := cr.CheckNSetDefaults(t.Context(), &platform.ServerVersion{
-		Platform: platform.PlatformKubernetes,
+		Platform: platform.Kubernetes,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -325,10 +324,8 @@ func TestService(t *testing.T) {
 	podName := "test-cluster-router"
 
 	cr := &apiv1.PerconaServerMySQL{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cluster",
-			Namespace: "test-namespace",
-		},
+		Name:      "test-cluster",
+		Namespace: "test-namespace",
 		Spec: apiv1.PerconaServerMySQLSpec{
 			Proxy: apiv1.ProxySpec{
 				Router: &apiv1.MySQLRouterSpec{

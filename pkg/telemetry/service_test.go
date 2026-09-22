@@ -10,7 +10,6 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/robfig/cron/v3"
 	"github.com/stretchr/testify/assert"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	k8sversion "k8s.io/apimachinery/pkg/version"
 
@@ -203,9 +202,7 @@ func TestServiceURL(t *testing.T) {
 
 func defaultCR() *apiv1.PerconaServerMySQL {
 	return &apiv1.PerconaServerMySQL{
-		ObjectMeta: metav1.ObjectMeta{
-			UID: types.UID(defaultUID),
-		},
+		UID: types.UID(defaultUID),
 		Spec: apiv1.PerconaServerMySQLSpec{
 			CRVersion: "1.12.0",
 			UpgradeOptions: apiv1.UpgradeOptions{
@@ -227,7 +224,7 @@ func defaultCR() *apiv1.PerconaServerMySQL {
 
 func defaultServerVersion() *platform.ServerVersion {
 	return &platform.ServerVersion{
-		Platform: platform.PlatformKubernetes,
+		Platform: platform.Kubernetes,
 		Info: k8sversion.Info{
 			GitVersion: "v1.28.0",
 		},

@@ -7,7 +7,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	restclient "k8s.io/client-go/rest"
 )
 
@@ -24,6 +23,10 @@ func (m *mockClientCmd) Exec(ctx context.Context, pod *corev1.Pod, containerName
 }
 
 func (m *mockClientCmd) REST() restclient.Interface {
+	return nil
+}
+
+func (m *mockClientCmd) Config() *restclient.Config {
 	return nil
 }
 
@@ -126,10 +129,8 @@ func TestGetPVCUsage(t *testing.T) {
 			}
 
 			pod := &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-cluster-mysql-0",
-					Namespace: "test-namespace",
-				},
+				Name:      "test-cluster-mysql-0",
+				Namespace: "test-namespace",
 			}
 
 			usage, err := GetPVCUsage(context.Background(), mockCmd, pod, tt.pvcName)

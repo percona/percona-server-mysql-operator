@@ -45,7 +45,7 @@ func TestS3CABundleJobs(t *testing.T) {
 	})
 
 	t.Run("restore", func(t *testing.T) {
-		restore := &apiv1.PerconaServerMySQLRestore{ObjectMeta: metav1.ObjectMeta{Name: "restore", Namespace: "ns"}}
+		restore := &apiv1.PerconaServerMySQLRestore{Name: "restore", Namespace: "ns"}
 		job := RestoreJob(cluster, DestinationInfo{Base: "destination"}, restore, storage, "init-image", "pvc")
 		checkContainer(t, job.Spec.Template.Spec.Containers[0], "/opt/percona/run-restore.sh")
 		require.Len(t, job.Spec.Template.Spec.InitContainers, 1)
@@ -58,7 +58,7 @@ func TestS3CABundleJobs(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, k8sutil.S3CAPath(selector), backupConfig.CACert)
 
-		job := GetDeleteJob(cluster, backup, backupConfig, "init-image")
+		job := GetDeleteJob(new(apiv1.PerconaServerMySQL), backup, backupConfig, "init-image")
 		checkContainer(t, job.Spec.Template.Spec.Containers[0], "xbcloud")
 		require.Len(t, job.Spec.Template.Spec.InitContainers, 1)
 		assert.Contains(t, job.Spec.Template.Spec.Containers[0].Command, "--cacert="+k8sutil.S3CAPath(selector))
@@ -90,7 +90,7 @@ func TestJob(t *testing.T) {
 
 	cr := readDefaultCluster(t, "cluster", ns)
 	if err := cr.CheckNSetDefaults(t.Context(), &platform.ServerVersion{
-		Platform: platform.PlatformKubernetes,
+		Platform: platform.Kubernetes,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -285,7 +285,7 @@ func TestDeleteJob(t *testing.T) {
 
 	cr := readDefaultCluster(t, "cluster", ns)
 	if err := cr.CheckNSetDefaults(t.Context(), &platform.ServerVersion{
-		Platform: platform.PlatformKubernetes,
+		Platform: platform.Kubernetes,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -458,7 +458,7 @@ func TestRestoreJob(t *testing.T) {
 
 	cr := readDefaultCluster(t, "cluster", ns)
 	if err := cr.CheckNSetDefaults(t.Context(), &platform.ServerVersion{
-		Platform: platform.PlatformKubernetes,
+		Platform: platform.Kubernetes,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -651,9 +651,7 @@ func TestGetDestination(t *testing.T) {
 
 	newBackup := func(clusterName string, backupType apiv1.BackupType) *apiv1.PerconaServerMySQLBackup {
 		return &apiv1.PerconaServerMySQLBackup{
-			ObjectMeta: metav1.ObjectMeta{
-				CreationTimestamp: metav1.NewTime(ts),
-			},
+			CreationTimestamp: metav1.NewTime(ts),
 			Spec: apiv1.PerconaServerMySQLBackupSpec{
 				Type:        backupType,
 				ClusterName: clusterName,

@@ -90,16 +90,12 @@ func Service(cr *apiv1.PerconaServerMySQL) *corev1.Service {
 	}
 
 	s := &corev1.Service{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "Service",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        ServiceName(cr),
-			Namespace:   cr.Namespace,
-			Labels:      labels,
-			Annotations: util.SSMapMerge(cr.GlobalAnnotations(), expose.Annotations),
-		},
+		APIVersion:  "v1",
+		Kind:        "Service",
+		Name:        ServiceName(cr),
+		Namespace:   cr.Namespace,
+		Labels:      labels,
+		Annotations: util.SSMapMerge(cr.GlobalAnnotations(), expose.Annotations),
 		Spec: corev1.ServiceSpec{
 			Type:                          expose.Type,
 			Ports:                         ports(cr.Spec.Proxy.Router.Ports),
@@ -129,16 +125,12 @@ func Deployment(cr *apiv1.PerconaServerMySQL, initImage, configHash, tlsHash str
 
 	zero := intstr.FromInt32(0)
 	return &appsv1.Deployment{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "apps/v1",
-			Kind:       "Deployment",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        Name(cr),
-			Namespace:   cr.Namespace,
-			Labels:      Labels(cr),
-			Annotations: util.SSMapMerge(cr.GlobalAnnotations(), spec.Annotations),
-		},
+		APIVersion:  "apps/v1",
+		Kind:        "Deployment",
+		Name:        Name(cr),
+		Namespace:   cr.Namespace,
+		Labels:      Labels(cr),
+		Annotations: util.SSMapMerge(cr.GlobalAnnotations(), spec.Annotations),
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
 			Selector: &metav1.LabelSelector{
@@ -184,45 +176,35 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 
 	return []corev1.Volume{
 		{
-			Name: apiv1.BinVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			},
+			Name:     apiv1.BinVolumeName,
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		},
 		{
 			Name: credsVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: cr.InternalSecretName(),
-				},
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: cr.InternalSecretName(),
 			},
 		},
 		{
 			Name: tlsVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: cr.Spec.SSLSecretName,
-				},
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: cr.Spec.SSLSecretName,
 			},
 		},
 		{
 			Name: configVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				Projected: &corev1.ProjectedVolumeSource{
-					Sources: []corev1.VolumeProjection{
-						{
-							ConfigMap: &corev1.ConfigMapProjection{
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: conf.GetConfigMapName(),
+			Projected: &corev1.ProjectedVolumeSource{
+				Sources: []corev1.VolumeProjection{
+					{
+						ConfigMap: &corev1.ConfigMapProjection{
+							Name: conf.GetConfigMapName(),
+							Items: []corev1.KeyToPath{
+								{
+									Key:  conf.GetConfigMapKey(),
+									Path: conf.GetConfigMapKey(),
 								},
-								Items: []corev1.KeyToPath{
-									{
-										Key:  conf.GetConfigMapKey(),
-										Path: conf.GetConfigMapKey(),
-									},
-								},
-								Optional: &t,
 							},
+							Optional: &t,
 						},
 					},
 				},
