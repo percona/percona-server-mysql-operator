@@ -425,7 +425,7 @@ func servicePorts(cr *apiv1.PerconaServerMySQL) []corev1.ServicePort {
 		},
 	}
 
-	if cr.Spec.MySQL.IsGR() {
+	if cr.AppliedIsGR() {
 		ports = append(ports, corev1.ServicePort{Name: AppName + "-gr", Port: DefaultGRPort})
 	}
 
@@ -448,7 +448,7 @@ func containerPorts(cr *apiv1.PerconaServerMySQL) []corev1.ContainerPort {
 		},
 	}
 
-	if cr.Spec.MySQL.IsGR() {
+	if cr.AppliedIsGR() {
 		ports = append(ports, corev1.ContainerPort{Name: AppName + "-gr", ContainerPort: DefaultGRPort})
 	}
 

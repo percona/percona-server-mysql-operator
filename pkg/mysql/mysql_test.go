@@ -736,25 +736,23 @@ func TestHeadlessService_PublishNotReadyAddresses(t *testing.T) {
 	tests := map[string]struct {
 		specType   apiv1.ClusterType
 		statusType apiv1.ClusterType
-		expect     bool
+		expectGR   bool
 	}{
 		"GR cluster": {
 			specType: apiv1.ClusterTypeGR,
-			expect:   true,
+			expectGR: true,
 		},
 		"async cluster": {
 			specType: apiv1.ClusterTypeAsync,
-			expect:   false,
 		},
 		"GR cluster with a pending switch to async": {
 			specType:   apiv1.ClusterTypeAsync,
 			statusType: apiv1.ClusterTypeGR,
-			expect:     true,
+			expectGR:   true,
 		},
 		"async cluster with a pending switch to GR": {
 			specType:   apiv1.ClusterTypeGR,
 			statusType: apiv1.ClusterTypeAsync,
-			expect:     false,
 		},
 	}
 
@@ -769,7 +767,26 @@ func TestHeadlessService_PublishNotReadyAddresses(t *testing.T) {
 				Status: apiv1.PerconaServerMySQLStatus{ClusterType: tt.statusType},
 			}
 
-			assert.Equal(t, tt.expect, HeadlessService(cr).Spec.PublishNotReadyAddresses)
+			service := HeadlessService(cr)
+			assert.Equal(t, tt.expectGR, service.Spec.PublishNotReadyAddresses)
+
+			hasGRServicePort := false
+			for _, port := range service.Spec.Ports {
+				if port.Name == AppName+"-gr" {
+					hasGRServicePort = true
+					assert.Equal(t, int32(DefaultGRPort), port.Port)
+				}
+			}
+			assert.Equal(t, tt.expectGR, hasGRServicePort)
+
+			hasGRContainerPort := false
+			for _, port := range containerPorts(cr) {
+				if port.Name == AppName+"-gr" {
+					hasGRContainerPort = true
+					assert.Equal(t, int32(DefaultGRPort), port.ContainerPort)
+				}
+			}
+			assert.Equal(t, tt.expectGR, hasGRContainerPort)
 		})
 	}
 }
