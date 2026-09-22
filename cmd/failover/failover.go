@@ -26,12 +26,14 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 )
 
-const sourceLogsDir = "/var/lib/mysql/source-logs"
-
-// stagingMarker marks the staging directory as this job's own. Emptying the
-// directory is a recursive delete, so one without the marker is one we did not
-// create and must not touch.
-const stagingMarker = ".failover-staging"
+const (
+	// stagingMarker marks the staging directory as this job's own. Emptying the
+	// directory is a recursive delete, so one without the marker is one we did not
+	// create and must not touch.
+	stagingMarker = ".failover-staging"
+	sourceLogsDir = "/var/lib/mysql/source-logs"
+	lockPath      = "/var/lib/mysql/failover.lock"
+)
 
 const (
 	relayLogApplyTimeout = 6 * time.Minute
@@ -60,6 +62,7 @@ type failoverConfig struct {
 	sourceURL    func(host string) string
 	source       string
 	stagingDir   string
+	lockPath     string
 	wait         bool
 	applyPoll    time.Duration
 	applyTimeout time.Duration
@@ -94,6 +97,7 @@ func config(f flags) failoverConfig {
 		sourceURL:    sourceStreamURL,
 		source:       f.source,
 		stagingDir:   f.stagingDir,
+		lockPath:     lockPath,
 		wait:         f.wait,
 		applyPoll:    relayLogApplyPoll,
 		applyTimeout: f.waitTimeout,
@@ -133,6 +137,7 @@ func run(ctx context.Context, cfg failoverConfig) error {
 	if cfg.fetchTimeout <= 0 {
 		return fmt.Errorf("-fetch-timeout must be positive, got %s", cfg.fetchTimeout)
 	}
+
 	stagingDir, err := stagingPath(cfg.stagingDir)
 	if err != nil {
 		return err
@@ -140,6 +145,13 @@ func run(ctx context.Context, cfg failoverConfig) error {
 	if err := checkStagingDir(stagingDir); err != nil {
 		return err
 	}
+
+	lock, err := lockSplice(cfg.lockPath)
+	if err != nil {
+		return err
+	}
+	defer lock.Close() //nolint:errcheck
+
 	log.Printf("Fetching binary logs from %s", host)
 
 	d, err := cfg.newDatabase(ctx)
