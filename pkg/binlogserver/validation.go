@@ -110,7 +110,7 @@ func oldestBinlogName(ctx context.Context, st storage.Storage) (string, error) {
 	if err != nil {
 		return "", errors.Wrapf(err, "get %s", binlogIndexName)
 	}
-	defer obj.Close()
+	defer obj.Close() //nolint:errcheck
 
 	scanner := bufio.NewScanner(obj)
 	for scanner.Scan() {
@@ -136,7 +136,7 @@ func getBinlogMetadata(ctx context.Context, st storage.Storage, name string) (*a
 	if err != nil {
 		return nil, errors.Wrap(err, "get object")
 	}
-	defer obj.Close()
+	defer obj.Close() //nolint:errcheck
 
 	entry := new(archiveMetadata)
 	decoder := json.NewDecoder(obj)
