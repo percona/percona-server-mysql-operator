@@ -1,6 +1,5 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
-timeout: 360
 commands:
   - script: |-
       set -o errexit
@@ -95,3 +94,4 @@ commands:
           --from-literal=root_secret_absent="${root_secret_absent}" \
           --from-literal=root_skipped="${root_skipped}"
       kubectl get configmap -n "${NAMESPACE}" 08-check-hosts -o yaml
+    timeout: 360
