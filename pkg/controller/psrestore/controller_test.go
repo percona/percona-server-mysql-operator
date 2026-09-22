@@ -493,7 +493,7 @@ func TestCompletedBaseRestoreReconcilesPITRConfigSecret(t *testing.T) {
 	cluster.Spec.Backup.PiTR = apiv1.PiTRSpec{
 		Enabled: true,
 		BinlogServer: &apiv1.BinlogServerSpec{
-			PodSpec: apiv1.PodSpec{ContainerSpec: apiv1.ContainerSpec{Image: "binlog-server:latest"}},
+			Image: "binlog-server:latest",
 			Storage: apiv1.BinlogServerStorageSpec{S3: &apiv1.BackupStorageS3Spec{
 				Bucket:            "binlogs",
 				CredentialsSecret: "binlog-s3",
@@ -510,28 +510,24 @@ func TestCompletedBaseRestoreReconcilesPITRConfigSecret(t *testing.T) {
 	}
 
 	restoreJob := &batchv1.Job{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      xtrabackup.RestoreJobName(cluster, restore),
-			Namespace: namespace,
-		},
+		Name:      xtrabackup.RestoreJobName(cluster, restore),
+		Namespace: namespace,
 		Status: batchv1.JobStatus{Conditions: []batchv1.JobCondition{{
 			Type:   batchv1.JobComplete,
 			Status: corev1.ConditionTrue,
 		}}},
 	}
 	prepareJob := &batchv1.Job{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      xtrabackup.PrepareJobName(restore),
-			Namespace: namespace,
-		},
-		Status: batchv1.JobStatus{Active: 1},
+		Name:      xtrabackup.PrepareJobName(restore),
+		Namespace: namespace,
+		Status:    batchv1.JobStatus{Active: 1},
 	}
 	internalSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: cluster.InternalSecretName(), Namespace: namespace},
-		Data:       map[string][]byte{string(apiv1.UserReplication): []byte("replication-password")},
+		Name: cluster.InternalSecretName(), Namespace: namespace,
+		Data: map[string][]byte{string(apiv1.UserReplication): []byte("replication-password")},
 	}
 	s3Secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "binlog-s3", Namespace: namespace},
+		Name: "binlog-s3", Namespace: namespace,
 		Data: map[string][]byte{
 			"AWS_ACCESS_KEY_ID":     []byte("access-key"),
 			"AWS_SECRET_ACCESS_KEY": []byte("secret-key"),

@@ -225,14 +225,11 @@ func ConfigVolume(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServerSpec, co
 
 	return corev1.Volume{
 		Name: ConfigVolumeName,
-		VolumeSource: corev1.VolumeSource{
 			Projected: &corev1.ProjectedVolumeSource{
 				Sources: []corev1.VolumeProjection{
 					{
 						Secret: &corev1.SecretProjection{
-							LocalObjectReference: corev1.LocalObjectReference{
 								Name: configSecretName,
-							},
 							Items: []corev1.KeyToPath{
 								{
 									Key:  ConfigKey,
@@ -243,9 +240,7 @@ func ConfigVolume(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServerSpec, co
 					},
 					{
 						ConfigMap: &corev1.ConfigMapProjection{
-							LocalObjectReference: corev1.LocalObjectReference{
 								Name: conf.GetConfigMapName(),
-							},
 							Items: []corev1.KeyToPath{
 								{
 									Key:  conf.GetConfigMapKey(),
@@ -257,7 +252,6 @@ func ConfigVolume(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServerSpec, co
 					},
 				},
 			},
-		},
 	}
 }
 
@@ -265,22 +259,20 @@ func SearchVolumes(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServerSpec, c
 	volumes := []corev1.Volume{
 		{
 			Name:         searchBufferVolumeName,
-			VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		},
 		{
 			Name: searchCredsVolumeName,
-			VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{
 				SecretName: cr.InternalSecretName(),
-			}},
+			},
 		},
 		ConfigVolume(cr, spec, configSecretName),
 	}
 	if spec.KeyringSecret != nil {
 		volumes = append(volumes, corev1.Volume{
 			Name: searchKeyringVolumeName,
-			VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{
 				SecretName: spec.KeyringSecret.Name,
-			}},
+			},
 		})
 	}
 	return volumes

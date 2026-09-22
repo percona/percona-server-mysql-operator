@@ -69,8 +69,8 @@ func PrepareInitContainersWithS3CA(job *batchv1.Job, cluster *apiv1.PerconaServe
 	}
 
 	job.Spec.Template.Spec.Volumes = append(job.Spec.Template.Spec.Volumes, corev1.Volume{
-		Name:         naming.S3CertsVolumeName,
-		VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+		Name:     naming.S3CertsVolumeName,
+		EmptyDir: &corev1.EmptyDirVolumeSource{},
 	})
 
 	initContainers := job.Spec.Template.Spec.InitContainers

@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	restclient "k8s.io/client-go/rest"
@@ -48,7 +47,7 @@ func (f *fakeExecClient) Config() *restclient.Config {
 
 func newReadyBinlogServerPod(cr *apiv1.PerconaServerMySQL) *corev1.Pod {
 	return &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: Name(cr) + "-0", Namespace: cr.Namespace},
+		Name: Name(cr) + "-0", Namespace: cr.Namespace,
 		Status: corev1.PodStatus{
 			Phase:      corev1.PodRunning,
 			Conditions: []corev1.PodCondition{{Type: corev1.ContainersReady, Status: corev1.ConditionTrue}},
@@ -177,7 +176,7 @@ func TestSearchCommands(t *testing.T) {
 			exec: &fakeExecClient{}, subcommand: SearchByGTIDCommand, arg: "uuid:1", expectedError: "get binlog server pod",
 		},
 		"pod not ready": {
-			pod:  &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: Name(cr) + "-0", Namespace: cr.Namespace}},
+			pod:  &corev1.Pod{Name: Name(cr) + "-0", Namespace: cr.Namespace},
 			exec: &fakeExecClient{}, subcommand: SearchByGTIDCommand, arg: "uuid:1", expectedError: "is not ready",
 		},
 		"exec error": {
