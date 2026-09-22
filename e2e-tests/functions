@@ -1547,6 +1547,33 @@ get_primary_from_haproxy() {
 	run_mysql "SHOW VARIABLES LIKE '%hostname%';" "-h ${haproxy_pod_ip} -P3306" | awk '{print $2}'
 }
 
+# haproxy pods learn a new primary on their own external-check schedule, and
+# spread-checks deliberately staggers them, so a single sample right after a
+# failover catches some of them mid-flight. Echoes the primary once every pod
+# routes to the one carrying the label.
+wait_for_haproxy_primary() {
+	local cluster=$1
+	local haproxy_size=${2:-3}
+
+	local primary data i
+	while true; do
+		primary=$(get_primary_from_label)
+
+		data=()
+		for i in $(seq 0 $((haproxy_size - 1))); do
+			data+=("$(get_primary_from_haproxy ${cluster}-haproxy-${i})")
+		done
+
+		if [ -n "${primary}" ] && [ "$(printf '%s\n' "${data[@]}" | sort -u)" = "${primary}" ]; then
+			echo "${primary}"
+			return 0
+		fi
+
+		echo "waiting for haproxy pods to route to primary ${primary}: ${data[*]}" >&2
+		sleep 5
+	done
+}
+
 # Verifies the backends HAProxy generated for the given cluster: every server is
 # listed on its backend's own port, every backend runs the check that matches the
 # roles it holds, and the x-protocol and admin ports reach a writable primary.
