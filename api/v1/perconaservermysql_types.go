@@ -1762,7 +1762,13 @@ func (cr *PerconaServerMySQL) OrchestratorEnabled() bool {
 		return false
 	}
 
-	if cr.MySQLSpec().IsAsync() && !cr.Spec.Unsafe.Orchestrator {
+	// The switch away from async tears Orchestrator down itself; don't bring it
+	// back while that is running.
+	if meta.IsStatusConditionTrue(cr.Status.Conditions, ConditionClusterTypeSwitchInProgress) {
+		return false
+	}
+
+	if cr.AppliedIsAsync() && !cr.Spec.Unsafe.Orchestrator {
 		return true
 	}
 

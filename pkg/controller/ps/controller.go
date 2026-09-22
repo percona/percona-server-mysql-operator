@@ -819,6 +819,17 @@ func (r *PerconaServerMySQLReconciler) reconcileClusterTypeChange(
 
 	switch observedType {
 	case apiv1.ClusterTypeAsync:
+		// orchestrator might start replication again that we'll stop
+		// in teardownAsync, so get rid of it first
+		orcRemoved, err := r.ensureOrchestratorRemoved(ctx, cr)
+		if err != nil {
+			return errors.Wrap(err, "remove orchestrator")
+		}
+		if !orcRemoved {
+			log.Info("Waiting for Orchestrator to go away before tearing down async replication")
+			return nil
+		}
+
 		if err := r.teardownAsync(ctx, cr); err != nil {
 			return errors.Wrap(err, "teardown async")
 		}
@@ -981,6 +992,29 @@ func (r *PerconaServerMySQLReconciler) teardownGR(
 	}
 
 	return nil
+}
+
+// ensureOrchestratorRemoved deletes the Orchestrator StatefulSet and reports
+// whether its pods are gone. reconcileClusterTypeChange marks the switch in
+// progress first, which keeps OrchestratorEnabled false so nothing recreates it
+// in between.
+func (r *PerconaServerMySQLReconciler) ensureOrchestratorRemoved(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQL,
+) (bool, error) {
+	if err := r.Delete(ctx, &appsv1.StatefulSet{
+		Name:      orchestrator.Name(cr),
+		Namespace: cr.GetNamespace(),
+	}); client.IgnoreNotFound(err) != nil {
+		return false, errors.Wrap(err, "delete orchestrator statefulset")
+	}
+
+	pods, err := k8s.PodsByLabels(ctx, r.Client, orchestrator.MatchLabels(cr), cr.Namespace)
+	if err != nil {
+		return false, errors.Wrap(err, "get orchestrator pods")
+	}
+
+	return len(pods) == 0, nil
 }
 
 func (r *PerconaServerMySQLReconciler) teardownAsync(

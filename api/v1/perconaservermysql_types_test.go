@@ -5,7 +5,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/validation"
 
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
@@ -978,11 +980,12 @@ func TestAppliedClusterType(t *testing.T) {
 
 func TestOrchestratorEnabled(t *testing.T) {
 	tests := map[string]struct {
-		specType   ClusterType
-		statusType ClusterType
-		unsafe     bool
-		enabled    bool
-		expect     bool
+		specType      ClusterType
+		statusType    ClusterType
+		unsafe        bool
+		enabled       bool
+		switchRunning bool
+		expect        bool
 	}{
 		"async cluster": {
 			specType: ClusterTypeAsync,
@@ -1021,14 +1024,22 @@ func TestOrchestratorEnabled(t *testing.T) {
 			enabled:    true,
 			expect:     false,
 		},
-		// The reverse switch requires orchestrator.enabled=false first, and
-		// teardownAsync resets replication by hand - Orchestrator has to be gone
-		// before that, so the spec still wins here.
+		// The reverse switch requires orchestrator.enabled=false up front, but the
+		// pods still run async and need Orchestrator to promote a primary, or the
+		// cluster never reaches Ready and the switch never runs.
 		"async cluster with a pending switch to GR": {
 			specType:   ClusterTypeGR,
 			statusType: ClusterTypeAsync,
 			enabled:    false,
-			expect:     false,
+			expect:     true,
+		},
+		// Once the teardown has started, Orchestrator must not come back.
+		"async cluster with the switch to GR in progress": {
+			specType:      ClusterTypeGR,
+			statusType:    ClusterTypeAsync,
+			enabled:       false,
+			switchRunning: true,
+			expect:        false,
 		},
 	}
 
@@ -1039,6 +1050,13 @@ func TestOrchestratorEnabled(t *testing.T) {
 			cr.Status.ClusterType = tt.statusType
 			cr.Spec.Unsafe.Orchestrator = tt.unsafe
 			cr.Spec.Orchestrator.Enabled = tt.enabled
+			if tt.switchRunning {
+				meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
+					Type:   ConditionClusterTypeSwitchInProgress,
+					Status: metav1.ConditionTrue,
+					Reason: "TeardownStarted",
+				})
+			}
 
 			assert.Equal(t, tt.expect, cr.OrchestratorEnabled())
 		})
