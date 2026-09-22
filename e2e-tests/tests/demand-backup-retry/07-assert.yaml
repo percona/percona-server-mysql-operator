@@ -16,7 +16,7 @@ kind: PerconaServerMySQL
 metadata:
   name: demand-backup-retry
 status:
-  state: initializing
+  state: paused
 ---
 apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQLBackup
@@ -28,6 +28,9 @@ status:
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: xb-demand-backup-retry-minio
+  ownerReferences:
+    - controller: true
+      kind: PerconaServerMySQLBackup
+      name: demand-backup-retry
 spec:
   suspend: true

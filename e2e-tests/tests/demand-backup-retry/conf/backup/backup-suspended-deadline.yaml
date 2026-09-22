@@ -7,4 +7,4 @@ metadata:
 spec:
   clusterName: demand-backup-retry
   storageName: <storage-name>
-  suspendedDeadlineSeconds: 5
+  suspendedDeadlineSeconds: 30

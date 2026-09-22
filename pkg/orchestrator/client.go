@@ -51,18 +51,36 @@ type InstanceKey struct {
 	Port     int32  `json:"Port"`
 }
 
+type BinlogCoordinates struct {
+	LogFile string `json:"LogFile"`
+	LogPos  int64  `json:"LogPos"`
+}
+
 type Instance struct {
-	Key                  InstanceKey   `json:"Key"`
-	Alias                string        `json:"InstanceAlias"`
-	MasterKey            InstanceKey   `json:"MasterKey"`
-	Replicas             []InstanceKey `json:"Replicas"`
-	ReadOnly             bool          `json:"ReadOnly"`
-	Problems             []string      `json:"Problems"`
-	IsDowntimed          bool          `json:"IsDowntimed"`
-	DowntimeReason       string        `json:"DowntimeReason"`
-	DowntimeOwner        string        `json:"DowntimeOwner"`
-	DowntimeEndTimestamp string        `json:"DowntimeEndTimestamp"`
-	ElapsedDowntime      time.Duration `json:"ElapsedDowntime"`
+	Key                   InstanceKey       `json:"Key"`
+	Alias                 string            `json:"InstanceAlias"`
+	MasterKey             InstanceKey       `json:"MasterKey"`
+	Replicas              []InstanceKey     `json:"Replicas"`
+	ReadOnly              bool              `json:"ReadOnly"`
+	Problems              []string          `json:"Problems"`
+	IsDowntimed           bool              `json:"IsDowntimed"`
+	DowntimeReason        string            `json:"DowntimeReason"`
+	DowntimeOwner         string            `json:"DowntimeOwner"`
+	DowntimeEndTimestamp  string            `json:"DowntimeEndTimestamp"`
+	ElapsedDowntime       time.Duration     `json:"ElapsedDowntime"`
+	ExecBinlogCoordinates BinlogCoordinates `json:"ExecBinlogCoordinates"`
+	ExecutedGtidSet       string            `json:"ExecutedGtidSet"`
+}
+
+const PromotionRulePrefer = "prefer"
+
+var masterFailoverAnalyses = map[string]bool{
+	"DeadMaster":                true,
+	"DeadMasterAndSomeReplicas": true,
+}
+
+func IsMasterFailover(analysis string) bool {
+	return masterFailoverAnalyses[analysis]
 }
 
 var (
@@ -254,6 +272,26 @@ func Discover(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, hos
 
 func SetWriteable(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, host string, port int) error {
 	url := fmt.Sprintf("api/set-writeable/%s/%d", host, port)
+
+	var res, errb bytes.Buffer
+	err := exec(ctx, cliCmd, pod, url, &res, &errb)
+	if err != nil {
+		return err
+	}
+
+	orcResp := new(orcResponse)
+	if err := unmarshalOrcResponse(res.Bytes(), orcResp); err != nil {
+		return err
+	}
+
+	return orcResp.Error()
+}
+
+// RegisterCandidate sets the promotion rule orchestrator applies to an instance
+// when it picks a replica to promote. The registration expires on its own after
+// CandidateInstanceExpireMinutes.
+func RegisterCandidate(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, host string, port int32, promotionRule string) error {
+	url := fmt.Sprintf("api/register-candidate/%s/%d/%s", host, port, promotionRule)
 
 	var res, errb bytes.Buffer
 	err := exec(ctx, cliCmd, pod, url, &res, &errb)
