@@ -1754,10 +1754,9 @@ func (cr *PerconaServerMySQL) AppliedIsGR() bool {
 	return cr.AppliedClusterType() == ClusterTypeGR
 }
 
-// OrchestratorEnabled determines if the orchestrator is enabled,
-// considering the MySQL configuration.
+// OrchestratorEnabled reports whether Orchestrator should be running for this cluster.
 func (cr *PerconaServerMySQL) OrchestratorEnabled() bool {
-	if cr.MySQLSpec().IsGR() {
+	if cr.AppliedIsGR() {
 		return false
 	}
 
@@ -1885,8 +1884,4 @@ func (cr *PerconaServerMySQL) BootstrapMode() BootstrapMode {
 
 func (cr *PerconaServerMySQL) IsAwaitingExternalBootstrap() bool {
 	return cr.BootstrapMode() == BootstrapModeManual && meta.IsStatusConditionTrue(cr.Status.Conditions, ConditionAwaitingExternalBootstrap)
-}
-
-func (cr *PerconaServerMySQL) IsOrchestratorEnabled() bool {
-	return cr.Spec.MySQL.IsAsync() && cr.Spec.Orchestrator.Enabled
 }

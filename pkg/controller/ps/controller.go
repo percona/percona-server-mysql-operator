@@ -1218,7 +1218,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("reconcileOrchestrator")
 
-	if cr.Spec.MySQL.ClusterType == apiv1.ClusterTypeGR || !cr.OrchestratorEnabled() {
+	if !cr.OrchestratorEnabled() {
 		return nil
 	}
 
@@ -1425,7 +1425,7 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 		return errors.Wrap(err, "reconcile group replication")
 	}
 
-	if cr.Spec.MySQL.ClusterType == apiv1.ClusterTypeGR || !cr.OrchestratorEnabled() || cr.Spec.Orchestrator.Size <= 0 {
+	if !cr.OrchestratorEnabled() || cr.Spec.Orchestrator.Size <= 0 {
 		return nil
 	}
 
@@ -1519,7 +1519,7 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 }
 
 func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
-	if cr.Spec.MySQL.ClusterType != apiv1.ClusterTypeGR {
+	if !cr.AppliedIsGR() {
 		return nil
 	}
 

@@ -264,7 +264,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 			return rr, nil
 		}
 
-		if cluster.IsOrchestratorEnabled() {
+		if cluster.OrchestratorEnabled() {
 			if err := r.renewDowntime(ctx, cr, cluster, backupSource); err != nil {
 				return rr, errors.Wrap(err, "renew downtime for backup source")
 			}
@@ -643,7 +643,7 @@ func (r *PerconaServerMySQLBackupReconciler) renewDowntime(
 	cluster *apiv1.PerconaServerMySQL,
 	backupSource string,
 ) error {
-	if !cluster.IsOrchestratorEnabled() {
+	if !cluster.OrchestratorEnabled() {
 		return nil
 	}
 
@@ -705,7 +705,7 @@ func (r *PerconaServerMySQLBackupReconciler) runPostFinishTasks(
 		}
 	}
 
-	if !cluster.Spec.MySQL.IsAsync() || !cluster.Spec.Orchestrator.Enabled {
+	if !cluster.OrchestratorEnabled() {
 		return nil
 	}
 

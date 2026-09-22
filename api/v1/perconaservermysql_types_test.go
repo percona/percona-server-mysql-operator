@@ -975,3 +975,72 @@ func TestAppliedClusterType(t *testing.T) {
 		assert.Equal(t, ClusterTypeAsync, cr.AppliedClusterType())
 	})
 }
+
+func TestOrchestratorEnabled(t *testing.T) {
+	tests := map[string]struct {
+		specType   ClusterType
+		statusType ClusterType
+		unsafe     bool
+		enabled    bool
+		expect     bool
+	}{
+		"async cluster": {
+			specType: ClusterTypeAsync,
+			expect:   true,
+		},
+		"async cluster with unsafe opt-out and orchestrator disabled": {
+			specType: ClusterTypeAsync,
+			unsafe:   true,
+			expect:   false,
+		},
+		"async cluster with unsafe opt-out and orchestrator enabled": {
+			specType: ClusterTypeAsync,
+			unsafe:   true,
+			enabled:  true,
+			expect:   true,
+		},
+		"GR cluster": {
+			specType: ClusterTypeGR,
+			expect:   false,
+		},
+		"cluster type not set yet falls back to the spec": {
+			enabled: true,
+			expect:  true,
+		},
+		"settled async cluster": {
+			specType:   ClusterTypeAsync,
+			statusType: ClusterTypeAsync,
+			enabled:    true,
+			expect:     true,
+		},
+		// The switch has been requested but not carried out: the pods still run
+		// GR, so Orchestrator must not be deployed or pointed at them yet.
+		"GR cluster with a pending switch to async": {
+			specType:   ClusterTypeAsync,
+			statusType: ClusterTypeGR,
+			enabled:    true,
+			expect:     false,
+		},
+		// The reverse switch requires orchestrator.enabled=false first, and
+		// teardownAsync resets replication by hand - Orchestrator has to be gone
+		// before that, so the spec still wins here.
+		"async cluster with a pending switch to GR": {
+			specType:   ClusterTypeGR,
+			statusType: ClusterTypeAsync,
+			enabled:    false,
+			expect:     false,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := new(PerconaServerMySQL)
+			cr.Spec.MySQL.ClusterType = tt.specType
+			cr.Status.ClusterType = tt.statusType
+			cr.Spec.Unsafe.Orchestrator = tt.unsafe
+			cr.Spec.Orchestrator.Enabled = tt.enabled
+
+			assert.Equal(t, tt.expect, cr.OrchestratorEnabled())
+		})
+	}
+}

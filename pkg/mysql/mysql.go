@@ -602,7 +602,7 @@ func containers(cr *apiv1.PerconaServerMySQL, secret *corev1.Secret) []corev1.Co
 		containers = append(containers, backupContainer(cr))
 	}
 
-	if toolkit := cr.Spec.Toolkit; toolkit != nil && cr.Spec.MySQL.IsAsync() && cr.OrchestratorEnabled() {
+	if toolkit := cr.Spec.Toolkit; toolkit != nil && cr.AppliedIsAsync() && cr.OrchestratorEnabled() {
 		containers = append(containers, heartbeatContainer(cr))
 	}
 
