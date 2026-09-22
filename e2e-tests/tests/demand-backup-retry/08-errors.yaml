@@ -1,4 +1,0 @@
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: xb-demand-backup-retry-deadline-minio

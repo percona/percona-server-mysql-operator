@@ -31,6 +31,7 @@ import (
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
+	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
@@ -1507,12 +1508,14 @@ func TestRenewDowntime(t *testing.T) {
 	}
 
 	// instanceJSON renders an orchestrator api/instance/ response with the given
-	// downtime state. endTimestamp is the RFC3339 DowntimeEndTimestamp.
+	// downtime state.
 	instanceJSON := func(isDowntimed bool, endTimestamp string) string {
 		return fmt.Sprintf(`{"IsDowntimed":%t,"DowntimeEndTimestamp":%q}`, isDowntimed, endTimestamp)
 	}
 
-	now := time.Now()
+	orcTimestamp := func(in time.Duration) string {
+		return time.Now().UTC().Add(in).Format(mysql.DatetimeFormat)
+	}
 
 	tests := []struct {
 		name string
@@ -1537,17 +1540,35 @@ func TestRenewDowntime(t *testing.T) {
 		},
 		{
 			name:              "downtime near completion is renewed",
-			instanceResp:      instanceJSON(true, now.Add(30*time.Second).Format(time.RFC3339)),
+			instanceResp:      instanceJSON(true, orcTimestamp(30*time.Second)),
 			cluster:           asyncWithOrc(),
 			pods:              []client.Object{backupPod, orchestratorPod},
 			wantBeginDowntime: true,
 		},
 		{
 			name:              "downtime far from completion is left untouched",
-			instanceResp:      instanceJSON(true, now.Add(10*time.Minute).Format(time.RFC3339)),
+			instanceResp:      instanceJSON(true, orcTimestamp(10*time.Minute)),
 			cluster:           asyncWithOrc(),
 			pods:              []client.Object{backupPod, orchestratorPod},
 			wantBeginDowntime: false,
+		},
+		{
+			name:              "rfc3339 timestamp is not accepted",
+			instanceResp:      instanceJSON(true, time.Now().UTC().Add(10*time.Minute).Format(time.RFC3339)),
+			cluster:           asyncWithOrc(),
+			pods:              []client.Object{backupPod, orchestratorPod},
+			wantBeginDowntime: false,
+			wantErr:           true,
+			errorMsg:          "parse downtime end timestamp",
+		},
+		{
+			name:              "unparsable timestamp is reported",
+			instanceResp:      instanceJSON(true, "not-a-timestamp"),
+			cluster:           asyncWithOrc(),
+			pods:              []client.Object{backupPod, orchestratorPod},
+			wantBeginDowntime: false,
+			wantErr:           true,
+			errorMsg:          "parse downtime end timestamp",
 		},
 		{
 			name: "skip with group replication cluster (no orchestrator needed)",
