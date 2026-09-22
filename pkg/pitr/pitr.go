@@ -148,10 +148,8 @@ func RestoreJob(
 							},
 						},
 						{
-							Name: binlogsVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								EmptyDir: &corev1.EmptyDirVolumeSource{},
-							},
+							Name:     binlogsVolumeName,
+							EmptyDir: &corev1.EmptyDirVolumeSource{},
 						},
 					},
 				},

@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/binlogserver"
@@ -220,23 +220,21 @@ func TestRestoreJob(t *testing.T) {
 		},
 		"binlogs file is shared by the search and restore containers": {
 			cluster: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "ns"},
+				Name: "cluster", Namespace: "ns",
 				Spec: apiv1.PerconaServerMySQLSpec{
 					SecretsName:   "secrets",
 					SSLSecretName: "ssl",
 					Backup: &apiv1.BackupSpec{
 						PiTR: apiv1.PiTRSpec{
 							BinlogServer: &apiv1.BinlogServerSpec{
-								PodSpec: apiv1.PodSpec{
-									ContainerSpec: apiv1.ContainerSpec{Image: "binlog-server:latest"},
-								},
+								Image: "binlog-server:latest",
 							},
 						},
 					},
 				},
 			},
 			restore: &apiv1.PerconaServerMySQLRestore{
-				ObjectMeta: metav1.ObjectMeta{Name: "my-restore", Namespace: "ns"},
+				Name: "my-restore", Namespace: "ns",
 				Spec: apiv1.PerconaServerMySQLRestoreSpec{
 					PITR: &apiv1.RestorePITRSpec{
 						Type: apiv1.PITRDate,
@@ -254,12 +252,12 @@ func TestRestoreJob(t *testing.T) {
 				assert.Equal(t, binlogserver.SearchContainerName, search.Name)
 				assert.Equal(t, "binlog-server:latest", search.Image)
 
-				assert.Len(t, search.Args, 1)
-				assert.Contains(t, search.Args[0], binlogserver.BinlogServerBinary)
-				assert.Contains(t, search.Args[0], binlogserver.SearchByTimestampCommand)
-				assert.Contains(t, search.Args[0], path.Join(binlogserver.ConfigMountPath, binlogserver.ConfigKey))
-				assert.Contains(t, search.Args[0], `"2024-01-01T10:00:00"`)
-				assert.Contains(t, search.Args[0], "/var/lib/pitr-binlogs/binlogs.json")
+				require.Len(t, search.Args, 7)
+				assert.Equal(t, []string{
+					"binlog-search", "/var/lib/pitr-binlogs/binlogs.json", binlogserver.BinlogServerBinary,
+					binlogserver.SearchByTimestampCommand, path.Join(binlogserver.ConfigMountPath, binlogserver.ConfigKey),
+					"2024-01-01T10:00:00",
+				}, search.Args[1:])
 				assert.Contains(t, search.Args[0], `"$output_path"`)
 
 				mountPath := func(c corev1.Container, name string) string {
@@ -312,7 +310,7 @@ func TestRestoreJob(t *testing.T) {
 		},
 		"search target is independent of binlog server env": {
 			cluster: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "ns"},
+				Name: "cluster", Namespace: "ns",
 				Spec: apiv1.PerconaServerMySQLSpec{
 					SecretsName:   "secrets",
 					SSLSecretName: "ssl",
@@ -333,7 +331,7 @@ func TestRestoreJob(t *testing.T) {
 				},
 			},
 			restore: &apiv1.PerconaServerMySQLRestore{
-				ObjectMeta: metav1.ObjectMeta{Name: "restore", Namespace: "ns"},
+				Name: "restore", Namespace: "ns",
 				Spec: apiv1.PerconaServerMySQLRestoreSpec{
 					PITR: &apiv1.RestorePITRSpec{Type: apiv1.PITRDate, Date: "2024-01-01 10:00:00"},
 				},
@@ -346,8 +344,10 @@ func TestRestoreJob(t *testing.T) {
 				assert.Equal(t, binlogserver.SearchByGTIDCommand, env["SEARCH_SUBCOMMAND"])
 				assert.Equal(t, "wrong-target", env["SEARCH_ARG"])
 				assert.Equal(t, "http://proxy.example", env["HTTP_PROXY"])
-				assert.Len(t, search.Args, 1)
-				assert.Contains(t, search.Args[0], `"2024-01-01T10:00:00"`)
+				require.Len(t, search.Args, 7)
+				assert.Equal(t, binlogserver.SearchByTimestampCommand, search.Args[4])
+				assert.Equal(t, "2024-01-01T10:00:00", search.Args[6])
+				assert.NotContains(t, search.Args[0], "2024-01-01T10:00:00")
 			},
 		},
 		"storage scheduling fields propagated to pod spec": {

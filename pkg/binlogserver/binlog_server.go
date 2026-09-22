@@ -1,7 +1,6 @@
 package binlogserver
 
 import (
-	"fmt"
 	"path"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -225,44 +224,45 @@ func ConfigVolume(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServerSpec, co
 
 	return corev1.Volume{
 		Name: ConfigVolumeName,
-			Projected: &corev1.ProjectedVolumeSource{
-				Sources: []corev1.VolumeProjection{
-					{
-						Secret: &corev1.SecretProjection{
-								Name: configSecretName,
-							Items: []corev1.KeyToPath{
-								{
-									Key:  ConfigKey,
-									Path: ConfigKey,
-								},
+		Projected: &corev1.ProjectedVolumeSource{
+			Sources: []corev1.VolumeProjection{
+				{
+					Secret: &corev1.SecretProjection{
+						Name: configSecretName,
+						Items: []corev1.KeyToPath{
+							{
+								Key:  ConfigKey,
+								Path: ConfigKey,
 							},
-						},
-					},
-					{
-						ConfigMap: &corev1.ConfigMapProjection{
-								Name: conf.GetConfigMapName(),
-							Items: []corev1.KeyToPath{
-								{
-									Key:  conf.GetConfigMapKey(),
-									Path: conf.GetConfigMapKey(),
-								},
-							},
-							Optional: &t,
 						},
 					},
 				},
+				{
+					ConfigMap: &corev1.ConfigMapProjection{
+						Name: conf.GetConfigMapName(),
+						Items: []corev1.KeyToPath{
+							{
+								Key:  conf.GetConfigMapKey(),
+								Path: conf.GetConfigMapKey(),
+							},
+						},
+						Optional: &t,
+					},
+				},
 			},
+		},
 	}
 }
 
 func SearchVolumes(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServerSpec, configSecretName string) []corev1.Volume {
 	volumes := []corev1.Volume{
 		{
-			Name:         searchBufferVolumeName,
+			Name:     searchBufferVolumeName,
 			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		},
 		{
 			Name: searchCredsVolumeName,
+			Secret: &corev1.SecretVolumeSource{
 				SecretName: cr.InternalSecretName(),
 			},
 		},
@@ -271,6 +271,7 @@ func SearchVolumes(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServerSpec, c
 	if spec.KeyringSecret != nil {
 		volumes = append(volumes, corev1.Volume{
 			Name: searchKeyringVolumeName,
+			Secret: &corev1.SecretVolumeSource{
 				SecretName: spec.KeyringSecret.Name,
 			},
 		})
@@ -281,19 +282,20 @@ func SearchVolumes(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServerSpec, c
 func SearchContainer(spec *apiv1.BinlogServerSpec, subcommand, arg, outputVolumeName, outputMountPath, outputFile string) corev1.Container {
 	configPath := path.Join(ConfigMountPath, ConfigKey)
 	outputPath := path.Join(outputMountPath, outputFile)
-	searchScript := fmt.Sprintf(`output_path=%s
-if ! %s %s %s "%s" > "$output_path"; then
+	searchScript := `output_path=$1
+shift
+if ! "$@" > "$output_path"; then
 	cat "$output_path" >&2
 	exit 1
 fi
-cat "$output_path"`, outputPath, BinlogServerBinary, subcommand, configPath, arg)
+cat "$output_path"`
 
 	container := corev1.Container{
 		Name:            SearchContainerName,
 		Image:           spec.Image,
 		ImagePullPolicy: spec.ImagePullPolicy,
 		Command:         []string{"/bin/sh", "-c"},
-		Args:            []string{searchScript},
+		Args:            []string{searchScript, "binlog-search", outputPath, BinlogServerBinary, subcommand, configPath, arg},
 		Env:             spec.Env,
 		EnvFrom:         spec.EnvFrom,
 		VolumeMounts: []corev1.VolumeMount{

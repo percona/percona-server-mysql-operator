@@ -144,15 +144,15 @@ func TestGetOptionsFromBackupStatus(t *testing.T) {
 func TestGetS3OptionsFromSpec(t *testing.T) {
 	const namespace = "test"
 	credentials := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "credentials", Namespace: namespace},
+		Name: "credentials", Namespace: namespace,
 		Data: map[string][]byte{
 			secret.CredentialsAWSAccessKey: []byte("access-key"),
 			secret.CredentialsAWSSecretKey: []byte("secret-key"),
 		},
 	}
 	ca := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "ca", Namespace: namespace},
-		Data:       map[string][]byte{"ca.crt": []byte("test-ca")},
+		Name: "ca", Namespace: namespace,
+		Data: map[string][]byte{"ca.crt": []byte("test-ca")},
 	}
 	scheme := runtime.NewScheme()
 	require.NoError(t, clientgoscheme.AddToScheme(scheme))
