@@ -3,7 +3,6 @@ package backup
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -109,8 +108,20 @@ func (h *Handler) createBackupHandler(w http.ResponseWriter, req *http.Request) 
 		http.Error(w, "backup failed", http.StatusInternalServerError)
 		return
 	}
+
+	generatedDefaultsFile, err := generateDefaultsFile(&backupConf)
+	if err != nil {
+		log.Error(err, "failed to generate xtrabackup defaults file")
+		http.Error(w, "backup failed", http.StatusInternalServerError)
+		return
+	}
+	if generatedDefaultsFile != "" {
+		defer os.Remove(generatedDefaultsFile) //nolint:errcheck
+	}
+	xbArgs := xtrabackupArgs(string(backupUser), backupPass, &backupConf, generatedDefaultsFile)
+
 	g, gCtx := errgroup.WithContext(req.Context())
-	xtrabackup := exec.CommandContext(gCtx, "xtrabackup", xtrabackupArgs(string(backupUser), backupPass, &backupConf)...)
+	xtrabackup := exec.CommandContext(gCtx, "xtrabackup", xbArgs...)
 	xtrabackup.Env = envs(backupConf)
 
 	xbOut, err := xtrabackup.StdoutPipe()
@@ -215,46 +226,66 @@ func (h *Handler) createBackupHandler(w http.ResponseWriter, req *http.Request) 
 	log.Info("Backup finished successfully", "destination", backupConf.Destination, "storage", backupConf.Type)
 }
 
-func xtrabackupArgs(user, pass string, conf *xb.BackupConfig) []string {
-	args := []string{
+func xtrabackupArgs(user, pass string, conf *xb.BackupConfig, generatedDefaultsFile string) []string {
+	customArgs := conf.XtrabackupArgs()
+
+	defaultsArg := defaultFileArg(generatedDefaultsFile)
+	if generatedDefaultsFile != "" && len(customArgs) > 0 && strings.HasPrefix(customArgs[0], "--defaults-file=") {
+		// kubebuilder validation guarantees that --defaults-file=<path> is the first custom argument if specified.
+		// https://docs.percona.com/percona-xtrabackup/8.0/xtrabackup-option-reference.html#defaults-file
+		// We should move it to the beginning of args. Other custom arguments should be appended after the generated arguments.
+		customArgs = customArgs[1:]
+	}
+
+	args := []string{}
+	if defaultsArg != "" {
+		args = append(args, defaultsArg)
+	}
+
+	args = append(args,
 		"--backup",
 		"--stream=xbstream",
 		"--safe-slave-backup",
 		"--slave-info",
 		"--target-dir=/backup/",
 		"--databases-exclude=lost+found",
-		fmt.Sprintf("--user=%s", user),
-		fmt.Sprintf("--password=%s", pass),
-	}
-	if _, err := os.Stat(mysql.CustomMyCnfPath); err == nil {
-		args = append([]string{"--defaults-extra-file=" + mysql.CustomMyCnfPath}, args...)
-	}
+		"--user="+user,
+		"--password="+pass,
+	)
 
 	if conf == nil {
 		return args
 	}
+
 	if conf.EncryptionKeyFile != "" {
-		args = append(args, fmt.Sprintf("--encrypt-key-file=%s", conf.EncryptionKeyFile))
+		args = append(args, "--encrypt-key-file="+conf.EncryptionKeyFile)
 		if conf.ContainerOptions.GetArgs().GetXtrabackupFlagValue("--encrypt") == "" {
 			args = append(args, "--encrypt=AES256")
 		}
 	}
-	if conf.ContainerOptions != nil {
-		customArgs := conf.ContainerOptions.Args.Xtrabackup
-		// kubebuilder validation guarantees that --defaults-file=<path> is the first custom argument if specified.
-		// https://docs.percona.com/percona-xtrabackup/8.0/xtrabackup-option-reference.html#defaults-file
-		// We should move it to the beginning of args. Other custom arguments should be appended after the generated arguments.
-		if len(customArgs) > 0 && strings.HasPrefix(customArgs[0], "--defaults-file=") && customArgs[0] != "--defaults-file=" {
-			args = append([]string{customArgs[0]}, args...)
-			customArgs = customArgs[1:]
-		}
-		args = append(args, customArgs...)
-	}
+
+	args = append(args, customArgs...)
+
 	if conf.IncrementalLsn != "" {
-		args = append(args, fmt.Sprintf("--incremental-lsn=%s", conf.IncrementalLsn))
+		args = append(args, "--incremental-lsn="+conf.IncrementalLsn)
 	}
 
 	return args
+}
+
+func defaultFileArg(generatedDefaultsFile string) string {
+	if generatedDefaultsFile != "" {
+		return "--defaults-file=" + generatedDefaultsFile
+	}
+	if hasCustomConfig() {
+		return "--defaults-extra-file=" + mysql.CustomMyCnfPath
+	}
+	return ""
+}
+
+func hasCustomConfig() bool {
+	_, err := os.Stat(mysql.CustomMyCnfPath)
+	return err == nil
 }
 
 func getClusterType() apiv1.ClusterType {
