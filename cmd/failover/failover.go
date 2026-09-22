@@ -37,6 +37,7 @@ const (
 	relayLogApplyTimeout = 6 * time.Minute
 	relayLogApplyPoll    = time.Second
 	sourceFetchTimeout   = 2 * time.Minute
+	jobTimeout           = 10 * time.Minute
 )
 
 var binlogMagic = []byte{0xfe, 'b', 'i', 'n'}
@@ -71,6 +72,7 @@ type flags struct {
 	wait         bool
 	waitTimeout  time.Duration
 	fetchTimeout time.Duration
+	timeout      time.Duration
 }
 
 func parseFlags() flags {
@@ -80,6 +82,7 @@ func parseFlags() flags {
 	flag.BoolVar(&f.wait, "wait", true, "Wait for the applier to work through the fetched logs. With -wait=false the job returns as soon as the SQL thread is started.")
 	flag.DurationVar(&f.waitTimeout, "wait-timeout", relayLogApplyTimeout, "How long to wait for the applier to work through the fetched logs. Ignored with -wait=false.")
 	flag.DurationVar(&f.fetchTimeout, "fetch-timeout", sourceFetchTimeout, "How long the source has to stream the binary logs, headers and body included.")
+	flag.DurationVar(&f.timeout, "timeout", jobTimeout, "How long the whole job may take, fetching the logs from the source included. Zero or less means no limit.")
 	flag.Parse()
 
 	return f
@@ -99,7 +102,18 @@ func config(f flags) failoverConfig {
 }
 
 func main() {
-	if err := run(context.Background(), config(parseFlags())); err != nil {
+	f := parseFlags()
+
+	// Nothing else bounds the fetch, and the job runs from a failover hook that
+	// holds up the promotion for as long as it takes.
+	ctx := context.Background()
+	if f.timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, f.timeout)
+		defer cancel()
+	}
+
+	if err := run(ctx, config(f)); err != nil {
 		log.Fatalf("ERROR: %v", err)
 	}
 
