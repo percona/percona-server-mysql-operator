@@ -79,7 +79,7 @@ func (r *PerconaServerMySQLReconciler) reconcileTLSReload(ctx context.Context, c
 	}
 
 	if cr.Spec.Pause || len(pods) < int(cr.Spec.MySQL.Size) {
-		log.Info("Not all pods are ready, defer reloading TLS certificates", "ready", len(pods), "desired", cr.Spec.MySQL.Size)
+		log.V(1).Info("Not all pods are ready, defer reloading TLS certificates", "ready", len(pods), "desired", cr.Spec.MySQL.Size)
 		return nil
 	}
 
