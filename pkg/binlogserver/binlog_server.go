@@ -220,8 +220,6 @@ func ConfigVolume(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServerSpec, co
 		configSecretName = ConfigSecretName(cr)
 	}
 
-	conf := Configurable{cr: cr, spec: spec}
-
 	return corev1.Volume{
 		Name: ConfigVolumeName,
 		Projected: &corev1.ProjectedVolumeSource{
@@ -239,11 +237,11 @@ func ConfigVolume(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServerSpec, co
 				},
 				{
 					ConfigMap: &corev1.ConfigMapProjection{
-						Name: conf.GetConfigMapName(),
+						Name: customConfigMapName(cr),
 						Items: []corev1.KeyToPath{
 							{
-								Key:  conf.GetConfigMapKey(),
-								Path: conf.GetConfigMapKey(),
+								Key:  customConfigKey,
+								Path: customConfigKey,
 							},
 						},
 						Optional: &t,

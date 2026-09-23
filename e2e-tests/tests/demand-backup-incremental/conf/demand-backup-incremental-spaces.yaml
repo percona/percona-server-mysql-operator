@@ -32,3 +32,6 @@ spec:
             - name: VERIFY_TLS
               value: "true"
 
+          args:
+            xtrabackup:
+              - "--page-tracking"

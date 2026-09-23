@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"flag"
 	"os"
@@ -142,6 +143,22 @@ func TestRun(t *testing.T) {
 		j.relay.assertUntouched(t)
 	})
 
+	t.Run("an instance with no replication channel is left alone", func(t *testing.T) {
+		j := newJobFixture(t)
+		j.fake.err = sql.ErrNoRows
+		before, err := os.ReadFile(j.relay.target)
+		require.NoError(t, err)
+
+		require.NoError(t, run(t.Context(), j.cfg))
+
+		assert.Empty(t, j.fake.ops, "replication must not be touched")
+
+		after, err := os.ReadFile(j.relay.target)
+		require.NoError(t, err)
+		assert.Equal(t, before, after)
+		j.relay.assertUntouched(t)
+	})
+
 	t.Run("-wait=false returns once the applier is started", func(t *testing.T) {
 		j := newJobFixture(t)
 		j.cfg.wait = false
@@ -151,7 +168,7 @@ func TestRun(t *testing.T) {
 		require.NoError(t, run(t.Context(), j.cfg))
 
 		assert.Equal(t, wantOps, j.fake.ops)
-		assert.Zero(t, j.fake.calls, "the applier must not be polled")
+		assert.Equal(t, 1, j.fake.calls, "only the pre-check reads the status; the applier must not be polled")
 
 		after, err := os.ReadFile(j.relay.target)
 		require.NoError(t, err)
@@ -329,7 +346,7 @@ func TestRun(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "start SQL_THREAD")
 		assert.Equal(t, wantOps, j.fake.ops)
-		assert.Equal(t, 0, j.fake.calls, "no point polling an applier that never started")
+		assert.Equal(t, 1, j.fake.calls, "only the pre-check; no point polling an applier that never started")
 	})
 
 	t.Run("the applier never drains the splice", func(t *testing.T) {

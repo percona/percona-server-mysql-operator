@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"errors"
 	"io"
 	"net/http"
@@ -1190,6 +1191,21 @@ func (f *fakeStatuser) ShowReplicaStatus(context.Context) (map[string]string, er
 	return f.statuses[min(f.calls-1, len(f.statuses)-1)], nil
 }
 
+type vanishingStatuser struct {
+	inner *fakeStatuser
+	after int
+}
+
+var _ replicaStatuser = (*vanishingStatuser)(nil)
+
+func (v *vanishingStatuser) ShowReplicaStatus(ctx context.Context) (map[string]string, error) {
+	if v.inner.calls >= v.after {
+		return nil, sql.ErrNoRows
+	}
+
+	return v.inner.ShowReplicaStatus(ctx)
+}
+
 func applying(file string, pos uint64, state string) map[string]string {
 	return map[string]string{
 		"Replica_SQL_Running":       "Yes",
@@ -1426,6 +1442,20 @@ func TestWaitForRelayLogsApplied(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "show replica status: connection lost")
 		assert.Equal(t, 1, f.calls)
+	})
+
+	t.Run("a channel that disappears mid-wait is not a failure", func(t *testing.T) {
+		inner := &fakeStatuser{statuses: []map[string]string{applying(target, 150, busyState)}}
+		v := &vanishingStatuser{inner: inner, after: 2}
+
+		require.NoError(t, waitForRelayLogsApplied(t.Context(), v, logs, target, startPos, poll, patience))
+		assert.Equal(t, 2, inner.calls, "the wait ends on the read that finds no rows")
+	})
+
+	t.Run("a channel that is already gone is not a failure", func(t *testing.T) {
+		f := &fakeStatuser{err: sql.ErrNoRows}
+
+		require.NoError(t, waitForRelayLogsApplied(t.Context(), f, logs, target, startPos, poll, patience))
 	})
 
 	t.Run("the give-up message reports the injected timeout", func(t *testing.T) {

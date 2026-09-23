@@ -39,7 +39,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/validation"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
@@ -228,13 +227,6 @@ type ClusterType string
 const (
 	ClusterTypeGR    ClusterType = "group-replication"
 	ClusterTypeAsync ClusterType = "async"
-)
-
-const (
-	MinSafeProxySize = 2
-	MinSafeGRSize    = 3
-	MaxSafeGRSize    = 9
-	MinSafeAsyncSize = 2
 )
 
 // Checks if the provided ClusterType is valid.
@@ -587,6 +579,7 @@ type BackupContainerArgs struct {
 	// +kubebuilder:validation:MaxItems=100
 	// +kubebuilder:validation:items:MaxLength=1024
 	// +kubebuilder:validation:XValidation:rule="!self.exists(arg, arg == '--defaults-file' || arg.startsWith('--defaults-file=')) || (self[0].startsWith('--defaults-file=') && self[0] != '--defaults-file=')",message="--defaults-file must use --defaults-file=<path> syntax and be the first xtrabackup argument"
+	// +kubebuilder:validation:XValidation:rule="!self.exists(arg, arg == '--defaults-extra-file' || arg.startsWith('--defaults-extra-file='))",message="--defaults-extra-file is managed by the operator and cannot be specified"
 	Xtrabackup []string `json:"xtrabackup,omitempty"`
 	Xbcloud    []string `json:"xbcloud,omitempty"`
 	Xbstream   []string `json:"xbstream,omitempty"`
@@ -1666,16 +1659,6 @@ func (cr *PerconaServerMySQL) Labels(name, component string) map[string]string {
 // cluster using its name and namespace.
 func (cr *PerconaServerMySQL) ClusterHint() string {
 	return fmt.Sprintf("%s.%s", cr.Name, cr.Namespace)
-}
-
-// GetClusterNameFromObject retrieves the cluster's name from the given client object's labels.
-func GetClusterNameFromObject(obj client.Object) (string, error) {
-	labels := obj.GetLabels()
-	instance, ok := labels[naming.LabelInstance]
-	if !ok {
-		return "", errors.Errorf("label %s doesn't exist", naming.LabelInstance)
-	}
-	return instance, nil
 }
 
 // FNVHash computes a hash of the provided byte slice using the FNV-1a algorithm.
