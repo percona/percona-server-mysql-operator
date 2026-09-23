@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
+	"regexp"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -19,6 +21,12 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
+
+var sensitiveRegexp = regexp.MustCompile(":.*@")
+
+func URI(user, password, host string) string {
+	return fmt.Sprintf("%s:%s@%s", user, url.QueryEscape(password), host)
+}
 
 type MysqlshExec struct {
 	pod           *corev1.Pod

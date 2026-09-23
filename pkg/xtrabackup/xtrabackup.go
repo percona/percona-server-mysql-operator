@@ -710,44 +710,6 @@ func restoreContainer(
 	}
 }
 
-func PVC(cluster *apiv1.PerconaServerMySQL, cr *apiv1.PerconaServerMySQLBackup, storage *apiv1.BackupStorageSpec) *corev1.PersistentVolumeClaim {
-	if len(storage.Volume.PersistentVolumeClaim.AccessModes) == 0 {
-		storage.Volume.PersistentVolumeClaim.AccessModes = []corev1.PersistentVolumeAccessMode{
-			corev1.ReadWriteOnce,
-		}
-	}
-
-	return &corev1.PersistentVolumeClaim{
-		APIVersion: "batch/v1",
-		Kind:       "Job",
-		Name:       JobName(cr),
-		Namespace:  cluster.Namespace,
-		Spec:       *storage.Volume.PersistentVolumeClaim,
-	}
-}
-
-func SetStoragePVC(job *batchv1.Job, pvc *corev1.PersistentVolumeClaim) error {
-	spec := &job.Spec.Template.Spec
-
-	vol := corev1.Volume{Name: appName,
-		PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: pvc.Name}}
-
-	spec.Volumes = append(spec.Volumes, vol)
-
-	for i := range spec.Containers {
-		container := &spec.Containers[i]
-		if container.Name == appName {
-			container.VolumeMounts = append(
-				container.VolumeMounts,
-				corev1.VolumeMount{Name: backupVolumeName, MountPath: backupMountPath},
-			)
-			return nil
-		}
-	}
-
-	return errors.Errorf("no container named %s in Job spec", appName)
-}
-
 func SetStorageS3(job *batchv1.Job, s3 *apiv1.BackupStorageS3Spec) error {
 	spec := &job.Spec.Template.Spec
 
