@@ -134,11 +134,22 @@ func EnsureObjectWithHash(
 	obj client.Object,
 	s *runtime.Scheme,
 ) error {
+	_, err := ensureObjectWithHash(ctx, cl, owner, obj, s)
+	return err
+}
+
+func ensureObjectWithHash(
+	ctx context.Context,
+	cl client.Client,
+	owner metav1.Object,
+	obj client.Object,
+	s *runtime.Scheme,
+) (bool, error) {
 	log := logf.FromContext(ctx)
 
 	if owner != nil {
 		if err := controllerutil.SetControllerReference(owner, obj, s); err != nil {
-			return errors.Wrapf(err, "set controller reference to %s/%s",
+			return false, errors.Wrapf(err, "set controller reference to %s/%s",
 				obj.GetObjectKind().GroupVersionKind().Kind,
 				obj.GetName())
 		}
@@ -154,7 +165,7 @@ func EnsureObjectWithHash(
 
 	hash, err := ObjectHash(obj)
 	if err != nil {
-		return errors.Wrap(err, "calculate object hash")
+		return false, errors.Wrap(err, "calculate object hash")
 	}
 
 	objAnnotations = obj.GetAnnotations()
@@ -173,16 +184,16 @@ func EnsureObjectWithHash(
 	}
 	if err = cl.Get(ctx, nn, oldObject); err != nil {
 		if !k8serrors.IsNotFound(err) {
-			return errors.Wrapf(err, "get %v", nn.String())
+			return false, errors.Wrapf(err, "get %v", nn.String())
 		}
 
 		log.V(1).Info("Creating object", "name", obj.GetName(), "kind", obj.GetObjectKind())
 
 		if err := cl.Create(ctx, obj); err != nil {
-			return errors.Wrapf(err, "create %v", nn.String())
+			return false, errors.Wrapf(err, "create %v", nn.String())
 		}
 
-		return nil
+		return true, nil
 	}
 
 	// Certain annotations should be preserved
@@ -230,11 +241,13 @@ func EnsureObjectWithHash(
 		}
 
 		if err := cl.Patch(ctx, obj, patch); err != nil {
-			return errors.Wrapf(err, "patch %v", nn.String())
+			return false, errors.Wrapf(err, "patch %v", nn.String())
 		}
+
+		return true, nil
 	}
 
-	return nil
+	return false, nil
 }
 
 type Component interface {
@@ -251,32 +264,33 @@ func EnsureComponent(
 	ctx context.Context,
 	cl client.Client,
 	c Component,
-) error {
+) (bool, error) {
 	cr := c.PerconaServerMySQL()
 
 	obj, err := c.Object(ctx, cl)
 	if err != nil {
-		return errors.Wrap(err, "statefulset")
+		return false, errors.Wrap(err, "statefulset")
 	}
-	if err := EnsureObjectWithHash(ctx, cl, cr, obj, cl.Scheme()); err != nil {
-		return errors.Wrap(err, "failed to ensure statefulset")
+	written, err := ensureObjectWithHash(ctx, cl, cr, obj, cl.Scheme())
+	if err != nil {
+		return false, errors.Wrap(err, "failed to ensure statefulset")
 	}
 
 	if cr.CompareVersion("0.12.0") < 0 {
-		return nil
+		return written, nil
 	}
 
 	podSpec := c.PodSpec()
 	if podSpec == nil || podSpec.PodDisruptionBudget == nil {
-		return nil
+		return written, nil
 	}
 
 	pdb := podDisruptionBudget(cr, podSpec.PodDisruptionBudget, c.Labels(), c.MatchLabels())
 	if err := EnsureObjectWithHash(ctx, cl, cr, pdb, cl.Scheme()); err != nil {
-		return errors.Wrap(err, "failed to create pdb")
+		return written, errors.Wrap(err, "failed to create pdb")
 	}
 
-	return nil
+	return written, nil
 }
 
 func EnsureService(

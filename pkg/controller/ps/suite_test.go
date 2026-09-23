@@ -103,9 +103,8 @@ func reconciler() *PerconaServerMySQLReconciler {
 	cr := NewCronRegistry()
 	DeferCleanup(cr.crons.Stop)
 	return &PerconaServerMySQLReconciler{
-		Client:    k8sClient,
-		APIReader: k8sClient,
-		Scheme:    k8sClient.Scheme(),
+		Client: k8sClient,
+		Scheme: k8sClient.Scheme(),
 		ServerVersion: &platform.ServerVersion{
 			Platform: platform.Kubernetes,
 		},

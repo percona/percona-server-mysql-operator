@@ -155,6 +155,7 @@ func TestReconcileMySQLConfig(t *testing.T) {
 		object            []client.Object   // what the API holds besides the CR, the ConfigMap and the statefulset; nil means a healthy cluster
 		stmtErrs          map[string]string // stderr mysql answers a given statement with; drives the case on its own
 		stmtCurrent       map[string]string // value SELECT @@GLOBAL reports for a refused statement
+		rolloutStarted    bool              // the reconcile wrote the statefulset before reaching the config
 
 		expectedStmts  []string // List of SET GLOBAL statements expected on all pods
 		expectRestart  bool
@@ -494,6 +495,27 @@ func TestReconcileMySQLConfig(t *testing.T) {
 			expectedConfig: `{"max_connections":"200"}`,
 		},
 		{
+			// The rollout the caller just started is not on the statefulset
+			// read back from the cache, so it says so and the restart waits.
+			desc:              "restart is deferred when the reconcile already wrote the statefulset",
+			state:             apiv1.StateReady,
+			currentConfig:     "[mysqld]\nmax_connections=300\n",
+			lastAppliedConfig: `{"max_connections":"200","sql_mode":"STRICT_TRANS_TABLES"}`,
+			rolloutStarted:    true,
+			expectedConfig:    `{"max_connections":"300"}`,
+		},
+		{
+			// Only the restart waits: a variable mysqld takes at runtime is
+			// still applied.
+			desc:              "statements still run when the reconcile wrote the statefulset",
+			state:             apiv1.StateReady,
+			currentConfig:     "[mysqld]\nmax_connections=300\n",
+			lastAppliedConfig: `{"max_connections":"200"}`,
+			rolloutStarted:    true,
+			expectedStmts:     []string{"SET GLOBAL max_connections=300"},
+			expectedConfig:    `{"max_connections":"300"}`,
+		},
+		{
 			// The copy is a record of what was applied, not a license to skip
 			// the diff: a change made while the set was being recreated still
 			// reaches mysql.
@@ -613,7 +635,7 @@ func TestReconcileMySQLConfig(t *testing.T) {
 
 			r := &PerconaServerMySQLReconciler{Client: cl, Scheme: scheme, ClientCmd: cliCmd}
 
-			err := r.reconcileMySQLConfig(ctx, cr, sts, tt.autoConfig)
+			err := r.reconcileMySQLConfig(ctx, cr, sts, tt.autoConfig, tt.rolloutStarted)
 			if tt.expectedError != nil {
 				require.ErrorContains(t, err, tt.expectedError.Error())
 			} else {

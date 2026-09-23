@@ -29,6 +29,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfig(
 	cr *apiv1.PerconaServerMySQL,
 	sts *appsv1.StatefulSet,
 	autoConf string,
+	rolloutStarted bool,
 ) error {
 	if cr.CompareVersion("1.2.0") <= 0 {
 		return nil
@@ -74,7 +75,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfig(
 
 	confHash := fmt.Sprintf("%x", md5.Sum(confJson))
 	restartMySQL := func() error {
-		if rolloutInFlight(sts) {
+		if rolloutStarted || rolloutInFlight(sts) {
 			log.Info("Pods are being replaced, they read the configuration as they start")
 			return nil
 		}

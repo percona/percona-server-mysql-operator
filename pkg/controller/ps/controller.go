@@ -67,7 +67,6 @@ import (
 // PerconaServerMySQLReconciler reconciles a PerconaServerMySQL object
 type PerconaServerMySQLReconciler struct {
 	client.Client
-	APIReader     client.Reader
 	Scheme        *runtime.Scheme
 	ServerVersion *platform.ServerVersion
 	Recorder      record.EventRecorder
@@ -1030,13 +1029,6 @@ func (r *PerconaServerMySQLReconciler) teardownAsync(
 	return nil
 }
 
-func (r *PerconaServerMySQLReconciler) statefulSetReader() client.Reader {
-	if r.APIReader != nil {
-		return r.APIReader
-	}
-	return r.Client
-}
-
 func (r *PerconaServerMySQLReconciler) reconcileDatabase(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("reconcileDatabase")
 
@@ -1051,7 +1043,8 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(ctx context.Context, cr
 	}
 
 	component := mysql.Component(*cr)
-	if err := k8s.EnsureComponent(ctx, r.Client, &component); err != nil {
+	stsWritten, err := k8s.EnsureComponent(ctx, r.Client, &component)
+	if err != nil {
 		return errors.Wrap(err, "ensure component")
 	}
 
@@ -1069,7 +1062,7 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(ctx context.Context, cr
 	}
 
 	sts := new(appsv1.StatefulSet)
-	if err := r.statefulSetReader().Get(ctx, types.NamespacedName{
+	if err := r.Get(ctx, types.NamespacedName{
 		Name:      component.Name(),
 		Namespace: cr.Namespace,
 	}, sts); err != nil {
@@ -1080,7 +1073,7 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(ctx context.Context, cr
 			return errors.Wrap(err, "smart update")
 		}
 	}
-	if err := r.reconcileMySQLConfig(ctx, cr, sts, autoConf); err != nil {
+	if err := r.reconcileMySQLConfig(ctx, cr, sts, autoConf, stsWritten); err != nil {
 		return errors.Wrap(err, "reconcile MySQL config")
 	}
 
@@ -1316,7 +1309,7 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 	}
 
 	component := orchestrator.Component(*cr)
-	if err := k8s.EnsureComponent(ctx, r.Client, &component); err != nil {
+	if _, err := k8s.EnsureComponent(ctx, r.Client, &component); err != nil {
 		return errors.Wrap(err, "ensure component")
 	}
 
@@ -1433,7 +1426,7 @@ func (r *PerconaServerMySQLReconciler) reconcileHAProxy(ctx context.Context, cr 
 	}
 
 	component := haproxy.Component(*cr)
-	if err := k8s.EnsureComponent(ctx, r.Client, &component); err != nil {
+	if _, err := k8s.EnsureComponent(ctx, r.Client, &component); err != nil {
 		return errors.Wrap(err, "ensure component")
 	}
 
@@ -1896,7 +1889,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 	}
 
 	component := router.Component(*cr)
-	if err := k8s.EnsureComponent(ctx, r.Client, &component); err != nil {
+	if _, err := k8s.EnsureComponent(ctx, r.Client, &component); err != nil {
 		return errors.Wrap(err, "ensure component")
 	}
 

@@ -35,7 +35,7 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 		return nil
 	}
 
-	currentSet := sts
+	currentSet := new(appsv1.StatefulSet)
 	err := r.Client.Get(ctx, types.NamespacedName{
 		Name:      sts.Name,
 		Namespace: sts.Namespace,
@@ -103,7 +103,7 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 
 		log.Info("apply changes to the secondary pod", "pod", pod.Name)
 
-		if pod.Labels[controllerRevisionHash] == sts.Status.UpdateRevision {
+		if pod.Labels[controllerRevisionHash] == currentSet.Status.UpdateRevision {
 			log.Info("pod updated", "pod", pod.Name)
 			continue
 		}
@@ -121,7 +121,7 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 	}
 
 	log.Info("apply changes to the primary pod", "pod", primPod.Name)
-	if primPod.Labels[controllerRevisionHash] != sts.Status.UpdateRevision {
+	if primPod.Labels[controllerRevisionHash] != currentSet.Status.UpdateRevision {
 		log.Info("primary pod was deleted", "pod", primPod.Name)
 		err = deletePodAndWait(ctx, r.Client, primPod, currentSet)
 		if err != nil {
