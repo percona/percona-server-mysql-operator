@@ -183,25 +183,6 @@ func (m *mysqlsh) getGTIDExecuted(ctx context.Context) (string, error) {
 	return s, nil
 }
 
-func (m *mysqlsh) getGTIDPurged(ctx context.Context) (string, error) {
-	result, err := m.runSQL(ctx, "SELECT @@GTID_PURGED")
-	if err != nil {
-		return "", err
-	}
-
-	v, ok := result.Rows[0]["@@GTID_PURGED"]
-	if !ok {
-		return "", errors.Errorf("unexpected output: %+v", result)
-	}
-
-	s, ok := v.(string)
-	if !ok {
-		return "", errors.Errorf("unexpected type: %T", v)
-	}
-
-	return s, nil
-}
-
 func (m *mysqlsh) setGroupSeeds(ctx context.Context, seeds string) error {
 	if seeds != "" && !seedsRegexp.MatchString(seeds) {
 		return errors.Errorf("invalid group_replication_group_seeds value %q", seeds)

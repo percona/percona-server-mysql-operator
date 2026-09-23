@@ -10,7 +10,6 @@ import (
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
@@ -295,29 +294,4 @@ func binlogServerSSLConfig(sslMode string) *ConnectionSSL {
 		ssl.Key = path.Join(TLSMountPath, "tls.key")
 	}
 	return ssl
-}
-
-type Configurable struct {
-	cr   *apiv1.PerconaServerMySQL
-	spec *apiv1.BinlogServerSpec
-}
-
-func (c *Configurable) GetConfigMapName() string {
-	return customConfigMapName(c.cr)
-}
-
-func (c *Configurable) GetConfigMapKey() string {
-	return customConfigKey
-}
-
-func (c *Configurable) GetConfiguration() string {
-	return c.spec.Configuration
-}
-
-func (c *Configurable) GetResources() corev1.ResourceRequirements {
-	return c.spec.Resources
-}
-
-func (c *Configurable) ExecuteConfigurationTemplate(input string, memory *resource.Quantity) (string, error) {
-	return input, nil
 }
