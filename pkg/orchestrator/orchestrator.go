@@ -298,7 +298,10 @@ func apiProbe(cr *apiv1.PerconaServerMySQL, path string, initialDelay int32) *co
 }
 
 func sidecarContainers(cr *apiv1.PerconaServerMySQL) []corev1.Container {
-	serviceName := mysql.ServiceName(cr)
+	orcServiceName := mysql.ServiceName(cr)
+	if cr.CompareVersion("1.3.0") >= 0 {
+		orcServiceName = ServiceName(cr)
+	}
 
 	addNodesScript := "/usr/bin/add_mysql_nodes.sh"
 	if cr.CompareVersion("1.2.0") >= 0 {
@@ -313,11 +316,11 @@ func sidecarContainers(cr *apiv1.PerconaServerMySQL) []corev1.Container {
 			Env: append([]corev1.EnvVar{
 				{
 					Name:  "ORC_SERVICE",
-					Value: serviceName,
+					Value: orcServiceName,
 				},
 				{
 					Name:  "MYSQL_SERVICE",
-					Value: serviceName,
+					Value: mysql.ServiceName(cr),
 				},
 			}, apiAuthEnv(cr)...),
 			VolumeMounts: containerMounts(),
@@ -501,19 +504,19 @@ var reservedOrchestratorConfigKeys = map[string]bool{
 	"RaftNodes":             true,
 	"RaftEnabledSingleNode": true,
 	// entrypoint-injected per-pod (orc-entrypoint.sh)
-	"HTTPAdvertise":                  true,
-	"RaftAdvertise":                  true,
-	"RaftBind":                       true,
-	"RaftEnabled":                    true,
-	"MySQLTopologyUseMutualTLS":      true,
-	"MySQLTopologySSLSkipVerify":     true,
-	"MySQLTopologySSLPrivateKeyFile": true,
-	"MySQLTopologySSLCertFile":       true,
-	"MySQLTopologySSLCAFile":         true,
-	"AuthenticationMethod":           true,
-	"HTTPAuthUser":                   true,
-	"HTTPAuthPassword":               true,
-	// failover hooks that label the primary pod via orc-handler
+	"HTTPAdvertise":                           true,
+	"RaftAdvertise":                           true,
+	"RaftBind":                                true,
+	"RaftEnabled":                             true,
+	"MySQLTopologyUseMutualTLS":               true,
+	"MySQLTopologySSLSkipVerify":              true,
+	"MySQLTopologySSLPrivateKeyFile":          true,
+	"MySQLTopologySSLCertFile":                true,
+	"MySQLTopologySSLCAFile":                  true,
+	"AuthenticationMethod":                    true,
+	"HTTPAuthUser":                            true,
+	"HTTPAuthPassword":                        true,
+	"PreFailoverProcesses":                    true,
 	"PostFailoverProcesses":                   true,
 	"PostMasterFailoverProcesses":             true,
 	"PostIntermediateMasterFailoverProcesses": true,
@@ -595,7 +598,12 @@ func RBAC(cr *apiv1.PerconaServerMySQL) (*rbacv1.Role, *rbacv1.RoleBinding, *cor
 		{
 			APIGroups: []string{corev1.SchemeGroupVersion.Group},
 			Resources: []string{"pods"},
-			Verbs:     []string{"list", "patch"},
+			Verbs:     []string{"get", "list", "patch"},
+		},
+		{
+			APIGroups: []string{corev1.SchemeGroupVersion.Group},
+			Resources: []string{"pods/exec"},
+			Verbs:     []string{"create"},
 		},
 		{
 			APIGroups: []string{cr.GroupVersionKind().Group},

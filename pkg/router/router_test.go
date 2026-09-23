@@ -24,7 +24,7 @@ func TestDeployment(t *testing.T) {
 
 	cr := readDefaultCluster(t, "cluster", ns)
 	if err := cr.CheckNSetDefaults(t.Context(), &platform.ServerVersion{
-		Platform: platform.PlatformKubernetes,
+		Platform: platform.Kubernetes,
 	}); err != nil {
 		t.Fatal(err)
 	}

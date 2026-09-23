@@ -17,7 +17,7 @@ sort_yaml() {
 	PMM_ORDER='"enabled","image","imagePullPolicy","serverHost","customClusterName","mysqlParams","haproxyParams","containerSecurityContext", "resources", "readinessProbes", "livenessProbes"'
 	BINLOG_SERVER_ORDER='"enabled","binlogServer"'
 	BINLOG_SERVER_SPEC_ORDER='"size","image","imagePullPolicy","imagePullSecrets","serverId","storage","keyringSecret","connectTimeout","readTimeout","writeTimeout","idleTime"'
-	BACKUP_ORDER='"enabled","pitr","sourcePod","image","imagePullPolicy","imagePullSecrets","schedule","backoffLimit", "serviceAccountName", "initContainer", "containerSecurityContext", "resources","storages"'
+	BACKUP_ORDER='"enabled","pitr","sourcePod","image","imagePullPolicy","imagePullSecrets","schedule","backoffLimit", "serviceAccountName", "initContainer", "containerSecurityContext", "resources","storages", "allowParallel", "encryptionKeySecret", "startingDeadlineSeconds", "suspendedDeadlineSeconds"'
 	LOGCOLLECTOR_ORDER='"enabled","image","imagePullPolicy","configuration","env","envFrom","containerSecurityContext","resources","readinessProbe","livenessProbe","volumeMounts","volumes","logRotate"'
 	LOGROTATE_ORDER='"schedule","configuration","extraConfig","readinessProbe","livenessProbe"'
 
@@ -223,6 +223,9 @@ del_fields_to_comment() {
 		| yq "del(.spec.pmm.livenessProbes)" \
 		| yq "del(.spec.pmm.containerSecurityContext)" \
 		| yq "del(.spec.pmm.resources.limits)" \
+		| yq "del(.spec.backup.allowParallel)" \
+		| yq "del(.spec.backup.startingDeadlineSeconds)" \
+		| yq "del(.spec.backup.suspendedDeadlineSeconds)" \
 		| yq "del(.spec.backup.pitr.binlogServer)" \
 		| yq "del(.spec.backup.sourcePod)" \
 		| yq "del(.spec.backup.schedule)" \

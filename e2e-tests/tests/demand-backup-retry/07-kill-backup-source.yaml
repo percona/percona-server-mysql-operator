@@ -1,7 +1,7 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
-  - timeout: 30
+  - timeout: 120
     script: |-
       set -o errexit
       set -o xtrace
@@ -10,3 +10,17 @@ commands:
 
       pod=$(kubectl get ps-backup demand-backup-retry -n ${NAMESPACE} -o jsonpath='{.status.backupSource}' | cut -d'.' -f1)
       kubectl delete pod "$pod" -n ${NAMESPACE} --force --grace-period=0
+
+      # Keep the cluster unready until the backup controller suspends the job
+      kubectl patch ps demand-backup-retry -n "$NAMESPACE" --type=merge \
+        -p '{"spec":{"pause":true}}'
+      kubectl wait ps/demand-backup-retry -n "$NAMESPACE" \
+        --for='jsonpath={.status.state}=paused' --timeout=90s
+      kubectl wait ps-backup/demand-backup-retry -n "$NAMESPACE" \
+        --for='jsonpath={.status.state}=Suspended' --timeout=30s
+
+      # Create another backup while the cluster is paused. It must expire
+      # without creating a Job, while the original Job is suspended.
+      storage_name=$(kubectl get ps demand-backup-retry -n ${NAMESPACE} -o yaml \
+        | yq '(.spec.backup.storages // {}) | keys | .[0]')
+      run_backup demand-backup-retry-deadline "$storage_name" demand-backup-retry deadline

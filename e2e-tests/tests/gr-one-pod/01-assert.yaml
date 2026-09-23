@@ -6,6 +6,11 @@ kind: StatefulSet
 apiVersion: apps/v1
 metadata:
   name: gr-one-pod-mysql
+spec:
+  template:
+    spec:
+      serviceAccount: gr-one-pod-mysql
+      serviceAccountName: gr-one-pod-mysql
 status:
   observedGeneration: 1
   replicas: 1
@@ -29,6 +34,8 @@ spec:
   replicas: 1
   template:
     spec:
+      serviceAccount: gr-one-pod-router
+      serviceAccountName: gr-one-pod-router
       containers:
       - args:
         - mysqlrouter
@@ -75,6 +82,16 @@ status:
   replicas: 1
   updatedReplicas: 1
 ---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gr-one-pod-mysql
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gr-one-pod-router
+---
 apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQL
 metadata:
@@ -85,9 +102,11 @@ spec:
   mysql:
     clusterType: group-replication
     size: 1
+    serviceAccountName: gr-one-pod-mysql
   proxy:
     router:
       size: 1
+      serviceAccountName: gr-one-pod-router
 status:
   mysql:
     ready: 1

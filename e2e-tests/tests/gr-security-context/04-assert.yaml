@@ -8,11 +8,11 @@ metadata:
   generation: 1
   labels:
     app.kubernetes.io/component: backup
-    app.kubernetes.io/instance: gr-security-context-minio
+    app.kubernetes.io/instance: gr-security-context-s3
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: xtrabackup
     app.kubernetes.io/part-of: percona-server-backup
-  name: xb-gr-security-context-minio-minio
+  name: xb-gr-security-context-s3-local-s3
 spec:
   backoffLimit: 6
   completionMode: NonIndexed
@@ -23,11 +23,11 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/component: backup
-        app.kubernetes.io/instance: gr-security-context-minio
+        app.kubernetes.io/instance: gr-security-context-s3
         app.kubernetes.io/managed-by: percona-server-mysql-operator
         app.kubernetes.io/name: xtrabackup
         app.kubernetes.io/part-of: percona-server-backup
-        job-name: xb-gr-security-context-minio-minio
+        job-name: xb-gr-security-context-s3-local-s3
     spec:
       containers:
       - command:

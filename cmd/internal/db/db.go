@@ -33,8 +33,16 @@ var ErrRestartAfterClone = errors.New("Error 3707: Restart server failed (mysqld
 type ReplicationStatus int8
 
 type DB struct {
-	db *sql.DB
+	db     *sql.DB
+	params DBParams
 }
+
+// cloneReadTimeoutSeconds is the read timeout for the dedicated clone connection.
+// CLONE INSTANCE sends nothing on the wire until it finishes, so the normal
+// read timeout would abort a long clone; this is set effectively "no deadline"
+// (7 days, matching the startup-probe backstop) instead - the stall watchdog and
+// context bound the operation.
+const cloneReadTimeoutSeconds = 7 * 24 * 60 * 60
 
 type DBParams struct {
 	User apiv1.SystemUser
@@ -58,7 +66,7 @@ func (p *DBParams) setDefaults() {
 	}
 
 	if p.CloneTimeoutSeconds == 0 {
-		p.CloneTimeoutSeconds = defs.DefaultCloneTimeoutSecondsSeconds // 1 hour for clone operations (large databases can take time)
+		p.CloneTimeoutSeconds = defs.DefaultCloneTimeoutSeconds // generous default; large databases can take hours to clone
 	}
 
 	if p.SourceRetryCount == 0 {
@@ -91,7 +99,9 @@ func (p *DBParams) DSN() string {
 }
 
 func NewDatabase(ctx context.Context, params DBParams) (*DB, error) {
-	db, err := sql.Open("mysql", params.DSN())
+	// DSN() applies defaults to params (pointer receiver), so read it back after.
+	dsn := params.DSN()
+	db, err := sql.Open("mysql", dsn)
 	if err != nil {
 		return nil, errors.Wrap(err, "connect to MySQL")
 	}
@@ -100,7 +110,7 @@ func NewDatabase(ctx context.Context, params DBParams) (*DB, error) {
 		return nil, errors.Wrap(err, "ping DB")
 	}
 
-	return &DB{db}, nil
+	return &DB{db: db, params: params}, nil
 }
 
 func (d *DB) StartReplication(ctx context.Context, host, replicaPass string, port int32, sourceRetryCount, sourceConnectRetry uint32) error {
@@ -131,6 +141,11 @@ func (d *DB) StartReplication(ctx context.Context, host, replicaPass string, por
 	return errors.Wrap(err, "start replication")
 }
 
+func (d *DB) StartSQLThread(ctx context.Context) error {
+	_, err := d.db.ExecContext(ctx, "START REPLICA SQL_THREAD")
+	return errors.Wrap(err, "start SQL_THREAD")
+}
+
 func (d *DB) StopReplication(ctx context.Context) error {
 	_, err := d.db.ExecContext(ctx, "STOP REPLICA")
 	return errors.Wrap(err, "stop replication")
@@ -139,6 +154,84 @@ func (d *DB) StopReplication(ctx context.Context) error {
 func (d *DB) ResetReplication(ctx context.Context) error {
 	_, err := d.db.ExecContext(ctx, "RESET REPLICA ALL")
 	return errors.Wrap(err, "reset replication")
+}
+
+func (d *DB) FlushRelayLogs(ctx context.Context) error {
+	_, err := d.db.ExecContext(ctx, "FLUSH RELAY LOGS")
+	return errors.Wrap(err, "flush relay logs")
+}
+
+func (d *DB) ShowReplicaStatus(ctx context.Context) (map[string]string, error) {
+	rows, err := d.db.QueryContext(ctx, "SHOW REPLICA STATUS")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close() //nolint:errcheck
+
+	cols, err := rows.Columns()
+	if err != nil {
+		return nil, err
+	}
+
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+		return nil, sql.ErrNoRows // not a replica
+	}
+
+	vals := make([]sql.RawBytes, len(cols))
+	ptrs := make([]any, len(cols))
+	for i := range vals {
+		ptrs[i] = &vals[i]
+	}
+	if err := rows.Scan(ptrs...); err != nil {
+		return nil, err
+	}
+
+	status := make(map[string]string, len(cols))
+	for i, c := range cols {
+		status[c] = string(vals[i])
+	}
+
+	return status, rows.Err()
+}
+
+type ReplicaPosition struct {
+	SourceHost   string
+	SourceLog    string
+	SourcePos    uint64
+	RelayLog     string
+	RelayPos     uint64
+	GTIDExecuted string
+}
+
+func (d *DB) GetSourceLogPos(ctx context.Context) (ReplicaPosition, error) {
+	var positions ReplicaPosition
+
+	status, err := d.ShowReplicaStatus(ctx)
+	if err != nil {
+		return positions, fmt.Errorf("show replica status: %w", err)
+	}
+
+	positions.SourceHost = status["Source_Host"]
+	positions.SourceLog = status["Source_Log_File"]
+	positions.RelayLog = status["Relay_Log_File"]
+	positions.GTIDExecuted = status["Executed_Gtid_Set"]
+
+	pos, err := strconv.ParseUint(status["Read_Source_Log_Pos"], 10, 64)
+	if err != nil {
+		return positions, fmt.Errorf("parse Read_Source_Log_Pos: %w", err)
+	}
+	positions.SourcePos = pos
+
+	pos, err = strconv.ParseUint(status["Relay_Log_Pos"], 10, 64)
+	if err != nil {
+		return positions, fmt.Errorf("parse Relay_Log_Pos: %w", err)
+	}
+	positions.RelayPos = pos
+
+	return positions, nil
 }
 
 func (d *DB) ReplicationStatus(ctx context.Context) (db.ReplicationStatus, string, error) {
@@ -190,6 +283,27 @@ func (d *DB) ReportHost(ctx context.Context) (string, error) {
 	var reportHost string
 	err := d.db.QueryRowContext(ctx, "select @@report_host").Scan(&reportHost)
 	return reportHost, errors.Wrap(err, "select report_host param")
+}
+
+// RelayLogPaths returns the full path prefix shared by relay log files and the
+// path of the relay log index file.
+func (d *DB) RelayLogPaths(ctx context.Context) (string, string, error) {
+	var basename, index sql.NullString
+	err := d.db.QueryRowContext(ctx, "select @@relay_log_basename, @@relay_log_index").Scan(&basename, &index)
+	if err != nil {
+		return "", "", errors.Wrap(err, "select relay log params")
+	}
+
+	if basename.String == "" {
+		return "", "", errors.New("relay_log_basename is empty")
+	}
+
+	// MySQL derives the index file from the basename unless it's set explicitly.
+	if index.String == "" {
+		return basename.String, basename.String + ".index", nil
+	}
+
+	return basename.String, index.String, nil
 }
 
 func (d *DB) Close() error {
@@ -275,24 +389,47 @@ func (d *DB) getCloneStatusDetails(ctx context.Context) (map[string]any, error) 
 	return details, nil
 }
 
-func (d *DB) Clone(ctx context.Context, donor, user, pass string, port int32, cloneTimeoutSeconds uint32) error {
-	_, err := d.db.ExecContext(ctx, "SET GLOBAL clone_valid_donor_list=?", fmt.Sprintf("%s:%d", donor, port))
+func (d *DB) Clone(ctx context.Context, donor, user, pass string, port int32, cloneTimeoutSeconds, stallTimeoutSeconds uint32) error {
+	// CLONE INSTANCE is silent on the wire until it completes, so running it on
+	// the normal connection would trip that connection's read timeout on any
+	// clone longer than ReadTimeoutSeconds (1h by default). Use a dedicated
+	// connection with an effectively unlimited read deadline; the stall watchdog
+	// and context bound the operation instead.
+	cloneParams := d.params
+	cloneParams.ReadTimeoutSeconds = cloneReadTimeoutSeconds
+	cloneDB, err := sql.Open("mysql", cloneParams.DSN())
+	if err != nil {
+		return errors.Wrap(err, "open clone connection")
+	}
+	defer func() { _ = cloneDB.Close() }()
+
+	_, err = cloneDB.ExecContext(ctx, "SET GLOBAL clone_valid_donor_list=?", fmt.Sprintf("%s:%d", donor, port))
 	if err != nil {
 		return errors.Wrap(err, "set clone_valid_donor_list")
 	}
 
-	// Use the original context if no timeout is specified, otherwise create a timeout context
-	var cloneCtx context.Context
-	var cancel context.CancelFunc
-
+	// cloneCtx controls how long CLONE INSTANCE may run. We make it cancelable so
+	// the stall watchdog below can stop a clone that has stopped making progress.
+	// If cloneTimeoutSeconds > 0, we also add a fixed overall deadline on top.
+	cloneCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	if cloneTimeoutSeconds > 0 {
-		cloneCtx, cancel = context.WithTimeout(ctx, time.Duration(cloneTimeoutSeconds)*time.Second)
-		defer cancel()
-	} else {
-		cloneCtx = ctx
+		var timeoutCancel context.CancelFunc
+		cloneCtx, timeoutCancel = context.WithTimeout(cloneCtx, time.Duration(cloneTimeoutSeconds)*time.Second)
+		defer timeoutCancel()
 	}
 
-	_, err = d.db.ExecContext(cloneCtx, "CLONE INSTANCE FROM ?@?:? IDENTIFIED BY ?", user, donor, port, pass)
+	// Watch the clone's progress and abort it if it transfers no bytes for
+	// stallTimeoutSeconds. This lets a slow-but-progressing clone run as long as
+	// it needs, while a genuinely hung clone is stopped (and then retried when
+	// the container restarts) instead of hanging forever.
+	if stallTimeoutSeconds > 0 {
+		stop := make(chan struct{})
+		defer close(stop)
+		go d.watchCloneProgress(ctx, cancel, time.Duration(stallTimeoutSeconds)*time.Second, stop, d.cloneProgress)
+	}
+
+	_, err = cloneDB.ExecContext(cloneCtx, "CLONE INSTANCE FROM ?@?:? IDENTIFIED BY ?", user, donor, port, pass)
 	if err != nil {
 		mErr, ok := err.(*mysql.MySQLError)
 		if !ok {
@@ -335,6 +472,92 @@ func (d *DB) Clone(ctx context.Context, donor, user, pass string, port int32, cl
 	}
 
 	return nil
+}
+
+// cloneProgress reports how far the running clone has gotten, read from the
+// recipient's performance_schema.clone_progress over a separate pooled
+// connection so it works while the main connection is blocked in CLONE INSTANCE.
+// It returns both the bytes moved (grows only during DATA/PAGE/REDO copy) and
+// the count of finished stages, so byte-less stages like DROP DATA, FILE SYNC
+// and RECOVERY still register as progress instead of looking like a stall.
+func (d *DB) cloneProgress(ctx context.Context) (bytes, completedStages int64, err error) {
+	var data, network, completed sql.NullInt64
+	err = d.db.QueryRowContext(ctx,
+		"SELECT COALESCE(SUM(DATA), 0), COALESCE(SUM(NETWORK), 0), COALESCE(SUM(STATE = 'Completed'), 0) FROM clone_progress").
+		Scan(&data, &network, &completed)
+	if err != nil {
+		return 0, 0, err
+	}
+	return data.Int64 + network.Int64, completed.Int64, nil
+}
+
+// watchCloneProgress polls the clone's progress and calls cancel to stop the
+// clone if it does not advance for the whole stall duration. Progress is either
+// more bytes moved or another stage finished, so byte-less tail stages (FILE
+// SYNC, RECOVERY, ...) are not mistaken for a stall. Short outages (the mysqld
+// restart at the end of a clone, a transient error) are tolerated, but if the
+// clone cannot be observed at all for a whole stall duration - so we can neither
+// confirm progress nor a stall - it is stopped too, rather than waiting forever.
+// cloneProgressPollInterval is how often the watchdog samples progress. It is a
+// var (not a const) so tests can shrink it.
+var cloneProgressPollInterval = 30 * time.Second
+
+// cloneProgressFunc reports (bytesTransferred, completedStages). It is injected
+// so the watchdog loop can be tested without a live clone.
+type cloneProgressFunc func(ctx context.Context) (bytes, completedStages int64, err error)
+
+func (d *DB) watchCloneProgress(ctx context.Context, cancel context.CancelFunc, stall time.Duration, stop <-chan struct{}, progress cloneProgressFunc) {
+	log := logf.FromContext(ctx)
+
+	ticker := time.NewTicker(cloneProgressPollInterval)
+	defer ticker.Stop()
+
+	now := time.Now()
+	lastBytes := int64(-1)
+	lastStages := int64(-1)
+	lastProgress := now // last time bytes moved or a stage finished
+	lastMeasured := now // last time we successfully read progress
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-stop:
+			return
+		case <-ticker.C:
+			qCtx, qCancel := context.WithTimeout(ctx, 10*time.Second)
+			bytes, stages, err := progress(qCtx)
+			qCancel()
+			if err != nil {
+				// Could not read progress this tick (the mysqld restart at the end
+				// of a clone, or a transient error). Tolerate short outages, but if
+				// we cannot observe the clone at all for a whole stall duration,
+				// stop it instead of waiting forever: a healthy clone keeps its
+				// recipient reachable, so persistent unreadability is itself a
+				// failure.
+				if time.Since(lastMeasured) >= stall {
+					log.Info("clone progress could not be measured, aborting", "stall", stall.String())
+					cancel()
+					return
+				}
+				continue
+			}
+			lastMeasured = time.Now()
+
+			if lastBytes < 0 || bytes > lastBytes || stages > lastStages {
+				lastBytes = bytes
+				lastStages = stages
+				lastProgress = time.Now()
+				continue
+			}
+
+			if time.Since(lastProgress) >= stall {
+				log.Info("clone made no progress, aborting", "stall", stall.String(), "bytesTransferred", bytes, "completedStages", stages)
+				cancel()
+				return
+			}
+		}
+	}
 }
 
 func (d *DB) DumbQuery(ctx context.Context) error {

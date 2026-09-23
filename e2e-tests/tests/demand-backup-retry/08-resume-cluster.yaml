@@ -1,0 +1,22 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 120
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      # Do not resume the cluster until the starting deadline has been observed
+      kubectl wait ps-backup/demand-backup-retry-deadline -n "$NAMESPACE" \
+        --for='jsonpath={.status.state}=Error' --timeout=60s
+
+      storage_name=$(kubectl get ps-backup/demand-backup-retry-deadline \
+        -n "$NAMESPACE" -o jsonpath='{.spec.storageName}')
+      if kubectl get job "xb-demand-backup-retry-deadline-${storage_name}" \
+        -n "$NAMESPACE"; then
+        echo "A Job was created for a backup that exceeded its starting deadline"
+        exit 1
+      fi
+
+      kubectl patch ps demand-backup-retry -n "$NAMESPACE" --type=merge \
+        -p '{"spec":{"pause":false}}'

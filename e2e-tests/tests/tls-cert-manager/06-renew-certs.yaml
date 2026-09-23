@@ -1,11 +1,37 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
-  - timeout: 30
+  - timeout: 1200
     script: |-
       set -o errexit
       set -o xtrace
 
       source ../../functions
 
+      cluster=$(get_cluster_name)
+      mysql_uids_before=$(get_mysql_pod_uids "${cluster}")
+      orc_uids_before=$(get_component_pod_uids "${cluster}" orchestrator)
+      haproxy_uids_before=$(get_component_pod_uids "${cluster}" haproxy)
+      not_before=$(get_mysql_cert_not_before_on_pods "${cluster}")
+
       renew_certificate "tls-cert-manager-ssl"
+
+      reloaded="true"
+      wait_for_mysql_cert_reload "${cluster}" "${not_before}" 300 || reloaded="false"
+
+      # Orchestrator connects to MySQL with a client certificate it reads once at
+      # startup, so unlike mysqld it still has to be restarted to pick up the new
+      # one. HAProxy shares that hash today.
+      proxies_recycled="true"
+      wait_for_component_pods_restart "${cluster}" orchestrator "${orc_uids_before}" 600 || proxies_recycled="false"
+      wait_for_component_pods_restart "${cluster}" haproxy "${haproxy_uids_before}" 600 || proxies_recycled="false"
+
+      # The renewed leaf is signed by the same CA, so no database pod may be
+      # replaced - not even while everything around it rolls.
+      mysql_recycled="false"
+      [[ $(get_mysql_pod_uids "${cluster}") == "${mysql_uids_before}" ]] || mysql_recycled="true"
+
+      kubectl -n "${NAMESPACE}" create configmap 06-renew-certs \
+          --from-literal=reloaded="${reloaded}" \
+          --from-literal=mysql_recycled="${mysql_recycled}" \
+          --from-literal=proxies_recycled="${proxies_recycled}"

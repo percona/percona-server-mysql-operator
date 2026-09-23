@@ -49,6 +49,13 @@ const (
 	AnnotationClusterSetRecoveryNeeded AnnotationKey = perconaPrefix + "clusterset-recovery-needed"
 	AnnotationClusterSetRejoinCluster  AnnotationKey = perconaPrefix + "clusterset-rejoin-cluster"
 	AnnotationLastAppliedConfig        AnnotationKey = perconaPrefix + "last-applied-config"
+	AnnotationLastReloadedTLS          AnnotationKey = perconaPrefix + "last-reloaded-tls"
+)
+
+const (
+	TLSCAKey   = "ca.crt"
+	TLSCertKey = "tls.crt"
+	TLSKeyKey  = "tls.key"
 
 	// AnnotationLogCollectorConfigHash rolls MySQL pods when the log collector
 	// configuration changes. That config is mounted from ConfigMaps by a stable

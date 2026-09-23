@@ -4,6 +4,7 @@ go 1.27.0
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.8.1
+	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/Percona-Lab/percona-version-service v0.0.0-20230324081000-27de445df239
 	github.com/cert-manager/cert-manager v1.21.2
 	github.com/dustin/go-humanize v1.0.1
@@ -15,7 +16,7 @@ require (
 	github.com/go-openapi/strfmt v0.27.1
 	github.com/go-openapi/swag v0.29.2
 	github.com/go-openapi/validate v1.0.0
-	github.com/go-sql-driver/mysql v1.10.0
+	github.com/go-sql-driver/mysql v1.10.1
 	github.com/gocarina/gocsv v0.0.0-20230616125104-99d496ca653d
 	github.com/golang/mock v1.6.0
 	github.com/google/go-cmp v0.7.0
@@ -40,7 +41,7 @@ require (
 	k8s.io/client-go v0.37.0
 	k8s.io/utils v0.0.0-20260626114624-be93311217bd
 	sigs.k8s.io/cli-utils v0.37.2
-	sigs.k8s.io/controller-runtime v0.24.1
+	sigs.k8s.io/controller-runtime v0.25.0
 	sigs.k8s.io/yaml v1.6.0
 )
 

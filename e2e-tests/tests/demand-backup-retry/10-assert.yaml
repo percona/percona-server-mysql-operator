@@ -1,0 +1,27 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 120
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQLBackup
+metadata:
+  name: demand-backup-retry-suspended-deadline
+status:
+  state: Suspended
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: demand-backup-retry
+status:
+  state: paused
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  ownerReferences:
+    - controller: true
+      kind: PerconaServerMySQLBackup
+      name: demand-backup-retry-suspended-deadline
+spec:
+  suspend: true

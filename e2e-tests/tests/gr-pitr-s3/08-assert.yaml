@@ -1,0 +1,34 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 600
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-pitr-s3
+  finalizers:
+    - percona.com/delete-mysql-pods-in-order
+status:
+  router:
+    ready: 3
+    size: 3
+    state: ready
+  mysql:
+    ready: 3
+    size: 3
+    state: ready
+  state: ready
+---
+kind: PerconaServerMySQLRestore
+apiVersion: ps.percona.com/v1
+metadata:
+  name: gr-pitr-s3-restore-date
+spec:
+  backupSource:
+    storage:
+      s3:
+        caBundle:
+          name: s3-restore-ca-bundle
+          key: ca.crt
+status:
+  state: Succeeded
