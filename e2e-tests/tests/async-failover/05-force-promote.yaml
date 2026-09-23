@@ -1,0 +1,35 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 900
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster=$(get_cluster_name)
+      primary_before=$(get_primary_from_label)
+
+      # Pick any pod that is not the primary and demand it.
+      target=""
+      for pod in $(kubectl -n "${NAMESPACE}" get pods -l 'app.kubernetes.io/component=database' -o jsonpath='{.items[*].metadata.name}'); do
+          if [[ ${pod} != "${primary_before}" ]]; then
+              target=${pod}
+              break
+          fi
+      done
+      if [[ -z ${target} ]]; then
+          echo "no replica to promote"
+          exit 1
+      fi
+
+      echo "forcing the promotion of ${target}, the primary is ${primary_before}"
+
+      kubectl -n "${NAMESPACE}" annotate ps "${cluster}" \
+          "percona.com/force-promote-with-possible-data-loss=${target}" --overwrite
+
+      wait_for_primary "${target}" 600
+
+      wait_cluster_consistency_async "${cluster}" 3 3
+    timeout: 900

@@ -1,0 +1,31 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 300
+commands:
+  - script: |-
+      set -o errexit
+
+      source ../../functions
+
+      cluster=$(get_cluster_name)
+
+      # The failover finished, so the condition is there and cleared. An empty
+      # answer would mean nobody wrote it.
+      blocked=$(get_cluster_condition "${cluster}" AsyncFailoverBlocked)
+      if [[ ${blocked} != "False" ]]; then
+          kubectl -n "${NAMESPACE}" get ps "${cluster}" -o jsonpath='{.status.conditions}'
+          echo "AsyncFailoverBlocked is '${blocked}' after a completed failover, expected False"
+          exit 1
+      fi
+
+      # The policy is ForceWithPossibleDataLoss, so a hook that never recovers
+      # the row would still end in a promotion once the timeout expires. Only a
+      # failover that finished within its budget leaves no trace.
+      reasons=$(kubectl -n "${NAMESPACE}" get events \
+          --field-selector "involvedObject.name=${cluster}" \
+          -o jsonpath='{range .items[*]}{.reason}{"\n"}{end}')
+      if echo "${reasons}" | grep -qE '^(FailoverForced|FailoverBlocked)$'; then
+          kubectl -n "${NAMESPACE}" get events --field-selector "involvedObject.name=${cluster}"
+          echo "the failover ran out of its budget instead of recovering the row"
+          exit 1
+      fi
