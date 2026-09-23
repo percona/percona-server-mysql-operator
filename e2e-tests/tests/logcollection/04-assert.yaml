@@ -3,4 +3,4 @@ kind: ConfigMap
 metadata:
   name: 04-rotate-logs
 data:
-  rotated: "yes"
+  rotated: "3"

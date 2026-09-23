@@ -14,8 +14,6 @@ kind: TestStep
 timeout: 10
 commands:
   - script: |-
-      null
-      ---
       set -o errexit
       set -o xtrace
 

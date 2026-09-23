@@ -3,4 +3,4 @@ kind: ConfigMap
 metadata:
   name: 02-check-error-log
 data:
-  configured: "1"
+  configured: "3"

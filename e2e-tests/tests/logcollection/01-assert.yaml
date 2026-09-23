@@ -3,12 +3,6 @@ kind: TestAssert
 timeout: 420
 commands:
   - script: |-
-      null
-      ---
-      null
-      ---
-      null
-      ---
       set -o errexit
       set -o xtrace
 
@@ -34,27 +28,6 @@ status:
   currentReplicas: 3
   updatedReplicas: 3
   collisionCount: 0
-commands:
-  - script: |-
-      null
-      ---
-      null
-      ---
-      null
-      ---
-      set -o errexit
-      set -o xtrace
-
-      source ../../functions
-
-      for pod in $(get_mysql_pod_names logcollection); do
-          kubectl -n "${NAMESPACE}" get pod "${pod}" \
-              -o jsonpath='{.spec.containers[*].name}' | grep -w logs
-          kubectl -n "${NAMESPACE}" get pod "${pod}" \
-              -o jsonpath='{.spec.containers[*].name}' | grep -w logrotate
-      done
-
-      kubectl -n "${NAMESPACE}" get configmap logcollection-log-collector-logrotate-config
 ---
 apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQL
@@ -65,51 +38,3 @@ status:
     ready: 3
     size: 3
     state: ready
-commands:
-  - script: |-
-      null
-      ---
-      null
-      ---
-      null
-      ---
-      set -o errexit
-      set -o xtrace
-
-      source ../../functions
-
-      for pod in $(get_mysql_pod_names logcollection); do
-          kubectl -n "${NAMESPACE}" get pod "${pod}" \
-              -o jsonpath='{.spec.containers[*].name}' | grep -w logs
-          kubectl -n "${NAMESPACE}" get pod "${pod}" \
-              -o jsonpath='{.spec.containers[*].name}' | grep -w logrotate
-      done
-
-      kubectl -n "${NAMESPACE}" get configmap logcollection-log-collector-logrotate-config
----
-apiVersion: kuttl.dev/v1beta1
-kind: TestAssert
-metadata:
-  name: check-log-collector-containers
-timeout: 120
-commands:
-  - script: |-
-      null
-      ---
-      null
-      ---
-      null
-      ---
-      set -o errexit
-      set -o xtrace
-
-      source ../../functions
-
-      for pod in $(get_mysql_pod_names logcollection); do
-          kubectl -n "${NAMESPACE}" get pod "${pod}" \
-              -o jsonpath='{.spec.containers[*].name}' | grep -w logs
-          kubectl -n "${NAMESPACE}" get pod "${pod}" \
-              -o jsonpath='{.spec.containers[*].name}' | grep -w logrotate
-      done
-
-      kubectl -n "${NAMESPACE}" get configmap logcollection-log-collector-logrotate-config

@@ -1,0 +1,46 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 900
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      before_uids=$(get_mysql_pod_uids logcollection)
+      before_hash=$(kubectl -n "${NAMESPACE}" get sts logcollection-mysql \
+          -o jsonpath='{.spec.template.metadata.annotations.percona\.com/logcollector-config-hash}')
+
+      kubectl -n "${NAMESPACE}" create configmap extra-logrotate-config \
+          --from-literal=extra.conf="$(printf '%s\n' \
+              '/var/lib/mysql/log/extra-*.log {' \
+              '    rotate 9' \
+              '    missingok' \
+              '    nocompress' \
+              '    notifempty' \
+              '    copytruncate' \
+              '}')" \
+          --dry-run=client -o yaml | kubectl -n "${NAMESPACE}" apply -f -
+
+      wait_for_mysql_pods_restart logcollection "${before_uids}" 600
+      wait_cluster_consistency_gr logcollection 3 3
+
+      after_hash=$(kubectl -n "${NAMESPACE}" get sts logcollection-mysql \
+          -o jsonpath='{.spec.template.metadata.annotations.percona\.com/logcollector-config-hash}')
+      if [[ ${before_hash} == "${after_hash}" ]]; then
+          echo "log collector config hash did not change: ${before_hash}"
+          exit 1
+      fi
+
+      applied=0
+      for pod in $(get_mysql_pod_names logcollection); do
+          retry 24 5 bash -c "
+              kubectl -n '${NAMESPACE}' exec '${pod}' -c logrotate -- \
+                  cat /opt/percona/logcollector/logrotate/conf.d/extra.conf | grep -q 'rotate 9'
+          "
+
+          applied=$((applied + 1))
+      done
+
+      kubectl create configmap -n "${NAMESPACE}" 07-update-extra-config --from-literal=applied="${applied}"

@@ -1,0 +1,7 @@
+pipeline:
+  filters:
+    - name: record_modifier
+      match: "*"
+      record:
+        - cluster_name cluster1
+        - kuttl_config_check applied

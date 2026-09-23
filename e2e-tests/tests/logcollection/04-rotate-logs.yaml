@@ -8,15 +8,18 @@ commands:
 
       source ../../functions
 
-      pod=$(get_mysql_pod_names logcollection | awk '{print $1}')
+      rotated=0
+      for pod in $(get_mysql_pod_names logcollection); do
+          # -f forces a rotation regardless of the age/size conditions in the config,
+          # so the test does not have to wait for the cron schedule.
+          kubectl -n "${NAMESPACE}" exec "${pod}" -c logrotate -- \
+              logrotate -f -s /var/lib/mysql/log/logrotate.status \
+              /opt/percona/logcollector/logrotate/conf.d/mysql.conf
 
-      # -f forces a rotation regardless of the age/size conditions in the config,
-      # so the test does not have to wait for the cron schedule.
-      kubectl -n "${NAMESPACE}" exec "${pod}" -c logrotate -- \
-          logrotate -f -s /var/lib/mysql/log/logrotate.status \
-          /opt/percona/logcollector/logrotate/conf.d/mysql.conf
+          kubectl -n "${NAMESPACE}" exec "${pod}" -c logrotate -- \
+              test -f /var/lib/mysql/log/mysqld-error.log.1
 
-      rotated=$(kubectl -n "${NAMESPACE}" exec "${pod}" -c logrotate -- \
-          sh -c 'ls /var/lib/mysql/log/mysqld-error.log.1 >/dev/null 2>&1 && echo yes || echo no')
+          rotated=$((rotated + 1))
+      done
 
       kubectl create configmap -n "${NAMESPACE}" 04-rotate-logs --from-literal=rotated="${rotated}"
