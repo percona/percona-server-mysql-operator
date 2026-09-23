@@ -347,20 +347,20 @@ func fileExists(name string) (bool, error) {
 // isReplicationStopExpected reports whether something is holding replication
 // down on purpose.
 func isReplicationStopExpected(ctx context.Context, lockPath string) (bool, error) {
-	running, err := isBackupRunning(ctx)
-	if err != nil {
-		return false, errors.Wrap(err, "check backup running")
-	}
-	if running {
-		return true, nil
-	}
-
 	failingOver, err := failover.InProgress(lockPath)
 	if err != nil {
 		return false, errors.Wrap(err, "check failover in progress")
 	}
+	if failingOver {
+		return true, nil
+	}
 
-	return failingOver, nil
+	running, err := isBackupRunning(ctx)
+	if err != nil {
+		return false, errors.Wrap(err, "check backup running")
+	}
+
+	return running, nil
 }
 
 func isBackupRunning(ctx context.Context) (bool, error) {

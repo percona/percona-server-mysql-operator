@@ -42,14 +42,13 @@ func readSourceHeader(path string) (sourceHeader, error) {
 
 	name := filepath.Base(path)
 
-	head := make([]byte, len(binlogMagic)+eventHeaderLen)
-	if _, err := io.ReadFull(f, head); err != nil {
-		return sourceHeader{}, fmt.Errorf("%w: %s is shorter than one event: %w", errNoFDE, name, err)
+	if err := readMagic(f); err != nil {
+		return sourceHeader{}, fmt.Errorf("%w: %s: %w", errNoFDE, name, err)
 	}
 
-	header := head[len(binlogMagic):]
-	if string(head[:len(binlogMagic)]) != string(binlogMagic) {
-		return sourceHeader{}, fmt.Errorf("%w: %s has no magic number", errNoFDE, name)
+	header := make([]byte, eventHeaderLen)
+	if _, err := io.ReadFull(f, header); err != nil {
+		return sourceHeader{}, fmt.Errorf("%w: %s is shorter than one event: %w", errNoFDE, name, err)
 	}
 	if header[4] != fdeEventType {
 		return sourceHeader{}, fmt.Errorf("%w: %s starts with event type %d", errNoFDE, name, header[4])
