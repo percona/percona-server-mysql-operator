@@ -6594,6 +6594,23 @@ spec:
                       type:
                         type: string
                     type: object
+                  failover:
+                    properties:
+                      onTimeout:
+                        default: Abort
+                        enum:
+                        - Abort
+                        - ForceWithPossibleDataLoss
+                        type: string
+                      switchoverCatchUpTimeout:
+                        default: 5m
+                        pattern: ^([0-9]+(\.[0-9]+)?(ns|us|ms|s|m|h))+$
+                        type: string
+                      timeout:
+                        default: 6h
+                        pattern: ^([0-9]+(\.[0-9]+)?(ns|us|ms|s|m|h))+$
+                        type: string
+                    type: object
                   gracePeriod:
                     format: int64
                     type: integer
@@ -10769,6 +10786,10 @@ spec:
                 async cluster type
               rule: (oldSelf.mysql.clusterType == self.mysql.clusterType) || self.mysql.clusterType
                 == 'async' || !self.?orchestrator.?enabled.orValue(false)
+            - message: 'Invalid configuration: ''orchestrator.failover'' only applies
+                when ''mysql.clusterType'' is set to ''async'''
+              rule: '!(self.mysql.clusterType == ''group-replication'') || !has(self.orchestrator)
+                || !has(self.orchestrator.failover)'
           status:
             properties:
               backupVersion:

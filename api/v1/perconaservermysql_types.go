@@ -25,6 +25,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	v "github.com/hashicorp/go-version"
@@ -47,6 +48,9 @@ import (
 
 const (
 	defaultGracePeriodSec int64 = 600
+
+	defaultFailoverTimeout                  = 6 * time.Hour
+	defaultFailoverSwitchoverCatchUpTimeout = 5 * time.Minute
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -66,6 +70,7 @@ const (
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async' && self.updateStrategy == 'SmartUpdate') || (has(self.orchestrator) && self.orchestrator.enabled)",message="Invalid configuration: For 'async' replication, SmartUpdate requires Orchestrator to be enabled"
 // +kubebuilder:validation:XValidation:rule="!has(self.proxy) || !(has(self.proxy.router) && has(self.proxy.router.enabled) && self.proxy.router.enabled && has(self.proxy.haproxy) && has(self.proxy.haproxy.enabled) && self.proxy.haproxy.enabled)",message="Invalid configuration: MySQL Router and HAProxy can't be enabled at the same time"
 // +kubebuilder:validation:XValidation:rule="(oldSelf.mysql.clusterType == self.mysql.clusterType) || self.mysql.clusterType == 'async' || !self.?orchestrator.?enabled.orValue(false)",message="spec.orchestrator.enabled should be false when switching from async cluster type"
+// +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'group-replication') || !has(self.orchestrator) || !has(self.orchestrator.failover)",message="Invalid configuration: 'orchestrator.failover' only applies when 'mysql.clusterType' is set to 'async'"
 type PerconaServerMySQLSpec struct {
 	Metadata  *Metadata `json:"metadata,omitempty"`
 	CRVersion string    `json:"crVersion,omitempty"`
@@ -296,7 +301,121 @@ type OrchestratorSpec struct {
 	Enabled bool          `json:"enabled,omitempty"`
 	Expose  ServiceExpose `json:"expose,omitempty"`
 
+	// Failover configures how the cluster recovers from a primary that is gone.
+	// +kubebuilder:validation:Optional
+	Failover *FailoverSpec `json:"failover,omitempty"`
+
 	PodSpec `json:",inline"`
+}
+
+// FailoverPolicy decides what happens once a failover has spent its whole
+// timeout without recovering the transactions stranded on the dead primary.
+type FailoverPolicy string
+
+const (
+	// FailoverPolicyAbort leaves the cluster without a writable primary. Nothing
+	// is lost, but nothing is promoted either, until someone intervenes.
+	FailoverPolicyAbort FailoverPolicy = "Abort"
+
+	// FailoverPolicyForce promotes the best candidate anyway, giving up whatever
+	// the dead primary committed and never delivered. It does not apply when the
+	// old primary is reachable again and holds transactions the candidate does
+	// not have: promoting then would leave two writable primaries.
+	FailoverPolicyForce FailoverPolicy = "ForceWithPossibleDataLoss"
+)
+
+func (p FailoverPolicy) Valid() bool {
+	return p == FailoverPolicyAbort || p == FailoverPolicyForce
+}
+
+type FailoverSpec struct {
+	// Timeout bounds how long the cluster tries to recover the transactions
+	// stranded on the dead primary. It is measured from the moment the failure is
+	// first seen and covers every retry, not a single attempt. The clock restarts
+	// if the Orchestrator raft leader changes mid-failover, which delays the
+	// OnTimeout decision rather than bringing it forward.
+	// +kubebuilder:validation:Pattern=`^([0-9]+(\.[0-9]+)?(ns|us|ms|s|m|h))+$`
+	// +kubebuilder:default="6h"
+	Timeout string `json:"timeout,omitempty"`
+
+	// OnTimeout decides what happens when Timeout expires.
+	// +kubebuilder:validation:Enum=Abort;ForceWithPossibleDataLoss
+	// +kubebuilder:default=Abort
+	OnTimeout FailoverPolicy `json:"onTimeout,omitempty"`
+
+	// SwitchoverCatchUpTimeout bounds how long a planned switchover waits for the
+	// candidate to apply everything the current primary wrote before promoting it.
+	// +kubebuilder:validation:Pattern=`^([0-9]+(\.[0-9]+)?(ns|us|ms|s|m|h))+$`
+	// +kubebuilder:default="5m"
+	SwitchoverCatchUpTimeout string `json:"switchoverCatchUpTimeout,omitempty"`
+}
+
+func (s *FailoverSpec) SetDefaults() {
+	if s.Timeout == "" {
+		s.Timeout = defaultFailoverTimeout.String()
+	}
+	if s.OnTimeout == "" {
+		s.OnTimeout = FailoverPolicyAbort
+	}
+	if s.SwitchoverCatchUpTimeout == "" {
+		s.SwitchoverCatchUpTimeout = defaultFailoverSwitchoverCatchUpTimeout.String()
+	}
+}
+
+func (s *FailoverSpec) validate() error {
+	for _, f := range []struct {
+		name  string
+		value string
+	}{
+		{"orchestrator.failover.timeout", s.Timeout},
+		{"orchestrator.failover.switchoverCatchUpTimeout", s.SwitchoverCatchUpTimeout},
+	} {
+		d, err := time.ParseDuration(f.value)
+		if err != nil {
+			return errors.Wrapf(err, "failed to parse %s", f.name)
+		}
+		// Both end up as whole seconds in orchestrator's configuration.
+		if d < time.Second {
+			return errors.Errorf("%s should be at least 1s", f.name)
+		}
+	}
+
+	if !s.OnTimeout.Valid() {
+		return errors.Errorf("orchestrator.failover.onTimeout should be one of %s, %s", FailoverPolicyAbort, FailoverPolicyForce)
+	}
+
+	return nil
+}
+
+// TimeoutDuration returns Timeout, falling back to the default when it is unset
+// or unparsable. CheckNSetDefaults rejects both, so the fallback only covers
+// objects that never went through it.
+func (s *FailoverSpec) TimeoutDuration() time.Duration {
+	return parseDurationOr(s.Timeout, defaultFailoverTimeout)
+}
+
+func (s *FailoverSpec) SwitchoverCatchUp() time.Duration {
+	return parseDurationOr(s.SwitchoverCatchUpTimeout, defaultFailoverSwitchoverCatchUpTimeout)
+}
+
+func parseDurationOr(value string, fallback time.Duration) time.Duration {
+	d, err := time.ParseDuration(value)
+	if err != nil || d < time.Second {
+		return fallback
+	}
+
+	return d
+}
+
+// FailoverSpec returns the failover configuration with every default filled in
+func (cr *PerconaServerMySQL) FailoverSpec() *FailoverSpec {
+	spec := new(FailoverSpec)
+	if cr.Spec.Orchestrator.Failover != nil {
+		spec = cr.Spec.Orchestrator.Failover.DeepCopy()
+	}
+	spec.SetDefaults()
+
+	return spec
 }
 
 type ContainerSpec struct {
@@ -1030,6 +1149,7 @@ const (
 	ConditionAwaitingExternalBootstrap   string = "AwaitingExternalBootstrap"
 	ConditionMySQLConfigSynced                  = "MySQLConfigSynced"
 	ConditionClusterTypeSwitchInProgress string = "ClusterTypeSwitchInProgress"
+	ConditionAsyncFailoverBlocked        string = "AsyncFailoverBlocked"
 
 	// Deprecated, preserved only for backward compatibility
 	ConditionClusterSetReplicationRunning string = "ClusterSetReplicationRunning"
@@ -1204,6 +1324,18 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 
 	if valid := cr.Spec.MySQL.ClusterType.isValid(); !valid {
 		return errors.Errorf("%s is not a valid clusterType, valid options are %s and %s", cr.Spec.MySQL.ClusterType, ClusterTypeGR, ClusterTypeAsync)
+	}
+
+	if cr.Spec.Orchestrator.Failover != nil {
+		if cr.Spec.MySQL.ClusterType != ClusterTypeAsync {
+			return errors.Errorf("orchestrator.failover only applies to %s clusters", ClusterTypeAsync)
+		}
+
+		cr.Spec.Orchestrator.Failover.SetDefaults()
+
+		if err := cr.Spec.Orchestrator.Failover.validate(); err != nil {
+			return err
+		}
 	}
 
 	if err := cr.validateStorageAutoscaling(); err != nil {
