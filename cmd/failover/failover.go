@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -165,6 +166,15 @@ func run(ctx context.Context, cfg failoverConfig) error {
 			log.Printf("ERROR: failed to close database connection: %v", err)
 		}
 	}()
+
+	if _, err := d.ShowReplicaStatus(ctx); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			log.Printf("Not a replica, nothing to apply")
+			return nil
+		}
+
+		return fmt.Errorf("show replica status: %w", err)
+	}
 
 	if err := d.StopReplication(ctx); err != nil {
 		return fmt.Errorf("stop replica: %w", err)
@@ -662,6 +672,11 @@ func waitForRelayLogsApplied(
 	for {
 		status, err := s.ShowReplicaStatus(ctx)
 		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				log.Printf("Replication channel is gone; the instance was already promoted")
+				return nil
+			}
+
 			return fmt.Errorf("show replica status: %w", err)
 		}
 

@@ -1,11 +1,15 @@
 package backup
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	xb "github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
 )
 
@@ -22,8 +26,9 @@ func TestXtrabackupArgs(t *testing.T) {
 	}
 
 	tests := map[string]struct {
-		conf *xb.BackupConfig
-		want []string
+		conf                  *xb.BackupConfig
+		generatesDefaultsFile bool
+		want                  []string
 	}{
 		"nil config": {
 			want: defaultArgs,
@@ -47,6 +52,7 @@ func TestXtrabackupArgs(t *testing.T) {
 			want: append(defaultArgs, "--compress", "--parallel=2"),
 		},
 		"defaults file with equals is first": {
+			generatesDefaultsFile: true,
 			conf: &xb.BackupConfig{
 				ContainerOptions: &apiv1.BackupContainerOptions{
 					Args: apiv1.BackupContainerArgs{
@@ -131,6 +137,7 @@ func TestXtrabackupArgs(t *testing.T) {
 			want: append(defaultArgs, "--incremental-lsn=123:456"),
 		},
 		"all optional arguments preserve required ordering": {
+			generatesDefaultsFile: true,
 			conf: &xb.BackupConfig{
 				EncryptionKeyFile: "/etc/mysql/encryption-key",
 				ContainerOptions: &apiv1.BackupContainerOptions{
@@ -155,7 +162,90 @@ func TestXtrabackupArgs(t *testing.T) {
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			assert.Equal(t, test.want, xtrabackupArgs("backup-user", "backup-password", test.conf))
+			generatedDefaultsFile, err := generateDefaultsFile(test.conf)
+			assert.NoError(t, err)
+			got := xtrabackupArgs("backup-user", "backup-password", test.conf, generatedDefaultsFile)
+			if test.generatesDefaultsFile {
+				if !assert.NotEmpty(t, generatedDefaultsFile) {
+					return
+				}
+				t.Cleanup(func() {
+					os.Remove(generatedDefaultsFile) //nolint:errcheck
+				})
+				assert.Equal(t, "--defaults-file="+generatedDefaultsFile, got[0])
+				got[0] = test.want[0]
+			} else {
+				assert.Empty(t, generatedDefaultsFile)
+			}
+			assert.Equal(t, test.want, got)
+		})
+	}
+}
+
+func TestGenerateDefaultsFile(t *testing.T) {
+	defaultsFile := filepath.Join(t.TempDir(), "backup.cnf")
+
+	assert.NoError(t, os.WriteFile(defaultsFile, []byte("[xtrabackup]\nparallel=2\n"), 0o600))
+
+	wantIncludes := make([]string, 0, 2)
+	if hasCustomConfig() {
+		wantIncludes = append(wantIncludes, mysql.CustomMyCnfPath)
+	}
+	wantIncludes = append(wantIncludes, defaultsFile)
+
+	tests := map[string]struct {
+		conf          *xb.BackupConfig
+		wantGenerated bool
+		wantIncludes  []string
+	}{
+		"nil config": {},
+		"no defaults file": {
+			conf: &xb.BackupConfig{},
+		},
+		"user defaults file": {
+			conf: &xb.BackupConfig{
+				ContainerOptions: &apiv1.BackupContainerOptions{
+					Args: apiv1.BackupContainerArgs{
+						Xtrabackup: []string{"--defaults-file=" + defaultsFile, "--compress"},
+					},
+				},
+			},
+			wantGenerated: true,
+			wantIncludes:  wantIncludes,
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			generatedDefaultsFile, err := generateDefaultsFile(test.conf)
+			if !assert.NoError(t, err) {
+				return
+			}
+			if !test.wantGenerated {
+				assert.Empty(t, generatedDefaultsFile)
+				return
+			}
+			if !assert.NotEmpty(t, generatedDefaultsFile) {
+				return
+			}
+			t.Cleanup(func() {
+				os.Remove(generatedDefaultsFile) //nolint:errcheck
+			})
+
+			args := xtrabackupArgs("backup-user", "backup-password", test.conf, generatedDefaultsFile)
+			assert.Equal(t, "--defaults-file="+generatedDefaultsFile, args[0])
+			assert.NotContains(t, args, "--defaults-extra-file="+mysql.CustomMyCnfPath)
+			assert.Contains(t, args, "--compress")
+
+			contents, err := os.ReadFile(generatedDefaultsFile)
+			assert.NoError(t, err)
+			includes := make([]string, 0, len(test.wantIncludes))
+			for _, includePath := range test.wantIncludes {
+				includes = append(includes, "!include "+includePath)
+			}
+			assert.Equal(t, strings.Join(includes, "\n")+"\n", string(contents))
+
+			assert.Equal(t, "--defaults-file="+defaultsFile, test.conf.ContainerOptions.Args.Xtrabackup[0], "input config must not be mutated")
 		})
 	}
 }
