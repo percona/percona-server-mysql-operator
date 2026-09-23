@@ -118,7 +118,7 @@ func TestLastEventEnd(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			path := writeFile(t, t.TempDir(), "binlog.000004", []byte(tt.content))
 
-			got, err := lastEventEnd(path, tt.start)
+			got, _, err := lastEventEnd(path, tt.start)
 
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, got)
@@ -128,14 +128,14 @@ func TestLastEventEnd(t *testing.T) {
 	t.Run("a log shorter than its magic number", func(t *testing.T) {
 		path := writeFile(t, t.TempDir(), "binlog.000005", []byte("\xfeb"))
 
-		_, err := lastEventEnd(path, binlogStartPos)
+		_, _, err := lastEventEnd(path, binlogStartPos)
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "shorter than a binary log header")
 	})
 
 	t.Run("a missing log", func(t *testing.T) {
-		_, err := lastEventEnd(filepath.Join(t.TempDir(), "binlog.000004"), 0)
+		_, _, err := lastEventEnd(filepath.Join(t.TempDir(), "binlog.000004"), 0)
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "no such file")

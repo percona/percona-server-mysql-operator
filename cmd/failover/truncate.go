@@ -25,17 +25,12 @@ func truncateTornTail(sourceLogs []string) error {
 			start = binlogStartPos
 		}
 
-		fi, err := os.Stat(path)
-		if err != nil {
-			return fmt.Errorf("stat %s: %w", path, err)
-		}
-
-		end, err := lastEventEnd(path, start)
+		end, size, err := lastEventEnd(path, start)
 		if err != nil {
 			return err
 		}
 
-		torn := fi.Size() - end
+		torn := size - end
 		if torn == 0 {
 			continue
 		}
@@ -57,51 +52,53 @@ func truncateTornTail(sourceLogs []string) error {
 	return nil
 }
 
-// lastEventEnd returns the offset at which the last complete event in path ends.
-// Events begin at start, which skips the magic number a whole binary log carries.
-func lastEventEnd(path string, start int64) (int64, error) {
+// lastEventEnd returns the offset at which the last complete event in path
+// ends, along with the file's size. Events begin at start, which skips the
+// magic number a whole binary log carries.
+func lastEventEnd(path string, start int64) (end, size int64, err error) {
 	name := filepath.Base(path)
 
 	f, err := os.Open(path)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	defer f.Close() //nolint:errcheck
 
 	fi, err := f.Stat()
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
-	if fi.Size() < start {
-		return 0, fmt.Errorf("%s is %d byte(s), shorter than a binary log header", name, fi.Size())
+	size = fi.Size()
+	if size < start {
+		return 0, 0, fmt.Errorf("%s is %d byte(s), shorter than a binary log header", name, size)
 	}
 
 	if _, err := f.Seek(start, io.SeekStart); err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 
 	r := bufio.NewReader(f)
 	header := make([]byte, eventHeaderLen)
-	end := start
+	end = start
 
 	for {
 		if _, err := io.ReadFull(r, header); err != nil {
 			if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
-				return end, nil
+				return end, size, nil
 			}
 
-			return 0, fmt.Errorf("read %s: %w", name, err)
+			return 0, 0, fmt.Errorf("read %s: %w", name, err)
 		}
 
-		size := int64(binary.LittleEndian.Uint32(header[9:13]))
-		if size < eventHeaderLen || end+size > fi.Size() {
-			return end, nil
+		eventSize := int64(binary.LittleEndian.Uint32(header[9:13]))
+		if eventSize < eventHeaderLen || end+eventSize > size {
+			return end, size, nil
 		}
 
-		if _, err := io.CopyN(io.Discard, r, size-eventHeaderLen); err != nil {
-			return 0, fmt.Errorf("read %s: %w", name, err)
+		if _, err := io.CopyN(io.Discard, r, eventSize-eventHeaderLen); err != nil {
+			return 0, 0, fmt.Errorf("read %s: %w", name, err)
 		}
 
-		end += size
+		end += eventSize
 	}
 }

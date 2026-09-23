@@ -6,10 +6,6 @@ import (
 	"fmt"
 	"log"
 	"time"
-
-	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
-	"github.com/percona/percona-server-mysql-operator/cmd/bootstrap/utils"
-	"github.com/percona/percona-server-mysql-operator/cmd/internal/db"
 )
 
 const (
@@ -31,6 +27,7 @@ var errSourceRecovered = errors.New("the source is back; standing down without p
 // sourceDatabase is the failed source seen from the replica we splice into.
 type sourceDatabase interface {
 	GetGTIDExecuted(ctx context.Context) (string, error)
+	IsReadonly(ctx context.Context) (bool, error)
 	Close() error
 }
 
@@ -38,11 +35,8 @@ type sourceDatabase interface {
 // again, so the job can hand the replica back instead of promoting it.
 //
 // It probes the source's FQDN rather than the pod IP the binary logs are fetched
-// from. The mysql headless service does not publish not-ready addresses, so a
-// name that resolves means the pod passed its readiness probe, which means its
-// startup probe - the bootstrap - has already settled the pod's own view of the
-// topology. It is also the host the replication channel is configured with, so
-// it is what the receiver has to reach to reconnect.
+// from: that is the host the replication channel is configured with, so it is
+// what the receiver has to reach to reconnect.
 type sourceWatch struct {
 	local        database
 	connect      func(ctx context.Context, host string) (sourceDatabase, error)
@@ -69,7 +63,7 @@ func newSourceWatch(cfg failoverConfig, local database, host string) *sourceWatc
 // confirmed blocks until the source has answered sourceConfirmations probes in a
 // row, or until one of them fails.
 func (w *sourceWatch) confirmed(ctx context.Context) bool {
-	if w.connect == nil || w.host == "" {
+	if w.host == "" {
 		return false
 	}
 
@@ -113,14 +107,26 @@ func (w *sourceWatch) probe(ctx context.Context) bool {
 	return true
 }
 
-// usable reports whether the source is answering and holds every transaction
-// this replica has executed.
+// usable reports whether the source is serving writes again and holds every
+// transaction this replica has executed.
 func (w *sourceWatch) usable(ctx context.Context) error {
 	d, err := w.connect(ctx, w.host)
 	if err != nil {
 		return fmt.Errorf("source %s is unreachable: %w", w.host, err)
 	}
 	defer d.Close() //nolint:errcheck
+
+	// A mysqld that answers is not a source that is back. Every pod starts
+	// read-only and only a promotion clears it, so a source still read-only
+	// here is one that merely restarted: nothing is driving it, and handing the
+	// replica back would leave the cluster without a primary.
+	readOnly, err := d.IsReadonly(ctx)
+	if err != nil {
+		return fmt.Errorf("get source read_only: %w", err)
+	}
+	if readOnly {
+		return fmt.Errorf("source %s is back but read-only", w.host)
+	}
 
 	sourceSet, err := d.GetGTIDExecuted(ctx)
 	if err != nil {
@@ -179,7 +185,7 @@ func watchSource(ctx context.Context, w *sourceWatch) <-chan struct{} {
 // whatever has already been executed by the time it arrives.
 func (w *sourceWatch) standDown(ctx context.Context) error {
 	if err := w.local.StartIOThread(ctx); err != nil {
-		return fmt.Errorf("start IO_THREAD: %w", err)
+		return fmt.Errorf("start IO_THREAD: %w: %w", err, errSourceRecovered)
 	}
 	log.Printf("Started IO_THREAD")
 
@@ -216,17 +222,4 @@ func waitForReceiver(ctx context.Context, s replicaStatuser, poll, timeout time.
 		case <-ticker.C:
 		}
 	}
-}
-
-func connectToSource(ctx context.Context, host string) (sourceDatabase, error) {
-	operatorPass, err := utils.GetSecret(apiv1.UserOperator)
-	if err != nil {
-		return nil, fmt.Errorf("get %s password: %w", apiv1.UserOperator, err)
-	}
-
-	return db.NewDatabase(ctx, db.DBParams{
-		User: apiv1.UserOperator,
-		Pass: operatorPass,
-		Host: host,
-	})
 }

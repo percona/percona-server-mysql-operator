@@ -12,14 +12,19 @@ import (
 )
 
 type fakeSourceDB struct {
-	gtid string
-	conn *fakeSourceConn
+	gtid     string
+	readOnly bool
+	conn     *fakeSourceConn
 }
 
 var _ sourceDatabase = (*fakeSourceDB)(nil)
 
 func (f *fakeSourceDB) GetGTIDExecuted(context.Context) (string, error) {
 	return f.gtid, nil
+}
+
+func (f *fakeSourceDB) IsReadonly(context.Context) (bool, error) {
+	return f.readOnly, nil
 }
 
 func (f *fakeSourceDB) Close() error {
@@ -34,12 +39,13 @@ func (f *fakeSourceDB) Close() error {
 // fakeSourceConn dials the source. up is consumed one entry per dial and its
 // last entry repeats, so a one-element script describes a steady state.
 type fakeSourceConn struct {
-	mu     sync.Mutex
-	up     []bool
-	gtid   string
-	dials  int
-	closes int
-	hosts  []string
+	mu       sync.Mutex
+	up       []bool
+	gtid     string
+	readOnly bool
+	dials    int
+	closes   int
+	hosts    []string
 }
 
 func (c *fakeSourceConn) connect(_ context.Context, host string) (sourceDatabase, error) {
@@ -57,7 +63,7 @@ func (c *fakeSourceConn) connect(_ context.Context, host string) (sourceDatabase
 		return nil, errors.New("dial tcp: connect: connection refused")
 	}
 
-	return &fakeSourceDB{gtid: c.gtid, conn: c}, nil
+	return &fakeSourceDB{gtid: c.gtid, readOnly: c.readOnly, conn: c}, nil
 }
 
 func (c *fakeSourceConn) count() (dials, closes int) {
@@ -122,6 +128,14 @@ func TestSourceWatch(t *testing.T) {
 
 		assert.False(t, w.confirmed(t.Context()),
 			"standing down would strand transactions nothing can replicate back")
+	})
+
+	t.Run("a source that is back but still read-only is refused", func(t *testing.T) {
+		conn := &fakeSourceConn{up: []bool{true}, readOnly: true}
+		w := newWatch(t, conn, &fakeDatabase{})
+
+		assert.False(t, w.confirmed(t.Context()),
+			"a pod that just restarted answers read-only; only a promotion puts it back in service")
 	})
 
 	t.Run("an unreadable GTID set is refused", func(t *testing.T) {
@@ -235,8 +249,10 @@ func TestStandDown(t *testing.T) {
 		err := newWatch(t, &fakeSourceConn{}, f).standDown(t.Context())
 
 		require.Error(t, err)
-		assert.NotErrorIs(t, err, errSourceRecovered)
 		assert.Contains(t, err.Error(), "start IO_THREAD")
+		// The source is serving either way, so the caller must still see this as
+		// a stand-down: a forced promotion here would leave two writable primaries.
+		assert.ErrorIs(t, err, errSourceRecovered)
 	})
 }
 
