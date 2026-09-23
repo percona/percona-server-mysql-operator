@@ -223,22 +223,6 @@ func (m *ReplicationDBManager) CheckIfClusterMetadataDBExists(ctx context.Contex
 	return len(rows) > 0, nil
 }
 
-func (m *ReplicationDBManager) GetClusterSetReplicationRunning(ctx context.Context) (bool, error) {
-	rows := []*struct {
-		IsRunning bool `csv:"is_running"`
-	}{}
-
-	err := m.query(ctx, "SELECT EXISTS(SELECT 1 FROM replication_connection_status conn JOIN replication_applier_status appl USING (CHANNEL_NAME) WHERE conn.CHANNEL_NAME = 'clusterset_replication' AND conn.SERVICE_STATE = 'ON' AND appl.SERVICE_STATE = 'ON') as is_running", &rows)
-	if err != nil {
-		return false, errors.Wrap(err, "query cluster set replication running")
-	}
-	if len(rows) == 0 {
-		return false, nil
-	}
-
-	return rows[0].IsRunning, nil
-}
-
 func (m *ReplicationDBManager) StopReplication(ctx context.Context) error {
 	var errb, outb bytes.Buffer
 	err := m.db.exec(ctx, "STOP REPLICA", &outb, &errb)
