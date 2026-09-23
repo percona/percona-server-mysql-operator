@@ -87,12 +87,16 @@ jobs:
         with:
           go-version: '^1.26'
       - name: check on release branch
-        if: ${{ contains(github.base_ref, 'release-') && ! startsWith(github.head_ref, 'after-release-') }}
+        if: |
+          (startsWith(github.base_ref, 'release-') && !startsWith(github.head_ref, 'after-release-')) ||
+          startsWith(github.base_ref, 'security/')
         run: |
           make release VERSION="$(cat pkg/version/version.txt)" IMAGE_TAG_BASE="percona/percona-server-mysql-operator"
           git diff --exit-code
       - name: check on non release branches
-        if: ${{ ! contains(github.base_ref, 'release-') || startsWith(github.head_ref, 'after-release-') }}
+        if: |
+          !startsWith(github.base_ref, 'release-') &&
+          !startsWith(github.base_ref, 'security/')
         run: |
           make generate manifests VERSION=main
           git diff --exit-code
