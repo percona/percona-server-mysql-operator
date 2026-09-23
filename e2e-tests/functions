@@ -461,7 +461,7 @@ prepare_vault_tls() {
 	local name=$1
 	local namespace=$2
 	local platform=$3
-	local csr_name=vault-csr-${RANDOM}
+	local csr_name=vault-csr-${namespace}
 	local csr_api_ver="v1"
 	local csr_signer
 
@@ -512,6 +512,7 @@ ${csr_signer}
   - server auth
 EOF
 
+	kubectl delete csr ${csr_name} --ignore-not-found
 	kubectl create -n ${namespace} -f ${tmp_dir}/csr.yaml
 	sleep 10
 	kubectl certificate approve ${csr_name}
@@ -549,9 +550,13 @@ _deploy_vault() {
 	local namespace=$4
 	local tmp_dir=$5
 
-	if kubectl get ns | grep ${namespace}; then
-		echo "${namespace} is already exist, assuming Vault is running there."
-		return
+	if kubectl get namespace ${namespace} >/dev/null 2>&1; then
+		if [[ -s ${tmp_dir}/${name} ]]; then
+			echo "${namespace} already exists, assuming Vault is running there."
+			return
+		fi
+		echo "${namespace} exists but ${tmp_dir}/${name} doesn't, recreating Vault"
+		destroy_vault ${name} ${namespace}
 	fi
 
 	rm -rf ${tmp_dir}
@@ -561,7 +566,6 @@ _deploy_vault() {
 	helm repo update
 
 	kubectl create namespace "${namespace}"
-	helm uninstall "$name" || :
 
 	echo "install Vault $name"
 
@@ -678,6 +682,34 @@ deploy_vault() {
 	fi
 
 	kubectl apply -n "${NAMESPACE}" -f ${tmp_dir}/vault-secret.yaml
+}
+
+destroy_vault() {
+	local name=${1:-vault-service}
+	local namespace=${2:-${name}}
+
+	local tmp_dir=/tmp/vault
+	local selector="app.kubernetes.io/instance=${name}"
+	local vault_ns
+	vault_ns="$(helm list --all-namespaces --filter "${name}" | tail -n1 | awk -F' ' '{print $2}' | $sed 's/NAMESPACE//')"
+	: "${vault_ns:=${namespace}}"
+
+	kubectl -n "${NAMESPACE}" delete secret vault-keyring-secret --ignore-not-found
+
+	if [[ -n ${OPENSHIFT} ]]; then
+		oc adm policy remove-scc-from-user privileged ${name}-agent-injector || :
+	fi
+
+	helm uninstall "${name}" --namespace "${vault_ns}" || :
+
+	timeout 30 kubectl delete mutatingwebhookconfiguration -l "${selector}" || :
+	timeout 30 kubectl delete clusterrolebinding -l "${selector}" || :
+	timeout 30 kubectl delete clusterrole -l "${selector}" || :
+
+	kubectl delete csr vault-csr-${vault_ns} --ignore-not-found
+	timeout 120 kubectl delete namespace "${vault_ns}" --ignore-not-found || :
+
+	rm -rf ${tmp_dir}
 }
 
 retry() {
