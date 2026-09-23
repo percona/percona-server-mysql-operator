@@ -1,0 +1,41 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      backup_name="demand-backup-defaults-file"
+      backup_source=$(kubectl -n "${NAMESPACE}" get ps-backup "${backup_name}" -o jsonpath='{.status.backupSource}')
+      backup_source_pod=${backup_source%%.*}
+      command_log=$(kubectl -n "${NAMESPACE}" logs "${backup_source_pod}" -c xtrabackup \
+        | grep "${backup_name}" \
+        | grep "xtrabackupCmd" \
+        | tail -n 1)
+
+      if ! grep -Eq -- '--defaults-file=/tmp/xtrabackup-defaults-[^ ]+\.cnf' <<<"${command_log}"; then
+        echo "Generated defaults file is missing from the xtrabackup command: ${command_log}"
+        exit 1
+      fi
+
+      if grep -q -- '--defaults-extra-file' <<<"${command_log}"; then
+        echo "xtrabackup command contains both defaults-file options: ${command_log}"
+        exit 1
+      fi
+
+      if ! kubectl -n "${NAMESPACE}" logs "${backup_source_pod}" -c xtrabackup \
+        | grep -Eq -- '--innodb[-_]flush[-_]log[-_]at[-_]trx[-_]commit=2'; then
+        echo "MySQL configuration is missing from the xtrabackup recognized server arguments"
+        exit 1
+      fi
+
+      if ! kubectl -n "${NAMESPACE}" logs "${backup_source_pod}" -c xtrabackup \
+        | grep -Eq -- '--parallel(=| )2'; then
+        echo "User defaults file configuration is missing from the xtrabackup recognized client arguments"
+        exit 1
+      fi
+
+      cluster_name=$(kubectl -n "${NAMESPACE}" get ps-backup "${backup_name}" -o jsonpath='{.spec.clusterName}')
+      for i in 0 1 2; do
+        kubectl -n "${NAMESPACE}" exec "${cluster_name}-mysql-${i}" -c xtrabackup -- rm -f /tmp/xb-defaults.cnf
+      done
