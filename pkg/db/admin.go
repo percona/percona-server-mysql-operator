@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strings"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
@@ -58,6 +59,20 @@ func (m *AdminManager) ReloadTLS(ctx context.Context) error {
 var (
 	variableNameRegex = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 )
+
+func (m *AdminManager) GetGlobalVariable(ctx context.Context, key string) (string, error) {
+	key = mysql.CanonicalVariableName(key)
+	if !variableNameRegex.MatchString(key) {
+		return "", fmt.Errorf("invalid global variable name: %q", key)
+	}
+
+	var errb, outb bytes.Buffer
+	cmd := fmt.Sprintf("SELECT @@GLOBAL.%s", key)
+	if err := m.db.exec(ctx, cmd, &outb, &errb); err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(outb.String()), nil
+}
 
 func (m *AdminManager) SetGlobalVariable(ctx context.Context, key, value string) error {
 	key = mysql.CanonicalVariableName(key)

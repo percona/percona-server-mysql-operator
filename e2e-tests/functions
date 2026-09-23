@@ -1551,6 +1551,66 @@ get_primary_from_haproxy() {
 	run_mysql "SHOW VARIABLES LIKE '%hostname%';" "-h ${haproxy_pod_ip} -P3306" | awk '{print $2}'
 }
 
+# Waits until every haproxy pod reports the same primary and echoes it. A failed
+# query lands on stdout, so the answer is checked to be a pod name; excluded, if
+# given, is a pod the answer must not be.
+wait_for_same_primary_from_haproxy() {
+	local cluster=$1
+	local haproxy_size=${2:-3}
+	local timeout=${3:-120}
+	local excluded=${4:-}
+	local elapsed=0
+
+	while :; do
+		local data=()
+		local i
+		for i in $(seq 0 $((haproxy_size - 1))); do
+			data+=("$(get_primary_from_haproxy "${cluster}-haproxy-${i}" || :)")
+		done
+
+		local converged=1
+		local primary
+		for primary in "${data[@]}"; do
+			if [[ ! ${primary} =~ ^${cluster}-mysql-[0-9]+$ ]] || [[ ${primary} != "${data[0]}" ]] \
+				|| [[ -n ${excluded} && ${primary} == "${excluded}" ]]; then
+				converged=0
+				break
+			fi
+		done
+
+		if ((converged)); then
+			echo "${data[0]}"
+			return 0
+		fi
+
+		if ((elapsed >= timeout)); then
+			echo "Timeout (${timeout}s) exceeded while waiting for all ${cluster} haproxy pods to point to the same primary: ${data[*]}" >&2
+			return 1
+		fi
+
+		echo "waiting for all ${cluster} haproxy pods to point to the same primary (current: ${data[*]})" >&2
+		sleep 5
+		elapsed=$((elapsed + 5))
+	done
+}
+
+# Waits until the primary label names the expected pod.
+wait_for_primary_label() {
+	local expected=$1
+	local timeout=${2:-120}
+	local elapsed=0
+
+	until [[ "$(get_primary_from_label)" == "${expected}" ]]; do
+		if ((elapsed >= timeout)); then
+			echo "Timeout (${timeout}s) exceeded: primary label is $(get_primary_from_label), expected ${expected}" >&2
+			return 1
+		fi
+		echo "waiting for the primary label to move to ${expected}" >&2
+		sleep 5
+		elapsed=$((elapsed + 5))
+	done
+}
+
 # Verifies the backends HAProxy generated for the given cluster: every server is
 # listed on its backend's own port, every backend runs the check that matches the
 # roles it holds, and the x-protocol and admin ports reach a writable primary.

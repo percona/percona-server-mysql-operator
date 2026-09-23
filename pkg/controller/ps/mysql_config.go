@@ -74,6 +74,10 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfig(
 
 	confHash := fmt.Sprintf("%x", md5.Sum(confJson))
 	restartMySQL := func() error {
+		if rolloutInFlight(sts) {
+			log.Info("Pods are being replaced, they read the configuration as they start")
+			return nil
+		}
 		return k8s.RolloutRestart(ctx, r.Client, sts, naming.AnnotationConfigHash, confHash)
 	}
 
@@ -168,6 +172,13 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfig(
 	return nil
 }
 
+func rolloutInFlight(sts *appsv1.StatefulSet) bool {
+	if sts.Status.ObservedGeneration != sts.Generation {
+		return true
+	}
+	return sts.Status.UpdatedReplicas != sts.Status.Replicas
+}
+
 const (
 	readOnlyErrorString                = "ERROR 1238"
 	unknownVariableErrorString         = "ERROR 1193"
@@ -219,6 +230,11 @@ func setGlobalVariables(
 			err := mgr.SetGlobalVariable(ctx, k, v)
 			if err != nil {
 				if isReadOnlyVariableError(err) || isGRRunningVariableError(err) {
+					if current, getErr := mgr.GetGlobalVariable(ctx, k); getErr == nil &&
+						mysql.FormatConfigValue(current) == v {
+						log.V(1).Info("Variable already holds the configured value", "variable", k, "pod", pod.Name)
+						continue
+					}
 					restartNeeded = true
 					continue
 				}

@@ -5,6 +5,7 @@ import (
 	"crypto/md5"
 	"fmt"
 	"io"
+	"strings"
 	"testing"
 
 	"github.com/pkg/errors"
@@ -34,6 +35,7 @@ func TestReconcileMySQLConfig(t *testing.T) {
 		stderrReadOnly   = "ERROR 1238 (HY000): Variable 'innodb_buffer_pool_size' is a read only variable\n"
 		stderrDenied     = "ERROR 1227 (42000): Access denied\n"
 		stderrUnknown    = "ERROR 1193 (HY000): Unknown system variable\n"
+		stderrGRRunning  = "ERROR 3093 (HY000): The function 'group_replication_set_write_concurrency' failed\n"
 	)
 
 	newCR := func(crVersion string, state apiv1.StatefulAppState) *apiv1.PerconaServerMySQL {
@@ -152,6 +154,7 @@ func TestReconcileMySQLConfig(t *testing.T) {
 		stashedConfig     string            // JSON string the cr carries while the statefulset is recreated
 		object            []client.Object   // what the API holds besides the CR, the ConfigMap and the statefulset; nil means a healthy cluster
 		stmtErrs          map[string]string // stderr mysql answers a given statement with; drives the case on its own
+		stmtCurrent       map[string]string // value SELECT @@GLOBAL reports for a refused statement
 
 		expectedStmts  []string // List of SET GLOBAL statements expected on all pods
 		expectRestart  bool
@@ -387,6 +390,21 @@ func TestReconcileMySQLConfig(t *testing.T) {
 			expectedConfig: `{"innodb_buffer_pool_size":"2G","max_connections":"300"}`,
 		},
 		{
+			desc:              "read only variable already at the configured value does not restart",
+			state:             apiv1.StateReady,
+			currentConfig:     "[mysqld]\ninnodb_buffer_pool_chunk_size=268435456\n",
+			lastAppliedConfig: `{"innodb_buffer_pool_chunk_size":"536870912"}`,
+			expectedStmts:     []string{"SET GLOBAL innodb_buffer_pool_chunk_size=268435456"},
+			stmtErrs: map[string]string{
+				"SET GLOBAL innodb_buffer_pool_chunk_size=268435456": stderrReadOnly,
+			},
+			stmtCurrent: map[string]string{
+				"SET GLOBAL innodb_buffer_pool_chunk_size=268435456": "268435456",
+			},
+			expectRestart:  false,
+			expectedConfig: `{"innodb_buffer_pool_chunk_size":"268435456"}`,
+		},
+		{
 			// An SQL error that is not a refusal must leave the annotation
 			// alone, otherwise the next reconcile treats the failed change as
 			// applied and never retries it.
@@ -567,6 +585,29 @@ func TestReconcileMySQLConfig(t *testing.T) {
 							_, _ = args.Get(6).(io.Writer).Write([]byte(stderr))
 						})
 					}
+
+					// a refused variable is read back to see whether it already
+					// holds the configured value
+					if stderr != stderrReadOnly && stderr != stderrGRRunning {
+						continue
+					}
+					key, _, _ := strings.Cut(strings.TrimPrefix(stmt, "SET GLOBAL "), "=")
+					current := tt.stmtCurrent[stmt]
+					if current == "" {
+						current = "some-other-value"
+					}
+					cliCmd.On("Exec",
+						mock.Anything,
+						mock.MatchedBy(func(p *corev1.Pod) bool { return p.Name == pod }),
+						"mysql",
+						mysqlCmd(cr, pod, "SELECT @@GLOBAL."+key),
+						mock.Anything,
+						mock.Anything,
+						mock.Anything,
+						false,
+					).Return(nil).Once().Run(func(args mock.Arguments) {
+						_, _ = args.Get(5).(io.Writer).Write([]byte(current + "\n"))
+					})
 				}
 			}
 
@@ -607,6 +648,91 @@ func TestReconcileMySQLConfig(t *testing.T) {
 				_, kept := updatedCR.GetAnnotations()[naming.AnnotationLastAppliedConfig.String()]
 				assert.False(t, kept, "the copy on the cr is dropped once it is back on the statefulset")
 			}
+		})
+	}
+}
+
+func TestRolloutInFlight(t *testing.T) {
+	tests := map[string]struct {
+		sts  *appsv1.StatefulSet
+		want bool
+	}{
+		"settled": {
+			sts: &appsv1.StatefulSet{
+				Generation: 4,
+				Status: appsv1.StatefulSetStatus{
+					ObservedGeneration: 4,
+					CurrentRevision:    "rev-a",
+					UpdateRevision:     "rev-a",
+					Replicas:           3,
+					UpdatedReplicas:    3,
+				},
+			},
+			want: false,
+		},
+		"spec write not observed yet": {
+			sts: &appsv1.StatefulSet{
+				Generation: 5,
+				Status: appsv1.StatefulSetStatus{
+					ObservedGeneration: 4,
+					CurrentRevision:    "rev-a",
+					UpdateRevision:     "rev-a",
+					Replicas:           3,
+					UpdatedReplicas:    3,
+				},
+			},
+			want: true,
+		},
+		// OnDelete leaves currentRevision behind for good, so a mismatch there
+		// says nothing about whether pods are still being replaced
+		"stale current revision with every pod updated": {
+			sts: &appsv1.StatefulSet{
+				Generation: 5,
+				Status: appsv1.StatefulSetStatus{
+					ObservedGeneration: 5,
+					CurrentRevision:    "rev-a",
+					UpdateRevision:     "rev-b",
+					Replicas:           3,
+					UpdatedReplicas:    3,
+				},
+			},
+			want: false,
+		},
+		"pods not yet on the newest revision": {
+			sts: &appsv1.StatefulSet{
+				Generation: 5,
+				Status: appsv1.StatefulSetStatus{
+					ObservedGeneration: 5,
+					CurrentRevision:    "rev-a",
+					UpdateRevision:     "rev-b",
+					Replicas:           3,
+					UpdatedReplicas:    0,
+				},
+			},
+			want: true,
+		},
+		"pods still catching up": {
+			sts: &appsv1.StatefulSet{
+				Generation: 5,
+				Status: appsv1.StatefulSetStatus{
+					ObservedGeneration: 5,
+					CurrentRevision:    "rev-b",
+					UpdateRevision:     "rev-b",
+					Replicas:           3,
+					UpdatedReplicas:    2,
+				},
+			},
+			want: true,
+		},
+		"statefulset with no revisions recorded": {
+			sts:  &appsv1.StatefulSet{},
+			want: false,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, tt.want, rolloutInFlight(tt.sts))
 		})
 	}
 }

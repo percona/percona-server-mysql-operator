@@ -67,6 +67,7 @@ import (
 // PerconaServerMySQLReconciler reconciles a PerconaServerMySQL object
 type PerconaServerMySQLReconciler struct {
 	client.Client
+	APIReader     client.Reader
 	Scheme        *runtime.Scheme
 	ServerVersion *platform.ServerVersion
 	Recorder      record.EventRecorder
@@ -1029,6 +1030,13 @@ func (r *PerconaServerMySQLReconciler) teardownAsync(
 	return nil
 }
 
+func (r *PerconaServerMySQLReconciler) statefulSetReader() client.Reader {
+	if r.APIReader != nil {
+		return r.APIReader
+	}
+	return r.Client
+}
+
 func (r *PerconaServerMySQLReconciler) reconcileDatabase(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("reconcileDatabase")
 
@@ -1061,7 +1069,7 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(ctx context.Context, cr
 	}
 
 	sts := new(appsv1.StatefulSet)
-	if err := r.Get(ctx, types.NamespacedName{
+	if err := r.statefulSetReader().Get(ctx, types.NamespacedName{
 		Name:      component.Name(),
 		Namespace: cr.Namespace,
 	}, sts); err != nil {

@@ -6,11 +6,11 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   annotations:
-    percona.com/last-applied-config: '{"innodb_buffer_pool_size":"2147483648"}'
-  generation: 4
+    percona.com/last-applied-config: '{"innodb_buffer_pool_size":"2147483648","max_connections":"341"}'
+  generation: 5
   name: auto-config-mysql
 status:
-  observedGeneration: 4
+  observedGeneration: 5
   replicas: 3
   readyReplicas: 3
   updatedReplicas: 3
