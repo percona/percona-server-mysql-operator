@@ -168,7 +168,7 @@ func Bootstrap(ctx context.Context) error {
 
 	cloneLock := filepath.Join(mysql.DataMountPath, "clone.lock")
 
-	donorExecuted, donorPurged, err := donorGTIDs(ctx, donor, operatorPass)
+	donorExecuted, donorPurged, err := donorGTIDs(ctx, donor, operatorPass, readTimeout)
 	if err != nil {
 		return errors.Wrapf(err, "get GTID sets from donor %s", donor)
 	}
@@ -266,21 +266,15 @@ func getTopology(ctx context.Context, fqdn string, peers sets.Set[string]) (stri
 		return "", nil, errors.Wrapf(err, "get %s password", apiv1.UserOperator)
 	}
 
-	for _, peer := range sets.List(peers) {
-		params := database.DBParams{
-			User: apiv1.UserOperator,
-			Pass: operatorPass,
-			Host: peer,
-		}
-		readTimeout, err := utils.GetReadTimeout()
-		if err != nil {
-			return "", nil, errors.Wrap(err, "get read timeout")
-		}
-		params.ReadTimeoutSeconds = readTimeout
+	readTimeout, err := utils.GetReadTimeout()
+	if err != nil {
+		return "", nil, errors.Wrap(err, "get read timeout")
+	}
 
-		db, err := database.NewDatabase(ctx, params)
+	for _, peer := range sets.List(peers) {
+		db, err := connectAsOperator(ctx, peer, operatorPass, readTimeout)
 		if err != nil {
-			return "", nil, errors.Wrapf(err, "connect to %s", peer)
+			return "", nil, err
 		}
 
 		defer func() {
@@ -360,19 +354,13 @@ func selectDonor(ctx context.Context, fqdn, primary string, replicas []string) (
 		return "", errors.Wrapf(err, "get %s password", apiv1.UserOperator)
 	}
 
-	for _, replica := range replicas {
-		params := database.DBParams{
-			User: apiv1.UserOperator,
-			Pass: operatorPass,
-			Host: replica,
-		}
-		readTimeout, err := utils.GetReadTimeout()
-		if err != nil {
-			return "", errors.Wrap(err, "get read timeout")
-		}
-		params.ReadTimeoutSeconds = readTimeout
+	readTimeout, err := utils.GetReadTimeout()
+	if err != nil {
+		return "", errors.Wrap(err, "get read timeout")
+	}
 
-		db, err := database.NewDatabase(ctx, params)
+	for _, replica := range replicas {
+		db, err := connectAsOperator(ctx, replica, operatorPass, readTimeout)
 		if err != nil {
 			continue
 		}
@@ -452,9 +440,10 @@ func electPrimary(ctx context.Context, s gtidSubtractor, gtids map[string]string
 		return "", nil
 	}
 
-	complete := make([]string, 0, len(gtids))
+	peers := sets.List(sets.KeySet(gtids))
+	complete := make([]string, 0, len(peers))
 
-	for _, candidate := range sets.List(sets.KeySet(gtids)) {
+	for _, candidate := range peers {
 		holdsAll := true
 
 		for peer, gtid := range gtids {
@@ -479,7 +468,7 @@ func electPrimary(ctx context.Context, s gtidSubtractor, gtids map[string]string
 
 	switch len(complete) {
 	case 0:
-		return "", errors.Wrapf(errDivergedPeers, "none of %v holds every transaction", sets.List(sets.KeySet(gtids)))
+		return "", errors.Wrapf(errDivergedPeers, "none of %v holds every transaction", peers)
 	case 1:
 		return complete[0], nil
 	default:
@@ -513,21 +502,24 @@ func cloneRequired(ctx context.Context, s gtidSubtractor, local, donorExecuted, 
 	return missing != "", nil
 }
 
-func donorGTIDs(ctx context.Context, donor, operatorPass string) (string, string, error) {
-	params := database.DBParams{
-		User: apiv1.UserOperator,
-		Pass: operatorPass,
-		Host: donor,
-	}
-	readTimeout, err := utils.GetReadTimeout()
+func connectAsOperator(ctx context.Context, host, operatorPass string, readTimeout uint32) (*database.DB, error) {
+	db, err := database.NewDatabase(ctx, database.DBParams{
+		User:               apiv1.UserOperator,
+		Pass:               operatorPass,
+		Host:               host,
+		ReadTimeoutSeconds: readTimeout,
+	})
 	if err != nil {
-		return "", "", errors.Wrap(err, "get read timeout")
+		return nil, errors.Wrapf(err, "connect to %s", host)
 	}
-	params.ReadTimeoutSeconds = readTimeout
 
-	db, err := database.NewDatabase(ctx, params)
+	return db, nil
+}
+
+func donorGTIDs(ctx context.Context, donor, operatorPass string, readTimeout uint32) (string, string, error) {
+	db, err := connectAsOperator(ctx, donor, operatorPass, readTimeout)
 	if err != nil {
-		return "", "", errors.Wrapf(err, "connect to %s", donor)
+		return "", "", err
 	}
 
 	defer func() {
