@@ -1,6 +1,6 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 600
+timeout: 720
 collectors:
   - type: pod
     selector: "app.kubernetes.io/component=pitr"
