@@ -1,0 +1,105 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 900
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster=$(get_cluster_name)
+
+      generation=$(kubectl -n "${NAMESPACE}" get sts "${cluster}-orc" -o jsonpath='{.metadata.generation}')
+
+      # A budget the test can afford to spend. Abort is the policy that leaves
+      # the cluster without a primary rather than lose transactions.
+      kubectl -n "${NAMESPACE}" patch ps "${cluster}" --type merge \
+          -p '{"spec":{"orchestrator":{"failover":{"timeout":"1m","onTimeout":"Abort"}}}}'
+
+      # The spec has to reach the hook orchestrator actually runs, which takes
+      # a rollout of the orchestrator pods.
+      retry=0
+      until [[ $(kubectl -n "${NAMESPACE}" get sts "${cluster}-orc" -o jsonpath='{.metadata.generation}') -gt ${generation} ]]; do
+          if [[ ${retry} -ge 24 ]]; then
+              echo "the orchestrator StatefulSet never picked up the new failover spec"
+              exit 1
+          fi
+          sleep 5
+          retry=$((retry + 1))
+      done
+      kubectl -n "${NAMESPACE}" rollout status sts "${cluster}-orc" --timeout=300s
+
+      for pod in $(kubectl -n "${NAMESPACE}" get pods -l 'app.kubernetes.io/component=orchestrator' -o jsonpath='{.items[*].metadata.name}'); do
+          kubectl -n "${NAMESPACE}" wait --for=condition=ready pod "${pod}" --timeout=120s
+
+          retry=0
+          until kubectl -n "${NAMESPACE}" exec "${pod}" -c orchestrator -- \
+              jq -r '.PreFailoverProcesses[] | select(contains("orc-handler failover"))' \
+              /etc/orchestrator/config/orchestrator.conf.json \
+              | grep -q -- "-timeout 1m0s -on-timeout Abort"; do
+              if [[ ${retry} -ge 30 ]]; then
+                  echo "${pod} never got the Abort policy"
+                  exit 1
+              fi
+              sleep 5
+              retry=$((retry + 1))
+          done
+      done
+
+      wait_cluster_consistency_async "${cluster}" 3 3
+
+      primary_before=$(get_primary_from_label)
+      echo "${primary_before}" > "${TEMP_DIR}/dead-primary"
+
+      # A quota of zero pods leaves the running ones alone and refuses every new
+      # one, so the StatefulSet cannot bring the primary back: this is a node
+      # that is gone with the volume on it, not a pod being rescheduled.
+      kubectl -n "${NAMESPACE}" apply -f - <<-QUOTA
+      	apiVersion: v1
+      	kind: ResourceQuota
+      	metadata:
+      	  name: no-new-pods
+      	spec:
+      	  hard:
+      	    pods: "0"
+      	QUOTA
+      # The quota is enforced only once its status is populated.
+      kubectl -n "${NAMESPACE}" wait --for=jsonpath='{.status.hard.pods}'=0 resourcequota/no-new-pods --timeout=60s
+
+      # Strand a row on the primary, as in step 04. This time nothing can
+      # recover it.
+      for pod in $(get_mysql_pods | grep -v "^${primary_before}$"); do
+          run_mysql "STOP REPLICA IO_THREAD" "-h ${pod}.${cluster}-mysql"
+      done
+
+      run_mysql "INSERT myDB.myTable (id) VALUES (100502)" "-h $(get_haproxy_svc "${cluster}")"
+
+      kubectl -n "${NAMESPACE}" delete pod "${primary_before}" --force --grace-period=0
+
+      # The hook waits the whole budget for the pod to come back, then the
+      # next attempt finds the budget spent and aborts.
+      retry=0
+      until kubectl -n "${NAMESPACE}" get events \
+          --field-selector "reason=FailoverBlocked,involvedObject.name=${cluster}" \
+          -o jsonpath='{.items[*].message}' | grep -q "Could not recover the transactions stranded on ${primary_before}"; do
+          if [[ ${retry} -ge 60 ]]; then
+              echo "the failover was never blocked"
+              kubectl -n "${NAMESPACE}" get events --field-selector "involvedObject.name=${cluster}"
+              exit 1
+          fi
+          sleep 5
+          retry=$((retry + 1))
+      done
+
+      retry=0
+      until [[ $(get_cluster_condition "${cluster}" AsyncFailoverBlocked) == "True" ]]; do
+          if [[ ${retry} -ge 24 ]]; then
+              echo "AsyncFailoverBlocked never became True"
+              kubectl -n "${NAMESPACE}" get ps "${cluster}" -o jsonpath='{.status.conditions}'
+              exit 1
+          fi
+          sleep 5
+          retry=$((retry + 1))
+      done
+    timeout: 900

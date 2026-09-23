@@ -1,0 +1,24 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 300
+commands:
+  - script: |-
+      set -o errexit
+
+      source ../../functions
+
+      cluster=$(get_cluster_name)
+
+      # Consumed once and removed: left in place it would re-promote on every
+      # reconcile, and it is a request to lose transactions.
+      annotation=$(kubectl -n "${NAMESPACE}" get ps "${cluster}" \
+          -o jsonpath='{.metadata.annotations.percona\.com/force-promote-with-possible-data-loss}')
+      if [[ -n ${annotation} ]]; then
+          echo "the force-promote annotation was not removed: ${annotation}"
+          exit 1
+      fi
+
+      # Losing transactions has to leave a trace the user can find.
+      kubectl -n "${NAMESPACE}" get events \
+          --field-selector "reason=FailoverForced,involvedObject.name=${cluster}" \
+          -o jsonpath='{.items[*].message}' | grep -q "Forced the promotion"

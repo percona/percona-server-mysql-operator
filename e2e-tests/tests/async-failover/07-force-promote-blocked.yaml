@@ -1,0 +1,50 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 900
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster=$(get_cluster_name)
+      dead=$(cat "${TEMP_DIR}/dead-primary")
+
+      # "true" leaves the choice of replica to the operator. This is the way
+      # out of a blocked failover, and it gives the stranded row up.
+      kubectl -n "${NAMESPACE}" annotate ps "${cluster}" \
+          "percona.com/force-promote-with-possible-data-loss=true" --overwrite
+
+      primary_after=$(wait_for_primary "changed:${dead}" 600)
+      echo "Forced the promotion of ${primary_after}"
+      echo "${primary_after}" > "${TEMP_DIR}/forced-primary"
+
+      # The old primary holds a transaction nobody else has, so its data
+      # directory cannot rejoin: bootstrap refuses to clone over it. Its volume
+      # goes before the pod is let back in, which is the procedure for a node
+      # lost with its disk.
+      kubectl -n "${NAMESPACE}" delete pvc "datadir-${dead}" --wait=true
+      kubectl -n "${NAMESPACE}" delete resourcequota no-new-pods
+
+      # The StatefulSet controller backs off after the refused creations; an
+      # update wakes it up.
+      kubectl -n "${NAMESPACE}" annotate sts "${cluster}-mysql" "percona.com/e2e-nudge=$(date +%s)" --overwrite
+
+      wait_cluster_consistency_async "${cluster}" 3 3
+
+      rows=$(run_mysql "SELECT id FROM myDB.myTable ORDER BY id" "-h $(get_haproxy_svc "${cluster}")")
+      echo "rows after forced promotion: ${rows}"
+
+      echo "${rows}" | grep -q 100500
+      echo "${rows}" | grep -q 100501
+      echo "${rows}" | grep -q 100600
+
+      # The row was on the dead primary and nowhere else. Finding it here would
+      # mean the promotion did not lose what it said it would, so the data came
+      # from a place the test did not intend.
+      if echo "${rows}" | grep -q 100502; then
+          echo "row 100502 survived a promotion that was supposed to lose it"
+          exit 1
+      fi
+    timeout: 900

@@ -1,5 +1,6 @@
 async-data-at-rest-encryption
 async-global-metadata
+async-failover
 async-ignore-annotations
 async-pitr-s3
 async-upgrade
