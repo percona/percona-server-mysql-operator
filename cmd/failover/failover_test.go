@@ -677,6 +677,45 @@ func TestUpdateRelayLogs(t *testing.T) {
 		assert.Empty(t, target)
 		assert.Equal(t, uint64(0), startPos)
 	})
+
+	t.Run("precedes every source log after the first with a Rotate event", func(t *testing.T) {
+		l := newRelayLayout(t)
+		before, err := os.ReadFile(l.target)
+		require.NoError(t, err)
+
+		dir := t.TempDir()
+		h := sourceHeader{serverID: 42, checksummed: true}
+		// The first log is a tail cut at a position, so it carries neither a magic
+		// number nor a format description event. Every later one is a whole file.
+		first := writeFile(t, dir, "binlog.000004", []byte("tail-of-four"))
+		second := writeFile(t, dir, "binlog.000005", append([]byte(magic), append(fde(42, true), []byte("whole-five")...)...))
+
+		_, _, err = updateRelayLogs([]string{first, second}, "relay-bin.000002", l.logs(t))
+		require.NoError(t, err)
+
+		after, err := os.ReadFile(l.target)
+		require.NoError(t, err)
+		want := string(before) + "tail-of-four" +
+			string(rotateEvent("binlog.000005", h)) + string(fde(42, true)) + "whole-five"
+		assert.Equal(t, want, string(after))
+
+		assert.Equal(t, 1, bytes.Count(after, binlogMagic), "only the relay log's own magic number may remain")
+		l.assertUntouched(t)
+	})
+
+	t.Run("a source log with no format description event is appended without a Rotate event", func(t *testing.T) {
+		l := newRelayLayout(t)
+		before, err := os.ReadFile(l.target)
+		require.NoError(t, err)
+
+		_, _, err = updateRelayLogs(newSourceLogs(t), "relay-bin.000002", l.logs(t))
+		require.NoError(t, err)
+
+		after, err := os.ReadFile(l.target)
+		require.NoError(t, err)
+		assert.Equal(t, string(before)+"tail-of-four"+"whole-five"+"whole-six", string(after),
+			"a splice that cannot name the source's files must still land")
+	})
 }
 
 func TestValidateSourceLogs(t *testing.T) {

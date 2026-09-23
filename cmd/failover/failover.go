@@ -617,7 +617,23 @@ func spliceInto(target string, startPos uint64, sourceLogs []string) error {
 	}
 
 	for i, sourceLog := range sourceLogs {
-		// Only the cut first log is already free of its magic number.
+		// A receiver precedes every source rotation with an artificial Rotate event
+		// naming the new file. Without it the applier keeps reporting the previous
+		// file's name while taking the new file's positions, so its source
+		// coordinates go backwards — and orchestrator ranks promotion candidates by
+		// exactly those coordinates.
+		if i > 0 {
+			if err := appendRotate(relay, sourceLog); err != nil {
+				return errors.Join(
+					fmt.Errorf("append Rotate event for %s: %w", filepath.Base(sourceLog), err),
+					rollbackSplice(relay, target, startPos),
+				)
+			}
+		}
+
+		// The first log is the source's binary log cut at the position the replica
+		// had already read, so it carries no magic number. Every later one is a
+		// whole file and does.
 		w, err := appendLog(relay, sourceLog, i > 0)
 		if err != nil {
 			return errors.Join(

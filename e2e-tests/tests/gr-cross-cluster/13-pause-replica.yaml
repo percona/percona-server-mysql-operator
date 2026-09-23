@@ -1,6 +1,5 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
-timeout: 420
 commands:
   - script: |-
       set -o errexit
@@ -18,4 +17,4 @@ commands:
 
       kubectl patch -n "${NAMESPACE}" ps gr-cross-cluster-dc1 --type=merge \
         -p '{"spec":{"pause":true}}'
-
+    timeout: 420
