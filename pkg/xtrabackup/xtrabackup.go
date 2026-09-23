@@ -366,6 +366,14 @@ func (conf *BackupConfig) XbcloudPutArgs() []string {
 	return args
 }
 
+func (conf *BackupConfig) XtrabackupArgs() []string {
+	if conf == nil || conf.ContainerOptions == nil {
+		return nil
+	}
+
+	return conf.ContainerOptions.Args.Xtrabackup
+}
+
 func (conf *BackupConfig) XbcloudDeleteArgs() []string {
 	args := []string{string(XBCloudActionDelete), "--parallel=10", "--curl-retriable-errors=7"}
 	if conf.ContainerOptions != nil {

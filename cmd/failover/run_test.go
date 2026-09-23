@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"flag"
 	"os"
@@ -107,6 +108,7 @@ func newJobFixture(t *testing.T) *jobFixture {
 			source:       "mysql-1.mysql",
 			wait:         true,
 			stagingDir:   filepath.Join(t.TempDir(), "source-logs"),
+			lockPath:     filepath.Join(t.TempDir(), "failover.lock"),
 			applyPoll:    time.Millisecond,
 			applyTimeout: time.Second,
 			fetchTimeout: testFetchTimeout,
@@ -141,6 +143,22 @@ func TestRun(t *testing.T) {
 		j.relay.assertUntouched(t)
 	})
 
+	t.Run("an instance with no replication channel is left alone", func(t *testing.T) {
+		j := newJobFixture(t)
+		j.fake.err = sql.ErrNoRows
+		before, err := os.ReadFile(j.relay.target)
+		require.NoError(t, err)
+
+		require.NoError(t, run(t.Context(), j.cfg))
+
+		assert.Empty(t, j.fake.ops, "replication must not be touched")
+
+		after, err := os.ReadFile(j.relay.target)
+		require.NoError(t, err)
+		assert.Equal(t, before, after)
+		j.relay.assertUntouched(t)
+	})
+
 	t.Run("-wait=false returns once the applier is started", func(t *testing.T) {
 		j := newJobFixture(t)
 		j.cfg.wait = false
@@ -150,7 +168,7 @@ func TestRun(t *testing.T) {
 		require.NoError(t, run(t.Context(), j.cfg))
 
 		assert.Equal(t, wantOps, j.fake.ops)
-		assert.Zero(t, j.fake.calls, "the applier must not be polled")
+		assert.Equal(t, 1, j.fake.calls, "only the pre-check reads the status; the applier must not be polled")
 
 		after, err := os.ReadFile(j.relay.target)
 		require.NoError(t, err)
@@ -328,7 +346,7 @@ func TestRun(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "start SQL_THREAD")
 		assert.Equal(t, wantOps, j.fake.ops)
-		assert.Equal(t, 0, j.fake.calls, "no point polling an applier that never started")
+		assert.Equal(t, 1, j.fake.calls, "only the pre-check; no point polling an applier that never started")
 	})
 
 	t.Run("the applier never drains the splice", func(t *testing.T) {
@@ -341,6 +359,19 @@ func TestRun(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "apply relay logs")
 		assert.Equal(t, wantOps, j.fake.ops)
+	})
+
+	t.Run("a splice already in progress stops this one", func(t *testing.T) {
+		j := newJobFixture(t)
+		held, err := lockSplice(j.cfg.lockPath)
+		require.NoError(t, err)
+		t.Cleanup(func() { held.Close() }) //nolint:errcheck
+
+		err = run(t.Context(), j.cfg)
+
+		require.ErrorIs(t, err, errLocked)
+		assert.Empty(t, j.fake.ops, "replication must not be touched by a losing run")
+		j.relay.assertUntouched(t)
 	})
 
 	t.Run("the applier reports a failure", func(t *testing.T) {
@@ -383,6 +414,7 @@ func TestProductionConfig(t *testing.T) {
 	assert.Equal(t, sourceStreamURL("mysql-1.mysql"), cfg.sourceURL("mysql-1.mysql"))
 	assert.Equal(t, "mysql-1.mysql", cfg.source)
 	assert.Equal(t, "/tmp/source-logs", cfg.stagingDir)
+	assert.Equal(t, lockPath, cfg.lockPath)
 	assert.True(t, cfg.wait)
 	assert.Equal(t, relayLogApplyPoll, cfg.applyPoll)
 	assert.Equal(t, 5*time.Minute, cfg.applyTimeout)

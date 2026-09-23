@@ -5,6 +5,9 @@ metadata:
   finalizers:
     - percona.com/delete-backup
 spec:
-  clusterName: demand-backup-retry
+  clusterName: demand-backup
   storageName: <storage-name>
-  suspendedDeadlineSeconds: 30
+  containerOptions:
+    args:
+      xtrabackup:
+        - "--defaults-file=/tmp/xb-defaults.cnf"
