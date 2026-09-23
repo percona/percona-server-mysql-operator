@@ -357,7 +357,7 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 		}
 
 		log.Info("Ensuring oldest mysql node is the primary")
-		err = orchestrator.EnsureNodeIsPrimary(ctx, r.ClientCmd, orcPod, cr.ClusterHint(), firstPod.GetName(), mysql.DefaultPort)
+		err = orchestrator.EnsureNodeIsPrimary(ctx, r.ClientCmd, orcPod, cr.ClusterHint(), firstPod.GetName(), mysql.DefaultPort, cr.FailoverSpec().SwitchoverCatchUp())
 		if err != nil {
 			if orchestratorTopologyUnavailable(err) {
 				log.Info("Could not ensure primary via Orchestrator, proceeding with deletion", "reason", err.Error())

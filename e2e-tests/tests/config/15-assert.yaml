@@ -7,21 +7,24 @@ kind: ConfigMap
 metadata:
   name: 15-check-orchestrator-config-0
 data:
-  fail_master_promotion_on_lag_minutes: "30"
+  unseen_instance_forget_hours: "3"
   recovery_period_block_seconds: "300"
+  fail_master_promotion_on_lag_minutes: "0"
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: 15-check-orchestrator-config-1
 data:
-  fail_master_promotion_on_lag_minutes: "30"
+  unseen_instance_forget_hours: "3"
   recovery_period_block_seconds: "300"
+  fail_master_promotion_on_lag_minutes: "0"
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: 15-check-orchestrator-config-2
 data:
-  fail_master_promotion_on_lag_minutes: "30"
+  unseen_instance_forget_hours: "3"
   recovery_period_block_seconds: "300"
+  fail_master_promotion_on_lag_minutes: "0"

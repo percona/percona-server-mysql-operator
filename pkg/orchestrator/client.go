@@ -236,12 +236,26 @@ func RemovePeer(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, p
 }
 
 const (
-	DowntimeOwner             = "percona-server-mysql-operator"
-	DowntimeReasonSwitchover  = "graceful-switchover"
-	switchoverDowntimeSeconds = 600
+	DowntimeOwner            = "percona-server-mysql-operator"
+	DowntimeReasonSwitchover = "graceful-switchover"
+
+	// switchoverDowntimeFactor scales the takeover's own catch-up wait, which
+	// orchestrator bounds by ReasonableMaintenanceReplicationLagSeconds. A
+	// downtime that merely matched it would expire just as the promotion starts,
+	// which is the case it is there to protect. It still expires on its own, so
+	// an operator that dies mid-switchover cannot leave behind an instance
+	// orchestrator won't recover.
+	switchoverDowntimeFactor = 2
 )
 
-func EnsureNodeIsPrimary(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, clusterHint, host string, port int) (err error) {
+// SwitchoverDowntime is how long the old primary is kept downtimed during a
+// graceful switchover, derived from the configured catch-up wait so the two
+// cannot drift apart.
+func SwitchoverDowntime(catchUp time.Duration) int {
+	return int(catchUp.Seconds()) * switchoverDowntimeFactor
+}
+
+func EnsureNodeIsPrimary(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, clusterHint, host string, port int, catchUp time.Duration) (err error) {
 	primary, err := ClusterPrimary(ctx, cliCmd, pod, clusterHint)
 	if err != nil {
 		return errors.Wrap(err, "get cluster primary")
@@ -252,7 +266,7 @@ func EnsureNodeIsPrimary(ctx context.Context, cliCmd clientcmd.Client, pod *core
 	}
 
 	if err := BeginDowntime(ctx, cliCmd, pod, primary.Key.Hostname, int(primary.Key.Port),
-		DowntimeOwner, DowntimeReasonSwitchover, switchoverDowntimeSeconds); err != nil {
+		DowntimeOwner, DowntimeReasonSwitchover, SwitchoverDowntime(catchUp)); err != nil {
 		return errors.Wrapf(err, "begin downtime on %s", primary.Key.Hostname)
 	}
 	defer func() {

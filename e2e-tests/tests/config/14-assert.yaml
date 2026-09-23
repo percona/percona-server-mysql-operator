@@ -8,5 +8,11 @@ commands:
       source ../../functions
 
       data=$(kubectl -n "${NAMESPACE}" get configmap "$(get_cluster_name)-orc" -o jsonpath='{.data.orchestrator\.conf\.json}')
-      echo "${data}" | grep -F '"FailMasterPromotionOnLagMinutes":30' >/dev/null || echo "${data}" | grep -F '"FailMasterPromotionOnLagMinutes": 30' >/dev/null
+      echo "${data}" | grep -F '"UnseenInstanceForgetHours":3' >/dev/null || echo "${data}" | grep -F '"UnseenInstanceForgetHours": 3' >/dev/null
       echo "${data}" | grep -F '"RecoveryPeriodBlockSeconds":300' >/dev/null || echo "${data}" | grep -F '"RecoveryPeriodBlockSeconds": 300' >/dev/null
+
+      # FailMasterPromotionOnLagMinutes is reserved: the lag it measures grows
+      # with the failover hook's own runtime, so a non-zero value vetoes exactly
+      # the failovers the hook just made safe. The override must be dropped.
+      echo "${data}" | grep -F 'FailMasterPromotionOnLagMinutes' >/dev/null && exit 1
+      exit 0
