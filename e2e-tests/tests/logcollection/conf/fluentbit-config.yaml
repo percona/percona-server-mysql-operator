@@ -4,4 +4,3 @@ pipeline:
       match: "*"
       record:
         - cluster_name logcollection
-        - kuttl_config_check applied

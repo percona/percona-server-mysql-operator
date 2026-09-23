@@ -696,66 +696,66 @@ spec:
   logcollector:
     enabled: true
     image: perconalab/fluentbit:main-logcollector
-    imagePullPolicy: Always
-    configuration: |
-      pipeline:
-        filters:
-          - name: record_modifier
-            match: "*"
-            record:
-              - cluster_name cluster1
-    env: []
-    envFrom: []
-    containerSecurityContext:
-      privileged: false
-      runAsGroup: 1001
-      runAsUser: 1001
-    resources:
-      limits:
-        cpu: 350m
-        memory: 200M
-      requests:
-        cpu: 300m
-        memory: 150M
-    readinessProbe:
-      initialDelaySeconds: 5
-      periodSeconds: 10
-      tcpSocket:
-        port: 2020
-    livenessProbe:
-      initialDelaySeconds: 30
-      periodSeconds: 15
-      tcpSocket:
-        port: 2020
-    volumeMounts: []
-    volumes: []
-    logRotate:
-      schedule: 0 0 * * *
-      configuration: |
-        /var/lib/mysql/log/*.log {
-            daily
-            maxsize 100M
-            rotate 7
-            missingok
-            nocompress
-            notifempty
-            copytruncate
-            sharedscripts
-        }
-      extraConfig:
-        name: my-logrotate-config
-      readinessProbe:
-        exec:
-          command:
-            - /bin/true
-        initialDelaySeconds: 5
-        periodSeconds: 10
-      livenessProbe:
-        exec:
-          command:
-            - /bin/true
-        initialDelaySeconds: 30
-        periodSeconds: 15
+#    imagePullPolicy: Always
+#    configuration: |
+#      pipeline:
+#        filters:
+#          - name: record_modifier
+#            match: "*"
+#            record:
+#              - cluster_name cluster1
+#    env: []
+#    envFrom: []
+#    containerSecurityContext:
+#      privileged: false
+#      runAsGroup: 1001
+#      runAsUser: 1001
+#    resources:
+#      limits:
+#        cpu: 350m
+#        memory: 200M
+#      requests:
+#        cpu: 300m
+#        memory: 150M
+#    readinessProbe:
+#      initialDelaySeconds: 5
+#      periodSeconds: 10
+#      tcpSocket:
+#        port: 2020
+#    livenessProbe:
+#      initialDelaySeconds: 30
+#      periodSeconds: 15
+#      tcpSocket:
+#        port: 2020
+#    volumeMounts: []
+#    volumes: []
+#    logRotate:
+#      schedule: 0 0 * * *
+#      configuration: |
+#        /var/lib/mysql/log/*.log {
+#            daily
+#            maxsize 100M
+#            rotate 7
+#            missingok
+#            nocompress
+#            notifempty
+#            copytruncate
+#            sharedscripts
+#        }
+#      extraConfig:
+#        name: my-logrotate-config
+#      readinessProbe:
+#        exec:
+#          command:
+#            - /bin/true
+#        initialDelaySeconds: 5
+#        periodSeconds: 10
+#      livenessProbe:
+#        exec:
+#          command:
+#            - /bin/true
+#        initialDelaySeconds: 30
+#        periodSeconds: 15
   backup:
     enabled: true
     pitr:
