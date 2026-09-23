@@ -165,9 +165,7 @@ func logCollectorDefaults(spec *apiv1.LogCollectorSpec) {
 
 func tcpProbe(port int32, initialDelay, period int32) *corev1.Probe {
 	return &corev1.Probe{
-		ProbeHandler: corev1.ProbeHandler{
-			TCPSocket: &corev1.TCPSocketAction{Port: intstr.FromInt32(port)},
-		},
+		TCPSocket:           &corev1.TCPSocketAction{Port: intstr.FromInt32(port)},
 		InitialDelaySeconds: initialDelay,
 		PeriodSeconds:       period,
 	}
@@ -175,9 +173,7 @@ func tcpProbe(port int32, initialDelay, period int32) *corev1.Probe {
 
 func execProbe(command []string, initialDelay, period int32) *corev1.Probe {
 	return &corev1.Probe{
-		ProbeHandler: corev1.ProbeHandler{
-			Exec: &corev1.ExecAction{Command: command},
-		},
+		Exec:                &corev1.ExecAction{Command: command},
 		InitialDelaySeconds: initialDelay,
 		PeriodSeconds:       period,
 	}

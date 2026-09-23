@@ -48,17 +48,15 @@ func ownedConfigMap(t *testing.T, cr *apiv1.PerconaServerMySQL, name string, dat
 	t.Helper()
 
 	return &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: testNamespace,
-			OwnerReferences: []metav1.OwnerReference{{
-				APIVersion: apiv1.GroupVersion.String(),
-				Kind:       "PerconaServerMySQL",
-				Name:       cr.Name,
-				UID:        cr.UID,
-				Controller: new(true),
-			}},
-		},
+		Name:      name,
+		Namespace: testNamespace,
+		OwnerReferences: []metav1.OwnerReference{{
+			APIVersion: apiv1.GroupVersion.String(),
+			Kind:       "PerconaServerMySQL",
+			Name:       cr.Name,
+			UID:        cr.UID,
+			Controller: new(true),
+		}},
 		Data: data,
 	}
 }
@@ -111,7 +109,7 @@ func TestResolveDefaultEnabled(t *testing.T) {
 			objs := []client.Object{cr}
 			if tc.stsExists {
 				objs = append(objs, &appsv1.StatefulSet{
-					ObjectMeta: metav1.ObjectMeta{Name: testMySQLSTS.Name, Namespace: testMySQLSTS.Namespace},
+					Name: testMySQLSTS.Name, Namespace: testMySQLSTS.Namespace,
 				})
 			}
 			cl := buildFakeClient(t, objs...)
@@ -212,11 +210,9 @@ func TestReconcileFluentBitConfigMap(t *testing.T) {
 	t.Run("leaves a config map the operator does not own", func(t *testing.T) {
 		cr := testCR()
 		foreign := &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      ConfigMapName(testClusterName),
-				Namespace: testNamespace,
-			},
-			Data: map[string]string{"keep": "me"},
+			Name:      ConfigMapName(testClusterName),
+			Namespace: testNamespace,
+			Data:      map[string]string{"keep": "me"},
 		}
 		cl := buildFakeClient(t, cr, foreign)
 
@@ -362,8 +358,8 @@ func TestConfigHash(t *testing.T) {
 			}
 		})
 		extra := &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{Name: "extra", Namespace: testNamespace},
-			Data:       map[string]string{"a.conf": "first"},
+			Name: "extra", Namespace: testNamespace,
+			Data: map[string]string{"a.conf": "first"},
 		}
 		cl := buildFakeClient(t, cr, extra)
 
@@ -414,7 +410,7 @@ func TestStampConfigHash(t *testing.T) {
 		cr := testCR()
 		cl := buildFakeClient(t, cr)
 		tmpl := &corev1.PodTemplateSpec{
-			ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{"keep": "me"}},
+			Annotations: map[string]string{"keep": "me"},
 		}
 
 		require.NoError(t, StampConfigHash(t.Context(), cl, cr, tmpl))
@@ -450,7 +446,7 @@ func TestResolveDefaultEnabledIsStableAcrossReconciles(t *testing.T) {
 	// reconcile must not read that as "pre-existing cluster" and turn the
 	// collector back off, which would roll the pods on every other reconcile.
 	require.NoError(t, cl.Create(t.Context(), &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{Name: testMySQLSTS.Name, Namespace: testMySQLSTS.Namespace},
+		Name: testMySQLSTS.Name, Namespace: testMySQLSTS.Namespace,
 	}))
 
 	// The controller re-reads the CR from the API on every reconcile.

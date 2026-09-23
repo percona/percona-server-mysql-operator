@@ -79,12 +79,8 @@ func Volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 	if cr.Spec.LogCollector.Configuration != "" {
 		vols = append(vols, corev1.Volume{
 			Name: configVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: ConfigMapName(cr.Name),
-					},
-				},
+			ConfigMap: &corev1.ConfigMapVolumeSource{
+				Name: ConfigMapName(cr.Name),
 			},
 		})
 	}
@@ -106,9 +102,7 @@ func logrotateVolume(cr *apiv1.PerconaServerMySQL) *corev1.Volume {
 	if lr.Configuration != "" {
 		sources = append(sources, corev1.VolumeProjection{
 			ConfigMap: &corev1.ConfigMapProjection{
-				LocalObjectReference: corev1.LocalObjectReference{
-					Name: logrotate.ConfigMapName(cr.Name),
-				},
+				Name: logrotate.ConfigMapName(cr.Name),
 			},
 		})
 	}
@@ -121,10 +115,8 @@ func logrotateVolume(cr *apiv1.PerconaServerMySQL) *corev1.Volume {
 	}
 
 	return &corev1.Volume{
-		Name: logrotate.VolumeName,
-		VolumeSource: corev1.VolumeSource{
-			Projected: &corev1.ProjectedVolumeSource{Sources: sources},
-		},
+		Name:      logrotate.VolumeName,
+		Projected: &corev1.ProjectedVolumeSource{Sources: sources},
 	}
 }
 

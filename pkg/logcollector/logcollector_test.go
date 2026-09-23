@@ -268,7 +268,7 @@ func TestContainersLogContainer(t *testing.T) {
 		cr.Spec.LogCollector.ContainerSecurityContext = &corev1.SecurityContext{Privileged: new(false)}
 		cr.Spec.LogCollector.Env = []corev1.EnvVar{{Name: "EXTRA", Value: "1"}}
 		cr.Spec.LogCollector.EnvFrom = []corev1.EnvFromSource{{
-			SecretRef: &corev1.SecretEnvSource{LocalObjectReference: corev1.LocalObjectReference{Name: "s"}},
+			SecretRef: &corev1.SecretEnvSource{Name: "s"},
 		}}
 	})
 
