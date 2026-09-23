@@ -461,7 +461,7 @@ prepare_vault_tls() {
 	local name=$1
 	local namespace=$2
 	local platform=$3
-	local csr_name=vault-csr-${namespace}
+	local csr_name=vault-csr-${name}-${namespace}
 	local csr_api_ver="v1"
 	local csr_signer
 
@@ -691,7 +691,7 @@ destroy_vault() {
 	local tmp_dir=/tmp/vault
 	local selector="app.kubernetes.io/instance=${name}"
 	local vault_ns
-	vault_ns="$(helm list --all-namespaces --filter "${name}" | tail -n1 | awk -F' ' '{print $2}' | $sed 's/NAMESPACE//')"
+	vault_ns="$(helm list --all-namespaces --filter "^${name}\$" -o json | jq -r '.[0].namespace // empty')"
 	: "${vault_ns:=${namespace}}"
 
 	kubectl -n "${NAMESPACE}" delete secret vault-keyring-secret --ignore-not-found
@@ -706,8 +706,9 @@ destroy_vault() {
 	timeout 30 kubectl delete clusterrolebinding -l "${selector}" || :
 	timeout 30 kubectl delete clusterrole -l "${selector}" || :
 
-	kubectl delete csr vault-csr-${vault_ns} --ignore-not-found
+	kubectl delete csr vault-csr-${name}-${vault_ns} --ignore-not-found
 	timeout 120 kubectl delete namespace "${vault_ns}" --ignore-not-found || :
+	kubectl wait --for=delete "namespace/${vault_ns}" --timeout=120s || :
 
 	rm -rf ${tmp_dir}
 }
