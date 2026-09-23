@@ -3,11 +3,7 @@ package innodbcluster
 import (
 	"fmt"
 	"strings"
-
-	"github.com/pkg/errors"
 )
-
-var ErrMemberNotFound = errors.New("member not found")
 
 type ClusterStatus string
 
