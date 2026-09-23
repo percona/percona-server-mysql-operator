@@ -537,6 +537,8 @@ var reservedOrchestratorConfigKeys = map[string]bool{
 	"FailMasterPromotionIfSQLThreadNotUpToDate": true,
 }
 
+const handlerBinary = "/opt/percona/orc-handler"
+
 func ConfigMapData(cr *apiv1.PerconaServerMySQL) (string, error) {
 	config := make(map[string]any, 0)
 
@@ -609,6 +611,11 @@ func RBAC(cr *apiv1.PerconaServerMySQL) (*rbacv1.Role, *rbacv1.RoleBinding, *cor
 			APIGroups: []string{cr.GroupVersionKind().Group},
 			Resources: []string{"perconaservermysqls"},
 			Verbs:     []string{"get"},
+		},
+		{
+			APIGroups: []string{corev1.SchemeGroupVersion.Group},
+			Resources: []string{"events"},
+			Verbs:     []string{"create"},
 		},
 	}
 

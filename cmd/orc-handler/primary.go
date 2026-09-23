@@ -24,6 +24,13 @@ func runSetPrimaryLabel(ctx context.Context, args []string) error {
 		return errors.New("primary flag should not be empty")
 	}
 
+	// The cluster has a primary again, so no failure is still being timed. This
+	// runs from every Post*FailoverProcesses hook, which also covers the clusters
+	// someone repaired by hand and then switched over.
+	if err := newGate().clearAllSeen(); err != nil {
+		log.Error(err, "failed to clear the failover timeouts")
+	}
+
 	return setPrimaryLabel(ctx, *primary)
 }
 
@@ -70,15 +77,19 @@ func setPrimaryLabel(ctx context.Context, primary string) error {
 
 	if primaryPod.GetLabels()[naming.LabelMySQLPrimary] == "true" {
 		log.Info("Primary pod is not changed, skipping", "pod", primaryName)
-		return nil
+	} else {
+		pod := primaryPod.DeepCopy()
+		k8s.AddLabel(pod, naming.LabelMySQLPrimary, "true")
+		if err := cl.Patch(ctx, pod, client.StrategicMergeFrom(primaryPod)); err != nil {
+			return errors.Wrapf(err, "add label to new primary pod %v/%v", pod.GetNamespace(), pod.GetName())
+		}
+
+		log.Info("Labels added to the new primary pod", "pod", pod.GetName(), "namespace", pod.GetNamespace())
 	}
 
-	pod := primaryPod.DeepCopy()
-	k8s.AddLabel(pod, naming.LabelMySQLPrimary, "true")
-	if err := cl.Patch(ctx, pod, client.StrategicMergeFrom(primaryPod)); err != nil {
-		return errors.Wrapf(err, "add label to new primary pod %v/%v", pod.GetNamespace(), pod.GetName())
+	if err := execWorker(ctx, c, primary, "-clear-source"); err != nil {
+		return errors.Wrapf(err, "clear the replication channel on %s", primaryName)
 	}
 
-	log.Info("Labels added to the new primary pod", "pod", pod.GetName(), "namespace", pod.GetNamespace())
 	return nil
 }

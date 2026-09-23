@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"time"
@@ -331,6 +332,30 @@ func RegisterCandidate(ctx context.Context, cliCmd clientcmd.Client, pod *corev1
 	}
 
 	return orcResp.Error()
+}
+
+// AckRecovery acknowledges the recovery orchestrator identifies by uid, which
+// ends the active period it holds on the cluster and on the instance it
+// promoted. Until then orchestrator starts no other recovery for either. The
+// comment is what the audit shows as the reason.
+func AckRecovery(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, uid, comment string) error {
+	var res, errb bytes.Buffer
+	if err := exec(ctx, cliCmd, pod, ackRecoveryEndpoint(uid, comment), &res, &errb); err != nil {
+		return err
+	}
+
+	orcResp := new(orcResponse)
+	if err := unmarshalOrcResponse(res.Bytes(), orcResp); err != nil {
+		return err
+	}
+
+	return orcResp.Error()
+}
+
+// ackRecoveryEndpoint is the API path that acknowledges the recovery uid.
+// Orchestrator refuses an acknowledgement that carries no comment.
+func ackRecoveryEndpoint(uid, comment string) string {
+	return fmt.Sprintf("api/ack-recovery/uid/%s?comment=%s", uid, url.QueryEscape(comment))
 }
 
 func Cluster(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, clusterHint string) ([]*Instance, error) {

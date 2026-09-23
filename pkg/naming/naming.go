@@ -50,6 +50,11 @@ const (
 	AnnotationClusterSetRejoinCluster  AnnotationKey = perconaPrefix + "clusterset-rejoin-cluster"
 	AnnotationLastAppliedConfig        AnnotationKey = perconaPrefix + "last-applied-config"
 	AnnotationLastReloadedTLS          AnnotationKey = perconaPrefix + "last-reloaded-tls"
+
+	// AnnotationForcePromote asks the operator to promote a replica even though
+	// the transactions stranded on the dead primary could not be recovered. Its
+	// value is a MySQL pod name, or "true" to let the operator pick one.
+	AnnotationForcePromote AnnotationKey = perconaPrefix + "force-promote-with-possible-data-loss"
 )
 
 const (
