@@ -1,0 +1,20 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 180
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      # Keep the Job suspended until its deadline expires
+      kubectl wait ps-backup/demand-backup-retry-suspended-deadline \
+        -n "$NAMESPACE" --for='jsonpath={.status.state}=Failed' --timeout=90s
+
+      storage_name=$(kubectl get ps-backup/demand-backup-retry-suspended-deadline \
+        -n "$NAMESPACE" -o jsonpath='{.spec.storageName}')
+      kubectl wait \
+        job/"xb-demand-backup-retry-suspended-deadline-${storage_name}" \
+        -n "$NAMESPACE" --for=delete --timeout=30s
+
+      kubectl patch ps demand-backup-retry -n "$NAMESPACE" --type=merge \
+        -p '{"spec":{"pause":false}}'
