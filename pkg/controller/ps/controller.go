@@ -1524,13 +1524,18 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 		return errors.Wrap(err, "get cluster instances")
 	}
 
+	mysqlPods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr), cr.Namespace)
+	if err != nil {
+		return errors.Wrap(err, "get mysql pods")
+	}
+
+	if err := r.discoverMissingInstances(ctx, cr, pod, clusterInstances, mysqlPods); err != nil {
+		return errors.Wrap(err, "discover missing instances")
+	}
+
 	// In the case of a cluster downscale, we need to forget replicas that are not part of the cluster
 	if len(clusterInstances) > int(cr.MySQLSpec().Size) {
 		log.Info("Detected possible downscale, checking for replicas to forget")
-		mysqlPods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr), cr.Namespace)
-		if err != nil {
-			return errors.Wrap(err, "get mysql pods")
-		}
 
 		podSet := make(map[string]struct{}, len(mysqlPods))
 		for _, p := range mysqlPods {
@@ -1550,6 +1555,54 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 	}
 
 	return nil
+}
+
+// discoverMissingInstances registers the pods orchestrator does not know about.
+func (r *PerconaServerMySQLReconciler) discoverMissingInstances(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQL,
+	orcPod *corev1.Pod,
+	instances []*orchestrator.Instance,
+	pods []corev1.Pod,
+) error {
+	log := logf.FromContext(ctx).WithName("discoverMissingInstances")
+
+	known := make(map[string]struct{}, len(instances))
+	for _, instance := range instances {
+		known[instance.Alias] = struct{}{}
+	}
+
+	for _, p := range pods {
+		if _, ok := known[p.Name]; ok {
+			continue
+		}
+
+		if !bootstrapped(p) {
+			continue
+		}
+
+		host := fmt.Sprintf("%s.%s.%s", p.Name, mysql.ServiceName(cr), cr.Namespace)
+
+		if err := orchestrator.Discover(ctx, r.ClientCmd, orcPod, host, mysql.DefaultPort); err != nil {
+			log.Info("Failed to discover instance, will retry", "instance", p.Name, "error", err.Error())
+			continue
+		}
+
+		log.Info("Discovered instance orchestrator was missing", "instance", p.Name)
+	}
+
+	return nil
+}
+
+// bootstrapped reports whether the pod's mysql container passed its startup probe.
+func bootstrapped(pod corev1.Pod) bool {
+	for _, status := range pod.Status.ContainerStatuses {
+		if status.Name == mysql.AppName {
+			return status.Started != nil && *status.Started
+		}
+	}
+
+	return false
 }
 
 func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {

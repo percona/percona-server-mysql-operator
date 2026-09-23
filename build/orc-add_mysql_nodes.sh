@@ -56,6 +56,9 @@ am_i_leader() {
 	return 0
 }
 
+DISCOVER_ATTEMPTS=30
+DISCOVER_INTERVAL=2
+
 discover() {
 	local host=$1
 	local port=$2
@@ -66,15 +69,18 @@ discover() {
 		return 0
 	fi
 
-	for i in {1..5}; do
+	for i in $(seq 1 ${DISCOVER_ATTEMPTS}); do
 		R_CODE=$(curl -s "${CURL_AUTH[@]}" "${ORC_HOST}/api/discover/${host}/${port}" | jq -r '.Code // empty' 2>/dev/null) || true
 		if [ "$R_CODE" == 'OK' ]; then
 			log INFO "MySQL node ${host} is discovered"
-			break
+			return 0
 		fi
-		log ERROR "MySQL node ${host} can't be discovered"
-		sleep 1
+
+		log INFO "MySQL node ${host} is not up yet, retrying (${i}/${DISCOVER_ATTEMPTS})"
+		sleep ${DISCOVER_INTERVAL}
 	done
+
+	log ERROR "MySQL node ${host} can't be discovered, leaving it to the operator"
 }
 
 main() {
