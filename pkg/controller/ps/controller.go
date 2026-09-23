@@ -644,6 +644,9 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	if err := r.reconcileReplication(ctx, cr); err != nil {
 		return errors.Wrap(err, "replication")
 	}
+	if err := r.reconcileAsyncFailover(ctx, cr); err != nil {
+		return errors.Wrap(err, "async failover")
+	}
 	if err := r.reconcileHAProxy(ctx, cr); err != nil {
 		return errors.Wrap(err, "HAProxy")
 	}

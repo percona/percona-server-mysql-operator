@@ -63,6 +63,7 @@ type Instance struct {
 	MasterKey             InstanceKey       `json:"MasterKey"`
 	Replicas              []InstanceKey     `json:"Replicas"`
 	ReadOnly              bool              `json:"ReadOnly"`
+	IsLastCheckValid      bool              `json:"IsLastCheckValid"`
 	Problems              []string          `json:"Problems"`
 	IsDowntimed           bool              `json:"IsDowntimed"`
 	DowntimeReason        string            `json:"DowntimeReason"`
@@ -317,6 +318,26 @@ func SetWriteable(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod,
 	var res, errb bytes.Buffer
 	err := exec(ctx, cliCmd, pod, url, &res, &errb)
 	if err != nil {
+		return err
+	}
+
+	orcResp := new(orcResponse)
+	if err := unmarshalOrcResponse(res.Bytes(), orcResp); err != nil {
+		return err
+	}
+
+	return orcResp.Error()
+}
+
+// ForceMasterTakeover promotes host even though orchestrator sees no reason to.
+// It is the break-glass path for a cluster left without a writable primary
+// because the pre-failover hook could not recover the transactions stranded on
+// the dead one, so it gives those transactions up.
+func ForceMasterTakeover(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, clusterHint, host string, port int32) error {
+	url := fmt.Sprintf("api/force-master-takeover/%s/%s/%d", clusterHint, host, port)
+
+	var res, errb bytes.Buffer
+	if err := exec(ctx, cliCmd, pod, url, &res, &errb); err != nil {
 		return err
 	}
 
