@@ -1,6 +1,6 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
-timeout: 180
+timeout: 600
 commands:
   - script: |-
       set -o errexit
@@ -11,6 +11,10 @@ commands:
       cluster_name=$(get_cluster_name)
       kubectl -n "${NAMESPACE}" patch ps "${cluster_name}" --type merge \
         -p '{"spec":{"mysql":{"configuration":"[mysqld]\ninnodb_flush_log_at_trx_commit=2\n"}}}'
+
+      # A user configuration drops the calculated one, and variables that go
+      # away cannot be unset at runtime - the cluster is restarted for them.
+      wait_cluster_consistency_async "${cluster_name}" "3" "3"
 
       for i in 0 1 2; do
         pod_name="${cluster_name}-mysql-${i}"
