@@ -1,0 +1,31 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 180
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster_name=$(get_cluster_name)
+      kubectl -n "${NAMESPACE}" patch ps "${cluster_name}" --type merge \
+        -p '{"spec":{"mysql":{"configuration":"[mysqld]\ninnodb_flush_log_at_trx_commit=2\n"}}}'
+
+      for i in 0 1 2; do
+        pod_name="${cluster_name}-mysql-${i}"
+        kubectl -n "${NAMESPACE}" exec "${pod_name}" -c xtrabackup -- bash -c '
+          for _ in {1..60}; do
+            if [[ -f /etc/mysql/config/my-config.cnf ]]; then
+              printf "[xtrabackup]\nparallel=2\n" > /tmp/xb-defaults.cnf
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Timed out waiting for /etc/mysql/config/my-config.cnf" >&2
+          exit 1
+        '
+      done
+
+      storage_name=$(kubectl -n "${NAMESPACE}" get ps "${cluster_name}" -o yaml | yq '(.spec.backup.storages // {}) | keys | .[0]')
+      run_backup demand-backup-defaults-file "${storage_name}" "${cluster_name}" "defaults-file"

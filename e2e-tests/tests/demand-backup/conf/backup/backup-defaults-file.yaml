@@ -1,0 +1,13 @@
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQLBackup
+metadata:
+  name: <backup-name>
+  finalizers:
+    - percona.com/delete-backup
+spec:
+  clusterName: demand-backup
+  storageName: <storage-name>
+  containerOptions:
+    args:
+      xtrabackup:
+        - "--defaults-file=/tmp/xb-defaults.cnf"

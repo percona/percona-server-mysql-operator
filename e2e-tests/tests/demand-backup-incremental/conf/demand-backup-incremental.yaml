@@ -33,3 +33,5 @@ spec:
           args:
             xbcloud:
               - "--insecure"
+            xtrabackup:
+              - "--page-tracking"
