@@ -443,13 +443,11 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileRejoin(ctx context.Con
 
 			manager, err := r.getClusterSetManager(ctx, pcs)
 			if err != nil {
-				log.Error(err, "failed to get cluster set manager for post-rejoin validation", "cluster", rejoinClusterName)
 				return errors.Wrap(err, "get cluster set manager for rejoin validation")
 			}
 
 			currentStatus, err := manager.Status(ctx)
 			if err != nil {
-				log.Error(err, "failed to query cluster set status after rejoin job completion", "cluster", rejoinClusterName)
 				return errors.Wrap(err, "query cluster set status after rejoin")
 			}
 
