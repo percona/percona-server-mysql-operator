@@ -616,6 +616,22 @@ var _ = Describe("CR validations", Ordered, func() {
 				Expect(err).To(MatchError(ContainSubstring("--defaults-file must use --defaults-file=<path> syntax and be the first xtrabackup argument")))
 			})
 		})
+
+		When("--defaults-extra-file uses a separate value", func() {
+			It("should reject the backup", func() {
+				backup := newBackup("defaults-extra-file-separate", []string{"--defaults-extra-file", "/etc/my.cnf"})
+				err := k8sClient.Create(ctx, backup)
+				Expect(err).To(MatchError(ContainSubstring("--defaults-extra-file is managed by the operator and cannot be specified")))
+			})
+		})
+
+		When("--defaults-extra-file=<path> is specified", func() {
+			It("should reject the backup", func() {
+				backup := newBackup("defaults-extra-file-equals", []string{"--defaults-extra-file=/etc/my.cnf"})
+				err := k8sClient.Create(ctx, backup)
+				Expect(err).To(MatchError(ContainSubstring("--defaults-extra-file is managed by the operator and cannot be specified")))
+			})
+		})
 	})
 
 	Context("cr creation based on CheckNSetDefaults", Ordered, func() {
@@ -1219,6 +1235,26 @@ var _ = Describe("CR validations", Ordered, func() {
 				createErr := k8sClient.Create(ctx, cr)
 				Expect(createErr).To(HaveOccurred())
 				Expect(createErr.Error()).To(ContainSubstring("growthStep must be a positive quantity"))
+			})
+		})
+
+		When("duplicate users provided", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-duplicate-users", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.Users = []psv1.User{
+				{
+					Name: "some-user",
+				},
+				{
+					Name: "some-user",
+				},
+			}
+
+			It("should fail with error", func() {
+				createErr := k8sClient.Create(ctx, cr)
+				Expect(createErr).To(HaveOccurred())
+				Expect(createErr.Error()).To(ContainSubstring("PerconaServerMySQL.ps.percona.com \"cr-validations-duplicate-users\" is invalid: spec.users[1]: Duplicate value: {\"name\":\"some-user\"}"))
 			})
 		})
 	})

@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net"
 	"os"
@@ -16,7 +15,6 @@ import (
 	database "github.com/percona/percona-server-mysql-operator/cmd/internal/db"
 	state "github.com/percona/percona-server-mysql-operator/cmd/internal/naming"
 	mysqldb "github.com/percona/percona-server-mysql-operator/pkg/db"
-	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
 )
@@ -331,20 +329,6 @@ func getPodIP() (string, error) {
 	}
 
 	return addrs[0], nil
-}
-
-func getPodFQDN(svcName string) (string, error) {
-	hostname, err := getPodHostname()
-	if err != nil {
-		return "", err
-	}
-
-	namespace, err := k8s.DefaultAPINamespace()
-	if err != nil {
-		return "", errors.Wrap(err, "get namespace")
-	}
-
-	return fmt.Sprintf("%s.%s.%s", hostname, svcName, namespace), nil
 }
 
 func fileExists(name string) (bool, error) {
