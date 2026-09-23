@@ -102,23 +102,35 @@ func TestReconcileTLSReload(t *testing.T) {
 		return fmt.Sprintf("%s-mysql-%d", crName, idx)
 	}
 
-	newPods := func(count int) []client.Object {
+	newPod := func(idx int, ready bool) client.Object {
 		cr := newCR("", "", false)
 
+		status := corev1.ConditionFalse
+		if ready {
+			status = corev1.ConditionTrue
+		}
+
+		return &corev1.Pod{
+			Name:      podName(idx),
+			Namespace: ns,
+			Labels:    mysql.MatchLabels(cr),
+			Status: corev1.PodStatus{
+				Phase:      corev1.PodRunning,
+				Conditions: []corev1.PodCondition{{Type: corev1.ContainersReady, Status: status}},
+			},
+		}
+	}
+
+	newPods := func(count int) []client.Object {
 		objs := make([]client.Object, 0, count)
 		for i := range count {
-			objs = append(objs, &corev1.Pod{
-				Name:      podName(i),
-				Namespace: ns,
-				Labels:    mysql.MatchLabels(cr),
-				Status:    corev1.PodStatus{Phase: corev1.PodRunning},
-			})
+			objs = append(objs, newPod(i, true))
 		}
 		return objs
 	}
 
-	world := func(running int) []client.Object {
-		return append([]client.Object{newInternalSecret()}, newPods(running)...)
+	world := func(ready int) []client.Object {
+		return append([]client.Object{newInternalSecret()}, newPods(ready)...)
 	}
 
 	catCmd := []string{
@@ -127,13 +139,13 @@ func TestReconcileTLSReload(t *testing.T) {
 		mysql.TLSMountPath + "/" + naming.TLSKeyKey,
 	}
 
-	reloadCmd := func(cr *apiv1.PerconaServerMySQL, pod string) []string {
+	reloadCmd := func() []string {
 		return []string{
 			"mysql",
 			"--database", "performance_schema",
 			"-p" + operatorPass,
 			"-u", string(apiv1.UserOperator),
-			"-h", pod + "." + mysql.ServiceName(cr) + "." + cr.Namespace,
+			"-h", mysqlLocalHost,
 			"-e", reloadStmt,
 		}
 	}
@@ -218,11 +230,20 @@ func TestReconcileTLSReload(t *testing.T) {
 			object:       world(0),
 			expectedHash: leafHash(oldCertPEM, oldKeyPEM),
 		},
-		"reload is deferred until every pod is running": {
+		"reload is deferred until every pod exists": {
 			state:        apiv1.StateReady,
 			secret:       newTLSSecret(certPEM, keyPEM),
 			lastReloaded: leafHash(oldCertPEM, oldKeyPEM),
 			object:       world(podCount - 1),
+			expectedHash: leafHash(oldCertPEM, oldKeyPEM),
+		},
+		// A running but not ready pod has no DNS record in async clusters and may
+		// not accept connections yet, so it must not be reloaded.
+		"reload is deferred while a pod is running but not ready": {
+			state:        apiv1.StateReady,
+			secret:       newTLSSecret(certPEM, keyPEM),
+			lastReloaded: leafHash(oldCertPEM, oldKeyPEM),
+			object:       append(world(podCount-1), newPod(podCount-1, false)),
 			expectedHash: leafHash(oldCertPEM, oldKeyPEM),
 		},
 		// kubelet refreshes the mounted secret on its own schedule, and reloading
@@ -317,7 +338,7 @@ func TestReconcileTLSReload(t *testing.T) {
 						mock.Anything,
 						mock.MatchedBy(func(p *corev1.Pod) bool { return p.Name == pod }),
 						"mysql",
-						reloadCmd(cr, pod),
+						reloadCmd(),
 						mock.Anything,
 						mock.Anything,
 						mock.Anything,
