@@ -1077,7 +1077,7 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(ctx context.Context, cr
 	}
 
 	component := mysql.Component(*cr)
-	stsWritten, err := k8s.EnsureComponent(ctx, r.Client, &component)
+	ensured, err := k8s.EnsureComponent(ctx, r.Client, &component)
 	if err != nil {
 		return errors.Wrap(err, "ensure component")
 	}
@@ -1107,7 +1107,7 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(ctx context.Context, cr
 			return errors.Wrap(err, "smart update")
 		}
 	}
-	if err := r.reconcileMySQLConfig(ctx, cr, sts, autoConf, stsWritten); err != nil {
+	if err := r.reconcileMySQLConfig(ctx, cr, sts, autoConf, ensured.PodsRestarting); err != nil {
 		return errors.Wrap(err, "reconcile MySQL config")
 	}
 

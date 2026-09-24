@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -801,4 +802,96 @@ func TestGetTLSHash(t *testing.T) {
 		assert.NotEqual(t, allBefore, allAfter)
 		assert.NotEqual(t, mysqlBefore, mysqlAfter)
 	})
+}
+
+func TestRecordPodTemplateHash(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, corev1.AddToScheme(scheme))
+	require.NoError(t, appsv1.AddToScheme(scheme))
+
+	newSTS := func(image string) *appsv1.StatefulSet {
+		return &appsv1.StatefulSet{
+			Name: "cluster1-mysql", Namespace: "default",
+			Spec: appsv1.StatefulSetSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{Name: "mysql", Image: image}},
+					},
+				},
+			},
+		}
+	}
+
+	// recorded carries the hash of the template it was built from
+	recorded := func(t *testing.T, sts *appsv1.StatefulSet) *appsv1.StatefulSet {
+		t.Helper()
+		cl := fake.NewClientBuilder().WithScheme(scheme).Build()
+		_, err := recordPodTemplateHash(t.Context(), cl, sts)
+		require.NoError(t, err)
+		return sts
+	}
+
+	tests := map[string]struct {
+		obj      client.Object
+		existing func(t *testing.T) []client.Object
+		want     bool
+		wantHash bool
+	}{
+		"object is not in the api yet": {
+			obj:      newSTS("percona:8.4"),
+			want:     true,
+			wantHash: true,
+		},
+		"pod template is unchanged": {
+			obj: newSTS("percona:8.4"),
+			existing: func(t *testing.T) []client.Object {
+				return []client.Object{recorded(t, newSTS("percona:8.4"))}
+			},
+			want:     false,
+			wantHash: true,
+		},
+		"pod template changed": {
+			obj: newSTS("percona:8.4.1"),
+			existing: func(t *testing.T) []client.Object {
+				return []client.Object{recorded(t, newSTS("percona:8.4"))}
+			},
+			want:     true,
+			wantHash: true,
+		},
+		// an object that predates the annotation says nothing about its pods
+		"object in the api carries no hash": {
+			obj: newSTS("percona:8.4.1"),
+			existing: func(t *testing.T) []client.Object {
+				return []client.Object{newSTS("percona:8.4")}
+			},
+			want:     false,
+			wantHash: true,
+		},
+		"object has no pod template": {
+			obj: &corev1.Service{
+				Name: "cluster1-mysql", Namespace: "default",
+			},
+			want:     false,
+			wantHash: false,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			builder := fake.NewClientBuilder().WithScheme(scheme)
+			if tt.existing != nil {
+				builder = builder.WithObjects(tt.existing(t)...)
+			}
+
+			got, err := recordPodTemplateHash(t.Context(), builder.Build(), tt.obj)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+
+			hash, ok := tt.obj.GetAnnotations()[naming.AnnotationLastPodTemplateHash.String()]
+			require.Equal(t, tt.wantHash, ok, "pod template hash annotation")
+			if tt.wantHash {
+				assert.NotEmpty(t, hash)
+			}
+		})
+	}
 }

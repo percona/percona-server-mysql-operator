@@ -29,7 +29,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfig(
 	cr *apiv1.PerconaServerMySQL,
 	sts *appsv1.StatefulSet,
 	autoConf string,
-	rolloutStarted bool,
+	podsRestarting bool,
 ) error {
 	if cr.CompareVersion("1.2.0") <= 0 {
 		return nil
@@ -75,7 +75,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfig(
 
 	confHash := fmt.Sprintf("%x", md5.Sum(confJson))
 	restartMySQL := func() error {
-		if rolloutStarted || rolloutInFlight(sts) {
+		if podsRestarting || rolloutInFlight(sts) {
 			log.Info("Pods are being replaced, they read the configuration as they start")
 			return nil
 		}
@@ -107,10 +107,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfig(
 		}
 	}
 
-	if _, ok := sts.GetAnnotations()[naming.AnnotationLastAppliedConfig.String()]; !ok {
-		return writeAnnotation()
-	}
-
+	// an absent record reads as an empty one: the whole config is applied
 	lastAppliedConf, err := mysql.GetLastAppliedConfig(sts)
 	if err != nil {
 		return errors.Wrap(err, "get last applied MySQL config")
@@ -173,11 +170,14 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfig(
 	return nil
 }
 
+// rolloutInFlight reports whether sts is still replacing its pods with ones
+// built from the pod template it currently holds.
 func rolloutInFlight(sts *appsv1.StatefulSet) bool {
 	if sts.Status.ObservedGeneration != sts.Generation {
-		return true
+		return false
 	}
-	return sts.Status.UpdatedReplicas != sts.Status.Replicas
+	return sts.Status.CurrentRevision != sts.Status.UpdateRevision &&
+		sts.Status.UpdatedReplicas != sts.Status.Replicas
 }
 
 const (

@@ -68,7 +68,7 @@ func (m *AdminManager) GetGlobalVariable(ctx context.Context, key string) (strin
 
 	var errb, outb bytes.Buffer
 	cmd := fmt.Sprintf("SELECT @@GLOBAL.%s", key)
-	if err := m.db.exec(ctx, cmd, &outb, &errb); err != nil {
+	if err := m.db.execValues(ctx, cmd, &outb, &errb); err != nil {
 		return "", err
 	}
 	return strings.TrimSpace(outb.String()), nil

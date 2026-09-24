@@ -128,15 +128,16 @@ func TestReconcileMySQLConfig(t *testing.T) {
 	// mysqlCmd is the command the operator must run inside the mysql container:
 	// the configurator user, its password from the internal secret and the FQDN
 	// of the pod being configured.
-	mysqlCmd := func(cr *apiv1.PerconaServerMySQL, pod, stmt string) []string {
-		return []string{
+	mysqlCmd := func(cr *apiv1.PerconaServerMySQL, pod, stmt string, args ...string) []string {
+		cmd := []string{
 			"mysql",
 			"--database", "performance_schema",
 			"-p" + configuratorPass,
 			"-u", string(apiv1.UserConfigurator),
 			"-h", pod + "." + mysql.ServiceName(cr) + "." + cr.Namespace,
-			"-e", stmt,
 		}
+		cmd = append(cmd, args...)
+		return append(cmd, "-e", stmt)
 	}
 
 	configHash := func(confJSON string) string {
@@ -155,7 +156,7 @@ func TestReconcileMySQLConfig(t *testing.T) {
 		object            []client.Object   // what the API holds besides the CR, the ConfigMap and the statefulset; nil means a healthy cluster
 		stmtErrs          map[string]string // stderr mysql answers a given statement with; drives the case on its own
 		stmtCurrent       map[string]string // value SELECT @@GLOBAL reports for a refused statement
-		rolloutStarted    bool              // the reconcile wrote the statefulset before reaching the config
+		podsRestarting    bool              // the reconcile replaced the pod template before reaching the config
 
 		expectedStmts  []string // List of SET GLOBAL statements expected on all pods
 		expectRestart  bool
@@ -284,22 +285,36 @@ func TestReconcileMySQLConfig(t *testing.T) {
 			expectedConfig:    `{"binlog_expire_logs_seconds":"604800","max_connections":"300"}`,
 		},
 		{
-			// No annotation means no record of what mysqld was started with, and
-			// mysqld was started with exactly what is mounted now. Recording it is
-			// the whole response: replaying it would restart the cluster over the
-			// keys that cannot be set at runtime.
-			desc:           "missing last applied annotation records config without touching mysql",
-			state:          apiv1.StateReady,
-			currentConfig:  "[mysqld]\nmax_connections=200\nsql_mode=STRICT_TRANS_TABLES\n",
+			// applied rather than declared applied
+			desc:          "missing last applied annotation applies the whole config",
+			state:         apiv1.StateReady,
+			currentConfig: "[mysqld]\nmax_connections=200\nsql_mode=STRICT_TRANS_TABLES\n",
+			expectedStmts: []string{
+				"SET GLOBAL max_connections=200",
+				"SET GLOBAL sql_mode='STRICT_TRANS_TABLES'",
+			},
 			expectedConfig: `{"max_connections":"200","sql_mode":"STRICT_TRANS_TABLES"}`,
 		},
 		{
 			// The generated configuration carries innodb_buffer_pool_chunk_size,
 			// which mysqld refuses at runtime. A cluster whose first reconcile
-			// never got to write the annotation must still not be restarted for it.
-			desc:           "missing last applied annotation does not restart over generated config",
-			state:          apiv1.StateError,
-			autoConfig:     "\ninnodb_buffer_pool_size=4294967296\ninnodb_buffer_pool_chunk_size=536870912\nmax_connections=682",
+			// never got to write the annotation must still not be restarted for
+			// it: the refused value is read back and already matches.
+			desc:       "missing last applied annotation does not restart over generated config",
+			state:      apiv1.StateError,
+			autoConfig: "\ninnodb_buffer_pool_size=4294967296\ninnodb_buffer_pool_chunk_size=536870912\nmax_connections=682",
+			expectedStmts: []string{
+				"SET GLOBAL innodb_buffer_pool_size=4294967296",
+				"SET GLOBAL innodb_buffer_pool_chunk_size=536870912",
+				"SET GLOBAL max_connections=682",
+			},
+			stmtErrs: map[string]string{
+				"SET GLOBAL innodb_buffer_pool_chunk_size=536870912": stderrReadOnly,
+			},
+			stmtCurrent: map[string]string{
+				"SET GLOBAL innodb_buffer_pool_chunk_size=536870912": "536870912",
+			},
+			expectRestart:  false,
 			expectedConfig: `{"innodb_buffer_pool_chunk_size":"536870912","innodb_buffer_pool_size":"4294967296","max_connections":"682"}`,
 		},
 		{
@@ -497,21 +512,21 @@ func TestReconcileMySQLConfig(t *testing.T) {
 		{
 			// The rollout the caller just started is not on the statefulset
 			// read back from the cache, so it says so and the restart waits.
-			desc:              "restart is deferred when the reconcile already wrote the statefulset",
+			desc:              "restart is deferred when the reconcile already replaced the pod template",
 			state:             apiv1.StateReady,
 			currentConfig:     "[mysqld]\nmax_connections=300\n",
 			lastAppliedConfig: `{"max_connections":"200","sql_mode":"STRICT_TRANS_TABLES"}`,
-			rolloutStarted:    true,
+			podsRestarting:    true,
 			expectedConfig:    `{"max_connections":"300"}`,
 		},
 		{
 			// Only the restart waits: a variable mysqld takes at runtime is
 			// still applied.
-			desc:              "statements still run when the reconcile wrote the statefulset",
+			desc:              "statements still run when the reconcile replaced the pod template",
 			state:             apiv1.StateReady,
 			currentConfig:     "[mysqld]\nmax_connections=300\n",
 			lastAppliedConfig: `{"max_connections":"200"}`,
-			rolloutStarted:    true,
+			podsRestarting:    true,
 			expectedStmts:     []string{"SET GLOBAL max_connections=300"},
 			expectedConfig:    `{"max_connections":"300"}`,
 		},
@@ -622,7 +637,8 @@ func TestReconcileMySQLConfig(t *testing.T) {
 						mock.Anything,
 						mock.MatchedBy(func(p *corev1.Pod) bool { return p.Name == pod }),
 						"mysql",
-						mysqlCmd(cr, pod, "SELECT @@GLOBAL."+key),
+						// headerless, or the value comes back behind the column name
+						mysqlCmd(cr, pod, "SELECT @@GLOBAL."+key, "--skip-column-names"),
 						mock.Anything,
 						mock.Anything,
 						mock.Anything,
@@ -635,7 +651,7 @@ func TestReconcileMySQLConfig(t *testing.T) {
 
 			r := &PerconaServerMySQLReconciler{Client: cl, Scheme: scheme, ClientCmd: cliCmd}
 
-			err := r.reconcileMySQLConfig(ctx, cr, sts, tt.autoConfig, tt.rolloutStarted)
+			err := r.reconcileMySQLConfig(ctx, cr, sts, tt.autoConfig, tt.podsRestarting)
 			if tt.expectedError != nil {
 				require.ErrorContains(t, err, tt.expectedError.Error())
 			} else {
@@ -703,7 +719,7 @@ func TestRolloutInFlight(t *testing.T) {
 					UpdatedReplicas:    3,
 				},
 			},
-			want: true,
+			want: false,
 		},
 		// OnDelete leaves currentRevision behind for good, so a mismatch there
 		// says nothing about whether pods are still being replaced
@@ -733,12 +749,26 @@ func TestRolloutInFlight(t *testing.T) {
 			},
 			want: true,
 		},
-		"pods still catching up": {
+		// a pod being added, not one being replaced
+		"replica added to a template no pod is leaving": {
 			sts: &appsv1.StatefulSet{
 				Generation: 5,
 				Status: appsv1.StatefulSetStatus{
 					ObservedGeneration: 5,
 					CurrentRevision:    "rev-b",
+					UpdateRevision:     "rev-b",
+					Replicas:           3,
+					UpdatedReplicas:    2,
+				},
+			},
+			want: false,
+		},
+		"pods partway through a replacement": {
+			sts: &appsv1.StatefulSet{
+				Generation: 5,
+				Status: appsv1.StatefulSetStatus{
+					ObservedGeneration: 5,
+					CurrentRevision:    "rev-a",
 					UpdateRevision:     "rev-b",
 					Replicas:           3,
 					UpdatedReplicas:    2,

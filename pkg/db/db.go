@@ -29,7 +29,18 @@ func newDB(pod *corev1.Pod, cliCmd clientcmd.Client, user apiv1.SystemUser, pass
 }
 
 func (d *db) exec(ctx context.Context, stm string, stdout, stderr *bytes.Buffer) error {
-	cmd := []string{"mysql", "--database", "performance_schema", fmt.Sprintf("-p%s", d.pass), "-u", string(d.user), "-h", d.host, "-e", stm}
+	return d.execWithArgs(ctx, stm, stdout, stderr)
+}
+
+// execValues runs stm with the column headers suppressed.
+func (d *db) execValues(ctx context.Context, stm string, stdout, stderr *bytes.Buffer) error {
+	return d.execWithArgs(ctx, stm, stdout, stderr, "--skip-column-names")
+}
+
+func (d *db) execWithArgs(ctx context.Context, stm string, stdout, stderr *bytes.Buffer, args ...string) error {
+	cmd := []string{"mysql", "--database", "performance_schema", fmt.Sprintf("-p%s", d.pass), "-u", string(d.user), "-h", d.host}
+	cmd = append(cmd, args...)
+	cmd = append(cmd, "-e", stm)
 
 	err := d.client.Exec(ctx, d.pod, "mysql", cmd, nil, stdout, stderr, false)
 	if err != nil {

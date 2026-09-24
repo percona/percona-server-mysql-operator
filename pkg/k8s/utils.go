@@ -260,37 +260,102 @@ type Component interface {
 	Object(ctx context.Context, cl client.Client) (client.Object, error)
 }
 
+// EnsureResult reports what ensuring a component did to the object in the API.
+// PodsRestarting is true only when the write replaced the pod template.
+type EnsureResult struct {
+	Written        bool
+	PodsRestarting bool
+}
+
 func EnsureComponent(
 	ctx context.Context,
 	cl client.Client,
 	c Component,
-) (bool, error) {
+) (EnsureResult, error) {
 	cr := c.PerconaServerMySQL()
 
 	obj, err := c.Object(ctx, cl)
 	if err != nil {
-		return false, errors.Wrap(err, "statefulset")
-	}
-	written, err := ensureObjectWithHash(ctx, cl, cr, obj, cl.Scheme())
-	if err != nil {
-		return false, errors.Wrap(err, "failed to ensure statefulset")
+		return EnsureResult{}, errors.Wrap(err, "statefulset")
 	}
 
+	templateChanged, err := recordPodTemplateHash(ctx, cl, obj)
+	if err != nil {
+		return EnsureResult{}, errors.Wrap(err, "record pod template hash")
+	}
+
+	written, err := ensureObjectWithHash(ctx, cl, cr, obj, cl.Scheme())
+	if err != nil {
+		return EnsureResult{}, errors.Wrap(err, "failed to ensure statefulset")
+	}
+	result := EnsureResult{Written: written, PodsRestarting: written && templateChanged}
+
 	if cr.CompareVersion("0.12.0") < 0 {
-		return written, nil
+		return result, nil
 	}
 
 	podSpec := c.PodSpec()
 	if podSpec == nil || podSpec.PodDisruptionBudget == nil {
-		return written, nil
+		return result, nil
 	}
 
 	pdb := podDisruptionBudget(cr, podSpec.PodDisruptionBudget, c.Labels(), c.MatchLabels())
 	if err := EnsureObjectWithHash(ctx, cl, cr, pdb, cl.Scheme()); err != nil {
-		return written, errors.Wrap(err, "failed to create pdb")
+		return result, errors.Wrap(err, "failed to create pdb")
 	}
 
-	return written, nil
+	return result, nil
+}
+
+// recordPodTemplateHash annotates obj with the hash of the pod template it
+// carries and reports whether that template differs from the one the API
+// already holds. Comparing the templates directly would put what the operator
+// built against what the API server defaulted, so two operator-written hashes
+// are compared instead. An object carrying no hash yet reads as unchanged.
+func recordPodTemplateHash(ctx context.Context, cl client.Reader, obj client.Object) (bool, error) {
+	var template corev1.PodTemplateSpec
+	switch object := obj.(type) {
+	case *appsv1.StatefulSet:
+		template = object.Spec.Template
+	case *appsv1.Deployment:
+		template = object.Spec.Template
+	default:
+		return false, nil
+	}
+
+	data, err := json.Marshal(template)
+	if err != nil {
+		return false, errors.Wrap(err, "marshal pod template")
+	}
+	sum := md5.Sum(data)
+	hash := hex.EncodeToString(sum[:])
+
+	annotations := obj.GetAnnotations()
+	if annotations == nil {
+		annotations = make(map[string]string)
+	}
+	annotations[naming.AnnotationLastPodTemplateHash.String()] = hash
+	obj.SetAnnotations(annotations)
+
+	val := reflect.ValueOf(obj)
+	if val.Kind() == reflect.Pointer {
+		val = reflect.Indirect(val)
+	}
+	current := reflect.New(val.Type()).Interface().(client.Object)
+
+	if err := cl.Get(ctx, client.ObjectKeyFromObject(obj), current); err != nil {
+		if k8serrors.IsNotFound(err) {
+			// every pod is about to start from this template
+			return true, nil
+		}
+		return false, errors.Wrapf(err, "get %s", client.ObjectKeyFromObject(obj))
+	}
+
+	recorded, ok := current.GetAnnotations()[naming.AnnotationLastPodTemplateHash.String()]
+	if !ok {
+		return false, nil
+	}
+	return recorded != hash, nil
 }
 
 func EnsureService(
