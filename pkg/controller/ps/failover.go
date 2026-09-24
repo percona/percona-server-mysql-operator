@@ -125,6 +125,16 @@ func (r *PerconaServerMySQLReconciler) reconcileForcePromote(
 
 	log := logf.FromContext(ctx).WithName("forcePromote")
 
+	// A forced takeover neither fences nor re-points the old primary. With
+	// one that still takes writes, the promoted replica misses them and the
+	// old primary is left running on its own.
+	if hasWritablePrimary(primary) {
+		r.Recorder.Eventf(cr, corev1.EventTypeWarning, naming.EventFailoverForced,
+			"Refusing to force a promotion: %s is a writable primary. Forcing one is only for a cluster"+
+				" left without a writable primary.", primary.Alias)
+		return r.consumeForcePromote(ctx, cr)
+	}
+
 	instances, err := orchestrator.Cluster(ctx, r.ClientCmd, orcPod, cr.ClusterHint())
 	if err != nil {
 		return errors.Wrap(err, "get cluster instances")

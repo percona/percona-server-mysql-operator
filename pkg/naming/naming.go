@@ -53,7 +53,8 @@ const (
 
 	// AnnotationForcePromote asks the operator to promote a replica even though
 	// the transactions stranded on the dead primary could not be recovered. Its
-	// value is a MySQL pod name, or "true" to let the operator pick one.
+	// value is a MySQL pod name, or "true" to let the operator pick one. It is
+	// refused while the cluster has a writable primary.
 	AnnotationForcePromote AnnotationKey = perconaPrefix + "force-promote-with-possible-data-loss"
 )
 
