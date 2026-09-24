@@ -65,28 +65,3 @@ func LockWait(ctx context.Context, path string, wait, poll time.Duration) (*os.F
 		}
 	}
 }
-
-// InProgress reports whether a failover job currently holds the lock at path.
-// The probe takes a shared lock, which is enough to conflict with the exclusive
-// one Lock holds, and releases it again on return.
-func InProgress(path string) (bool, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return false, nil
-		}
-
-		return false, fmt.Errorf("open lock file %s: %w", path, err)
-	}
-	defer f.Close() //nolint:errcheck
-
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_SH|syscall.LOCK_NB); err != nil {
-		if errors.Is(err, syscall.EWOULDBLOCK) {
-			return true, nil
-		}
-
-		return false, fmt.Errorf("lock %s: %w", path, err)
-	}
-
-	return false, nil
-}
