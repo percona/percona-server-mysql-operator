@@ -1596,6 +1596,11 @@ func TestRenewDowntime(t *testing.T) {
 					MySQL: apiv1.MySQLSpec{
 						ClusterType: apiv1.ClusterTypeAsync,
 					},
+					// An async cluster only accepts orchestrator.enabled=false
+					// together with the unsafe flag.
+					Unsafe: apiv1.UnsafeFlags{
+						Orchestrator: true,
+					},
 					Orchestrator: apiv1.OrchestratorSpec{
 						Enabled: false,
 					},
@@ -1836,6 +1841,11 @@ func TestRunPostFinishTasks(t *testing.T) {
 				Spec: apiv1.PerconaServerMySQLSpec{
 					MySQL: apiv1.MySQLSpec{
 						ClusterType: apiv1.ClusterTypeAsync,
+					},
+					// An async cluster only accepts orchestrator.enabled=false
+					// together with the unsafe flag.
+					Unsafe: apiv1.UnsafeFlags{
+						Orchestrator: true,
 					},
 					Orchestrator: apiv1.OrchestratorSpec{
 						Enabled: false,
