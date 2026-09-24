@@ -53,7 +53,7 @@ func (r *PerconaServerMySQLReconciler) reconcileAsyncFailover(ctx context.Contex
 		return nil
 	}
 
-	r.reconcileStaleRecoveries(ctx, cr, orcPod, cluster)
+	r.reconcileStaleRecoveries(ctx, cr, orcPod)
 
 	primary, err := orchestrator.ClusterPrimary(ctx, r.ClientCmd, orcPod, cluster)
 	if err != nil {
@@ -228,11 +228,13 @@ func forcePromoteCandidate(instances []*orchestrator.Instance, value string) (st
 const staleRecoveryComment = "percona-server-mysql-operator: recovery left active with nothing to end it"
 
 // reconcileStaleRecoveries acknowledges the recoveries orchestrator still
-// holds in their active period although nothing is left to end them.
-func (r *PerconaServerMySQLReconciler) reconcileStaleRecoveries(ctx context.Context, cr *apiv1.PerconaServerMySQL, orcPod *corev1.Pod, cluster string) {
+// holds in their active period although nothing is left to end them. They are
+// looked up by alias: a recovery keeps the cluster name it started with, which
+// the promotion it made replaced.
+func (r *PerconaServerMySQLReconciler) reconcileStaleRecoveries(ctx context.Context, cr *apiv1.PerconaServerMySQL, orcPod *corev1.Pod) {
 	log := logf.FromContext(ctx).WithName("staleRecoveries")
 
-	recs, err := orchestrator.UnacknowledgedRecoveries(ctx, r.ClientCmd, orcPod, cluster)
+	recs, err := orchestrator.UnacknowledgedRecoveries(ctx, r.ClientCmd, orcPod, cr.ClusterHint())
 	if err != nil {
 		log.V(1).Info("Could not read the unacknowledged recoveries", "error", err.Error())
 		return

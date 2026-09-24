@@ -3,9 +3,11 @@ package ps
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -151,6 +153,66 @@ func TestIsAsyncReadyReportsSplitTopology(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, ready)
 	assert.Contains(t, msg, "orchestrator sees more than one live cluster: async-failover-mysql-0:3306, async-failover-mysql-2:3306")
+}
+
+// A failover renames the cluster after the promoted primary while the recovery
+// that promoted it keeps the old name, so the sweep has to find it by alias.
+func TestReconcileAsyncFailoverAcksStaleRecoveryOfRenamedCluster(t *testing.T) {
+	cr, err := readDefaultCR("async-failover", "renamed")
+	require.NoError(t, err)
+	cr.Spec.MySQL.ClusterType = apiv1.ClusterTypeAsync
+	cr.Spec.MySQL.Size = 3
+	cr.Spec.Orchestrator.Enabled = true
+	cr.Spec.Orchestrator.Size = 3
+
+	orcPod := &corev1.Pod{
+		Name:      orchestrator.PodName(cr, 0),
+		Namespace: cr.Namespace,
+		Labels:    orchestrator.MatchLabels(cr),
+		Status: corev1.PodStatus{
+			Phase:      corev1.PodRunning,
+			Conditions: []corev1.PodCondition{{Type: corev1.ContainersReady, Status: corev1.ConditionTrue}},
+		},
+	}
+
+	instances, err := json.Marshal([]orchestrator.Instance{
+		{Alias: "async-failover-mysql-0", ClusterName: "async-failover-mysql-2:3306", IsLastCheckValid: true},
+		{Alias: "async-failover-mysql-1", ClusterName: "async-failover-mysql-2:3306", IsLastCheckValid: true},
+		{Alias: "async-failover-mysql-2", ClusterName: "async-failover-mysql-2:3306", IsLastCheckValid: true},
+	})
+	require.NoError(t, err)
+
+	uid := "1790238958385238030:553a064110b0d0e2356aac15ad73eabfbeb9aff81e0be4b264d20e27470bc7ee"
+	recs, err := json.Marshal([]orchestrator.Recovery{
+		{UID: uid, IsActive: true, IsSuccessful: true, RecoveryEndTimestamp: "2026-09-24 08:38:17"},
+	})
+	require.NoError(t, err)
+	acked, err := json.Marshal(map[string]string{"Code": "OK"})
+	require.NoError(t, err)
+
+	fc := &fakeClient{scripts: []fakeClientScript{
+		allInstancesScriptWith(instances),
+		{
+			cmd:    orcURL(fmt.Sprintf("api/audit-recovery/alias/%s?unacknowledged=true", cr.ClusterHint())),
+			stdout: recs,
+		},
+		{
+			cmd:    orcURL(fmt.Sprintf("api/ack-recovery/uid/%s?comment=%s", uid, url.QueryEscape(staleRecoveryComment))),
+			stdout: acked,
+		},
+		{
+			cmd: orcURL("api/master/async-failover-mysql-2:3306"),
+			err: errors.New("stop here"),
+		},
+	}}
+	r := &PerconaServerMySQLReconciler{
+		Client:    fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(cr, orcPod).Build(),
+		ClientCmd: fc,
+		Recorder:  record.NewFakeRecorder(10),
+	}
+
+	require.NoError(t, r.reconcileAsyncFailover(t.Context(), cr))
+	assert.Equal(t, len(fc.scripts), fc.execCount)
 }
 
 func TestStaleRecoveries(t *testing.T) {
