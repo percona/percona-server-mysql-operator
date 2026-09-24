@@ -1157,36 +1157,65 @@ func TestFetchLogsFromSource(t *testing.T) {
 		assert.Equal(t, []string{filepath.Join(staging, "binlog.000004")}, logs)
 	})
 
-	t.Run("gives up on a sidecar that never listens at the deadline", func(t *testing.T) {
+	t.Run("gives up on a sidecar that never listens once the stall bound is spent", func(t *testing.T) {
 		_, err := fetchLogsFromSource(t.Context(), filepath.Join(t.TempDir(), "source-logs"),
 			"http://"+freeAddr(t), "binlog.000004", 157, 3*sidecarPoll)
 
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "source did not finish streaming within")
+		assert.Contains(t, err.Error(), "source sent nothing for")
 		assert.Contains(t, err.Error(), "connection refused")
-		assert.ErrorIs(t, err, context.DeadlineExceeded)
+		assert.ErrorIs(t, err, errFetchStalled)
 	})
 
-	t.Run("a source that stalls on the headers gives up at the deadline", func(t *testing.T) {
+	t.Run("a source that stalls on the headers gives up once the stall bound is spent", func(t *testing.T) {
 		srv := stallServer(t, nil)
 
 		_, err := fetchLogsFromSource(t.Context(), filepath.Join(t.TempDir(), "source-logs"),
 			srv.URL, "binlog.000004", 157, 50*time.Millisecond)
 
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "source did not finish streaming within 50ms")
-		assert.ErrorIs(t, err, context.DeadlineExceeded)
+		assert.Contains(t, err.Error(), "source sent nothing for 50ms")
+		assert.ErrorIs(t, err, errFetchStalled)
 	})
 
-	t.Run("a source that stalls mid-body gives up at the deadline", func(t *testing.T) {
+	t.Run("a source that stalls mid-body gives up once the stall bound is spent", func(t *testing.T) {
 		srv := stallServer(t, tarBytes(t, sourceArchive...)[:64])
 
 		_, err := fetchLogsFromSource(t.Context(), filepath.Join(t.TempDir(), "source-logs"),
 			srv.URL, "binlog.000004", 157, 50*time.Millisecond)
 
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "source did not finish streaming within 50ms")
-		assert.ErrorIs(t, err, context.DeadlineExceeded)
+		assert.Contains(t, err.Error(), "source sent nothing for 50ms")
+		assert.ErrorIs(t, err, errFetchStalled)
+	})
+
+	// The bound is on silence, not on the transfer: a large stranded tail over a
+	// slow link takes as long as it takes, as long as bytes keep arriving.
+	t.Run("a slow source that keeps sending is not a stalled one", func(t *testing.T) {
+		archive := tarBytes(t, sourceArchive...)
+		const chunks = 20
+		const pause = 25 * time.Millisecond
+		const stall = 150 * time.Millisecond
+
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			io.Copy(io.Discard, r.Body) //nolint:errcheck
+			w.WriteHeader(http.StatusOK)
+			size := (len(archive) + chunks - 1) / chunks
+			for i := 0; i < len(archive); i += size {
+				w.Write(archive[i:min(i+size, len(archive))]) //nolint:errcheck
+				w.(http.Flusher).Flush()
+				time.Sleep(pause)
+			}
+		}))
+		t.Cleanup(srv.Close)
+		staging := filepath.Join(t.TempDir(), "source-logs")
+
+		begin := time.Now()
+		logs, err := fetchLogsFromSource(t.Context(), staging, srv.URL, "binlog.000004", 157, stall)
+
+		require.NoError(t, err)
+		assert.NotEmpty(t, logs)
+		assert.Greater(t, time.Since(begin), stall, "the transfer must have outlasted the stall bound for the test to mean anything")
 	})
 
 	t.Run("cancelled context", func(t *testing.T) {

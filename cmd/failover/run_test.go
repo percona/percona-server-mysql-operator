@@ -156,7 +156,7 @@ func newJobFixture(t *testing.T) *jobFixture {
 			logDir:        t.TempDir(),
 			lockPath:      filepath.Join(t.TempDir(), "failover.lock"),
 			applyPoll:     time.Millisecond,
-			fetchTimeout:  testFetchTimeout,
+			stallTimeout:  testFetchTimeout,
 			sourcePoll:    time.Millisecond,
 			sourceTimeout: time.Second,
 			receiverWait:  50 * time.Millisecond,
@@ -273,15 +273,15 @@ func TestRun(t *testing.T) {
 		assert.Empty(t, j.fake.ops, "no statement may be issued without the input")
 	})
 
-	t.Run("a non-positive fetch timeout stops nothing", func(t *testing.T) {
+	t.Run("a non-positive stall timeout stops nothing", func(t *testing.T) {
 		for _, timeout := range []time.Duration{0, -time.Second} {
 			j := newJobFixture(t)
-			j.cfg.fetchTimeout = timeout
+			j.cfg.stallTimeout = timeout
 
 			err := run(t.Context(), j.cfg)
 
 			require.Error(t, err)
-			assert.Contains(t, err.Error(), "-fetch-timeout must be positive")
+			assert.Contains(t, err.Error(), "-stall-timeout must be positive")
 			assert.Empty(t, j.fake.ops, "no statement may be issued without the input")
 		}
 	})
@@ -629,13 +629,13 @@ func TestParseFlags(t *testing.T) {
 	assert.True(t, f.wait, "the job waits for the applier unless told not to")
 	assert.False(t, f.probe, "the job fetches unless told only to look")
 	assert.Equal(t, sourceLogsDir, f.stagingDir, "the staging dir defaults to the path in the container")
-	assert.Equal(t, sourceFetchTimeout, f.fetchTimeout)
+	assert.Equal(t, sourceStallTimeout, f.stallTimeout)
 	assert.Equal(t, jobTimeout, f.timeout, "the job bounds the fetch and the drain together")
 }
 
 func TestProductionConfig(t *testing.T) {
 	cfg := config(flags{source: "mysql-1.mysql", stagingDir: "/tmp/source-logs", wait: true, probe: true,
-		fetchTimeout: 2 * time.Minute, timeout: 5 * time.Minute})
+		stallTimeout: 2 * time.Minute, timeout: 5 * time.Minute})
 
 	require.NotNil(t, cfg.newDatabase)
 	require.NotNil(t, cfg.sourceURL)
@@ -652,7 +652,7 @@ func TestProductionConfig(t *testing.T) {
 	assert.Equal(t, receiverWait, cfg.receiverWait)
 	assert.Positive(t, cfg.sourcePoll)
 	assert.Equal(t, relayLogApplyPoll, cfg.applyPoll)
-	assert.Equal(t, 2*time.Minute, cfg.fetchTimeout)
+	assert.Equal(t, 2*time.Minute, cfg.stallTimeout)
 	assert.Positive(t, cfg.applyPoll)
 }
 
