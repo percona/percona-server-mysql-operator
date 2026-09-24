@@ -43,6 +43,20 @@ commands:
           exit 1
       fi
 
+      # What the id is for: the rebuilt pod has to end up with everything the
+      # primary holds, the old primary's own transactions included.
+      primary_gtids=$(run_mysql "SELECT REPLACE(@@gtid_executed, '\n', '')" "-h ${primary_after}.${cluster}-mysql")
+      retry=0
+      until [[ $(run_mysql "SELECT GTID_SUBSET('${primary_gtids}', @@gtid_executed)" "-h ${dead}.${cluster}-mysql") == "1" ]]; do
+          if [[ ${retry} -ge 30 ]]; then
+              missing=$(run_mysql "SELECT GTID_SUBTRACT('${primary_gtids}', @@gtid_executed)" "-h ${dead}.${cluster}-mysql")
+              echo "${dead} never received ${missing} from ${primary_after}"
+              exit 1
+          fi
+          sleep 2
+          retry=$((retry + 1))
+      done
+
       rows=$(run_mysql "SELECT id FROM myDB.myTable ORDER BY id" "-h $(get_haproxy_svc "${cluster}")")
       echo "rows after forced promotion: ${rows}"
 
