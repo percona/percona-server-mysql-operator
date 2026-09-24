@@ -10,10 +10,10 @@ commands:
 
       cluster=$(get_cluster_name)
       primary_before=$(get_primary_from_label)
+      echo "${primary_before}" > "${TEMP_DIR}/writable-primary"
 
-      # Pick any pod that is not the primary and demand it.
       target=""
-      for pod in $(kubectl -n "${NAMESPACE}" get pods -l 'app.kubernetes.io/component=database' -o jsonpath='{.items[*].metadata.name}'); do
+      for pod in $(get_mysql_pods); do
           if [[ ${pod} != "${primary_before}" ]]; then
               target=${pod}
               break
@@ -24,12 +24,49 @@ commands:
           exit 1
       fi
 
-      echo "forcing the promotion of ${target}, the primary is ${primary_before}"
+      # A forced takeover neither fences nor re-points the old primary, so
+      # with one that still takes writes it splits the cluster: the old primary
+      # keeps committing what the promoted replica never gets, and it is left
+      # replicating from nobody. The operator has to refuse.
+      echo "forcing the promotion of ${target} while ${primary_before} is writable"
 
       kubectl -n "${NAMESPACE}" annotate ps "${cluster}" \
           "percona.com/force-promote-with-possible-data-loss=${target}" --overwrite
 
-      wait_for_primary "${target}" 600
+      retry=0
+      until kubectl -n "${NAMESPACE}" get events \
+          --field-selector "reason=FailoverForced,involvedObject.name=${cluster}" \
+          -o jsonpath='{.items[*].message}' | grep -q "Refusing to force a promotion: ${primary_before} is a writable primary"; do
+          if [[ ${retry} -ge 24 ]]; then
+              echo "the forced promotion was never refused"
+              kubectl -n "${NAMESPACE}" get events --field-selector "involvedObject.name=${cluster}"
+              exit 1
+          fi
+          sleep 5
+          retry=$((retry + 1))
+      done
 
       wait_cluster_consistency_async "${cluster}" 3 3
+
+      primary_after=$(get_primary_from_label)
+      if [[ ${primary_after} != "${primary_before}" ]]; then
+          echo "the primary changed from ${primary_before} to ${primary_after} although the promotion was refused"
+          exit 1
+      fi
+
+      # A split leaves every pod ready, so readiness cannot tell. Each replica
+      # has to still be replicating from the primary.
+      for pod in $(get_mysql_pods | grep -v "^${primary_before}$"); do
+          source_host=$(run_mysql "SELECT HOST FROM performance_schema.replication_connection_configuration WHERE CHANNEL_NAME=''" "-h ${pod}.${cluster}-mysql")
+          if [[ ${source_host} != "${primary_before}."* ]]; then
+              echo "${pod} replicates from '${source_host}', expected ${primary_before}"
+              exit 1
+          fi
+
+          state=$(run_mysql "SELECT SERVICE_STATE FROM performance_schema.replication_connection_status WHERE CHANNEL_NAME=''" "-h ${pod}.${cluster}-mysql")
+          if [[ ${state} != "ON" ]]; then
+              echo "${pod}'s replication is '${state}', expected ON"
+              exit 1
+          fi
+      done
     timeout: 900

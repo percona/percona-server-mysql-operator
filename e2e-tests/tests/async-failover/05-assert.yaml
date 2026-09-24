@@ -9,8 +9,10 @@ commands:
 
       cluster=$(get_cluster_name)
 
-      # Consumed once and removed: left in place it would re-promote on every
-      # reconcile, and it is a request to lose transactions.
+      primary=$(cat "${TEMP_DIR}/writable-primary")
+
+      # Removed once answered, refused or not: left in place it would retry on
+      # every reconcile, and it is a request to lose transactions.
       annotation=$(kubectl -n "${NAMESPACE}" get ps "${cluster}" \
           -o jsonpath='{.metadata.annotations.percona\.com/force-promote-with-possible-data-loss}')
       if [[ -n ${annotation} ]]; then
@@ -18,7 +20,18 @@ commands:
           exit 1
       fi
 
-      # Losing transactions has to leave a trace the user can find.
-      kubectl -n "${NAMESPACE}" get events \
+      # The refusal has to leave a trace the user can find, and nothing may
+      # have been forced instead.
+      forced=$(kubectl -n "${NAMESPACE}" get events \
           --field-selector "reason=FailoverForced,involvedObject.name=${cluster}" \
-          -o jsonpath='{.items[*].message}' | grep -q "Forced the promotion"
+          -o jsonpath='{.items[*].message}')
+      echo "${forced}" | grep -q "Refusing to force a promotion: ${primary} is a writable primary"
+      if echo "${forced}" | grep -q "Forced the promotion"; then
+          echo "a promotion was forced although ${primary} is writable"
+          exit 1
+      fi
+
+      if [[ $(get_primary_from_label) != "${primary}" ]]; then
+          echo "the primary is no longer ${primary}"
+          exit 1
+      fi

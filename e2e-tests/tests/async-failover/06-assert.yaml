@@ -24,7 +24,7 @@ commands:
       fi
 
       # Abort never promotes on its own, so no forced event may come from
-      # this failover. The only one so far is step 05's, for its own target.
+      # this failover. Step 05's was a refusal.
       forced=$(kubectl -n "${NAMESPACE}" get events \
           --field-selector "reason=FailoverForced,involvedObject.name=${cluster}" \
           -o jsonpath='{.items[*].message}')
