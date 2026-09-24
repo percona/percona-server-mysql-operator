@@ -29,7 +29,10 @@ import (
 const magic = "\xfebin"
 
 // Long enough that no healthy test server ever hits it.
-const testFetchTimeout = time.Minute
+const (
+	testFetchTimeout   = time.Minute
+	testSourcePassword = "operator-pass"
+)
 
 func withMagic(payload string) []byte {
 	return append([]byte(magic), payload...)
@@ -961,7 +964,7 @@ func TestFetchLogsFromSource(t *testing.T) {
 		srv, req, body := streamServer(t, http.StatusOK, tarBytes(t, sourceArchive...))
 		staging := filepath.Join(t.TempDir(), "source-logs")
 
-		logs, err := fetchLogsFromSource(t.Context(), staging, srv.URL, "binlog.000004", 157, testFetchTimeout)
+		logs, err := fetchLogsFromSource(t.Context(), staging, srv.URL, testSourcePassword, "binlog.000004", 157, testFetchTimeout)
 
 		require.NoError(t, err)
 		require.Len(t, logs, 3)
@@ -974,6 +977,10 @@ func TestFetchLogsFromSource(t *testing.T) {
 
 		assert.Equal(t, http.MethodPost, req.Method)
 		assert.Equal(t, "application/json", req.Header.Get("Content-Type"))
+		user, pass, ok := req.BasicAuth()
+		assert.True(t, ok, "the sidecar only streams to the operator user")
+		assert.Equal(t, "operator", user)
+		assert.Equal(t, testSourcePassword, pass)
 		assert.JSONEq(t, `{"binary_log":"binlog.000004","position":157}`, string(*body))
 	})
 
@@ -984,7 +991,7 @@ func TestFetchLogsFromSource(t *testing.T) {
 		require.NoError(t, os.MkdirAll(filepath.Join(staging, "nested"), 0o755))
 		writeFile(t, staging, "binlog.999999", []byte("STALE"))
 
-		logs, err := fetchLogsFromSource(t.Context(), staging, srv.URL, "binlog.000004", 157, testFetchTimeout)
+		logs, err := fetchLogsFromSource(t.Context(), staging, srv.URL, testSourcePassword, "binlog.000004", 157, testFetchTimeout)
 
 		require.NoError(t, err)
 		require.Len(t, logs, 1)
@@ -996,7 +1003,7 @@ func TestFetchLogsFromSource(t *testing.T) {
 		staging := filepath.Join(t.TempDir(), "source-logs")
 		require.NoError(t, os.MkdirAll(staging, 0o755))
 
-		logs, err := fetchLogsFromSource(t.Context(), staging, srv.URL, "binlog.000004", 157, testFetchTimeout)
+		logs, err := fetchLogsFromSource(t.Context(), staging, srv.URL, testSourcePassword, "binlog.000004", 157, testFetchTimeout)
 
 		require.NoError(t, err)
 		require.Len(t, logs, 1)
@@ -1009,7 +1016,7 @@ func TestFetchLogsFromSource(t *testing.T) {
 		require.NoError(t, os.MkdirAll(staging, 0o755))
 		writeFile(t, staging, "ibdata1", []byte("DATA"))
 
-		_, err := fetchLogsFromSource(t.Context(), staging, srv.URL, "binlog.000004", 157, testFetchTimeout)
+		_, err := fetchLogsFromSource(t.Context(), staging, srv.URL, testSourcePassword, "binlog.000004", 157, testFetchTimeout)
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "it is not a staging directory this job may wipe")
@@ -1022,7 +1029,7 @@ func TestFetchLogsFromSource(t *testing.T) {
 		require.NoError(t, os.MkdirAll(staging, 0o755))
 		writeFile(t, staging, "binlog.999999", []byte("STALE"))
 
-		_, err := fetchLogsFromSource(t.Context(), staging, srv.URL, "binlog.000004", 157, testFetchTimeout)
+		_, err := fetchLogsFromSource(t.Context(), staging, srv.URL, testSourcePassword, "binlog.000004", 157, testFetchTimeout)
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "unexpected status: 404")
@@ -1035,7 +1042,7 @@ func TestFetchLogsFromSource(t *testing.T) {
 		srv, _, _ := streamServer(t, http.StatusOK, tarBytes(t))
 
 		_, err := fetchLogsFromSource(t.Context(), filepath.Join(t.TempDir(), "source-logs"),
-			srv.URL, "binlog.000004", 157, testFetchTimeout)
+			srv.URL, testSourcePassword, "binlog.000004", 157, testFetchTimeout)
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "source streamed no binary logs")
@@ -1047,7 +1054,7 @@ func TestFetchLogsFromSource(t *testing.T) {
 			sourceArchive[0]))
 		staging := filepath.Join(t.TempDir(), "source-logs")
 
-		logs, err := fetchLogsFromSource(t.Context(), staging, srv.URL, "binlog.000004", 157, testFetchTimeout)
+		logs, err := fetchLogsFromSource(t.Context(), staging, srv.URL, testSourcePassword, "binlog.000004", 157, testFetchTimeout)
 
 		require.NoError(t, err)
 		assert.Equal(t, []string{filepath.Join(staging, "binlog.000004")}, logs)
@@ -1059,7 +1066,7 @@ func TestFetchLogsFromSource(t *testing.T) {
 			sourceArchive[0]))
 		staging := filepath.Join(t.TempDir(), "source-logs")
 
-		logs, err := fetchLogsFromSource(t.Context(), staging, srv.URL, "binlog.000004", 157, testFetchTimeout)
+		logs, err := fetchLogsFromSource(t.Context(), staging, srv.URL, testSourcePassword, "binlog.000004", 157, testFetchTimeout)
 
 		require.NoError(t, err)
 		assert.Equal(t, []string{filepath.Join(staging, "binlog.000004")}, logs)
@@ -1072,7 +1079,7 @@ func TestFetchLogsFromSource(t *testing.T) {
 			tarEntry{name: "../../etc/binlog.000004", content: "tail-of-four"}))
 		staging := filepath.Join(t.TempDir(), "source-logs")
 
-		logs, err := fetchLogsFromSource(t.Context(), staging, srv.URL, "binlog.000004", 157, testFetchTimeout)
+		logs, err := fetchLogsFromSource(t.Context(), staging, srv.URL, testSourcePassword, "binlog.000004", 157, testFetchTimeout)
 
 		require.NoError(t, err)
 		assert.Equal(t, []string{filepath.Join(staging, "binlog.000004")}, logs)
@@ -1084,7 +1091,7 @@ func TestFetchLogsFromSource(t *testing.T) {
 			tarEntry{name: "binlog.000004", content: "second"}))
 		staging := filepath.Join(t.TempDir(), "source-logs")
 
-		logs, err := fetchLogsFromSource(t.Context(), staging, srv.URL, "binlog.000004", 157, testFetchTimeout)
+		logs, err := fetchLogsFromSource(t.Context(), staging, srv.URL, testSourcePassword, "binlog.000004", 157, testFetchTimeout)
 
 		require.NoError(t, err)
 		assert.Equal(t, []string{
@@ -1113,7 +1120,7 @@ func TestFetchLogsFromSource(t *testing.T) {
 		srv, _, _ := streamServer(t, http.StatusOK, buf.Bytes())
 		staging := filepath.Join(t.TempDir(), "source-logs")
 
-		logs, err := fetchLogsFromSource(t.Context(), staging, srv.URL, "binlog.000004", 157, testFetchTimeout)
+		logs, err := fetchLogsFromSource(t.Context(), staging, srv.URL, testSourcePassword, "binlog.000004", 157, testFetchTimeout)
 
 		require.NoError(t, err)
 		require.Len(t, logs, 1)
@@ -1127,7 +1134,7 @@ func TestFetchLogsFromSource(t *testing.T) {
 		srv, _, _ := streamServer(t, http.StatusOK, full[:600])
 
 		_, err := fetchLogsFromSource(t.Context(), filepath.Join(t.TempDir(), "source-logs"),
-			srv.URL, "binlog.000004", 157, testFetchTimeout)
+			srv.URL, testSourcePassword, "binlog.000004", 157, testFetchTimeout)
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "unexpected EOF")
@@ -1151,7 +1158,7 @@ func TestFetchLogsFromSource(t *testing.T) {
 		}()
 		staging := filepath.Join(t.TempDir(), "source-logs")
 
-		logs, err := fetchLogsFromSource(t.Context(), staging, "http://"+addr, "binlog.000004", 157, testFetchTimeout)
+		logs, err := fetchLogsFromSource(t.Context(), staging, "http://"+addr, testSourcePassword, "binlog.000004", 157, testFetchTimeout)
 
 		require.NoError(t, err)
 		assert.Equal(t, []string{filepath.Join(staging, "binlog.000004")}, logs)
@@ -1159,7 +1166,7 @@ func TestFetchLogsFromSource(t *testing.T) {
 
 	t.Run("gives up on a sidecar that never listens once the stall bound is spent", func(t *testing.T) {
 		_, err := fetchLogsFromSource(t.Context(), filepath.Join(t.TempDir(), "source-logs"),
-			"http://"+freeAddr(t), "binlog.000004", 157, 3*sidecarPoll)
+			"http://"+freeAddr(t), testSourcePassword, "binlog.000004", 157, 3*sidecarPoll)
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "source sent nothing for")
@@ -1171,7 +1178,7 @@ func TestFetchLogsFromSource(t *testing.T) {
 		srv := stallServer(t, nil)
 
 		_, err := fetchLogsFromSource(t.Context(), filepath.Join(t.TempDir(), "source-logs"),
-			srv.URL, "binlog.000004", 157, 50*time.Millisecond)
+			srv.URL, testSourcePassword, "binlog.000004", 157, 50*time.Millisecond)
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "source sent nothing for 50ms")
@@ -1182,7 +1189,7 @@ func TestFetchLogsFromSource(t *testing.T) {
 		srv := stallServer(t, tarBytes(t, sourceArchive...)[:64])
 
 		_, err := fetchLogsFromSource(t.Context(), filepath.Join(t.TempDir(), "source-logs"),
-			srv.URL, "binlog.000004", 157, 50*time.Millisecond)
+			srv.URL, testSourcePassword, "binlog.000004", 157, 50*time.Millisecond)
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "source sent nothing for 50ms")
@@ -1211,7 +1218,7 @@ func TestFetchLogsFromSource(t *testing.T) {
 		staging := filepath.Join(t.TempDir(), "source-logs")
 
 		begin := time.Now()
-		logs, err := fetchLogsFromSource(t.Context(), staging, srv.URL, "binlog.000004", 157, stall)
+		logs, err := fetchLogsFromSource(t.Context(), staging, srv.URL, testSourcePassword, "binlog.000004", 157, stall)
 
 		require.NoError(t, err)
 		assert.NotEmpty(t, logs)
@@ -1224,7 +1231,7 @@ func TestFetchLogsFromSource(t *testing.T) {
 		cancel()
 
 		_, err := fetchLogsFromSource(ctx, filepath.Join(t.TempDir(), "source-logs"),
-			srv.URL, "binlog.000004", 157, testFetchTimeout)
+			srv.URL, testSourcePassword, "binlog.000004", 157, testFetchTimeout)
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "stream logs from source")
@@ -1237,7 +1244,7 @@ func TestFetchLogsFromSource(t *testing.T) {
 		srv.Close()
 
 		_, err := fetchLogsFromSource(t.Context(), filepath.Join(t.TempDir(), "source-logs"),
-			url, "binlog.000004", 157, testFetchTimeout)
+			url, testSourcePassword, "binlog.000004", 157, testFetchTimeout)
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "stream logs from source")
@@ -1249,7 +1256,7 @@ func TestFetchLogsFromSource(t *testing.T) {
 		writeFile(t, dir, "blocker", []byte("not a directory"))
 
 		_, err := fetchLogsFromSource(t.Context(), filepath.Join(dir, "blocker", "source-logs"),
-			srv.URL, "binlog.000004", 157, testFetchTimeout)
+			srv.URL, testSourcePassword, "binlog.000004", 157, testFetchTimeout)
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "read dir ")
@@ -1266,7 +1273,7 @@ func TestFetchLogsFromSource(t *testing.T) {
 		t.Cleanup(func() { os.Chmod(dir, 0o755) }) //nolint:errcheck
 
 		_, err := fetchLogsFromSource(t.Context(), filepath.Join(dir, "source-logs"),
-			srv.URL, "binlog.000004", 157, testFetchTimeout)
+			srv.URL, testSourcePassword, "binlog.000004", 157, testFetchTimeout)
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "create dir ")

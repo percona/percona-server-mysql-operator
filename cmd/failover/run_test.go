@@ -147,19 +147,20 @@ func newJobFixture(t *testing.T) *jobFixture {
 		fake:   fake,
 		source: source,
 		cfg: failoverConfig{
-			newDatabase:   func(context.Context) (database, error) { return fake, nil },
-			newSourceDB:   source.connect,
-			sourceURL:     func(string) string { return src.url },
-			source:        "mysql-1.mysql",
-			wait:          true,
-			stagingDir:    filepath.Join(t.TempDir(), "source-logs"),
-			logDir:        t.TempDir(),
-			lockPath:      filepath.Join(t.TempDir(), "failover.lock"),
-			applyPoll:     time.Millisecond,
-			stallTimeout:  testFetchTimeout,
-			sourcePoll:    time.Millisecond,
-			sourceTimeout: time.Second,
-			receiverWait:  50 * time.Millisecond,
+			newDatabase:    func(context.Context) (database, error) { return fake, nil },
+			newSourceDB:    source.connect,
+			sourceURL:      func(string) string { return src.url },
+			sourcePassword: func() (string, error) { return testSourcePassword, nil },
+			source:         "mysql-1.mysql",
+			wait:           true,
+			stagingDir:     filepath.Join(t.TempDir(), "source-logs"),
+			logDir:         t.TempDir(),
+			lockPath:       filepath.Join(t.TempDir(), "failover.lock"),
+			applyPoll:      time.Millisecond,
+			stallTimeout:   testFetchTimeout,
+			sourcePoll:     time.Millisecond,
+			sourceTimeout:  time.Second,
+			receiverWait:   50 * time.Millisecond,
 		},
 	}
 }
@@ -311,6 +312,17 @@ func TestRun(t *testing.T) {
 		assert.FileExists(t, filepath.Join(staging, "ibdata1"), "nothing may be deleted")
 	})
 
+	t.Run("an unreadable operator password stops nothing", func(t *testing.T) {
+		j := newJobFixture(t)
+		j.cfg.sourcePassword = func() (string, error) { return "", os.ErrNotExist }
+
+		err := run(t.Context(), j.cfg)
+
+		require.ErrorIs(t, err, os.ErrNotExist)
+		assert.Contains(t, err.Error(), "get operator password")
+		assert.Empty(t, j.fake.ops, "no statement may be issued without the input")
+	})
+
 	t.Run("connecting to the database fails", func(t *testing.T) {
 		j := newJobFixture(t)
 		j.cfg.newDatabase = func(context.Context) (database, error) {
@@ -358,6 +370,14 @@ func TestRun(t *testing.T) {
 			name: "the source refuses to stream",
 			breakIt: func(_ *testing.T, j *jobFixture) {
 				j.fake.positions.SourceLog = "binlog.000001" // purged from the source
+			},
+			wantErr: "fetch logs from source",
+			wantOps: []string{"StopReplication", "FlushRelayLogs", "GetSourceLogPos", "RelayLogPaths"},
+		},
+		{
+			name: "the source rejects the password",
+			breakIt: func(_ *testing.T, j *jobFixture) {
+				j.cfg.sourcePassword = func() (string, error) { return "wrong", nil }
 			},
 			wantErr: "fetch logs from source",
 			wantOps: []string{"StopReplication", "FlushRelayLogs", "GetSourceLogPos", "RelayLogPaths"},
@@ -654,6 +674,7 @@ func TestProductionConfig(t *testing.T) {
 
 	require.NotNil(t, cfg.newDatabase)
 	require.NotNil(t, cfg.sourceURL)
+	require.NotNil(t, cfg.sourcePassword)
 	assert.Equal(t, sourceStreamURL("mysql-1.mysql"), cfg.sourceURL("mysql-1.mysql"))
 	assert.Equal(t, "mysql-1.mysql", cfg.source)
 	assert.Equal(t, "/tmp/source-logs", cfg.stagingDir)

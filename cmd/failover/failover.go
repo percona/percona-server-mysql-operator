@@ -76,21 +76,22 @@ type database interface {
 var _ database = (*db.DB)(nil)
 
 type failoverConfig struct {
-	newDatabase   func(ctx context.Context) (database, error)
-	newSourceDB   func(ctx context.Context, host string) (sourceDatabase, error)
-	sourceURL     func(host string) string
-	source        string
-	stagingDir    string
-	logDir        string
-	lockPath      string
-	wait          bool
-	probe         bool
-	clear         bool
-	applyPoll     time.Duration
-	stallTimeout  time.Duration
-	sourcePoll    time.Duration
-	sourceTimeout time.Duration
-	receiverWait  time.Duration
+	newDatabase    func(ctx context.Context) (database, error)
+	newSourceDB    func(ctx context.Context, host string) (sourceDatabase, error)
+	sourceURL      func(host string) string
+	sourcePassword func() (string, error)
+	source         string
+	stagingDir     string
+	logDir         string
+	lockPath       string
+	wait           bool
+	probe          bool
+	clear          bool
+	applyPoll      time.Duration
+	stallTimeout   time.Duration
+	sourcePoll     time.Duration
+	sourceTimeout  time.Duration
+	receiverWait   time.Duration
 }
 
 type flags struct {
@@ -119,21 +120,22 @@ func parseFlags() flags {
 
 func config(f flags) failoverConfig {
 	return failoverConfig{
-		newDatabase:   func(ctx context.Context) (database, error) { return connectToDB(ctx) },
-		newSourceDB:   func(ctx context.Context, host string) (sourceDatabase, error) { return connectTo(ctx, host) },
-		sourceURL:     sourceStreamURL,
-		source:        f.source,
-		stagingDir:    f.stagingDir,
-		logDir:        mysql.DataMountPath,
-		lockPath:      failover.LockPath,
-		wait:          f.wait,
-		probe:         f.probe,
-		clear:         f.clear,
-		applyPoll:     relayLogApplyPoll,
-		stallTimeout:  f.stallTimeout,
-		sourcePoll:    sourceProbePoll,
-		sourceTimeout: sourceProbeTimeout,
-		receiverWait:  receiverWait,
+		newDatabase:    func(ctx context.Context) (database, error) { return connectToDB(ctx) },
+		newSourceDB:    func(ctx context.Context, host string) (sourceDatabase, error) { return connectTo(ctx, host) },
+		sourceURL:      sourceStreamURL,
+		sourcePassword: func() (string, error) { return utils.GetSecret(apiv1.UserOperator) },
+		source:         f.source,
+		stagingDir:     f.stagingDir,
+		logDir:         mysql.DataMountPath,
+		lockPath:       failover.LockPath,
+		wait:           f.wait,
+		probe:          f.probe,
+		clear:          f.clear,
+		applyPoll:      relayLogApplyPoll,
+		stallTimeout:   f.stallTimeout,
+		sourcePoll:     sourceProbePoll,
+		sourceTimeout:  sourceProbeTimeout,
+		receiverWait:   receiverWait,
 	}
 }
 
@@ -189,6 +191,10 @@ func run(ctx context.Context, cfg failoverConfig) (err error) {
 	}
 	if err := checkStagingDir(stagingDir); err != nil {
 		return err
+	}
+	password, err := cfg.sourcePassword()
+	if err != nil {
+		return fmt.Errorf("get %s password: %w", apiv1.UserOperator, err)
 	}
 
 	lock, err := failover.Lock(cfg.lockPath)
@@ -279,7 +285,7 @@ func run(ctx context.Context, cfg failoverConfig) (err error) {
 	}
 	log.Printf("Relay index lists %d relay log(s)", len(relayLogs))
 
-	sourceLogs, err := fetchLogsFromSource(ctx, stagingDir, cfg.sourceURL(host), positions.SourceLog, positions.SourcePos, cfg.stallTimeout)
+	sourceLogs, err := fetchLogsFromSource(ctx, stagingDir, cfg.sourceURL(host), password, positions.SourceLog, positions.SourcePos, cfg.stallTimeout)
 	if err != nil {
 		return fmt.Errorf("fetch logs from source: %w", err)
 	}
@@ -432,7 +438,7 @@ var errFetchStalled = errors.New("the source stopped sending")
 // and returns their paths in the order they arrived, which is rotation order.
 // The fetch ends when the source goes silent for stall, whether it is the
 // sidecar not listening yet, the headers or the body.
-func fetchLogsFromSource(ctx context.Context, stagingDir, sourceURL, binlog string, position uint64, stall time.Duration) ([]string, error) {
+func fetchLogsFromSource(ctx context.Context, stagingDir, sourceURL, password, binlog string, position uint64, stall time.Duration) ([]string, error) {
 	body, err := json.Marshal(handler.StreamConfig{BinaryLog: binlog, Position: int64(position)})
 	if err != nil {
 		return nil, err
@@ -444,7 +450,7 @@ func fetchLogsFromSource(ctx context.Context, stagingDir, sourceURL, binlog stri
 	watchdog := time.AfterFunc(stall, func() { cancel(errFetchStalled) })
 	defer watchdog.Stop()
 
-	resp, err := postStream(ctx, sourceURL, body)
+	resp, err := postStream(ctx, sourceURL, password, body)
 	if err != nil {
 		return nil, fmt.Errorf("stream logs from source: %w", stalled(ctx, err, stall))
 	}
@@ -510,7 +516,7 @@ func fetchLogsFromSource(ctx context.Context, stagingDir, sourceURL, binlog stri
 }
 
 // postStream asks the source's sidecar for the stream, waiting for it to listen.
-func postStream(ctx context.Context, sourceURL string, body []byte) (*http.Response, error) {
+func postStream(ctx context.Context, sourceURL, password string, body []byte) (*http.Response, error) {
 	client := &http.Client{}
 	waiting := false
 
@@ -520,6 +526,7 @@ func postStream(ctx context.Context, sourceURL string, body []byte) (*http.Respo
 			return nil, err
 		}
 		req.Header.Add("Content-Type", "application/json")
+		req.SetBasicAuth(string(apiv1.UserOperator), password)
 
 		resp, err := client.Do(req)
 		if !errors.Is(err, syscall.ECONNREFUSED) {
