@@ -321,6 +321,14 @@ func containers(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServerSpec) []co
 }
 
 func binlogServerContainer(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServerSpec) corev1.Container {
+	env := spec.Env
+	if cr.CompareVersion("1.3.0") < 0 {
+		env = append([]corev1.EnvVar{
+			{Name: "CONFIG_PATH", Value: path.Join(ConfigMountPath, ConfigKey)},
+			{Name: "CUSTOM_CONFIG_PATH", Value: path.Join(ConfigMountPath, customConfigKey)},
+		}, spec.Env...)
+	}
+
 	mounts := []corev1.VolumeMount{
 		{
 			Name:      apiv1.BinVolumeName,
@@ -361,7 +369,7 @@ func binlogServerContainer(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServe
 		Image:                    spec.Image,
 		ImagePullPolicy:          spec.ImagePullPolicy,
 		Resources:                spec.Resources,
-		Env:                      spec.Env,
+		Env:                      env,
 		EnvFrom:                  spec.EnvFrom,
 		VolumeMounts:             mounts,
 		Command:                  []string{"/opt/percona/binlog-server-entrypoint.sh"},
