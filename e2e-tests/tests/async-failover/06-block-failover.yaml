@@ -51,6 +51,7 @@ commands:
 
       primary_before=$(get_primary_from_label)
       echo "${primary_before}" > "${TEMP_DIR}/dead-primary"
+      run_mysql "SELECT @@server_id" "-h ${primary_before}.${cluster}-mysql" > "${TEMP_DIR}/dead-primary-server-id"
 
       # A quota of zero pods leaves the running ones alone and refuses every new
       # one, so the StatefulSet cannot bring the primary back: this is a node

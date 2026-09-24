@@ -33,6 +33,16 @@ commands:
 
       wait_cluster_consistency_async "${cluster}" 3 3
 
+      # The pod is back on a new volume. Had it kept the old server_id, every
+      # event the old primary wrote would look like its own and be filtered out
+      # of replication without an error.
+      dead_server_id=$(cat "${TEMP_DIR}/dead-primary-server-id")
+      rebuilt_server_id=$(run_mysql "SELECT @@server_id" "-h ${dead}.${cluster}-mysql")
+      if [[ ${rebuilt_server_id} == "${dead_server_id}" ]]; then
+          echo "${dead} came back on a new volume with the old server_id ${dead_server_id}"
+          exit 1
+      fi
+
       rows=$(run_mysql "SELECT id FROM myDB.myTable ORDER BY id" "-h $(get_haproxy_svc "${cluster}")")
       echo "rows after forced promotion: ${rows}"
 
