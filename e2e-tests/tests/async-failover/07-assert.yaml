@@ -19,7 +19,7 @@ commands:
 
       kubectl -n "${NAMESPACE}" get events \
           --field-selector "reason=FailoverForced,involvedObject.name=${cluster}" \
-          -o jsonpath='{.items[*].message}' | grep -q "Forced the promotion of ${primary} on request"
+          -o jsonpath='{.items[*].message}' | grep -q "Forced the promotion of ${primary}\..* on request"
 
       blocked=$(get_cluster_condition "${cluster}" AsyncFailoverBlocked)
       if [[ ${blocked} != "False" ]]; then

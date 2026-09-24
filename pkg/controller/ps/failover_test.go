@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -82,11 +81,9 @@ func TestReconcileAsyncFailoverRefusesSplitTopology(t *testing.T) {
 	cr.Annotations = map[string]string{naming.AnnotationForcePromote.String(): "true"}
 
 	orcPod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      orchestrator.PodName(cr, 0),
-			Namespace: cr.Namespace,
-			Labels:    orchestrator.MatchLabels(cr),
-		},
+		Name:      orchestrator.PodName(cr, 0),
+		Namespace: cr.Namespace,
+		Labels:    orchestrator.MatchLabels(cr),
 		Status: corev1.PodStatus{
 			Phase:      corev1.PodRunning,
 			Conditions: []corev1.PodCondition{{Type: corev1.ContainersReady, Status: corev1.ConditionTrue}},
@@ -129,11 +126,9 @@ func TestIsAsyncReadyReportsSplitTopology(t *testing.T) {
 	require.NoError(t, err)
 
 	orcPod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      orchestrator.PodName(cr, 0),
-			Namespace: cr.Namespace,
-			Labels:    orchestrator.MatchLabels(cr),
-		},
+		Name:      orchestrator.PodName(cr, 0),
+		Namespace: cr.Namespace,
+		Labels:    orchestrator.MatchLabels(cr),
 		Status: corev1.PodStatus{
 			Phase:      corev1.PodRunning,
 			Conditions: []corev1.PodCondition{{Type: corev1.ContainersReady, Status: corev1.ConditionTrue}},
