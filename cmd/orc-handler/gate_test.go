@@ -435,7 +435,7 @@ func TestGateFirstSeen(t *testing.T) {
 		g := testGate(t)
 
 		for _, bad := range []string{"", ".", "..", "a/b"} {
-			_, err := g.markSeen(bad)
+			_, _, err := g.markSeen(bad)
 			require.Error(t, err, "markSeen(%q)", bad)
 
 			_, _, err = g.firstSeen(bad)
@@ -474,36 +474,48 @@ func TestGateNotifyOnce(t *testing.T) {
 	t.Run("the first caller reports, the next stays quiet", func(t *testing.T) {
 		g := testGate(t)
 
-		first, err := g.notifyOnce(source)
+		first, err := g.notifyOnce(source, "Blocked")
 		require.NoError(t, err)
 		assert.True(t, first)
 
 		// Orchestrator retries a blocked recovery every few seconds.
-		second, err := g.notifyOnce(source)
+		second, err := g.notifyOnce(source, "Blocked")
 		require.NoError(t, err)
 		assert.False(t, second)
 	})
 
 	t.Run("it reports again once the interval is spent", func(t *testing.T) {
 		g := testGate(t)
-		_, err := g.notifyOnce(source)
+		_, err := g.notifyOnce(source, "Blocked")
 		require.NoError(t, err)
 
-		require.NoError(t, backdate(t, g, notifiedDir, source, notifyInterval+time.Minute))
+		require.NoError(t, backdate(t, g, notifiedPath("Blocked"), source, notifyInterval+time.Minute))
 
-		again, err := g.notifyOnce(source)
+		again, err := g.notifyOnce(source, "Blocked")
 		require.NoError(t, err)
 		assert.True(t, again)
 	})
 
 	t.Run("sources are tracked apart", func(t *testing.T) {
 		g := testGate(t)
-		_, err := g.notifyOnce(source)
+		_, err := g.notifyOnce(source, "Blocked")
 		require.NoError(t, err)
 
-		other, err := g.notifyOnce("other-host")
+		other, err := g.notifyOnce("other-host", "Blocked")
 		require.NoError(t, err)
 		assert.True(t, other)
+	})
+
+	// A failover that starts waiting and times out within one interval has
+	// two different things to say.
+	t.Run("reasons are tracked apart", func(t *testing.T) {
+		g := testGate(t)
+		_, err := g.notifyOnce(source, "Waiting")
+		require.NoError(t, err)
+
+		blocked, err := g.notifyOnce(source, "Blocked")
+		require.NoError(t, err)
+		assert.True(t, blocked)
 	})
 }
 
@@ -511,7 +523,7 @@ func TestGateNotifyOnce(t *testing.T) {
 func markSeen(t *testing.T, g *gate, source string) {
 	t.Helper()
 
-	_, err := g.markSeen(source)
+	_, _, err := g.markSeen(source)
 	require.NoError(t, err)
 }
 

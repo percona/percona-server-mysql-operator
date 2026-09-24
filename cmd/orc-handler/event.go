@@ -14,6 +14,11 @@ import (
 
 // warn records a warning event on the cluster
 func (c *cluster) warn(ctx context.Context, reason, format string, args ...any) {
+	c.event(ctx, corev1.EventTypeWarning, reason, format, args...)
+}
+
+// event records an event of the given type on the cluster
+func (c *cluster) event(ctx context.Context, eventType, reason, format string, args ...any) {
 	now := metav1.NewTime(time.Now())
 	message := fmt.Sprintf(format, args...)
 
@@ -30,7 +35,7 @@ func (c *cluster) warn(ctx context.Context, reason, format string, args ...any) 
 		},
 		Reason:         reason,
 		Message:        message,
-		Type:           corev1.EventTypeWarning,
+		Type:           eventType,
 		FirstTimestamp: now,
 		LastTimestamp:  now,
 		Count:          1,

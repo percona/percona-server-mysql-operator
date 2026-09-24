@@ -247,21 +247,21 @@ func (g *gate) firstSeen(source string) (time.Time, bool, error) {
 }
 
 // markSeen records an attempt at this source and returns when the first one
-// was made. The first attempt starts the clock; later ones leave it alone and
-// only keep the mark from going idle, which matters because an attempt may
-// spend most of the budget waiting before it gives up.
-func (g *gate) markSeen(source string) (time.Time, error) {
+// was made, and whether this is it. The first attempt starts the clock; later
+// ones leave it alone and only keep the mark from going idle, which matters
+// because an attempt may spend most of the budget waiting before it gives up.
+func (g *gate) markSeen(source string) (time.Time, bool, error) {
 	first, ok, err := g.firstSeen(source)
 	if err != nil {
-		return time.Time{}, err
+		return time.Time{}, false, err
 	}
 	if ok {
-		return first, g.touch(seenDir, source)
+		return first, false, g.touch(seenDir, source)
 	}
 
 	now := time.Now()
 
-	return now, g.write(seenDir, source, []byte(now.Format(time.RFC3339Nano)))
+	return now, true, g.write(seenDir, source, []byte(now.Format(time.RFC3339Nano)))
 }
 
 // refreshSeen keeps an existing mark from going idle. An attempt may itself
@@ -295,10 +295,12 @@ func (g *gate) clearAllSeen() error {
 	return errors.Wrapf(ignoreNotExist(os.RemoveAll(path)), "remove %s", path)
 }
 
-// notifyOnce reports whether the caller should record an event for this source,
-// and marks it so the next retries stay quiet for notifyInterval.
-func (g *gate) notifyOnce(source string) (bool, error) {
-	age, ok, err := g.markAge(notifiedDir, source)
+// notifyOnce reports whether the caller should record an event of this reason
+// for this source, and marks it so the next retries stay quiet for
+// notifyInterval. Reasons are tracked apart: a failover that starts waiting
+// and times out within the interval reports both.
+func (g *gate) notifyOnce(source, reason string) (bool, error) {
+	age, ok, err := g.markAge(notifiedPath(reason), source)
 	if err != nil {
 		return false, err
 	}
@@ -306,12 +308,17 @@ func (g *gate) notifyOnce(source string) (bool, error) {
 		return false, nil
 	}
 
-	return true, g.markNotified(source)
+	return true, g.markNotified(source, reason)
 }
 
-// markNotified keeps notify quiet about this source for notifyInterval.
-func (g *gate) markNotified(source string) error {
-	return g.touch(notifiedDir, source)
+// markNotified keeps notify quiet about this reason for this source for
+// notifyInterval.
+func (g *gate) markNotified(source, reason string) error {
+	return g.touch(notifiedPath(reason), source)
+}
+
+func notifiedPath(reason string) string {
+	return filepath.Join(notifiedDir, reason)
 }
 
 func (g *gate) touch(dir, source string) error {

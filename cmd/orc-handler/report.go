@@ -5,6 +5,7 @@ import (
 	"flag"
 
 	"github.com/pkg/errors"
+	corev1 "k8s.io/api/core/v1"
 
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
@@ -30,7 +31,7 @@ func runReportFailover(ctx context.Context, args []string) error {
 
 	log.Info("Orchestrator could not recover from the failure", "source", *source, "failureType", *failureType)
 
-	return notify(ctx, newGate(), *source, naming.EventFailoverFailed,
+	return notify(ctx, newGate(), *source, corev1.EventTypeWarning, naming.EventFailoverFailed,
 		"Orchestrator could not recover from %s on %s. The cluster may be left without a writable primary.",
 		*failureType, *source)
 }
