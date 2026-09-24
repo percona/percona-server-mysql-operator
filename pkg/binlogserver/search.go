@@ -28,6 +28,19 @@ const (
 	binlogTimestampLayout    = "2006-01-02T15:04:05"
 )
 
+func parsePITRDate(value string) (string, error) {
+	var timestamp time.Time
+	var err error
+	if timestamp, err = time.Parse(time.RFC3339Nano, value); err != nil {
+		if timestamp, err = time.Parse(binlogTimestampLayout, strings.Replace(value, " ", "T", 1)); err != nil {
+			return "", errors.Wrap(err, "failed to parse time")
+		}
+	}
+
+	// binlog_server accepts UTC timestamps without a timezone suffix, to the second.
+	return timestamp.UTC().Format(binlogTimestampLayout), nil
+}
+
 func SearchArgs(restore *apiv1.PerconaServerMySQLRestore) (string, string, error) {
 	if restore == nil || restore.Spec.PITR == nil {
 		return "", "", errors.New("pitr spec is not set")
@@ -35,9 +48,9 @@ func SearchArgs(restore *apiv1.PerconaServerMySQLRestore) (string, string, error
 
 	switch restore.Spec.PITR.Type {
 	case apiv1.PITRDate:
-		date := strings.Replace(restore.Spec.PITR.Date, " ", "T", 1)
-		if _, err := time.Parse(binlogTimestampLayout, date); err != nil {
-			return "", "", errors.Errorf("invalid pitr date %q, expected the %q format", restore.Spec.PITR.Date, "2006-01-02 15:04:05")
+		date, err := parsePITRDate(restore.Spec.PITR.Date)
+		if err != nil {
+			return "", "", errors.Errorf("invalid pitr date %q, expected RFC3339 or %q", restore.Spec.PITR.Date, "2006-01-02 15:04:05")
 		}
 		return SearchByTimestampCommand, date, nil
 	case apiv1.PITRGtid:

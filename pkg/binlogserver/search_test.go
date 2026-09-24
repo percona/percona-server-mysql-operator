@@ -74,9 +74,18 @@ func TestSearchArgs(t *testing.T) {
 		expectedArg        string
 		expectedErr        string
 	}{
-		// the CR takes the MySQL form, the binlog server wants ISO-8601
-		"date": {
+		"legacy date": {
 			pitr:               &apiv1.RestorePITRSpec{Type: apiv1.PITRDate, Date: "2026-09-09 12:45:00"},
+			expectedSubcommand: SearchByTimestampCommand,
+			expectedArg:        "2026-09-09T12:45:00",
+		},
+		"RFC3339 offset with fractional seconds": {
+			pitr:               &apiv1.RestorePITRSpec{Type: apiv1.PITRDate, Date: "2026-09-09T14:45:00.25+02:00"},
+			expectedSubcommand: SearchByTimestampCommand,
+			expectedArg:        "2026-09-09T12:45:00",
+		},
+		"RFC3339 negative offset": {
+			pitr:               &apiv1.RestorePITRSpec{Type: apiv1.PITRDate, Date: "2026-09-09T07:45:00-05:00"},
 			expectedSubcommand: SearchByTimestampCommand,
 			expectedArg:        "2026-09-09T12:45:00",
 		},
@@ -96,6 +105,11 @@ func TestSearchArgs(t *testing.T) {
 		"date in an unsupported format": {
 			pitr:        &apiv1.RestorePITRSpec{Type: apiv1.PITRDate, Date: "2026-09-09 12:45:00 UTC"},
 			expectedErr: `invalid pitr date "2026-09-09 12:45:00 UTC"`,
+		},
+		"UTC date": {
+			pitr:               &apiv1.RestorePITRSpec{Type: apiv1.PITRDate, Date: "2024-11-18T11:10:48Z"},
+			expectedSubcommand: SearchByTimestampCommand,
+			expectedArg:        "2024-11-18T11:10:48",
 		},
 		"no pitr spec": {expectedErr: "pitr spec is not set"},
 		"unknown type": {

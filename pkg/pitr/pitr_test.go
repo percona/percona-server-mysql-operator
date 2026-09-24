@@ -503,7 +503,7 @@ func TestRestoreJob(t *testing.T) {
 				Spec: apiv1.PerconaServerMySQLRestoreSpec{
 					PITR: &apiv1.RestorePITRSpec{
 						Type: apiv1.PITRDate,
-						Date: "2024-01-15 10:00:00",
+						Date: "2024-01-15T12:00:00+02:00",
 					},
 				},
 			},
@@ -513,7 +513,7 @@ func TestRestoreJob(t *testing.T) {
 				container := job.Spec.Template.Spec.Containers[0]
 				envMap := envToMap(container.Env)
 				assert.Equal(t, "date", envMap["PITR_TYPE"])
-				assert.Equal(t, "2024-01-15 10:00:00", envMap["PITR_DATE"])
+				assert.Equal(t, "2024-01-15T10:00:00", envMap["PITR_DATE"])
 				assert.NotContains(t, envMap, "PITR_GTID")
 			},
 		},
@@ -535,7 +535,7 @@ func TestRestoreJob(t *testing.T) {
 				Spec: apiv1.PerconaServerMySQLRestoreSpec{
 					PITR: &apiv1.RestorePITRSpec{
 						Type: apiv1.PITRGtid,
-						GTID: "abc123:1-100",
+						GTID: "3E11FA47-71CA-11E1-9E33-C80AA9429562:1-100",
 					},
 				},
 			},
@@ -545,7 +545,7 @@ func TestRestoreJob(t *testing.T) {
 				container := job.Spec.Template.Spec.Containers[0]
 				envMap := envToMap(container.Env)
 				assert.Equal(t, "gtid", envMap["PITR_TYPE"])
-				assert.Equal(t, "abc123:1-100", envMap["PITR_GTID"])
+				assert.Equal(t, "3E11FA47-71CA-11E1-9E33-C80AA9429562:1-100", envMap["PITR_GTID"])
 				assert.NotContains(t, envMap, "PITR_DATE")
 				assert.NotContains(t, envMap, "PITR_FORCE")
 			},

@@ -72,11 +72,14 @@ func TestValidateTargetTimestamp(t *testing.T) {
 		notCovered  bool
 		expectedErr string
 	}{
-		"inside archive":      {target: "2026-09-09 12:45:00"},
-		"at archive start":    {target: "2026-09-09 12:00:00"},
-		"past archive":        {target: "2030-01-01 00:00:00"},
-		"before archive":      {target: "2026-09-09 11:00:00", notCovered: true, expectedErr: "archive starts at 2026-09-09T12:00:00"},
-		"malformed timestamp": {target: "yesterday", expectedErr: "invalid pitr target"},
+		"inside archive":        {target: "2026-09-09 12:45:00"},
+		"UTC date":              {target: "2026-09-09T12:45:00Z"},
+		"RFC3339 offset":        {target: "2026-09-09T14:45:00.25+02:00"},
+		"offset before archive": {target: "2026-09-09T13:59:59+02:00", notCovered: true, expectedErr: "archive starts at 2026-09-09T12:00:00"},
+		"at archive start":      {target: "2026-09-09 12:00:00"},
+		"past archive":          {target: "2030-01-01 00:00:00"},
+		"before archive":        {target: "2026-09-09 11:00:00", notCovered: true, expectedErr: "archive starts at 2026-09-09T12:00:00"},
+		"malformed timestamp":   {target: "yesterday", expectedErr: "invalid pitr target"},
 	}
 
 	for name, tt := range tests {

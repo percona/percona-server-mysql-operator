@@ -113,7 +113,7 @@ func RestoreJob(
 						binlogserver.SearchContainer(binlogServer, subcommand, arg, binlogsVolumeName, binlogsMountPath, binlogsFileName),
 					},
 					Containers: []corev1.Container{
-						restoreContainer(cluster, restore, storage),
+						restoreContainer(cluster, restore, storage, arg),
 					},
 					Affinity:                  storage.Affinity,
 					TopologySpreadConstraints: storage.TopologySpreadConstraints,
@@ -207,6 +207,7 @@ func restoreContainer(
 	cluster *apiv1.PerconaServerMySQL,
 	restore *apiv1.PerconaServerMySQLRestore,
 	storage *apiv1.BackupStorageSpec,
+	searchArg string,
 ) corev1.Container {
 	binlogServer := binlogserver.RestoreSpec(cluster, restore)
 
@@ -237,12 +238,12 @@ func restoreContainer(
 		case apiv1.PITRDate:
 			envs = append(envs, corev1.EnvVar{
 				Name:  "PITR_DATE",
-				Value: restore.Spec.PITR.Date,
+				Value: searchArg,
 			})
 		case apiv1.PITRGtid:
 			envs = append(envs, corev1.EnvVar{
 				Name:  "PITR_GTID",
-				Value: restore.Spec.PITR.GTID,
+				Value: searchArg,
 			})
 		}
 		if restore.Spec.PITR.Force {

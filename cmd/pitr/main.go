@@ -297,6 +297,7 @@ func applyBinlogs(ctx context.Context, objects []binlogSource, getObject getObje
 
 		args := append(mysqlbinlogArgs, "-")
 		binlogCmd := exec.CommandContext(ctx, "mysqlbinlog", args...)
+		binlogCmd.Env = append(os.Environ(), "TZ=UTC")
 		binlogCmd.Stdin = obj
 
 		var binlogStderr bytes.Buffer
