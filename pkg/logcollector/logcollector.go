@@ -11,7 +11,7 @@ import (
 
 const (
 	// ContainerName is the name of the Fluent Bit sidecar.
-	ContainerName = "logs"
+	ContainerName = apiv1.LogCollectorContainerName
 
 	// Component is the last segment of the Fluent Bit tag.
 	Component = "mysql"
@@ -64,6 +64,17 @@ func MySQLEnv(cr *apiv1.PerconaServerMySQL, dataMountPath string) []corev1.EnvVa
 		{Name: EnabledEnvVar, Value: "true"},
 		{Name: LogDirEnvVar, Value: LogDir(dataMountPath)},
 	}
+}
+
+// InitEnv returns the environment the init container needs so it can fail loudly
+// when log collection is on but the init image does not ship the log collector
+// assets, instead of leaving the sidecars to crash-loop on a missing entrypoint.
+func InitEnv(cr *apiv1.PerconaServerMySQL) []corev1.EnvVar {
+	if !cr.LogCollectorEnabled() {
+		return nil
+	}
+
+	return []corev1.EnvVar{{Name: EnabledEnvVar, Value: "true"}}
 }
 
 // Volumes returns the pod-level volumes the log collector sidecars require. The

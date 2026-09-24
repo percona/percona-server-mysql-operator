@@ -41,7 +41,7 @@ func TestBackupSidecarS3CABundle(t *testing.T) {
 		},
 		"ignored-gcs": {Type: apiv1.BackupStorageGCS},
 	}
-	sts := StatefulSet(cr, "init-image", "", "", &corev1.Secret{})
+	sts := StatefulSet(cr, "init-image", "", "", "", &corev1.Secret{})
 
 	var sidecar corev1.Container
 	for _, container := range sts.Spec.Template.Spec.Containers {
@@ -100,7 +100,7 @@ func TestStatefulSet(t *testing.T) {
 	t.Run("object meta", func(t *testing.T) {
 		cluster := cr.DeepCopy()
 
-		sts := StatefulSet(cluster, initImage, configHash, tlsHash, secret)
+		sts := StatefulSet(cluster, initImage, configHash, tlsHash, "", secret)
 
 		assert.NotNil(t, sts)
 		assert.Equal(t, "cluster-mysql", sts.Name)
@@ -118,7 +118,7 @@ func TestStatefulSet(t *testing.T) {
 	t.Run("defaults", func(t *testing.T) {
 		cluster := cr.DeepCopy()
 
-		sts := StatefulSet(cluster, initImage, configHash, tlsHash, secret)
+		sts := StatefulSet(cluster, initImage, configHash, tlsHash, "", secret)
 
 		assert.Equal(t, int32(3), *sts.Spec.Replicas)
 		initContainers := sts.Spec.Template.Spec.InitContainers
@@ -135,19 +135,19 @@ func TestStatefulSet(t *testing.T) {
 		cluster := cr.DeepCopy()
 
 		cluster.Spec.MySQL.TerminationGracePeriodSeconds = nil
-		sts := StatefulSet(cluster, initImage, configHash, tlsHash, secret)
+		sts := StatefulSet(cluster, initImage, configHash, tlsHash, "", secret)
 		assert.Equal(t, int64(600), *sts.Spec.Template.Spec.TerminationGracePeriodSeconds)
 
 		cluster.Spec.MySQL.TerminationGracePeriodSeconds = new(int64(30))
 
-		sts = StatefulSet(cluster, initImage, configHash, tlsHash, secret)
+		sts = StatefulSet(cluster, initImage, configHash, tlsHash, "", secret)
 		assert.Equal(t, int64(30), *sts.Spec.Template.Spec.TerminationGracePeriodSeconds)
 	})
 
 	t.Run("image pull secrets", func(t *testing.T) {
 		cluster := cr.DeepCopy()
 
-		sts := StatefulSet(cluster, initImage, configHash, tlsHash, secret)
+		sts := StatefulSet(cluster, initImage, configHash, tlsHash, "", secret)
 		assert.Equal(t, []corev1.LocalObjectReference(nil), sts.Spec.Template.Spec.ImagePullSecrets)
 
 		imagePullSecrets := []corev1.LocalObjectReference{
@@ -160,37 +160,37 @@ func TestStatefulSet(t *testing.T) {
 		}
 		cluster.Spec.MySQL.ImagePullSecrets = imagePullSecrets
 
-		sts = StatefulSet(cluster, initImage, configHash, tlsHash, secret)
+		sts = StatefulSet(cluster, initImage, configHash, tlsHash, "", secret)
 		assert.Equal(t, imagePullSecrets, sts.Spec.Template.Spec.ImagePullSecrets)
 	})
 
 	t.Run("runtime class name", func(t *testing.T) {
 		cluster := cr.DeepCopy()
-		sts := StatefulSet(cluster, initImage, configHash, tlsHash, secret)
+		sts := StatefulSet(cluster, initImage, configHash, tlsHash, "", secret)
 		assert.Empty(t, sts.Spec.Template.Spec.RuntimeClassName)
 
 		const runtimeClassName = "runtimeClassName"
 		cluster.Spec.MySQL.RuntimeClassName = ptr.To(runtimeClassName)
 
-		sts = StatefulSet(cluster, initImage, configHash, tlsHash, secret)
+		sts = StatefulSet(cluster, initImage, configHash, tlsHash, "", secret)
 		assert.Equal(t, runtimeClassName, *sts.Spec.Template.Spec.RuntimeClassName)
 	})
 
 	t.Run("service account name", func(t *testing.T) {
 		cluster := cr.DeepCopy()
-		sts := StatefulSet(cluster, initImage, configHash, tlsHash, secret)
+		sts := StatefulSet(cluster, initImage, configHash, tlsHash, "", secret)
 		assert.Empty(t, sts.Spec.Template.Spec.ServiceAccountName)
 
 		const serviceAccountName = "service"
 		cluster.Spec.MySQL.ServiceAccountName = serviceAccountName
 
-		sts = StatefulSet(cluster, initImage, configHash, tlsHash, secret)
+		sts = StatefulSet(cluster, initImage, configHash, tlsHash, "", secret)
 		assert.Equal(t, serviceAccountName, sts.Spec.Template.Spec.ServiceAccountName)
 	})
 
 	t.Run("tolerations", func(t *testing.T) {
 		cluster := cr.DeepCopy()
-		sts := StatefulSet(cluster, initImage, configHash, tlsHash, secret)
+		sts := StatefulSet(cluster, initImage, configHash, tlsHash, "", secret)
 		assert.Equal(t, []corev1.Toleration(nil), sts.Spec.Template.Spec.Tolerations)
 
 		tolerations := []corev1.Toleration{
@@ -204,7 +204,7 @@ func TestStatefulSet(t *testing.T) {
 		}
 		cluster.Spec.MySQL.Tolerations = tolerations
 
-		sts = StatefulSet(cluster, initImage, configHash, tlsHash, secret)
+		sts = StatefulSet(cluster, initImage, configHash, tlsHash, "", secret)
 		assert.Equal(t, tolerations, sts.Spec.Template.Spec.Tolerations)
 	})
 
@@ -213,7 +213,7 @@ func TestStatefulSet(t *testing.T) {
 		cluster.Spec.MySQL.Annotations = map[string]string{
 			"mysql-annotation": "mysql-annotation",
 		}
-		sts := StatefulSet(cluster, initImage, configHash, tlsHash, secret)
+		sts := StatefulSet(cluster, initImage, configHash, tlsHash, "", secret)
 		assert.Equal(t, "mysql-annotation", sts.Annotations["mysql-annotation"])
 		assert.Equal(t, "mysql-annotation", sts.Spec.Template.Annotations["mysql-annotation"])
 	})
@@ -223,7 +223,7 @@ func TestStatefulSet(t *testing.T) {
 		cluster.Spec.Backup = &apiv1.BackupSpec{
 			Enabled: true,
 		}
-		sts := StatefulSet(cluster, initImage, configHash, tlsHash, secret)
+		sts := StatefulSet(cluster, initImage, configHash, tlsHash, "", secret)
 
 		envs := sts.Spec.Template.Spec.Containers[0].Env
 		assert.Contains(t, envs, corev1.EnvVar{
@@ -233,7 +233,7 @@ func TestStatefulSet(t *testing.T) {
 
 		// backups disabled
 		cluster.Spec.Backup.Enabled = false
-		sts = StatefulSet(cluster, initImage, configHash, tlsHash, secret)
+		sts = StatefulSet(cluster, initImage, configHash, tlsHash, "", secret)
 		envs = sts.Spec.Template.Spec.Containers[0].Env
 		assert.Contains(t, envs, corev1.EnvVar{
 			Name:  naming.EnvBackupsEnabled,
@@ -296,7 +296,7 @@ func TestCloneStallWatchdogGate(t *testing.T) {
 
 	mysqldEnv := func(t *testing.T, cr *apiv1.PerconaServerMySQL, name string) (string, bool) {
 		t.Helper()
-		sts := StatefulSet(cr, "init-image", "cfg", "tls", secret)
+		sts := StatefulSet(cr, "init-image", "cfg", "tls", "", secret)
 		for _, c := range sts.Spec.Template.Spec.Containers {
 			if c.Name != AppName {
 				continue
@@ -535,7 +535,7 @@ func TestStatefulsetVolumes(t *testing.T) {
 				},
 			}
 
-			sts := StatefulSet(cr, initImage, configHash, tlsHash, nil)
+			sts := StatefulSet(cr, initImage, configHash, tlsHash, "", nil)
 
 			assert.NotNil(t, sts)
 			assert.Equal(t, tt.expectedStatefulSet.Name, sts.Name)
@@ -888,7 +888,7 @@ func TestStatefulSetLogCollector(t *testing.T) {
 	}
 
 	t.Run("sidecars are added when enabled", func(t *testing.T) {
-		sts := StatefulSet(newCR(t), "init", "", "", nil)
+		sts := StatefulSet(newCR(t), "init", "", "", "", nil)
 
 		names := containerNames(sts)
 		assert.Contains(t, names, logcollector.ContainerName)
@@ -898,7 +898,7 @@ func TestStatefulSetLogCollector(t *testing.T) {
 	t.Run("no sidecars when disabled", func(t *testing.T) {
 		sts := StatefulSet(newCR(t, func(cr *apiv1.PerconaServerMySQL) {
 			cr.Spec.LogCollector.Enabled = new(false)
-		}), "init", "", "", nil)
+		}), "init", "", "", "", nil)
 
 		names := containerNames(sts)
 		assert.NotContains(t, names, logcollector.ContainerName)
@@ -908,13 +908,13 @@ func TestStatefulSetLogCollector(t *testing.T) {
 	t.Run("no sidecars below cr version 1.3.0", func(t *testing.T) {
 		sts := StatefulSet(newCR(t, func(cr *apiv1.PerconaServerMySQL) {
 			cr.Spec.CRVersion = "1.2.0"
-		}), "init", "", "", nil)
+		}), "init", "", "", "", nil)
 
 		assert.NotContains(t, containerNames(sts), logcollector.ContainerName)
 	})
 
 	t.Run("mysqld is told to write its error log to a file", func(t *testing.T) {
-		sts := StatefulSet(newCR(t), "init", "", "", nil)
+		sts := StatefulSet(newCR(t), "init", "", "", "", nil)
 
 		var mysqld *corev1.Container
 		for i := range sts.Spec.Template.Spec.Containers {
@@ -936,7 +936,7 @@ func TestStatefulSetLogCollector(t *testing.T) {
 	t.Run("mysqld keeps stderr logging when disabled", func(t *testing.T) {
 		sts := StatefulSet(newCR(t, func(cr *apiv1.PerconaServerMySQL) {
 			cr.Spec.LogCollector.Enabled = new(false)
-		}), "init", "", "", nil)
+		}), "init", "", "", "", nil)
 
 		for _, c := range sts.Spec.Template.Spec.Containers {
 			for _, e := range c.Env {
@@ -948,7 +948,7 @@ func TestStatefulSetLogCollector(t *testing.T) {
 	t.Run("sidecars are appended after the user sidecars", func(t *testing.T) {
 		sts := StatefulSet(newCR(t, func(cr *apiv1.PerconaServerMySQL) {
 			cr.Spec.MySQL.Sidecars = []corev1.Container{{Name: "user-sidecar"}}
-		}), "init", "", "", nil)
+		}), "init", "", "", "", nil)
 
 		names := containerNames(sts)
 		require.Len(t, names, 5)
@@ -958,10 +958,58 @@ func TestStatefulSetLogCollector(t *testing.T) {
 		)
 	})
 
+	t.Run("config hash is stamped on the pod template", func(t *testing.T) {
+		sts := StatefulSet(newCR(t), "init", "", "", "collector-hash", nil)
+
+		assert.Equal(t, "collector-hash",
+			sts.Spec.Template.Annotations[string(naming.AnnotationLogCollectorConfigHash)])
+	})
+
+	t.Run("no config hash annotation when the hash is empty", func(t *testing.T) {
+		sts := StatefulSet(newCR(t), "init", "", "", "", nil)
+
+		assert.NotContains(t, sts.Spec.Template.Annotations,
+			string(naming.AnnotationLogCollectorConfigHash))
+	})
+
+	t.Run("a colliding user sidecar does not duplicate a container name", func(t *testing.T) {
+		sts := StatefulSet(newCR(t, func(cr *apiv1.PerconaServerMySQL) {
+			cr.Spec.MySQL.Sidecars = []corev1.Container{
+				{Name: logcollector.ContainerName},
+				{Name: logrotate.ContainerName},
+			}
+		}), "init", "", "", "", nil)
+
+		names := containerNames(sts)
+		seen := make(map[string]int, len(names))
+		for _, name := range names {
+			seen[name]++
+		}
+		assert.Equal(t, 1, seen[logcollector.ContainerName])
+		assert.Equal(t, 1, seen[logrotate.ContainerName])
+	})
+
+	t.Run("init container is told log collection is on", func(t *testing.T) {
+		sts := StatefulSet(newCR(t), "init", "", "", "", nil)
+
+		require.Len(t, sts.Spec.Template.Spec.InitContainers, 1)
+		assert.Contains(t, sts.Spec.Template.Spec.InitContainers[0].Env,
+			corev1.EnvVar{Name: logcollector.EnabledEnvVar, Value: "true"})
+	})
+
+	t.Run("init container has no log collector env when disabled", func(t *testing.T) {
+		sts := StatefulSet(newCR(t, func(cr *apiv1.PerconaServerMySQL) {
+			cr.Spec.LogCollector.Enabled = new(false)
+		}), "init", "", "", "", nil)
+
+		require.Len(t, sts.Spec.Template.Spec.InitContainers, 1)
+		assert.Empty(t, sts.Spec.Template.Spec.InitContainers[0].Env)
+	})
+
 	t.Run("custom configuration adds the config volume", func(t *testing.T) {
 		sts := StatefulSet(newCR(t, func(cr *apiv1.PerconaServerMySQL) {
 			cr.Spec.LogCollector.Configuration = "pipeline: {}"
-		}), "init", "", "", nil)
+		}), "init", "", "", "", nil)
 
 		var found bool
 		for _, v := range sts.Spec.Template.Spec.Volumes {

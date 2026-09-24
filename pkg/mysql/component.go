@@ -75,11 +75,10 @@ func (c *Component) Object(ctx context.Context, cl client.Client) (client.Object
 		return nil, errors.Wrapf(err, "get tls hash")
 	}
 
-	sts := StatefulSet(cr, initImage, configHash, tlsHash, internalSecret)
-
-	if err := logcollector.StampConfigHash(ctx, cl, cr, &sts.Spec.Template); err != nil {
-		return nil, errors.Wrap(err, "stamp log collector config hash")
+	logCollectorHash, err := logcollector.ConfigHash(ctx, cl, cr)
+	if err != nil {
+		return nil, errors.Wrap(err, "get log collector config hash")
 	}
 
-	return sts, nil
+	return StatefulSet(cr, initImage, configHash, tlsHash, logCollectorHash, internalSecret), nil
 }

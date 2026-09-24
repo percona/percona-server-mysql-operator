@@ -389,49 +389,6 @@ func TestConfigHash(t *testing.T) {
 	})
 }
 
-func TestStampConfigHash(t *testing.T) {
-	key := string(naming.AnnotationLogCollectorConfigHash)
-
-	t.Run("stamps the hash on the pod template", func(t *testing.T) {
-		cr := testCR(func(cr *apiv1.PerconaServerMySQL) {
-			cr.Spec.LogCollector.Configuration = "pipeline: {}"
-		})
-		cl := buildFakeClient(t, cr)
-		tmpl := new(corev1.PodTemplateSpec)
-
-		require.NoError(t, StampConfigHash(t.Context(), cl, cr, tmpl))
-
-		want, err := ConfigHash(t.Context(), cl, cr)
-		require.NoError(t, err)
-		assert.Equal(t, want, tmpl.Annotations[key])
-	})
-
-	t.Run("preserves existing annotations", func(t *testing.T) {
-		cr := testCR()
-		cl := buildFakeClient(t, cr)
-		tmpl := &corev1.PodTemplateSpec{
-			Annotations: map[string]string{"keep": "me"},
-		}
-
-		require.NoError(t, StampConfigHash(t.Context(), cl, cr, tmpl))
-
-		assert.Equal(t, "me", tmpl.Annotations["keep"])
-		assert.NotEmpty(t, tmpl.Annotations[key])
-	})
-
-	t.Run("no annotation when disabled", func(t *testing.T) {
-		cr := testCR(func(cr *apiv1.PerconaServerMySQL) {
-			cr.Spec.LogCollector.Enabled = new(false)
-		})
-		cl := buildFakeClient(t, cr)
-		tmpl := new(corev1.PodTemplateSpec)
-
-		require.NoError(t, StampConfigHash(t.Context(), cl, cr, tmpl))
-
-		assert.NotContains(t, tmpl.Annotations, key)
-	})
-}
-
 func TestResolveDefaultEnabledIsStableAcrossReconciles(t *testing.T) {
 	cr := testCR(func(cr *apiv1.PerconaServerMySQL) {
 		cr.Spec.LogCollector.Enabled = nil
@@ -578,20 +535,4 @@ func TestConfigHashExtraConfigMapError(t *testing.T) {
 	require.ErrorIs(t, err, errBoom)
 	assert.EqualError(t, err, "get ConfigMap/extra: boom")
 	assert.Empty(t, got)
-}
-
-func TestStampConfigHashError(t *testing.T) {
-	cr := testCR(func(cr *apiv1.PerconaServerMySQL) {
-		cr.Spec.LogCollector.LogRotate = &apiv1.LogRotateSpec{
-			ExtraConfig: corev1.LocalObjectReference{Name: "extra"},
-		}
-	})
-	cl := failingClient(t, failGet(new(corev1.ConfigMap), "extra"), cr)
-	tmpl := new(corev1.PodTemplateSpec)
-
-	err := StampConfigHash(t.Context(), cl, cr, tmpl)
-
-	require.ErrorIs(t, err, errBoom)
-	assert.EqualError(t, err, "compute log collector config hash: get ConfigMap/extra: boom")
-	assert.Empty(t, tmpl.Annotations)
 }

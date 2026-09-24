@@ -120,25 +120,6 @@ func ConfigHash(ctx context.Context, cl client.Client, cr *apiv1.PerconaServerMy
 	return fmt.Sprintf("%x", sha256.Sum256(data)), nil
 }
 
-// StampConfigHash records the log collector configuration hash on the pod
-// template, so that editing the configuration rolls the pods.
-func StampConfigHash(ctx context.Context, cl client.Client, cr *apiv1.PerconaServerMySQL, tmpl *corev1.PodTemplateSpec) error {
-	hash, err := ConfigHash(ctx, cl, cr)
-	if err != nil {
-		return errors.Wrap(err, "compute log collector config hash")
-	}
-	if hash == "" {
-		return nil
-	}
-
-	if tmpl.Annotations == nil {
-		tmpl.Annotations = make(map[string]string)
-	}
-	tmpl.Annotations[string(naming.AnnotationLogCollectorConfigHash)] = hash
-
-	return nil
-}
-
 func reconcileFluentBitConfigMap(ctx context.Context, cl client.Client, cr *apiv1.PerconaServerMySQL) error {
 	name := ConfigMapName(cr.Name)
 

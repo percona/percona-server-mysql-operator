@@ -1211,6 +1211,10 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 	if err := cr.validateStorageAutoscaling(); err != nil {
 		return errors.Wrap(err, "validate storage autoscaling")
 	}
+
+	if err := cr.validateLogCollector(); err != nil {
+		return errors.Wrap(err, "validate log collector")
+	}
 	cr.setStorageAutoscalingDefaults()
 
 	if cr.Spec.Backup == nil {
@@ -1698,6 +1702,14 @@ func (cr *PerconaServerMySQL) PMMEnabled(secret *corev1.Secret) bool {
 	return false
 }
 
+const (
+	// LogCollectorContainerName is the name of the Fluent Bit sidecar.
+	LogCollectorContainerName = "logs"
+
+	// LogRotateContainerName is the name of the logrotate sidecar.
+	LogRotateContainerName = "logrotate"
+)
+
 // LogCollectorSpec configures the log collector sidecars that tail, rotate and
 // ship the on-disk logs of the cluster components.
 type LogCollectorSpec struct {
@@ -1799,6 +1811,48 @@ func (cr *PerconaServerMySQL) LogRotateExtraConfigMaps() []string {
 		return nil
 	}
 	return []string{cr.Spec.LogCollector.LogRotate.ExtraConfig.Name}
+}
+
+// logCollectorConfigured reports whether the log collector sidecars may end up
+// in the pods. Unlike LogCollectorEnabled it also covers an unset `enabled`,
+// which the reconciler may still default to on.
+func (cr *PerconaServerMySQL) logCollectorConfigured() bool {
+	// An empty crVersion is defaulted to the current version, so it reads as
+	// new enough here (and CompareVersion panics on it).
+	return (cr.Spec.CRVersion == "" || cr.CompareVersion("1.3.0") >= 0) &&
+		cr.Spec.LogCollector != nil &&
+		(cr.Spec.LogCollector.Enabled == nil || *cr.Spec.LogCollector.Enabled)
+}
+
+// validateLogCollector rejects a log collector configuration the operator cannot
+// turn into a valid pod: an unparsable logrotate schedule, or a user sidecar
+// claiming one of the container names the log collector reserves.
+func (cr *PerconaServerMySQL) validateLogCollector() error {
+	if cr.Spec.LogCollector == nil {
+		return nil
+	}
+
+	if lr := cr.Spec.LogCollector.LogRotate; lr != nil && lr.Schedule != "" {
+		if strings.ContainsAny(lr.Schedule, "\n\r") {
+			return errors.New("logcollector.logRotate.schedule can't contain newlines")
+		}
+		if _, err := cron.ParseStandard(lr.Schedule); err != nil {
+			return errors.Wrap(err, "invalid logcollector.logRotate.schedule")
+		}
+	}
+
+	if !cr.logCollectorConfigured() {
+		return nil
+	}
+
+	for _, sidecar := range cr.Spec.MySQL.Sidecars {
+		switch sidecar.Name {
+		case LogCollectorContainerName, LogRotateContainerName:
+			return errors.Errorf("mysql.sidecars can't use the container name %s, it's reserved by the log collector", sidecar.Name)
+		}
+	}
+
+	return nil
 }
 
 const IndexFieldLogRotateExtraConfig = "psCluster.logRotateExtraConfig"

@@ -8,7 +8,7 @@ import (
 
 const (
 	// ContainerName is the name of the logrotate sidecar.
-	ContainerName = "logrotate"
+	ContainerName = apiv1.LogRotateContainerName
 
 	// VolumeName holds the operator-managed logrotate config and any extra
 	// config supplied through logRotate.extraConfig.

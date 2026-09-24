@@ -113,6 +113,44 @@ func TestConfigMapName(t *testing.T) {
 	}
 }
 
+func TestInitEnv(t *testing.T) {
+	tests := map[string]struct {
+		cr   *apiv1.PerconaServerMySQL
+		want []corev1.EnvVar
+	}{
+		"enabled": {
+			cr:   testCR(),
+			want: []corev1.EnvVar{{Name: EnabledEnvVar, Value: "true"}},
+		},
+		"explicitly disabled": {
+			cr: testCR(func(cr *apiv1.PerconaServerMySQL) {
+				cr.Spec.LogCollector.Enabled = new(false)
+			}),
+		},
+		"enabled unset": {
+			cr: testCR(func(cr *apiv1.PerconaServerMySQL) {
+				cr.Spec.LogCollector.Enabled = nil
+			}),
+		},
+		"spec absent": {
+			cr: testCR(func(cr *apiv1.PerconaServerMySQL) {
+				cr.Spec.LogCollector = nil
+			}),
+		},
+		"cr version too old": {
+			cr: testCR(func(cr *apiv1.PerconaServerMySQL) {
+				cr.Spec.CRVersion = testOldCRVersion
+			}),
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, tc.want, InitEnv(tc.cr))
+		})
+	}
+}
+
 func TestMySQLEnv(t *testing.T) {
 	tests := map[string]struct {
 		cr   *apiv1.PerconaServerMySQL

@@ -161,7 +161,7 @@ func MatchLabels(cr *apiv1.PerconaServerMySQL) map[string]string {
 	return cr.Labels(AppName, naming.ComponentDatabase)
 }
 
-func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, configHash, tlsHash string, secret *corev1.Secret) *appsv1.StatefulSet {
+func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, configHash, tlsHash, logCollectorHash string, secret *corev1.Secret) *appsv1.StatefulSet {
 	selector := MatchLabels(cr)
 	spec := cr.MySQLSpec()
 	replicas := spec.Size
@@ -173,6 +173,22 @@ func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, configHash, tlsHash st
 	if tlsHash != "" {
 		annotations[string(naming.AnnotationTLSHash)] = tlsHash
 	}
+	if logCollectorHash != "" {
+		annotations[string(naming.AnnotationLogCollectorConfigHash)] = logCollectorHash
+	}
+
+	initContainer := k8s.InitContainer(
+		cr,
+		AppName,
+		initImage,
+		spec.InitContainer,
+		spec.ImagePullPolicy,
+		spec.ContainerSecurityContext,
+		spec.Resources,
+		nil,
+	)
+	initContainer.Env = append(initContainer.Env, logcollector.InitEnv(cr)...)
+
 	sts := &appsv1.StatefulSet{
 		APIVersion:  "apps/v1",
 		Kind:        "StatefulSet",
@@ -195,18 +211,7 @@ func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, configHash, tlsHash st
 				Spec: spec.Core(
 					selector,
 					append(volumes(cr), spec.SidecarVolumes...),
-					[]corev1.Container{
-						k8s.InitContainer(
-							cr,
-							AppName,
-							initImage,
-							spec.InitContainer,
-							spec.ImagePullPolicy,
-							spec.ContainerSecurityContext,
-							spec.Resources,
-							nil,
-						),
-					},
+					[]corev1.Container{initContainer},
 					containers(cr, secret),
 				),
 			},
@@ -633,7 +638,7 @@ func containers(cr *apiv1.PerconaServerMySQL, secret *corev1.Secret) []corev1.Co
 
 	// Appended last so enabling the log collector does not shift the index of any
 	// container that was already in the pod.
-	return append(containers, logcollector.Containers(cr, dataVolumeMount(), backupLogsVolumeMount())...)
+	return appendUniqueContainers(containers, logcollector.Containers(cr, dataVolumeMount(), backupLogsVolumeMount())...)
 }
 
 func dataVolumeMount() corev1.VolumeMount {
