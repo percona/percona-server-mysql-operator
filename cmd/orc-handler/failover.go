@@ -75,9 +75,20 @@ func runFailover(ctx context.Context, args []string) error {
 	g := newGate()
 
 	err := guardedFailover(ctx, g, *source, *uid, func(ctx context.Context) error {
-		remaining, err := budget(g, *source, *timeout)
+		remaining, started, err := budget(g, *source, *timeout)
 		if err != nil {
 			return err
+		}
+
+		if started {
+			// The first attempt is the moment the cluster lost its primary, and
+			// the wait that follows should not be a surprise at its end.
+			if notifyErr := notify(ctx, g, *source, corev1.EventTypeNormal, naming.EventFailoverWaiting,
+				"Recovering the transactions stranded on %s before a replica is promoted. The cluster has no"+
+					" writable primary until that is done, for up to %s; then the %s policy applies.",
+				*source, *timeout, policy); notifyErr != nil {
+				log.Error(notifyErr, "failed to record the waiting failover event", "source", *source)
+			}
 		}
 
 		if remaining <= 0 {
@@ -94,7 +105,7 @@ func runFailover(ctx context.Context, args []string) error {
 			}
 
 			// The cluster has its primary back, so there is nothing to warn about.
-			if markErr := g.markNotified(*source); markErr != nil {
+			if markErr := g.markNotified(*source, naming.EventFailoverFailed); markErr != nil {
 				log.Error(markErr, "failed to mute the failover report", "source", *source)
 			}
 		case err != nil:
@@ -171,15 +182,16 @@ func ackRecovery(ctx context.Context, uid string) {
 	}
 }
 
-// budget returns what is left of the timeout for this source. It is measured
-// from the first attempt rather than per attempt.
-func budget(g *gate, source string, timeout time.Duration) (time.Duration, error) {
-	start, err := g.markSeen(source)
+// budget returns what is left of the timeout for this source, and whether
+// this attempt is the one that started the clock. It is measured from the
+// first attempt rather than per attempt.
+func budget(g *gate, source string, timeout time.Duration) (time.Duration, bool, error) {
+	start, started, err := g.markSeen(source)
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
 
-	return timeout - time.Since(start), nil
+	return timeout - time.Since(start), started, nil
 }
 
 // timedOut applies the configured policy once the whole budget is spent.
@@ -188,7 +200,7 @@ func timedOut(ctx context.Context, g *gate, source, target string, timeout time.
 		log.Info("Timed out recovering the transactions stranded on the source, aborting the failover",
 			"source", source, "timeout", timeout, "onTimeout", policy)
 
-		if err := notify(ctx, g, source, naming.EventFailoverBlocked,
+		if err := notify(ctx, g, source, corev1.EventTypeWarning, naming.EventFailoverBlocked,
 			"Could not recover the transactions stranded on %s within %s. The cluster stays without a"+
 				" writable primary. Annotate the cluster with %s to promote once.",
 			source, timeout, naming.AnnotationForcePromote); err != nil {
@@ -226,11 +238,11 @@ func timedOut(ctx context.Context, g *gate, source, target string, timeout time.
 	return nil
 }
 
-// notify records an event unless one was already recorded for this source
-// recently. Orchestrator retries a blocked recovery every few seconds and each
-// retry runs this hook again.
-func notify(ctx context.Context, g *gate, source, reason, format string, args ...any) error {
-	should, err := g.notifyOnce(source)
+// notify records an event unless one with the same reason was already
+// recorded for this source recently. Orchestrator retries a blocked recovery
+// every few seconds and each retry runs this hook again.
+func notify(ctx context.Context, g *gate, source, eventType, reason, format string, args ...any) error {
+	should, err := g.notifyOnce(source, reason)
 	if err != nil || !should {
 		return err
 	}
@@ -240,7 +252,7 @@ func notify(ctx context.Context, g *gate, source, reason, format string, args ..
 		return err
 	}
 
-	c.warn(ctx, reason, format, args...)
+	c.event(ctx, eventType, reason, format, args...)
 
 	return nil
 }

@@ -123,10 +123,22 @@ func TestBudget(t *testing.T) {
 	t.Run("the first attempt gets the whole timeout", func(t *testing.T) {
 		g := testGate(t)
 
-		remaining, err := budget(g, source, timeout)
+		remaining, _, err := budget(g, source, timeout)
 
 		require.NoError(t, err)
 		assert.InDelta(t, timeout, remaining, float64(time.Minute))
+	})
+
+	t.Run("only the first attempt starts the clock", func(t *testing.T) {
+		g := testGate(t)
+
+		_, started, err := budget(g, source, timeout)
+		require.NoError(t, err)
+		assert.True(t, started)
+
+		_, started, err = budget(g, source, timeout)
+		require.NoError(t, err)
+		assert.False(t, started)
 	})
 
 	t.Run("later attempts get what is left", func(t *testing.T) {
@@ -134,7 +146,7 @@ func TestBudget(t *testing.T) {
 		markSeen(t, g, source)
 		backdateSeen(t, g, source, 40*time.Minute)
 
-		remaining, err := budget(g, source, timeout)
+		remaining, _, err := budget(g, source, timeout)
 
 		require.NoError(t, err)
 		assert.InDelta(t, 20*time.Minute, remaining, float64(time.Minute))
@@ -145,7 +157,7 @@ func TestBudget(t *testing.T) {
 		markSeen(t, g, source)
 		backdateSeen(t, g, source, 2*timeout)
 
-		remaining, err := budget(g, source, timeout)
+		remaining, _, err := budget(g, source, timeout)
 
 		require.NoError(t, err)
 		assert.Negative(t, remaining)
@@ -158,14 +170,14 @@ func TestBudget(t *testing.T) {
 		g := testGate(t)
 
 		for range 5 {
-			remaining, err := budget(g, source, timeout)
+			remaining, _, err := budget(g, source, timeout)
 			require.NoError(t, err)
 			require.Positive(t, remaining)
 		}
 
 		backdateSeen(t, g, source, 2*timeout)
 
-		remaining, err := budget(g, source, timeout)
+		remaining, _, err := budget(g, source, timeout)
 		require.NoError(t, err)
 		assert.Negative(t, remaining)
 	})
@@ -176,7 +188,7 @@ func TestBudget(t *testing.T) {
 		markSeen(t, g, source)
 		backdateSeen(t, g, source, timeout+time.Hour)
 
-		remaining, err := budget(g, source, timeout)
+		remaining, _, err := budget(g, source, timeout)
 
 		require.NoError(t, err)
 		assert.Negative(t, remaining)
@@ -191,7 +203,7 @@ func TestBudget(t *testing.T) {
 
 		require.NoError(t, g.refreshSeen(source))
 
-		remaining, err := budget(g, source, timeout)
+		remaining, _, err := budget(g, source, timeout)
 		require.NoError(t, err)
 		assert.Negative(t, remaining)
 	})
@@ -201,7 +213,7 @@ func TestBudget(t *testing.T) {
 		markSeen(t, g, source)
 		require.NoError(t, backdate(t, g, seenDir, source, seenIdle+time.Minute))
 
-		remaining, err := budget(g, source, timeout)
+		remaining, _, err := budget(g, source, timeout)
 		require.NoError(t, err)
 		assert.InDelta(t, timeout, remaining, float64(time.Minute))
 
@@ -217,7 +229,7 @@ func TestBudget(t *testing.T) {
 		markSeen(t, g, source)
 		backdateSeen(t, g, source, 2*timeout)
 
-		remaining, err := budget(g, "other-host", timeout)
+		remaining, _, err := budget(g, "other-host", timeout)
 
 		require.NoError(t, err)
 		assert.Positive(t, remaining)
