@@ -154,8 +154,6 @@ func sslDisabled(spec *apiv1.BinlogServerSpec) bool {
 func volumes(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServerSpec, configSecretName string) []corev1.Volume {
 	t := true
 
-	conf := Configurable{cr: cr, spec: spec}
-
 	vols := []corev1.Volume{
 		{
 			Name:     apiv1.BinVolumeName,
@@ -207,11 +205,11 @@ func volumes(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServerSpec, configS
 					},
 					{
 						ConfigMap: &corev1.ConfigMapProjection{
-							Name: conf.GetConfigMapName(),
+							Name: customConfigMapName(cr),
 							Items: []corev1.KeyToPath{
 								{
-									Key:  conf.GetConfigMapKey(),
-									Path: conf.GetConfigMapKey(),
+									Key:  customConfigKey,
+									Path: customConfigKey,
 								},
 							},
 							Optional: &t,
