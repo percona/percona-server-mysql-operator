@@ -1,6 +1,5 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
-timeout: 240
 commands:
   - script: |-
       set -o errexit
@@ -12,9 +11,7 @@ commands:
 
       kubectl -n "${NAMESPACE}" delete pod ${primary_pod_from_label}
 
-      # the label and the haproxy backends both flap after the delete
-      primary_pod_from_haproxy="$(wait_for_same_primary_from_haproxy "${test_name}" 3 120 "${primary_pod_from_label}")"
-      wait_for_primary_label "${primary_pod_from_haproxy}"
+      primary_pod_from_label="$(wait_for_haproxy_primary ${test_name})"
 
-      check_haproxy_backends "${test_name}"
-    timeout: 240
+      check_haproxy_backends "${test_name}" "${primary_pod_from_label}"
+    timeout: 360

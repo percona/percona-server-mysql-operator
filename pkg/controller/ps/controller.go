@@ -349,7 +349,7 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 		}
 	}
 
-	if cr.Spec.MySQL.IsAsync() {
+	if cr.AppliedIsAsync() {
 		orcPod, err := getReadyOrcPod(ctx, r.Client, cr)
 		if err != nil {
 			return nil
@@ -818,6 +818,17 @@ func (r *PerconaServerMySQLReconciler) reconcileClusterTypeChange(
 
 	switch observedType {
 	case apiv1.ClusterTypeAsync:
+		// orchestrator might start replication again that we'll stop
+		// in teardownAsync, so get rid of it first
+		orcRemoved, err := r.ensureOrchestratorRemoved(ctx, cr)
+		if err != nil {
+			return errors.Wrap(err, "remove orchestrator")
+		}
+		if !orcRemoved {
+			log.Info("Waiting for Orchestrator to go away before tearing down async replication")
+			return nil
+		}
+
 		if err := r.teardownAsync(ctx, cr); err != nil {
 			return errors.Wrap(err, "teardown async")
 		}
@@ -980,6 +991,29 @@ func (r *PerconaServerMySQLReconciler) teardownGR(
 	}
 
 	return nil
+}
+
+// ensureOrchestratorRemoved deletes the Orchestrator StatefulSet and reports
+// whether its pods are gone. reconcileClusterTypeChange marks the switch in
+// progress first, which keeps OrchestratorEnabled false so nothing recreates it
+// in between.
+func (r *PerconaServerMySQLReconciler) ensureOrchestratorRemoved(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQL,
+) (bool, error) {
+	if err := r.Delete(ctx, &appsv1.StatefulSet{
+		Name:      orchestrator.Name(cr),
+		Namespace: cr.GetNamespace(),
+	}); client.IgnoreNotFound(err) != nil {
+		return false, errors.Wrap(err, "delete orchestrator statefulset")
+	}
+
+	pods, err := k8s.PodsByLabels(ctx, r.Client, orchestrator.MatchLabels(cr), cr.Namespace)
+	if err != nil {
+		return false, errors.Wrap(err, "get orchestrator pods")
+	}
+
+	return len(pods) == 0, nil
 }
 
 func (r *PerconaServerMySQLReconciler) teardownAsync(
@@ -1268,7 +1302,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("reconcileOrchestrator")
 
-	if cr.Spec.MySQL.ClusterType == apiv1.ClusterTypeGR || !cr.OrchestratorEnabled() {
+	if !cr.OrchestratorEnabled() {
 		return nil
 	}
 
@@ -1475,7 +1509,7 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 		return errors.Wrap(err, "reconcile group replication")
 	}
 
-	if cr.Spec.MySQL.ClusterType == apiv1.ClusterTypeGR || !cr.OrchestratorEnabled() || cr.Spec.Orchestrator.Size <= 0 {
+	if !cr.OrchestratorEnabled() || cr.Spec.Orchestrator.Size <= 0 {
 		return nil
 	}
 
@@ -1569,7 +1603,7 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 }
 
 func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
-	if cr.Spec.MySQL.ClusterType != apiv1.ClusterTypeGR {
+	if !cr.AppliedIsGR() {
 		return nil
 	}
 
@@ -1746,7 +1780,7 @@ func (r *PerconaServerMySQLReconciler) cleanupOutdatedServices(ctx context.Conte
 
 // cleanupOutdatedGRPrimaryService cleans up the outdated mysql primary service when group replication is enabled.
 func (r *PerconaServerMySQLReconciler) cleanupOutdatedGRPrimaryService(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
-	if !cr.Spec.MySQL.IsGR() {
+	if !cr.AppliedIsGR() {
 		return nil
 	}
 	if !cr.Spec.MySQL.ExposePrimary.Enabled {
