@@ -761,6 +761,7 @@ func TestSwitchOverAndWait(t *testing.T) {
 		cli := fake.NewClientBuilder().WithScheme(s).WithObjects(makeReadyOrcPod(cr)).Build()
 		fc := &fakeClient{
 			scripts: []fakeClientScript{
+				allInstancesScript,
 				{
 					cmd:    []string{"sh", "-c", fmt.Sprintf(`curl -s -u "%s:$(cat %s/%s)" "localhost:3000/api/master/%s"`, apiv1.UserOrchestrator, orchestrator.CredsMountPath, apiv1.UserOrchestrator, clusterHint)},
 					stdout: oldPrimaryResp,
@@ -778,6 +779,7 @@ func TestSwitchOverAndWait(t *testing.T) {
 					cmd:    orcURL(fmt.Sprintf("api/end-downtime/%s/%d", primary.Name, mysql.DefaultPort)),
 					stdout: downtimeResp,
 				},
+				allInstancesScript,
 				{
 					cmd:    []string{"sh", "-c", fmt.Sprintf(`curl -s -u "%s:$(cat %s/%s)" "localhost:3000/api/master/%s"`, apiv1.UserOrchestrator, orchestrator.CredsMountPath, apiv1.UserOrchestrator, clusterHint)},
 					stdout: newPrimaryResp,
@@ -796,8 +798,8 @@ func TestSwitchOverAndWait(t *testing.T) {
 
 		err := r.switchOverAndWait(t.Context(), cr, primary, target)
 		require.NoError(t, err)
-		// 4 calls for switchOverAsync + 1 call for getPrimaryHost in the wait loop.
-		assert.Equal(t, 5, fc.execCount)
+		// 5 calls for switchOverAsync + 2 calls for getPrimaryHost in the wait loop.
+		assert.Equal(t, 7, fc.execCount)
 	})
 
 	t.Run("GR assigns primary label to target", func(t *testing.T) {
@@ -1307,6 +1309,7 @@ func TestSmartUpdateMySQL(t *testing.T) {
 			clusterType: apiv1.ClusterTypeAsync,
 			revisions:   []string{oldRev, oldRev, oldRev},
 			scripts: []fakeClientScript{
+				allInstancesScript,
 				{stdout: primaryFromOrchestrator(0)},
 			},
 			wantDeleted: []string{mysql.PodName(cr, 1)},
@@ -1316,11 +1319,14 @@ func TestSmartUpdateMySQL(t *testing.T) {
 			clusterType: apiv1.ClusterTypeAsync,
 			revisions:   []string{oldRev, newRev, newRev},
 			scripts: []fakeClientScript{
+				allInstancesScript,
 				{stdout: primaryFromOrchestrator(0)},
+				allInstancesScript,
 				{stdout: primaryFromOrchestrator(0)},
 				{stdout: downtimeResp},
 				{stdout: primaryFromOrchestrator(1)},
 				{stdout: downtimeResp},
+				allInstancesScript,
 				{stdout: primaryFromOrchestrator(1)},
 			},
 			wantDeleted: []string{mysql.PodName(cr, 0)},
