@@ -748,7 +748,7 @@ func TestSwitchOverAndWait(t *testing.T) {
 			Recorder: new(record.FakeRecorder),
 		}
 
-		err := r.switchOverAndWait(ctx, cr, primary, target)
+		err := r.switchOverAndWait(t.Context(), cr, primary, target)
 		require.NoError(t, err)
 		// 2 calls for switchOverAsync + 1 call for getPrimaryHost in the wait loop.
 		assert.Equal(t, 3, fc.execCount)
