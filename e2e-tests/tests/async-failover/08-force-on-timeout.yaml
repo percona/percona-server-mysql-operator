@@ -1,0 +1,97 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 1200
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster=$(get_cluster_name)
+
+      generation=$(kubectl -n "${NAMESPACE}" get sts "${cluster}-orc" -o jsonpath='{.metadata.generation}')
+
+      # Same budget as step 06, but this time running out of it promotes a
+      # replica instead of leaving the cluster without a primary.
+      kubectl -n "${NAMESPACE}" patch ps "${cluster}" --type merge \
+          -p '{"spec":{"orchestrator":{"failover":{"timeout":"1m","onTimeout":"ForceWithPossibleDataLoss"}}}}'
+
+      # The rollout also wipes the hook's marks, so the budget step 06 spent
+      # does not carry over to a primary with the same name.
+      retry=0
+      until [[ $(kubectl -n "${NAMESPACE}" get sts "${cluster}-orc" -o jsonpath='{.metadata.generation}') -gt ${generation} ]]; do
+          if [[ ${retry} -ge 24 ]]; then
+              echo "the orchestrator StatefulSet never picked up the new failover spec"
+              exit 1
+          fi
+          sleep 5
+          retry=$((retry + 1))
+      done
+      kubectl -n "${NAMESPACE}" rollout status sts "${cluster}-orc" --timeout=300s
+
+      for pod in $(kubectl -n "${NAMESPACE}" get pods -l 'app.kubernetes.io/component=orchestrator' -o jsonpath='{.items[*].metadata.name}'); do
+          kubectl -n "${NAMESPACE}" wait --for=condition=ready pod "${pod}" --timeout=120s
+
+          retry=0
+          until kubectl -n "${NAMESPACE}" exec "${pod}" -c orchestrator -- \
+              jq -r '.PreFailoverProcesses[] | select(contains("orc-handler failover"))' \
+              /etc/orchestrator/config/orchestrator.conf.json \
+              | grep -q -- "-timeout 1m0s -on-timeout ForceWithPossibleDataLoss"; do
+              if [[ ${retry} -ge 30 ]]; then
+                  echo "${pod} never got the ForceWithPossibleDataLoss policy"
+                  exit 1
+              fi
+              sleep 5
+              retry=$((retry + 1))
+          done
+      done
+
+      wait_cluster_consistency_async "${cluster}" 3 3
+
+      primary_before=$(get_primary_from_label)
+      echo "${primary_before}" > "${TEMP_DIR}/timed-out-primary"
+
+      # As in step 06, the primary is lost with its volume.
+      kubectl -n "${NAMESPACE}" apply -f - <<-QUOTA
+      	apiVersion: v1
+      	kind: ResourceQuota
+      	metadata:
+      	  name: no-new-pods
+      	spec:
+      	  hard:
+      	    pods: "0"
+      	QUOTA
+      kubectl -n "${NAMESPACE}" wait --for=jsonpath='{.status.hard.pods}'=0 resourcequota/no-new-pods --timeout=60s
+
+      for pod in $(get_mysql_pods | grep -v "^${primary_before}$"); do
+          run_mysql "STOP REPLICA IO_THREAD" "-h ${pod}.${cluster}-mysql"
+      done
+
+      run_mysql "INSERT myDB.myTable (id) VALUES (100503)" "-h $(get_haproxy_svc "${cluster}")"
+
+      kubectl -n "${NAMESPACE}" delete pod "${primary_before}" --force --grace-period=0
+
+      # Nobody annotates the cluster: the promotion has to come from the policy.
+      primary_after=$(wait_for_primary "changed:${primary_before}" 900)
+      echo "Promoted ${primary_after} after the budget ran out"
+      echo "${primary_after}" > "${TEMP_DIR}/timed-out-candidate"
+
+      kubectl -n "${NAMESPACE}" delete pvc "datadir-${primary_before}" --wait=true
+      kubectl -n "${NAMESPACE}" delete resourcequota no-new-pods
+      kubectl -n "${NAMESPACE}" annotate sts "${cluster}-mysql" "percona.com/e2e-nudge=$(date +%s)" --overwrite
+
+      wait_cluster_consistency_async "${cluster}" 3 3
+
+      rows=$(run_mysql "SELECT id FROM myDB.myTable ORDER BY id" "-h $(get_haproxy_svc "${cluster}")")
+      echo "rows after the timed out failover: ${rows}"
+
+      echo "${rows}" | grep -q 100500
+      echo "${rows}" | grep -q 100501
+      echo "${rows}" | grep -q 100600
+
+      if echo "${rows}" | grep -q 100503; then
+          echo "row 100503 survived a promotion that was supposed to lose it"
+          exit 1
+      fi
+    timeout: 1200
