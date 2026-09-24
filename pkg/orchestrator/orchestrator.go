@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"path/filepath"
 	"time"
 
@@ -548,6 +549,16 @@ var reservedOrchestratorConfigKeys = map[string]bool{
 	"DelayMasterPromotionIfSQLThreadNotUpToDate": true,
 	// derived from spec.orchestrator.failover.switchoverCatchUpTimeout
 	"ReasonableMaintenanceReplicationLagSeconds": true,
+	// derived from spec.orchestrator.failover.timeout. Shorter than the timeout
+	// it lets orchestrator run a second recovery of the same failure while the
+	// pre hook is still working on the first.
+	"RecoveryPeriodBlockSeconds": true,
+	// Orchestrator drops an instance it has not seen for this long, and the
+	// dead primary is exactly such an instance. Without its row there is no
+	// DeadMaster analysis to retry the hook for and no primary for a forced
+	// takeover to demote, so it has to stay known for as long as the failover
+	// may need it.
+	"UnseenInstanceForgetHours": true,
 }
 
 const handlerBinary = "/opt/percona/orc-handler"
@@ -600,6 +611,15 @@ func recoveryPeriodBlockSeconds(failover *apiv1.FailoverSpec) int {
 	return int((failover.TimeoutDuration() + time.Hour).Seconds())
 }
 
+// unseenInstanceForgetHours is how long orchestrator keeps an instance it
+// cannot reach. The dead primary is unreachable from the moment the failure
+// is detected, and forgetting it ends the recovery attempts and disables the
+// forced promotion alike, so it has to outlast the failover timeout the same
+// way the recovery block does. Orchestrator only takes whole hours.
+func unseenInstanceForgetHours(failover *apiv1.FailoverSpec) int {
+	return int(math.Ceil((failover.TimeoutDuration() + time.Hour).Hours()))
+}
+
 func ConfigMapData(cr *apiv1.PerconaServerMySQL) (string, error) {
 	config := make(map[string]any, 0)
 
@@ -625,6 +645,7 @@ func ConfigMapData(cr *apiv1.PerconaServerMySQL) (string, error) {
 	config["PostFailoverProcesses"] = postFailoverProcesses()
 	config["PostUnsuccessfulFailoverProcesses"] = postUnsuccessfulFailoverProcesses()
 	config["RecoveryPeriodBlockSeconds"] = recoveryPeriodBlockSeconds(failover)
+	config["UnseenInstanceForgetHours"] = unseenInstanceForgetHours(failover)
 	config["ReasonableMaintenanceReplicationLagSeconds"] = int(failover.SwitchoverCatchUp().Seconds())
 
 	if cfg := cr.Spec.Orchestrator.Configuration; cfg != "" {

@@ -26,11 +26,11 @@ func TestConfigMapDataUserConfiguration(t *testing.T) {
 	t.Run("user keys are merged", func(t *testing.T) {
 		cr := &apiv1.PerconaServerMySQL{}
 		cr.Spec.CRVersion = "1.2.0"
-		cr.Spec.Orchestrator.Configuration = `{"UnseenInstanceForgetHours": 3, "RecoveryPeriodBlockSeconds": 300}`
+		cr.Spec.Orchestrator.Configuration = `{"InstancePollSeconds": 3, "ReasonableReplicationLagSeconds": 20}`
 
 		cfg := parse(t, cr)
-		assert.EqualValues(t, 3, cfg["UnseenInstanceForgetHours"])
-		assert.EqualValues(t, 300, cfg["RecoveryPeriodBlockSeconds"])
+		assert.EqualValues(t, 3, cfg["InstancePollSeconds"])
+		assert.EqualValues(t, 20, cfg["ReasonableReplicationLagSeconds"])
 	})
 
 	t.Run("reserved keys cannot be overridden", func(t *testing.T) {
@@ -84,6 +84,8 @@ func TestConfigMapDataUserConfiguration(t *testing.T) {
 			"FailMasterPromotionOnLagMinutes": 30,
 			"DelayMasterPromotionIfSQLThreadNotUpToDate": true,
 			"ReasonableMaintenanceReplicationLagSeconds": 1200,
+			"RecoveryPeriodBlockSeconds": 300,
+			"UnseenInstanceForgetHours": 3,
 			"PostFailoverProcesses": ["echo pwned"],
 			"PostMasterFailoverProcesses": ["echo pwned"],
 			"PostIntermediateMasterFailoverProcesses": ["echo pwned"],
@@ -132,6 +134,8 @@ func TestConfigMapDataUserConfiguration(t *testing.T) {
 		assert.NotContains(t, cfg["PostFailoverProcesses"], "echo pwned")
 		assert.NotContains(t, cfg["PostUnsuccessfulFailoverProcesses"], "echo pwned")
 		assert.EqualValues(t, 300, cfg["ReasonableMaintenanceReplicationLagSeconds"])
+		assert.EqualValues(t, 6*60*60+60*60, cfg["RecoveryPeriodBlockSeconds"])
+		assert.EqualValues(t, 7, cfg["UnseenInstanceForgetHours"])
 
 		// non-reserved keys (incl. the now-overridable ones) get through
 		assert.EqualValues(t, 9, cfg["InstancePollSeconds"])
@@ -246,6 +250,19 @@ func TestConfigMapDataRendersFailoverHook(t *testing.T) {
 
 		assert.Greater(t, cfg["RecoveryPeriodBlockSeconds"], float64(30*60),
 			"orchestrator measures the block from the start of the recovery, so a shorter one lets a second recovery in while the hook runs")
+	})
+
+	t.Run("the dead primary is never forgotten mid-failover", func(t *testing.T) {
+		cr := &apiv1.PerconaServerMySQL{}
+		cr.Spec.CRVersion = "1.2.0"
+		cr.Spec.Orchestrator.Failover = &apiv1.FailoverSpec{Timeout: "90m"}
+
+		cfg := parse(t, cr)
+
+		forget := time.Duration(cfg["UnseenInstanceForgetHours"].(float64)) * time.Hour
+		assert.GreaterOrEqual(t, forget, 90*time.Minute+time.Hour,
+			"orchestrator forgets the dead primary after this long, and with it the DeadMaster analysis and the forced takeover")
+		assert.EqualValues(t, 3, cfg["UnseenInstanceForgetHours"], "orchestrator takes whole hours, so the value rounds up")
 	})
 
 	t.Run("spec values are plumbed through", func(t *testing.T) {

@@ -60,7 +60,7 @@
   "RecoveryPeriodBlockSeconds": 25200,
   "RemoveTextFromHostnameDisplay": ":3306",
   "SQLite3DataFile": "/etc/orchestrator/config/orc.db",
-  "UnseenInstanceForgetHours": 1,
+  "UnseenInstanceForgetHours": 7,
   "StatusEndpoint": "/api/status",
   "UseSuperReadOnly": true,
   "ReplicationLagQuery": "SELECT CAST((UNIX_TIMESTAMP(NOW()) - UNIX_TIMESTAMP(ts)) AS UNSIGNED INTEGER) AS 'delay' FROM sys_operator.heartbeat ORDER BY ts DESC LIMIT 1",

@@ -18,13 +18,13 @@ commands:
       for pod in $(kubectl -n "${NAMESPACE}" get pods -l 'app.kubernetes.io/component=orchestrator' -o jsonpath='{.items[*].metadata.name}'); do
           kubectl -n "${NAMESPACE}" wait --for=condition=ready pod "${pod}" --timeout=120s
 
-          forget_hours=""
+          poll_seconds=""
           recovery_period=""
           retry=0
-          until [[ -n ${forget_hours} && ${forget_hours} != "null" ]] || [[ ${retry} -ge 30 ]]; do
+          until [[ ${poll_seconds} == "7" ]] || [[ ${retry} -ge 30 ]]; do
               sleep 5
-              forget_hours=$(kubectl -n "${NAMESPACE}" exec "${pod}" -c orchestrator -- \
-                  jq -r '.UnseenInstanceForgetHours' /etc/orchestrator/config/orchestrator.conf.json || true)
+              poll_seconds=$(kubectl -n "${NAMESPACE}" exec "${pod}" -c orchestrator -- \
+                  jq -r '.InstancePollSeconds' /etc/orchestrator/config/orchestrator.conf.json || true)
               recovery_period=$(kubectl -n "${NAMESPACE}" exec "${pod}" -c orchestrator -- \
                   jq -r '.RecoveryPeriodBlockSeconds' /etc/orchestrator/config/orchestrator.conf.json || true)
               # Reserved: the override above must never reach the merged config.
@@ -33,9 +33,9 @@ commands:
               retry=$((retry + 1))
           done
 
-          echo "${pod}: UnseenInstanceForgetHours=${forget_hours} RecoveryPeriodBlockSeconds=${recovery_period} FailMasterPromotionOnLagMinutes=${lag_minutes}"
+          echo "${pod}: InstancePollSeconds=${poll_seconds} RecoveryPeriodBlockSeconds=${recovery_period} FailMasterPromotionOnLagMinutes=${lag_minutes}"
           kubectl -n "${NAMESPACE}" create configmap "15-check-orchestrator-config-${idx}" \
-              --from-literal=unseen_instance_forget_hours="${forget_hours}" \
+              --from-literal=instance_poll_seconds="${poll_seconds}" \
               --from-literal=recovery_period_block_seconds="${recovery_period}" \
               --from-literal=fail_master_promotion_on_lag_minutes="${lag_minutes}"
           idx=$((idx + 1))

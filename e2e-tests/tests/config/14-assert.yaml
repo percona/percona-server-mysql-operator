@@ -8,8 +8,12 @@ commands:
       source ../../functions
 
       data=$(kubectl -n "${NAMESPACE}" get configmap "$(get_cluster_name)-orc" -o jsonpath='{.data.orchestrator\.conf\.json}')
-      echo "${data}" | grep -F '"UnseenInstanceForgetHours":3' >/dev/null || echo "${data}" | grep -F '"UnseenInstanceForgetHours": 3' >/dev/null
-      echo "${data}" | grep -F '"RecoveryPeriodBlockSeconds":300' >/dev/null || echo "${data}" | grep -F '"RecoveryPeriodBlockSeconds": 300' >/dev/null
+      echo "${data}" | grep -F '"InstancePollSeconds":7' >/dev/null || echo "${data}" | grep -F '"InstancePollSeconds": 7' >/dev/null
+
+      # RecoveryPeriodBlockSeconds is derived from the failover timeout (6h + 1h):
+      # a shorter block lets orchestrator run a second recovery of the same
+      # failure while the pre hook is still working on the first.
+      echo "${data}" | grep -F '"RecoveryPeriodBlockSeconds":25200' >/dev/null || echo "${data}" | grep -F '"RecoveryPeriodBlockSeconds": 25200' >/dev/null
 
       # FailMasterPromotionOnLagMinutes is reserved: the lag it measures grows
       # with the failover hook's own runtime, so a non-zero value vetoes exactly
