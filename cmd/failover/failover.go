@@ -47,6 +47,11 @@ const (
 	// deadline covers the transfer, and a bound on it would be a cap on how
 	// much can be stranded.
 	sourceStallTimeout = 2 * time.Minute
+
+	// drainHeartbeat is how often the drain logs while nothing changes. The
+	// hook runs this job over an exec stream, which the kubelet closes once
+	// it is idle for long enough.
+	drainHeartbeat = time.Minute
 )
 
 var errRelayApplyTimeout = fmt.Errorf("timeout while waiting for relay log apply")
@@ -813,6 +818,7 @@ func waitForRelayLogsApplied(
 
 	var prevLog string
 	var prevPos uint64
+	lastReport := started
 
 	for {
 		// Promoting while the source is serving again would leave the cluster
@@ -857,6 +863,7 @@ func waitForRelayLogsApplied(
 			if currentLog != prevLog || currentPos != prevPos {
 				log.Printf("Applying %s:%d (source %s:%s)", currentLog, currentPos,
 					status["Relay_Source_Log_File"], status["Exec_Source_Log_Pos"])
+				lastReport = time.Now()
 			}
 
 			drained := strings.Contains(status["Replica_SQL_Running_State"], "read all relay log")
@@ -873,6 +880,12 @@ func waitForRelayLogsApplied(
 			}
 
 			prevLog, prevPos = currentLog, currentPos
+		}
+
+		if time.Since(lastReport) >= drainHeartbeat {
+			log.Printf("Still applying %s:%d after %s (state %q)", prevLog, prevPos,
+				time.Since(started).Truncate(time.Second), status["Replica_SQL_Running_State"])
+			lastReport = time.Now()
 		}
 
 		select {
