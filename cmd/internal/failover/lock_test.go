@@ -16,7 +16,7 @@ func TestLock(t *testing.T) {
 
 		f, err := Lock(path)
 		require.NoError(t, err)
-		t.Cleanup(func() { f.Close() })
+		t.Cleanup(func() { f.Close() }) //nolint:errcheck
 
 		assert.FileExists(t, path)
 	})
@@ -26,7 +26,7 @@ func TestLock(t *testing.T) {
 
 		first, err := Lock(path)
 		require.NoError(t, err)
-		t.Cleanup(func() { first.Close() })
+		t.Cleanup(func() { first.Close() }) //nolint:errcheck
 
 		_, err = Lock(path)
 		require.ErrorIs(t, err, ErrLocked)
@@ -41,7 +41,7 @@ func TestLock(t *testing.T) {
 
 		second, err := Lock(path)
 		require.NoError(t, err)
-		t.Cleanup(func() { second.Close() })
+		t.Cleanup(func() { second.Close() }) //nolint:errcheck
 	})
 
 	t.Run("a leftover file with no holder is acquirable", func(t *testing.T) {
@@ -50,7 +50,7 @@ func TestLock(t *testing.T) {
 
 		f, err := Lock(path)
 		require.NoError(t, err)
-		t.Cleanup(func() { f.Close() })
+		t.Cleanup(func() { f.Close() }) //nolint:errcheck
 	})
 
 	t.Run("an unusable path is an error, not a false lock", func(t *testing.T) {
@@ -67,7 +67,7 @@ func TestInProgress(t *testing.T) {
 
 		f, err := Lock(path)
 		require.NoError(t, err)
-		t.Cleanup(func() { f.Close() })
+		t.Cleanup(func() { f.Close() }) //nolint:errcheck
 
 		inProgress, err := InProgress(path)
 		require.NoError(t, err)
@@ -121,7 +121,7 @@ func TestInProgress(t *testing.T) {
 
 		f, err := Lock(path)
 		require.NoError(t, err)
-		t.Cleanup(func() { f.Close() })
+		t.Cleanup(func() { f.Close() }) //nolint:errcheck
 	})
 
 	t.Run("probing does not disturb the holder", func(t *testing.T) {
@@ -129,7 +129,7 @@ func TestInProgress(t *testing.T) {
 
 		f, err := Lock(path)
 		require.NoError(t, err)
-		t.Cleanup(func() { f.Close() })
+		t.Cleanup(func() { f.Close() }) //nolint:errcheck
 
 		_, err = InProgress(path)
 		require.NoError(t, err)

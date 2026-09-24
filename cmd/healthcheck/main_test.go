@@ -21,7 +21,7 @@ func TestIsReplicationStopExpected(t *testing.T) {
 
 		f, err := failover.Lock(path)
 		require.NoError(t, err)
-		t.Cleanup(func() { f.Close() })
+		t.Cleanup(func() { f.Close() }) //nolint:errcheck
 
 		expected, err := isReplicationStopExpected(context.Background(), path)
 
