@@ -302,7 +302,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		case apiv1.UserReplication:
 			restartReplication = true
 		case apiv1.UserOrchestrator:
-			restartOrchestrator = true && cr.Spec.MySQL.IsAsync()
+			restartOrchestrator = cr.AppliedIsAsync()
 		}
 
 		log.V(1).Info("User password changed", "user", user)
@@ -313,7 +313,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	var asyncPrimary *orchestrator.Instance
 
 	if restartReplication {
-		if cr.Spec.MySQL.IsAsync() {
+		if cr.AppliedIsAsync() {
 			asyncPrimary, err = r.getPrimaryFromOrchestrator(ctx, cr)
 			if err != nil {
 				return errors.Wrap(err, "get cluster primary")
@@ -337,7 +337,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 			}
 		}
 
-		if cr.Spec.MySQL.IsAsync() {
+		if cr.AppliedIsAsync() {
 			if err := r.startAsyncReplication(ctx, cr, updatedReplicaPass, asyncPrimary); err != nil {
 				return errors.Wrap(err, "start async replication")
 			}
@@ -471,7 +471,7 @@ func validateUserSecret(cr *apiv1.PerconaServerMySQL, secret *corev1.Secret) err
 			continue
 		}
 		maxLen := mySQLPasswordMaxLength
-		if user == string(apiv1.UserReplication) && cr.Spec.MySQL.IsAsync() {
+		if user == string(apiv1.UserReplication) && (cr.Spec.MySQL.IsAsync() || cr.AppliedIsAsync()) {
 			maxLen = mySQLReplicationSourcePasswordMaxLength
 		}
 
@@ -550,7 +550,7 @@ func (r *PerconaServerMySQLReconciler) passwordsPropagated(ctx context.Context, 
 		},
 	}
 
-	if cr.MySQLSpec().IsAsync() {
+	if cr.OrchestratorEnabled() {
 		components = append(components, component{
 			name:      orchestrator.AppName,
 			size:      int(cr.Spec.Orchestrator.Size),
