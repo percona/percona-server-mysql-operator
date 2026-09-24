@@ -5,6 +5,7 @@ import (
 	"path"
 	"path/filepath"
 
+	"github.com/pkg/errors"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -61,10 +62,13 @@ func RestoreJob(
 	restore *apiv1.PerconaServerMySQLRestore,
 	storage *apiv1.BackupStorageSpec,
 	initImage string,
-) *batchv1.Job {
+) (*batchv1.Job, error) {
 	labels := util.SSMapMerge(cluster.GlobalLabels(), storage.Labels, restore.Labels(appName, naming.ComponentPITR))
 	binlogServer := binlogserver.RestoreSpec(cluster, restore)
-	subcommand, arg, _ := binlogserver.SearchArgs(restore)
+	subcommand, arg, err := binlogserver.SearchArgs(restore)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get search args")
+	}
 
 	pvcName := fmt.Sprintf("%s-%s-mysql-0", mysql.DataVolumeName, cluster.Name)
 
@@ -110,7 +114,6 @@ func RestoreJob(
 								},
 							},
 						),
-						binlogserver.SearchContainer(binlogServer, subcommand, arg, binlogsVolumeName, binlogsMountPath, binlogsFileName),
 					},
 					Containers: []corev1.Container{
 						restoreContainer(cluster, restore, storage, arg),
@@ -159,6 +162,7 @@ func RestoreJob(
 	}
 
 	if binlogServer != nil {
+		job.Spec.Template.Spec.InitContainers = append(job.Spec.Template.Spec.InitContainers, binlogserver.SearchContainer(binlogServer, subcommand, arg, binlogsVolumeName, binlogsMountPath, binlogsFileName))
 		job.Spec.Template.Spec.Volumes = append(job.Spec.Template.Spec.Volumes,
 			binlogserver.SearchVolumes(cluster, binlogServer, binlogserver.RestoreConfigSecretName(cluster, restore))...)
 
@@ -200,7 +204,7 @@ func RestoreJob(
 		})
 	}
 
-	return job
+	return job, nil
 }
 
 func restoreContainer(

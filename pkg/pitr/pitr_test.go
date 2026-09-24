@@ -31,7 +31,8 @@ func TestRestoreJobS3CABundle(t *testing.T) {
 		},
 	}
 	restore := &apiv1.PerconaServerMySQLRestore{Name: "restore", Namespace: "ns"}
-	job := RestoreJob(cluster, restore, &apiv1.BackupStorageSpec{}, "init-image")
+	job, err := RestoreJob(cluster, restore, &apiv1.BackupStorageSpec{}, "init-image")
+	assert.NoError(t, err)
 
 	container := job.Spec.Template.Spec.Containers[0]
 	assert.Equal(t, []string{"/opt/percona/run-pitr-restore.sh"}, container.Command)
@@ -317,7 +318,6 @@ func TestRestoreJob(t *testing.T) {
 					Backup: &apiv1.BackupSpec{
 						PiTR: apiv1.PiTRSpec{
 							BinlogServer: &apiv1.BinlogServerSpec{
-
 								Image: "binlog-server:latest",
 								Env: []corev1.EnvVar{
 									{Name: "SEARCH_SUBCOMMAND", Value: binlogserver.SearchByGTIDCommand},
@@ -892,7 +892,8 @@ func TestRestoreJob(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			job := RestoreJob(tt.cluster, tt.restore, tt.storage, tt.initImage)
+			job, err := RestoreJob(tt.cluster, tt.restore, tt.storage, tt.initImage)
+			assert.NoError(t, err)
 			tt.verify(t, job)
 		})
 	}

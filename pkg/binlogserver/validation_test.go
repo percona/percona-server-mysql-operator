@@ -67,18 +67,20 @@ func gtidRestore(value string) *apiv1.PerconaServerMySQLRestore {
 }
 
 func TestValidateTargetTimestamp(t *testing.T) {
+	expectedReads := []string{binlogIndexName, "binlog.000001.json"}
 	tests := map[string]struct {
-		target      string
-		notCovered  bool
-		expectedErr string
+		target        string
+		notCovered    bool
+		expectedErr   string
+		expectedReads []string
 	}{
-		"inside archive":        {target: "2026-09-09 12:45:00"},
-		"UTC date":              {target: "2026-09-09T12:45:00Z"},
-		"RFC3339 offset":        {target: "2026-09-09T14:45:00.25+02:00"},
-		"offset before archive": {target: "2026-09-09T13:59:59+02:00", notCovered: true, expectedErr: "archive starts at 2026-09-09T12:00:00"},
-		"at archive start":      {target: "2026-09-09 12:00:00"},
-		"past archive":          {target: "2030-01-01 00:00:00"},
-		"before archive":        {target: "2026-09-09 11:00:00", notCovered: true, expectedErr: "archive starts at 2026-09-09T12:00:00"},
+		"inside archive":        {target: "2026-09-09 12:45:00", expectedReads: expectedReads},
+		"UTC date":              {target: "2026-09-09T12:45:00Z", expectedReads: expectedReads},
+		"RFC3339 offset":        {target: "2026-09-09T14:45:00.25+02:00", expectedReads: expectedReads},
+		"offset before archive": {target: "2026-09-09T13:59:59+02:00", notCovered: true, expectedErr: "archive starts at 2026-09-09T12:00:00", expectedReads: expectedReads},
+		"at archive start":      {target: "2026-09-09 12:00:00", expectedReads: expectedReads},
+		"past archive":          {target: "2030-01-01 00:00:00", expectedReads: expectedReads},
+		"before archive":        {target: "2026-09-09 11:00:00", notCovered: true, expectedErr: "archive starts at 2026-09-09T12:00:00", expectedReads: expectedReads},
 		"malformed timestamp":   {target: "yesterday", expectedErr: "invalid pitr target"},
 	}
 
@@ -92,9 +94,7 @@ func TestValidateTargetTimestamp(t *testing.T) {
 			} else {
 				require.ErrorContains(t, err, tt.expectedErr)
 			}
-			if name != "malformed timestamp" {
-				assert.Equal(t, []string{binlogIndexName, "binlog.000001.json"}, archive.reads)
-			}
+			assert.Equal(t, tt.expectedReads, archive.reads)
 		})
 	}
 }

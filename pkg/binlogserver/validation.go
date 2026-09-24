@@ -144,7 +144,7 @@ func getBinlogMetadata(ctx context.Context, st storage.Storage, name string) (*a
 		return nil, errors.Wrap(err, "parse metadata")
 	}
 	var trailing any
-	if err := decoder.Decode(&trailing); err != io.EOF {
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
 		if err == nil {
 			return nil, errors.New("parse metadata: multiple JSON values")
 		}

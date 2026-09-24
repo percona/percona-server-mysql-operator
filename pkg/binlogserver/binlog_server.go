@@ -189,7 +189,7 @@ func volumes(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServerSpec, configS
 				SecretName: spec.Storage.S3.CredentialsSecret,
 			},
 		},
-		ConfigVolume(cr, spec, configSecretName),
+		ConfigVolume(cr, configSecretName),
 	)
 
 	if s := spec.Storage.S3; s != nil && s.CABundle != nil &&
@@ -213,7 +213,7 @@ func volumes(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServerSpec, configS
 	return vols
 }
 
-func ConfigVolume(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServerSpec, configSecretName string) corev1.Volume {
+func ConfigVolume(cr *apiv1.PerconaServerMySQL, configSecretName string) corev1.Volume {
 	t := true
 
 	if configSecretName == "" {
@@ -264,7 +264,7 @@ func SearchVolumes(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServerSpec, c
 				SecretName: cr.InternalSecretName(),
 			},
 		},
-		ConfigVolume(cr, spec, configSecretName),
+		ConfigVolume(cr, configSecretName),
 	}
 	if spec.KeyringSecret != nil {
 		volumes = append(volumes, corev1.Volume{

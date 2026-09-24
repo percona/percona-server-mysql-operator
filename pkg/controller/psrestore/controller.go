@@ -480,7 +480,15 @@ func (r *PerconaServerMySQLRestoreReconciler) binlogArchiveStorage(
 		return nil, errors.New("binlog server S3 storage is not configured")
 	}
 
-	opts, err := storage.GetS3OptionsFromSpec(ctx, r.Client, cluster.Namespace, spec.Storage.S3)
+	bcp, err := getBackup(ctx, r.Client, cr, cluster)
+	if err != nil {
+		return nil, err
+	}
+	verifyTLS := true
+	if bcp.Status.Storage != nil && bcp.Status.Storage.VerifyTLS != nil {
+		verifyTLS = *bcp.Status.Storage.VerifyTLS
+	}
+	opts, err := storage.GetS3OptionsFromSpec(ctx, r.Client, cluster.Namespace, spec.Storage.S3, verifyTLS)
 	if err != nil {
 		return nil, err
 	}
@@ -568,7 +576,10 @@ func (r *PerconaServerMySQLRestoreReconciler) reconcilePITRJob(
 			return "", errors.Wrap(err, "get operator image")
 		}
 
-		job := pitr.RestoreJob(cluster, cr, bcp.Status.Storage, initImage)
+		job, err := pitr.RestoreJob(cluster, cr, bcp.Status.Storage, initImage)
+		if err != nil {
+			return "", errors.Wrap(err, "pitr restore job")
+		}
 		if err := controllerutil.SetControllerReference(cr, job, r.Scheme); err != nil {
 			return "", errors.Wrapf(err, "set controller reference to Job %s/%s", job.Namespace, job.Name)
 		}

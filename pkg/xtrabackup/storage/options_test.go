@@ -164,7 +164,7 @@ func TestGetS3OptionsFromSpec(t *testing.T) {
 		Region:            "region",
 		EndpointURL:       "https://s3.example",
 		CABundle:          &apiv1.CABundleSecretSelector{Name: ca.Name, Key: "ca.crt"},
-	})
+	}, true)
 	require.NoError(t, err)
 	assert.Equal(t, "bucket", opts.BucketName)
 	assert.Equal(t, "prefix/", opts.Prefix)

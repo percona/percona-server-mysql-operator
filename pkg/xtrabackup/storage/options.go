@@ -73,7 +73,7 @@ func GetOptionsFromBackupStatus(ctx context.Context, cl client.Client, cluster *
 	}
 }
 
-func GetS3OptionsFromSpec(ctx context.Context, cl client.Client, namespace string, spec *apiv1.BackupStorageS3Spec) (*S3Options, error) {
+func GetS3OptionsFromSpec(ctx context.Context, cl client.Client, namespace string, spec *apiv1.BackupStorageS3Spec, verifyTLS bool) (*S3Options, error) {
 	if spec == nil {
 		return nil, errors.New("S3 storage is not configured")
 	}
@@ -115,7 +115,7 @@ func GetS3OptionsFromSpec(ctx context.Context, cl client.Client, namespace strin
 		BucketName:      bucket,
 		Prefix:          prefix,
 		Region:          spec.Region,
-		VerifyTLS:       true,
+		VerifyTLS:       verifyTLS,
 		CABundle:        caBundle,
 	}, nil
 }
