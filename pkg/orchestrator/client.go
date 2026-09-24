@@ -44,6 +44,9 @@ func (r *orcResponse) Error() error {
 	if strings.Contains(r.Message, "i/o timeout") {
 		return ErrTimeout
 	}
+	if strings.Contains(r.Message, "recovery not attempted") {
+		return ErrRecoveryNotAttempted
+	}
 	return errors.New(r.Message)
 }
 
@@ -103,6 +106,10 @@ var (
 	ErrNoSuchHost             = errors.New("mysql host not found")
 	ErrTimeout                = errors.New("timeout")
 	ErrContainerNotFound      = errors.New("orchestrator container not found")
+
+	// ErrRecoveryNotAttempted is orchestrator turning a takeover away because
+	// another recovery of the same instance holds its place in the audit
+	ErrRecoveryNotAttempted = errors.New("recovery not attempted")
 )
 
 func exec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, endpoint string, outb, errb *bytes.Buffer) error {

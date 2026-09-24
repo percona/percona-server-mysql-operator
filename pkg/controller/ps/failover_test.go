@@ -71,6 +71,51 @@ func TestReconcileForcePromoteRefusesWritablePrimary(t *testing.T) {
 	assert.Contains(t, event, "async-failover-mysql-0 is a writable primary")
 }
 
+// After an aborted failover orchestrator retries the dead primary's recovery
+// every second, and a takeover requested while one of those is registered is
+// turned away without being tried. The annotation has to outlive that.
+func TestReconcileForcePromoteRetriesTakeoverNotAttempted(t *testing.T) {
+	cr, err := readDefaultCR("async-failover", "force-promote")
+	require.NoError(t, err)
+	cr.Annotations = map[string]string{naming.AnnotationForcePromote.String(): "async-failover-mysql-1"}
+
+	cluster := "async-failover-mysql-0:3306"
+	instances, err := json.Marshal([]orchestrator.Instance{
+		{Alias: "async-failover-mysql-0", ClusterName: cluster},
+		{Alias: "async-failover-mysql-1", ClusterName: cluster, IsLastCheckValid: true},
+	})
+	require.NoError(t, err)
+	ok, err := json.Marshal(map[string]string{"Code": "OK"})
+	require.NoError(t, err)
+	notAttempted, err := json.Marshal(map[string]string{
+		"Code":    "ERROR",
+		"Message": "Unexpected error: recovery not attempted. This should not happen",
+	})
+	require.NoError(t, err)
+
+	fc := &fakeClient{scripts: []fakeClientScript{
+		{cmd: orcURL("api/cluster/" + cluster), stdout: instances},
+		{cmd: orcURL("api/register-candidate/async-failover-mysql-1/3306/prefer"), stdout: ok},
+		{cmd: orcURL("api/force-master-takeover/" + cluster + "/async-failover-mysql-1/3306"), stdout: notAttempted},
+	}}
+	recorder := record.NewFakeRecorder(10)
+	r := &PerconaServerMySQLReconciler{
+		Client:    fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(cr).Build(),
+		ClientCmd: fc,
+		Recorder:  recorder,
+	}
+
+	primary := &orchestrator.Instance{Alias: "async-failover-mysql-0"}
+
+	err = r.reconcileForcePromote(t.Context(), cr, &corev1.Pod{}, cluster, primary)
+	require.ErrorIs(t, err, orchestrator.ErrRecoveryNotAttempted)
+	assert.Equal(t, len(fc.scripts), fc.execCount)
+
+	require.NoError(t, r.Get(t.Context(), client.ObjectKeyFromObject(cr), cr))
+	assert.Equal(t, "async-failover-mysql-1", cr.Annotations[naming.AnnotationForcePromote.String()])
+	assert.Empty(t, recorder.Events)
+}
+
 // An orphaned primary claims the cluster's alias as well, so a promotion
 // requested while orchestrator sees two live clusters could land on either.
 func TestReconcileAsyncFailoverRefusesSplitTopology(t *testing.T) {
