@@ -316,21 +316,9 @@ func getTopology(ctx context.Context, fqdn string, peers sets.Set[string]) (stri
 	if primary == "" && peers.Len() == 1 {
 		primary = sets.List(peers)[0]
 	} else if primary == "" {
-		primary, err = electPrimary(ctx, subtractor, gtids)
+		primary, err = electPrimary(ctx, subtractor, fqdn, gtids)
 		if err != nil {
 			return "", nil, err
-		}
-
-		// The peers hold the same transactions, so there is nothing to lose
-		// whichever way round we point replication. Prefer another pod: ours has
-		// just started and is the one asking.
-		if primary == "" {
-			for _, r := range sets.List(replicas) {
-				if r != fqdn {
-					primary = r
-					break
-				}
-			}
 		}
 	}
 
@@ -435,7 +423,8 @@ func orderDonors(ctx context.Context, s gtidSubtractor, replicas []string, fqdn 
 }
 
 // electPrimary picks the peer whose executed GTID set holds every other peer's.
-func electPrimary(ctx context.Context, s gtidSubtractor, gtids map[string]string) (string, error) {
+// When several do, it picks the first of them that is not fqdn.
+func electPrimary(ctx context.Context, s gtidSubtractor, fqdn string, gtids map[string]string) (string, error) {
 	if len(gtids) == 0 {
 		return "", nil
 	}
@@ -471,9 +460,18 @@ func electPrimary(ctx context.Context, s gtidSubtractor, gtids map[string]string
 		return "", errors.Wrapf(errDivergedPeers, "none of %v holds every transaction", peers)
 	case 1:
 		return complete[0], nil
-	default:
-		return "", nil
 	}
+
+	// The complete peers hold the same transactions, so there is nothing to
+	// lose whichever of them we point replication at. Prefer another pod: ours
+	// has just started and is the one asking.
+	for _, candidate := range complete {
+		if candidate != fqdn {
+			return candidate, nil
+		}
+	}
+
+	return "", nil
 }
 
 type gtidSubtractor interface {
