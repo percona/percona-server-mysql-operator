@@ -39,7 +39,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/validation"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
@@ -228,13 +227,6 @@ type ClusterType string
 const (
 	ClusterTypeGR    ClusterType = "group-replication"
 	ClusterTypeAsync ClusterType = "async"
-)
-
-const (
-	MinSafeProxySize = 2
-	MinSafeGRSize    = 3
-	MaxSafeGRSize    = 9
-	MinSafeAsyncSize = 2
 )
 
 // Checks if the provided ClusterType is valid.
@@ -1669,16 +1661,6 @@ func (cr *PerconaServerMySQL) ClusterHint() string {
 	return fmt.Sprintf("%s.%s", cr.Name, cr.Namespace)
 }
 
-// GetClusterNameFromObject retrieves the cluster's name from the given client object's labels.
-func GetClusterNameFromObject(obj client.Object) (string, error) {
-	labels := obj.GetLabels()
-	instance, ok := labels[naming.LabelInstance]
-	if !ok {
-		return "", errors.Errorf("label %s doesn't exist", naming.LabelInstance)
-	}
-	return instance, nil
-}
-
 // FNVHash computes a hash of the provided byte slice using the FNV-1a algorithm.
 func FNVHash(p []byte) string {
 	hash := fnv.New32()
@@ -1757,14 +1739,19 @@ func (cr *PerconaServerMySQL) AppliedIsGR() bool {
 	return cr.AppliedClusterType() == ClusterTypeGR
 }
 
-// OrchestratorEnabled determines if the orchestrator is enabled,
-// considering the MySQL configuration.
+// OrchestratorEnabled reports whether Orchestrator should be running for this cluster.
 func (cr *PerconaServerMySQL) OrchestratorEnabled() bool {
-	if cr.MySQLSpec().IsGR() {
+	if cr.AppliedIsGR() {
 		return false
 	}
 
-	if cr.MySQLSpec().IsAsync() && !cr.Spec.Unsafe.Orchestrator {
+	// The switch away from async tears Orchestrator down itself; don't bring it
+	// back while that is running.
+	if meta.IsStatusConditionTrue(cr.Status.Conditions, ConditionClusterTypeSwitchInProgress) {
+		return false
+	}
+
+	if cr.AppliedIsAsync() && !cr.Spec.Unsafe.Orchestrator {
 		return true
 	}
 
@@ -1888,8 +1875,4 @@ func (cr *PerconaServerMySQL) BootstrapMode() BootstrapMode {
 
 func (cr *PerconaServerMySQL) IsAwaitingExternalBootstrap() bool {
 	return cr.BootstrapMode() == BootstrapModeManual && meta.IsStatusConditionTrue(cr.Status.Conditions, ConditionAwaitingExternalBootstrap)
-}
-
-func (cr *PerconaServerMySQL) IsOrchestratorEnabled() bool {
-	return cr.Spec.MySQL.IsAsync() && cr.Spec.Orchestrator.Enabled
 }

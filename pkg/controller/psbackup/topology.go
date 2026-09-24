@@ -16,7 +16,7 @@ import (
 
 // getDBTopology returns the topology of the database cluster.
 func getDBTopology(ctx context.Context, cli client.Client, cliCmd clientcmd.Client, cluster *apiv1.PerconaServerMySQL, operatorPass string) (topology.Topology, error) {
-	switch cluster.Spec.MySQL.ClusterType {
+	switch cluster.AppliedClusterType() {
 	case apiv1.ClusterTypeGR:
 		top, err := topology.GroupReplication(ctx, cli, cliCmd, cluster, operatorPass)
 		if err != nil {

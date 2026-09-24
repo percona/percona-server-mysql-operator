@@ -157,6 +157,21 @@ func TestRun(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, before, after)
 		j.relay.assertUntouched(t)
+
+		released, err := lockSplice(j.cfg.lockPath)
+		require.NoError(t, err, "the early exit must release the splice lock")
+		t.Cleanup(func() { released.Close() }) //nolint:errcheck
+	})
+
+	t.Run("an unreadable status stops the splice", func(t *testing.T) {
+		j := newJobFixture(t)
+		j.fake.err = errors.New("connection lost")
+
+		err := run(t.Context(), j.cfg)
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "show replica status")
+		assert.Empty(t, j.fake.ops, "replication must not be touched when the status is unreadable")
 	})
 
 	t.Run("-wait=false returns once the applier is started", func(t *testing.T) {
