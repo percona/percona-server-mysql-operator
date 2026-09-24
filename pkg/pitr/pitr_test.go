@@ -30,9 +30,14 @@ func TestRestoreJobS3CABundle(t *testing.T) {
 			}}},
 		},
 	}
-	restore := &apiv1.PerconaServerMySQLRestore{Name: "restore", Namespace: "ns"}
+	restore := &apiv1.PerconaServerMySQLRestore{
+		Name: "restore", Namespace: "ns",
+		Spec: apiv1.PerconaServerMySQLRestoreSpec{
+			PITR: &apiv1.RestorePITRSpec{Type: apiv1.PITRDate, Date: "2024-01-15 10:00:00"},
+		},
+	}
 	job, err := RestoreJob(cluster, restore, &apiv1.BackupStorageSpec{}, "init-image")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	container := job.Spec.Template.Spec.Containers[0]
 	assert.Equal(t, []string{"/opt/percona/run-pitr-restore.sh"}, container.Command)
@@ -50,11 +55,12 @@ func TestRestoreJobS3CABundle(t *testing.T) {
 
 func TestRestoreJob(t *testing.T) {
 	tests := map[string]struct {
-		cluster   *apiv1.PerconaServerMySQL
-		restore   *apiv1.PerconaServerMySQLRestore
-		storage   *apiv1.BackupStorageSpec
-		initImage string
-		verify    func(t *testing.T, job *batchv1.Job)
+		cluster     *apiv1.PerconaServerMySQL
+		restore     *apiv1.PerconaServerMySQLRestore
+		storage     *apiv1.BackupStorageSpec
+		initImage   string
+		expectError string
+		verify      func(t *testing.T, job *batchv1.Job)
 	}{
 		"basic job metadata": {
 			cluster: &apiv1.PerconaServerMySQL{
@@ -456,7 +462,7 @@ func TestRestoreJob(t *testing.T) {
 				assert.NotContains(t, envMap, "SLEEP_FOREVER")
 			},
 		},
-		"restore container has correct env vars without pitr spec": {
+		"missing pitr spec is rejected": {
 			cluster: &apiv1.PerconaServerMySQL{
 				Name: "cluster", Namespace: "ns",
 				Spec: apiv1.PerconaServerMySQLSpec{
@@ -473,17 +479,9 @@ func TestRestoreJob(t *testing.T) {
 				Name: "my-restore", Namespace: "ns",
 				Spec: apiv1.PerconaServerMySQLRestoreSpec{},
 			},
-			storage:   &apiv1.BackupStorageSpec{},
-			initImage: "init:latest",
-			verify: func(t *testing.T, job *batchv1.Job) {
-				container := job.Spec.Template.Spec.Containers[0]
-				envMap := envToMap(container.Env)
-				assert.Equal(t, "my-restore", envMap["RESTORE_NAME"])
-				assert.Equal(t, "/var/lib/pitr-binlogs/binlogs.json", envMap["BINLOGS_PATH"])
-				assert.NotContains(t, envMap, "PITR_TYPE")
-				assert.NotContains(t, envMap, "PITR_DATE")
-				assert.NotContains(t, envMap, "PITR_GTID")
-			},
+			storage:     &apiv1.BackupStorageSpec{},
+			initImage:   "init:latest",
+			expectError: "pitr spec is not set",
 		},
 		"restore container has pitr date env vars": {
 			cluster: &apiv1.PerconaServerMySQL{
@@ -599,7 +597,7 @@ func TestRestoreJob(t *testing.T) {
 				Spec: apiv1.PerconaServerMySQLRestoreSpec{
 					PITR: &apiv1.RestorePITRSpec{
 						Type: apiv1.PITRGtid,
-						GTID: "abc123:1-100",
+						GTID: "3E11FA47-71CA-11E1-9E33-C80AA9429562:1-100",
 					},
 				},
 			},
@@ -892,8 +890,19 @@ func TestRestoreJob(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
+			if tt.restore.Spec.PITR == nil && tt.expectError == "" {
+				tt.restore.Spec.PITR = &apiv1.RestorePITRSpec{Type: apiv1.PITRDate, Date: "2024-01-15 10:00:00"}
+			} else if tt.restore.Spec.PITR != nil && tt.restore.Spec.PITR.Type == "" {
+				tt.restore.Spec.PITR.Type = apiv1.PITRDate
+				tt.restore.Spec.PITR.Date = "2024-01-15 10:00:00"
+			}
 			job, err := RestoreJob(tt.cluster, tt.restore, tt.storage, tt.initImage)
-			assert.NoError(t, err)
+			if tt.expectError != "" {
+				require.ErrorContains(t, err, tt.expectError)
+				assert.Nil(t, job)
+				return
+			}
+			require.NoError(t, err)
 			tt.verify(t, job)
 		})
 	}

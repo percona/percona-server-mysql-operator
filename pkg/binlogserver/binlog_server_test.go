@@ -9,6 +9,7 @@ import (
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
+	"github.com/percona/percona-server-mysql-operator/pkg/version"
 )
 
 func TestStatefulSetS3CABundle(t *testing.T) {
@@ -47,6 +48,7 @@ func newTestCR(name, namespace string) *apiv1.PerconaServerMySQL {
 		Name:      name,
 		Namespace: namespace,
 		Spec: apiv1.PerconaServerMySQLSpec{
+			CRVersion:     version.Version(),
 			SSLSecretName: name + "-ssl",
 			SecretsName:   name + "-secrets",
 			Backup: &apiv1.BackupSpec{
