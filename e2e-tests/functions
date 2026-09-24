@@ -1548,26 +1548,56 @@ get_primary_from_haproxy() {
 	run_mysql "SHOW VARIABLES LIKE '%hostname%';" "-h ${haproxy_pod_ip} -P3306" | awk '{print $2}'
 }
 
-# Verifies the backends HAProxy generated for the given cluster: every server is
-# listed on its backend's own port, every backend runs the check that matches the
-# roles it holds, and the x-protocol and admin ports reach a writable primary.
-check_haproxy_backends() {
+# haproxy pods learn a new primary on their own external-check schedule, and
+# spread-checks deliberately staggers them, so a single sample right after a
+# failover catches some of them mid-flight. Echoes the primary once every pod
+# routes to the one carrying the label.
+wait_for_haproxy_primary() {
 	local cluster=$1
 	local haproxy_size=${2:-3}
 
-	local primary_pod=$(get_primary_from_label)
+	local primary data i
+	while true; do
+		primary=$(get_primary_from_label)
+
+		data=()
+		for i in $(seq 0 $((haproxy_size - 1))); do
+			data+=("$(get_primary_from_haproxy ${cluster}-haproxy-${i})")
+		done
+
+		if [ -n "${primary}" ] && [ "$(printf '%s\n' "${data[@]}" | sort -u)" = "${primary}" ]; then
+			echo "${primary}"
+			return 0
+		fi
+
+		echo "waiting for haproxy pods to route to primary ${primary}: ${data[*]}" >&2
+		sleep 5
+	done
+}
+
+# Verifies the backends HAProxy generated for the given cluster: every server is
+# listed on its backend's own port, every backend runs the check that matches the
+# roles it holds, and the x-protocol and admin ports reach a writable primary.
+# Every kubectl call is a full API round trip, so each haproxy pod is read in one
+# exec and the root credentials are resolved once for the whole function.
+check_haproxy_backends() {
+	local cluster=$1
+	local primary_pod=${2:-$(get_primary_from_label)}
+	local haproxy_size=${3:-3}
+
 	local primary_srv=$(kubectl -n "${NAMESPACE}" get pod "${primary_pod}" -o jsonpath='{.status.podIP}' | tr '.' '-')
 
 	local i
 	for i in $(seq 0 $((haproxy_size - 1))); do
 		local pod="${cluster}-haproxy-${i}"
 
+		local dump=$(kubectl -n "${NAMESPACE}" exec "${pod}" -c haproxy -- bash -c \
+			'cat /etc/haproxy/mysql/haproxy.cfg; echo "@@@"; echo "show stat" | socat stdio /etc/haproxy/mysql/haproxy.sock')
+
 		# '<backend> <kind> <name> <value>' per check and server line
-		local layout=$(kubectl -n "${NAMESPACE}" exec "${pod}" -c haproxy -- \
-			awk '/backend /{b=$2}
+		local layout=$(awk '/backend /{b=$2}
 			     /external-check command/{print b, "check", "-", $3}
-			     /^server /{split($3,a,":"); print b, "server", $2, a[2]}' \
-			/etc/haproxy/mysql/haproxy.cfg)
+			     /^server /{split($3,a,":"); print b, "server", $2, a[2]}' <<<"${dump%%@@@*}")
 
 		local backend='' kind='' name='' value='' expected=''
 		while read -r backend kind name value; do
@@ -1596,9 +1626,7 @@ check_haproxy_backends() {
 			fi
 		done <<<"${layout}"
 
-		local not_up=$(kubectl -n "${NAMESPACE}" exec "${pod}" -c haproxy -- \
-			bash -c "echo 'show stat' | socat stdio /etc/haproxy/mysql/haproxy.sock" \
-			| awk -F, -v p="${primary_srv}" '$1 ~ /^mysql-(x|admin)$/ && $2 == p && $18 !~ /^UP/ {print $1, $2, $18}')
+		local not_up=$(awk -F, -v p="${primary_srv}" '$1 ~ /^mysql-(x|admin)$/ && $2 == p && $18 !~ /^UP/ {print $1, $2, $18}' <<<"${dump#*@@@}")
 		if [ -n "${not_up}" ]; then
 			echo "${pod}: primary ${primary_pod} is not UP in the x-protocol/admin backends:"
 			echo "${not_up}"
@@ -1607,22 +1635,23 @@ check_haproxy_backends() {
 	done
 
 	local svc=$(get_haproxy_svc "${cluster}")
+	local creds="-uroot -p'$(get_user_pass root)'"
 
-	local host_via_x=$(run_mysqlsh "SELECT @@hostname" "--mysqlx -h ${svc} -P 33060")
+	# reaching the primary is not enough, x-protocol has to be writable: the DDL and
+	# the hostname go in one round trip, a failed write leaves the hostname unset
+	local host_via_x=$(run_mysqlsh \
+		"CREATE DATABASE IF NOT EXISTS check_haproxy_x; DROP DATABASE check_haproxy_x; SELECT @@hostname" \
+		"--mysqlx -h ${svc} -P 33060" "${creds}")
 	if [ "${host_via_x}" != "${primary_pod}" ]; then
-		echo "x-protocol port 33060 landed on '${host_via_x}', expected primary '${primary_pod}'"
+		echo "x-protocol port 33060 did not reach a writable primary: got '${host_via_x}', expected '${primary_pod}'"
 		exit 1
 	fi
 
-	local host_via_admin=$(run_mysql "SELECT @@hostname" "-h ${svc} -P 33062")
+	local host_via_admin=$(run_mysql "SELECT @@hostname" "-h ${svc} -P 33062" "${creds}")
 	if [ "${host_via_admin}" != "${primary_pod}" ]; then
 		echo "admin port 33062 landed on '${host_via_admin}', expected primary '${primary_pod}'"
 		exit 1
 	fi
-
-	# reaching the primary is not enough, x-protocol has to be writable
-	run_mysqlsh "CREATE DATABASE IF NOT EXISTS check_haproxy_x" "--mysqlx -h ${svc} -P 33060"
-	run_mysqlsh "DROP DATABASE check_haproxy_x" "--mysqlx -h ${svc} -P 33060"
 }
 
 get_primary_from_group_replication() {

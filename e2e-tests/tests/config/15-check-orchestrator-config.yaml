@@ -1,6 +1,5 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
-timeout: 600
 commands:
   - script: |-
       set -o errexit
@@ -38,3 +37,4 @@ commands:
               --from-literal=recovery_period_block_seconds="${recovery_period}"
           idx=$((idx + 1))
       done
+    timeout: 600

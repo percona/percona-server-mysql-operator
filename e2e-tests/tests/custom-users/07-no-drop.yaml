@@ -1,6 +1,5 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
-timeout: 360
 commands:
   - script: |-
       set -o errexit
@@ -52,3 +51,4 @@ commands:
           --from-literal=insert_kept="${insert_kept}" \
           --from-literal=bob_kept="${bob_kept}"
       kubectl get configmap -n "${NAMESPACE}" 07-check-no-drop -o yaml
+    timeout: 360

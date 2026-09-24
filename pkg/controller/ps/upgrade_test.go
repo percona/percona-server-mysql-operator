@@ -695,6 +695,65 @@ func TestSwitchOverAndWait(t *testing.T) {
 		assert.Equal(t, 3, fc.execCount)
 	})
 
+	t.Run("pending switch to GR still uses the async path", func(t *testing.T) {
+		// The spec already asks for GR but the switch has not run yet, so the
+		// instances are still an async topology. Picking the GR path here makes
+		// mysqlsh fail with "unmanaged asynchronous replication topology".
+		cr := readDefaultCRForUpgrade("test-cluster", "test-ns")
+		cr.Spec.MySQL.ClusterType = apiv1.ClusterTypeGR
+		cr.Status.ClusterType = apiv1.ClusterTypeAsync
+
+		primary := &corev1.Pod{Name: mysql.PodName(cr, 0), Namespace: cr.Namespace}
+		target := &corev1.Pod{Name: mysql.PodName(cr, 1), Namespace: cr.Namespace}
+
+		clusterHint := cr.ClusterHint()
+
+		oldPrimaryResp, _ := json.Marshal(orchestrator.Instance{
+			Key:   orchestrator.InstanceKey{Hostname: primary.Name},
+			Alias: primary.Name,
+		})
+		takeoverResp, _ := json.Marshal(orchestrator.Instance{
+			Key:   orchestrator.InstanceKey{Hostname: target.Name},
+			Alias: target.Name,
+		})
+		newPrimaryResp, _ := json.Marshal(orchestrator.Instance{
+			Key:   orchestrator.InstanceKey{Hostname: target.Name},
+			Alias: target.Name,
+		})
+
+		cli := fake.NewClientBuilder().WithScheme(s).WithObjects(makeReadyOrcPod(cr)).Build()
+		fc := &fakeClient{
+			scripts: []fakeClientScript{
+				{
+					cmd:    []string{"sh", "-c", fmt.Sprintf(`curl -s -u "%s:$(cat %s/%s)" "localhost:3000/api/master/%s"`, apiv1.UserOrchestrator, orchestrator.CredsMountPath, apiv1.UserOrchestrator, clusterHint)},
+					stdout: oldPrimaryResp,
+				},
+				{
+					cmd:    []string{"sh", "-c", fmt.Sprintf(`curl -s -u "%s:$(cat %s/%s)" "localhost:3000/api/graceful-master-takeover-auto/%s/%s/%d"`, apiv1.UserOrchestrator, orchestrator.CredsMountPath, apiv1.UserOrchestrator, clusterHint, target.GetName(), mysql.DefaultPort)},
+					stdout: takeoverResp,
+				},
+				{
+					cmd:    []string{"sh", "-c", fmt.Sprintf(`curl -s -u "%s:$(cat %s/%s)" "localhost:3000/api/master/%s"`, apiv1.UserOrchestrator, orchestrator.CredsMountPath, apiv1.UserOrchestrator, clusterHint)},
+					stdout: newPrimaryResp,
+				},
+			},
+		}
+		r := &PerconaServerMySQLReconciler{
+			Client:    cli,
+			Scheme:    s,
+			ClientCmd: fc,
+			ServerVersion: &platform.ServerVersion{
+				Platform: platform.Kubernetes,
+			},
+			Recorder: new(record.FakeRecorder),
+		}
+
+		err := r.switchOverAndWait(ctx, cr, primary, target)
+		require.NoError(t, err)
+		// 2 calls for switchOverAsync + 1 call for getPrimaryHost in the wait loop.
+		assert.Equal(t, 3, fc.execCount)
+	})
+
 	t.Run("GR assigns primary label to target", func(t *testing.T) {
 		cr := readDefaultCRForUpgrade("test-cluster", "test-ns")
 		cr.Spec.MySQL.ClusterType = apiv1.ClusterTypeGR

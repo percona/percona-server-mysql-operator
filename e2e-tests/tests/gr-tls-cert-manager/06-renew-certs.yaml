@@ -1,6 +1,5 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
-timeout: 1200
 commands:
   - script: |-
       set -o errexit
@@ -32,3 +31,4 @@ commands:
           --from-literal=reloaded="${reloaded}" \
           --from-literal=mysql_recycled="${mysql_recycled}" \
           --from-literal=router_recycled="${router_recycled}"
+    timeout: 1200
