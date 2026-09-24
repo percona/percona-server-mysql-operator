@@ -167,13 +167,20 @@ func (r *PerconaServerMySQLReconciler) reconcileForcePromote(
 
 	log.Info("Forcing promotion", "candidate", candidate)
 
+	err = orchestrator.ForceMasterTakeover(ctx, r.ClientCmd, orcPod, cluster, candidate, mysql.DefaultPort)
+	if errors.Is(err, orchestrator.ErrRecoveryNotAttempted) {
+		// After an aborted failover orchestrator retries the dead primary's
+		// recovery every second, and the takeover lost the race to one of them.
+		return errors.Wrapf(err, "force the promotion of %s", candidate)
+	}
+
 	defer func() {
 		if err := r.consumeForcePromote(ctx, cr); err != nil {
 			log.Error(err, "failed to remove the annotation", "annotation", naming.AnnotationForcePromote)
 		}
 	}()
 
-	if err := orchestrator.ForceMasterTakeover(ctx, r.ClientCmd, orcPod, cluster, candidate, mysql.DefaultPort); err != nil {
+	if err != nil {
 		r.Recorder.Eventf(cr, corev1.EventTypeWarning, naming.EventFailoverForced,
 			"Could not force the promotion of %s: %v", candidate, err)
 		return nil
