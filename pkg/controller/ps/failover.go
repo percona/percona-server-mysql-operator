@@ -48,6 +48,10 @@ func (r *PerconaServerMySQLReconciler) reconcileAsyncFailover(ctx context.Contex
 
 	primary, err := orchestrator.ClusterPrimary(ctx, r.ClientCmd, orcPod, cr.ClusterHint())
 	if err != nil {
+		if forcePromote {
+			return r.refuseForcePromote(ctx, cr, err)
+		}
+
 		return nil
 	}
 
@@ -160,6 +164,17 @@ func (r *PerconaServerMySQLReconciler) reconcileForcePromote(
 			" delivered are lost.", candidate)
 
 	return nil
+}
+
+// refuseForcePromote answers the annotation when orchestrator cannot say which
+// instance is the primary. A forced takeover demotes the primary, so without
+// one there is nothing orchestrator can do, and leaving the annotation in
+// place would only hide that.
+func (r *PerconaServerMySQLReconciler) refuseForcePromote(ctx context.Context, cr *apiv1.PerconaServerMySQL, cause error) error {
+	r.Recorder.Eventf(cr, corev1.EventTypeWarning, naming.EventFailoverForced,
+		"Could not force a promotion: orchestrator does not know the cluster's primary: %v", cause)
+
+	return r.consumeForcePromote(ctx, cr)
 }
 
 func (r *PerconaServerMySQLReconciler) consumeForcePromote(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {

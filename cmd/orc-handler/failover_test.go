@@ -237,6 +237,14 @@ func TestTimedOutAborts(t *testing.T) {
 	assert.Contains(t, err.Error(), "within 1h0m0s")
 }
 
+// The attempt that hands the whole budget to the worker still has to probe
+// the source and acknowledge the recovery once the worker is done.
+func TestHookTimeoutOutlastsTheBudget(t *testing.T) {
+	timeout := time.Hour
+
+	assert.GreaterOrEqual(t, hookTimeout(timeout), timeout+sourcePodWait+probeTimeout+ackWait)
+}
+
 func TestIsSourceRecovered(t *testing.T) {
 	tests := map[string]struct {
 		err  error

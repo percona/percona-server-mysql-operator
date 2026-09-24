@@ -21,7 +21,7 @@ import (
 const failoverBinary = "/opt/percona/failover"
 
 const (
-	// execSlack is how much longer than the failover binary this command waits
+	// execSlack is the margin on top of everything the hook is known to wait for
 	execSlack      = 10 * time.Second
 	defaultTimeout = 6 * time.Hour
 
@@ -69,7 +69,7 @@ func runFailover(ctx context.Context, args []string) error {
 		return errors.Errorf("on-timeout must be %s or %s, got %q", apiv1.FailoverPolicyAbort, apiv1.FailoverPolicyForce, *onTimeout)
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, *timeout+execSlack)
+	ctx, cancel := context.WithTimeout(ctx, hookTimeout(*timeout))
 	defer cancel()
 
 	g := newGate()
@@ -120,6 +120,15 @@ const (
 	ackWait = time.Minute
 	ackPoll = 5 * time.Second
 )
+
+// hookTimeout bounds one invocation of the hook. The worker may spend the
+// whole budget, and the attempt still waits for the source pod before it and
+// probes the source after it, then acknowledges the recovery on failure. The
+// budget itself is enforced through what the worker is given, not through
+// this deadline.
+func hookTimeout(timeout time.Duration) time.Duration {
+	return timeout + sourcePodWait + probeTimeout + ackWait + execSlack
+}
 
 // ackRecovery acknowledges the recovery running the hook, which lifts the
 // block orchestrator holds on the cluster for RecoveryPeriodBlockSeconds

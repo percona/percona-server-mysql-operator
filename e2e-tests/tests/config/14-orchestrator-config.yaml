@@ -9,4 +9,4 @@ commands:
 
       kubectl -n "${NAMESPACE}" patch ps "$(get_cluster_name)" \
           --type merge \
-          -p '{"spec": {"orchestrator": {"configuration": "{\"UnseenInstanceForgetHours\": 3, \"RecoveryPeriodBlockSeconds\": 300, \"FailMasterPromotionOnLagMinutes\": 30}"}}}'
+          -p '{"spec": {"orchestrator": {"configuration": "{\"InstancePollSeconds\": 7, \"RecoveryPeriodBlockSeconds\": 300, \"FailMasterPromotionOnLagMinutes\": 30}"}}}'
