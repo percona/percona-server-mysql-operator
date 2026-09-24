@@ -60,6 +60,7 @@ type BinlogCoordinates struct {
 type Instance struct {
 	Key                   InstanceKey       `json:"Key"`
 	Alias                 string            `json:"InstanceAlias"`
+	ClusterName           string            `json:"ClusterName"`
 	MasterKey             InstanceKey       `json:"MasterKey"`
 	Replicas              []InstanceKey     `json:"Replicas"`
 	ReadOnly              bool              `json:"ReadOnly"`

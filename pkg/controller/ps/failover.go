@@ -44,9 +44,7 @@ func (r *PerconaServerMySQLReconciler) reconcileAsyncFailover(ctx context.Contex
 		return nil
 	}
 
-	r.reconcileStaleRecoveries(ctx, cr, orcPod)
-
-	primary, err := orchestrator.ClusterPrimary(ctx, r.ClientCmd, orcPod, cr.ClusterHint())
+	cluster, err := orchestrator.ResolveCluster(ctx, r.ClientCmd, orcPod, cr.ClusterHint())
 	if err != nil {
 		if forcePromote {
 			return r.refuseForcePromote(ctx, cr, err)
@@ -55,7 +53,18 @@ func (r *PerconaServerMySQLReconciler) reconcileAsyncFailover(ctx context.Contex
 		return nil
 	}
 
-	if err := r.reconcileForcePromote(ctx, cr, orcPod, primary); err != nil {
+	r.reconcileStaleRecoveries(ctx, cr, orcPod, cluster)
+
+	primary, err := orchestrator.ClusterPrimary(ctx, r.ClientCmd, orcPod, cluster)
+	if err != nil {
+		if forcePromote {
+			return r.refuseForcePromote(ctx, cr, errors.Wrap(err, "orchestrator does not know the cluster's primary"))
+		}
+
+		return nil
+	}
+
+	if err := r.reconcileForcePromote(ctx, cr, orcPod, cluster, primary); err != nil {
 		return err
 	}
 
@@ -116,6 +125,7 @@ func (r *PerconaServerMySQLReconciler) reconcileForcePromote(
 	ctx context.Context,
 	cr *apiv1.PerconaServerMySQL,
 	orcPod *corev1.Pod,
+	cluster string,
 	primary *orchestrator.Instance,
 ) error {
 	value, ok := cr.GetAnnotations()[naming.AnnotationForcePromote.String()]
@@ -135,7 +145,7 @@ func (r *PerconaServerMySQLReconciler) reconcileForcePromote(
 		return r.consumeForcePromote(ctx, cr)
 	}
 
-	instances, err := orchestrator.Cluster(ctx, r.ClientCmd, orcPod, cr.ClusterHint())
+	instances, err := orchestrator.Cluster(ctx, r.ClientCmd, orcPod, cluster)
 	if err != nil {
 		return errors.Wrap(err, "get cluster instances")
 	}
@@ -163,7 +173,7 @@ func (r *PerconaServerMySQLReconciler) reconcileForcePromote(
 		}
 	}()
 
-	if err := orchestrator.ForceMasterTakeover(ctx, r.ClientCmd, orcPod, cr.ClusterHint(), candidate, mysql.DefaultPort); err != nil {
+	if err := orchestrator.ForceMasterTakeover(ctx, r.ClientCmd, orcPod, cluster, candidate, mysql.DefaultPort); err != nil {
 		r.Recorder.Eventf(cr, corev1.EventTypeWarning, naming.EventFailoverForced,
 			"Could not force the promotion of %s: %v", candidate, err)
 		return nil
@@ -177,12 +187,12 @@ func (r *PerconaServerMySQLReconciler) reconcileForcePromote(
 }
 
 // refuseForcePromote answers the annotation when orchestrator cannot say which
-// instance is the primary. A forced takeover demotes the primary, so without
-// one there is nothing orchestrator can do, and leaving the annotation in
-// place would only hide that.
+// instance is the primary, or which cluster is this one. A forced takeover
+// demotes the primary, so without one there is nothing orchestrator can do,
+// and leaving the annotation in place would only hide that.
 func (r *PerconaServerMySQLReconciler) refuseForcePromote(ctx context.Context, cr *apiv1.PerconaServerMySQL, cause error) error {
 	r.Recorder.Eventf(cr, corev1.EventTypeWarning, naming.EventFailoverForced,
-		"Could not force a promotion: orchestrator does not know the cluster's primary: %v", cause)
+		"Could not force a promotion: %v", cause)
 
 	return r.consumeForcePromote(ctx, cr)
 }
@@ -219,10 +229,10 @@ const staleRecoveryComment = "percona-server-mysql-operator: recovery left activ
 
 // reconcileStaleRecoveries acknowledges the recoveries orchestrator still
 // holds in their active period although nothing is left to end them.
-func (r *PerconaServerMySQLReconciler) reconcileStaleRecoveries(ctx context.Context, cr *apiv1.PerconaServerMySQL, orcPod *corev1.Pod) {
+func (r *PerconaServerMySQLReconciler) reconcileStaleRecoveries(ctx context.Context, cr *apiv1.PerconaServerMySQL, orcPod *corev1.Pod, cluster string) {
 	log := logf.FromContext(ctx).WithName("staleRecoveries")
 
-	recs, err := orchestrator.UnacknowledgedRecoveries(ctx, r.ClientCmd, orcPod, cr.ClusterHint())
+	recs, err := orchestrator.UnacknowledgedRecoveries(ctx, r.ClientCmd, orcPod, cluster)
 	if err != nil {
 		log.V(1).Info("Could not read the unacknowledged recoveries", "error", err.Error())
 		return

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"flag"
+	"fmt"
 	"strings"
 	"time"
 
@@ -425,7 +426,9 @@ func pickCandidate(ctx context.Context, c *cluster, orcPod *corev1.Pod, source, 
 		return &orchestrator.InstanceKey{Hostname: target, Port: mysql.DefaultPort}, nil
 	}
 
-	instances, err := orchestrator.Cluster(ctx, c.cliCmd, orcPod, c.cr.ClusterHint())
+	// By the source rather than the alias, which a primary outside the
+	// topology can hold.
+	instances, err := orchestrator.Cluster(ctx, c.cliCmd, orcPod, fmt.Sprintf("%s:%d", source, mysql.DefaultPort))
 	if err != nil {
 		return nil, errors.Wrap(err, "get cluster instances")
 	}

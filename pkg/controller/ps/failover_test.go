@@ -1,16 +1,20 @@
 package ps
 
 import (
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 )
@@ -55,7 +59,7 @@ func TestReconcileForcePromoteRefusesWritablePrimary(t *testing.T) {
 	primary := &orchestrator.Instance{Alias: "async-failover-mysql-0", IsLastCheckValid: true}
 
 	// A nil orcPod and ClientCmd make any call to orchestrator panic.
-	require.NoError(t, r.reconcileForcePromote(t.Context(), cr, nil, primary))
+	require.NoError(t, r.reconcileForcePromote(t.Context(), cr, nil, cr.ClusterHint(), primary))
 
 	require.NoError(t, r.Get(t.Context(), client.ObjectKeyFromObject(cr), cr))
 	assert.NotContains(t, cr.Annotations, naming.AnnotationForcePromote.String())
@@ -64,6 +68,94 @@ func TestReconcileForcePromoteRefusesWritablePrimary(t *testing.T) {
 	event := <-recorder.Events
 	assert.Contains(t, event, naming.EventFailoverForced)
 	assert.Contains(t, event, "async-failover-mysql-0 is a writable primary")
+}
+
+// An orphaned primary claims the cluster's alias as well, so a promotion
+// requested while orchestrator sees two live clusters could land on either.
+func TestReconcileAsyncFailoverRefusesSplitTopology(t *testing.T) {
+	cr, err := readDefaultCR("async-failover", "split")
+	require.NoError(t, err)
+	cr.Spec.MySQL.ClusterType = apiv1.ClusterTypeAsync
+	cr.Spec.MySQL.Size = 3
+	cr.Spec.Orchestrator.Enabled = true
+	cr.Spec.Orchestrator.Size = 3
+	cr.Annotations = map[string]string{naming.AnnotationForcePromote.String(): "true"}
+
+	orcPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      orchestrator.PodName(cr, 0),
+			Namespace: cr.Namespace,
+			Labels:    orchestrator.MatchLabels(cr),
+		},
+		Status: corev1.PodStatus{
+			Phase:      corev1.PodRunning,
+			Conditions: []corev1.PodCondition{{Type: corev1.ContainersReady, Status: corev1.ConditionTrue}},
+		},
+	}
+
+	instances, err := json.Marshal([]orchestrator.Instance{
+		{Alias: "async-failover-mysql-0", ClusterName: "async-failover-mysql-0:3306"},
+		{Alias: "async-failover-mysql-1", ClusterName: "async-failover-mysql-0:3306", IsLastCheckValid: true},
+		{Alias: "async-failover-mysql-2", ClusterName: "async-failover-mysql-2:3306", IsLastCheckValid: true},
+	})
+	require.NoError(t, err)
+
+	fc := &fakeClient{scripts: []fakeClientScript{allInstancesScriptWith(instances)}}
+	recorder := record.NewFakeRecorder(10)
+	r := &PerconaServerMySQLReconciler{
+		Client:    fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(cr, orcPod).Build(),
+		ClientCmd: fc,
+		Recorder:  recorder,
+	}
+
+	require.NoError(t, r.reconcileAsyncFailover(t.Context(), cr))
+
+	// Nothing past the lookup: no primary read, no candidate, no takeover.
+	assert.Equal(t, 1, fc.execCount)
+
+	require.NoError(t, r.Get(t.Context(), client.ObjectKeyFromObject(cr), cr))
+	assert.NotContains(t, cr.Annotations, naming.AnnotationForcePromote.String())
+
+	require.Len(t, recorder.Events, 1)
+	event := <-recorder.Events
+	assert.Contains(t, event, naming.EventFailoverForced)
+	assert.Contains(t, event, "orchestrator sees more than one live cluster: async-failover-mysql-0:3306, async-failover-mysql-2:3306")
+}
+
+// Readiness has to see the orphan too: judged by whichever cluster holds the
+// alias, a cluster whose old primary is running on its own looks healthy.
+func TestIsAsyncReadyReportsSplitTopology(t *testing.T) {
+	cr, err := readDefaultCR("async-failover", "split")
+	require.NoError(t, err)
+
+	orcPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      orchestrator.PodName(cr, 0),
+			Namespace: cr.Namespace,
+			Labels:    orchestrator.MatchLabels(cr),
+		},
+		Status: corev1.PodStatus{
+			Phase:      corev1.PodRunning,
+			Conditions: []corev1.PodCondition{{Type: corev1.ContainersReady, Status: corev1.ConditionTrue}},
+		},
+	}
+
+	instances, err := json.Marshal([]orchestrator.Instance{
+		{Alias: "async-failover-mysql-0", ClusterName: "async-failover-mysql-0:3306", IsLastCheckValid: true},
+		{Alias: "async-failover-mysql-1", ClusterName: "async-failover-mysql-0:3306", IsLastCheckValid: true},
+		{Alias: "async-failover-mysql-2", ClusterName: "async-failover-mysql-2:3306", IsLastCheckValid: true},
+	})
+	require.NoError(t, err)
+
+	r := &PerconaServerMySQLReconciler{
+		Client:    fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(orcPod).Build(),
+		ClientCmd: &fakeClient{scripts: []fakeClientScript{allInstancesScriptWith(instances)}},
+	}
+
+	ready, msg, err := r.isAsyncReady(t.Context(), cr)
+	require.NoError(t, err)
+	assert.False(t, ready)
+	assert.Contains(t, msg, "orchestrator sees more than one live cluster: async-failover-mysql-0:3306, async-failover-mysql-2:3306")
 }
 
 func TestStaleRecoveries(t *testing.T) {
