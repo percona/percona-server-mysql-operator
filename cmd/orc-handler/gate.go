@@ -14,7 +14,6 @@ import (
 )
 
 const (
-	gateDir  = "/tmp/orc-handler"
 	gateLock = "failover.lock"
 	claimDir = "claim"
 	seenDir  = "seen"
@@ -65,7 +64,7 @@ type gate struct {
 }
 
 func newGate() *gate {
-	return &gate{dir: gateDir, claimIdle: claimIdle, beat: claimBeat, idle: seenIdle}
+	return &gate{dir: orchestrator.HandlerStateDir, claimIdle: claimIdle, beat: claimBeat, idle: seenIdle}
 }
 
 func (g *gate) enter() (func(), error) {

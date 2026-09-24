@@ -31,11 +31,16 @@ const (
 	configVolumeName       = "config"
 	configMountPath        = "/etc/orchestrator/config"
 	customConfigMountPath  = "/etc/orchestrator/custom"
-	configFileKey          = "orchestrator.conf.json"
-	credsVolumeName        = "users"
-	CredsMountPath         = "/etc/orchestrator/orchestrator-users-secret"
-	tlsVolumeName          = "tls"
-	tlsMountPath           = "/etc/orchestrator/ssl"
+	// HandlerStateDir is where orc-handler keeps the marks a failover leaves
+	// between hook runs. It sits on the pod's config emptyDir, next to
+	// orchestrator's own database, so a container restart keeps both or
+	// neither.
+	HandlerStateDir = configMountPath + "/orc-handler"
+	configFileKey   = "orchestrator.conf.json"
+	credsVolumeName = "users"
+	CredsMountPath  = "/etc/orchestrator/orchestrator-users-secret"
+	tlsVolumeName   = "tls"
+	tlsMountPath    = "/etc/orchestrator/ssl"
 )
 
 type Exposer apiv1.PerconaServerMySQL
