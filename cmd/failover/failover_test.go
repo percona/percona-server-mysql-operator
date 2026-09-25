@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/rand"
 	"database/sql"
+	"encoding/binary"
 	"errors"
 	"io"
 	"net/http"
@@ -31,6 +32,16 @@ const testFetchTimeout = time.Minute
 
 func withMagic(payload string) []byte {
 	return append([]byte(magic), payload...)
+}
+
+// binlogEvent wraps payload in an event header. Only the declared length matters
+// to the splice, so the rest of the header stays zeroed.
+func binlogEvent(payload string) string {
+	e := make([]byte, eventHeaderLen+len(payload))
+	binary.LittleEndian.PutUint32(e[9:13], uint32(len(e)))
+	copy(e[eventHeaderLen:], payload)
+
+	return string(e)
 }
 
 func binlogFile(t *testing.T, dir, name, payload string) string {
