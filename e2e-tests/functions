@@ -841,7 +841,7 @@ get_cr() {
 		.spec.mysql.gracePeriod = 30 |
 		.spec.orchestrator.enabled = true |
 		.spec.mysql.image = "'"$image_mysql"'" |
-		(.spec.mysql | select(has("autoConfig")) | .autoConfig.version) = "'"${MYSQL_VERSION}"'" |
+		(.spec.mysql | select(has("autoConfig")) | .autoConfig.version) = "'"${MYSQL_AUTOCONFIG_VERSION}"'" |
 		.spec.backup.image = "'"$image_backup"'" |
 		.spec.orchestrator.image = "'"$image_orchestrator"'" |
 		.spec.proxy.router.image = "'"$image_router"'" |

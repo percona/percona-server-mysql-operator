@@ -282,7 +282,7 @@ type AutoConfigSpec struct {
 	// Version is the MySQL version the configuration is calculated for. It is
 	// required when autoconfig is enabled and never changes which server is
 	// deployed; it only tells the calculator which parameters exist.
-	// +kubebuilder:validation:Pattern=`^\d+\.\d+(\.\d+)?$`
+	// +kubebuilder:validation:Pattern=`^\d+\.\d+\.\d+$`
 	Version string `json:"version,omitempty"`
 }
 

@@ -345,8 +345,6 @@ func recordPodTemplateHash(ctx context.Context, cl client.Reader, obj client.Obj
 
 	if err := cl.Get(ctx, client.ObjectKeyFromObject(obj), current); err != nil {
 		if k8serrors.IsNotFound(err) {
-			// a recreate orphans and readopts the running pods, so an absent
-			// object is no promise that any pod restarts
 			return false, nil
 		}
 		return false, errors.Wrapf(err, "get %s", client.ObjectKeyFromObject(obj))

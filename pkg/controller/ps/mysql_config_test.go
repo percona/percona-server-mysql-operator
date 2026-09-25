@@ -542,9 +542,6 @@ func TestReconcileMySQLConfig(t *testing.T) {
 			expectedConfig: `{"max_connections":"200"}`,
 		},
 		{
-			// The set comes back from the recreate with the running pods
-			// readopted, not replaced, so a variable mysqld refuses at runtime
-			// only reaches them through a restart the operator starts here.
 			desc:          "static config changed during the recreate restarts the adopted pods",
 			state:         apiv1.StateReady,
 			currentConfig: "[mysqld]\ninnodb_buffer_pool_chunk_size=268435456\n",

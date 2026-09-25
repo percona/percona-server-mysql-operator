@@ -39,7 +39,7 @@ func mysqlDefaults(spec *apiv1.MySQLSpec) {
 
 	spec.AutoConfig.Enabled = new(true)
 	spec.AutoConfig.LoadType = apiv1.AutoConfigLoadTypeSomeWrites
-	spec.AutoConfig.Version = "8.4"
+	spec.AutoConfig.Version = "8.4.0"
 
 	spec.Bootstrap.Mode = new(apiv1.BootstrapModeAuto)
 

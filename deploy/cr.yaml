@@ -262,7 +262,7 @@ spec:
     autoConfig:
       enabled: true
       loadType: someWrites
-      version: "8.4"
+      version: 8.4.0
 #    bootstrap:
 #      mode: auto
   proxy:

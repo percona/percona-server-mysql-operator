@@ -837,8 +837,6 @@ func TestRecordPodTemplateHash(t *testing.T) {
 		want     bool
 		wantHash bool
 	}{
-		// a recreate readopts the running pods, so an absent object promises
-		// nothing about a restart
 		"object is not in the api yet": {
 			obj:      newSTS("percona:8.4"),
 			want:     false,

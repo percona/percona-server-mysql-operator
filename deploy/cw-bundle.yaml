@@ -7359,7 +7359,7 @@ spec:
                         - heavyWrites
                         type: string
                       version:
-                        pattern: ^\d+\.\d+(\.\d+)?$
+                        pattern: ^\d+\.\d+\.\d+$
                         type: string
                     type: object
                   autoRecovery:

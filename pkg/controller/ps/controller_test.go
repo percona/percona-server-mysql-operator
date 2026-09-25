@@ -1487,8 +1487,8 @@ var _ = Describe("CR validations", Ordered, func() {
 			})
 		})
 
-		When("autoconfig version is a major.minor version", Ordered, func() {
-			cr, err := readDefaultCR("cr-validations-autoconfig-version", ns)
+		When("autoconfig version omits the patch", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-autoconfig-version-no-patch", ns)
 			Expect(err).NotTo(HaveOccurred())
 
 			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
@@ -1496,6 +1496,22 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
 			cr.Spec.MySQL.AutoConfig.Enabled = &autoConfigEnabled
 			cr.Spec.MySQL.AutoConfig.Version = "8.4"
+			It("the creation of the cluster should fail with error message", func() {
+				createErr := k8sClient.Create(ctx, cr)
+				Expect(createErr).To(HaveOccurred())
+				Expect(createErr.Error()).To(ContainSubstring("autoConfig.version"))
+			})
+		})
+
+		When("autoconfig version is a major.minor.patch version", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-autoconfig-version", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
+			cr.Spec.Orchestrator.Enabled = true
+			cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
+			cr.Spec.MySQL.AutoConfig.Enabled = &autoConfigEnabled
+			cr.Spec.MySQL.AutoConfig.Version = "8.4.6"
 			It("should create successfully", func() {
 				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
 			})
