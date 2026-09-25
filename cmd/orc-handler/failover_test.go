@@ -185,3 +185,24 @@ func TestRunFailoverSkipsNonFailoverRecoveries(t *testing.T) {
 		})
 	}
 }
+
+// A planned takeover synthesizes a DeadMaster recovery on a primary that is
+// alive, frozen and already caught up with, so there is nothing to splice.
+func TestRunFailoverSkipsPlannedTakeovers(t *testing.T) {
+	tests := []string{
+		"graceful-master-takeover",
+		"force-master-takeover",
+	}
+
+	for _, command := range tests {
+		t.Run(command, func(t *testing.T) {
+			err := runFailover(context.Background(), []string{
+				"-source", "cluster1-mysql-0.cluster1-mysql.ps",
+				"-failure-type", "DeadMaster",
+				"-command", command,
+			})
+
+			require.NoError(t, err)
+		})
+	}
+}
