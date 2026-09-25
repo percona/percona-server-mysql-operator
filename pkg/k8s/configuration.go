@@ -24,6 +24,38 @@ type Configurable interface {
 	ExecuteConfigurationTemplate(configuration string, memory *resource.Quantity) (string, error)
 }
 
+// RenderConfiguration expands .spec.<component>.configuration into the content
+// the operator writes to the generated ConfigMap.
+func RenderConfiguration(configurable Configurable) (string, error) {
+	configuration := configurable.GetConfiguration()
+	if strings.TrimSpace(configuration) == "" {
+		return "", nil
+	}
+
+	var memory *resource.Quantity
+	if res := configurable.GetResources(); res.Size() > 0 {
+		if _, ok := res.Requests[corev1.ResourceMemory]; ok {
+			memory = res.Requests.Memory()
+		}
+		if _, ok := res.Limits[corev1.ResourceMemory]; ok {
+			memory = res.Limits.Memory()
+		}
+	}
+
+	if memory == nil {
+		if strings.Contains(configuration, "{{") {
+			return "", errors.New("resources.limits[memory] or resources.requests[memory] should be specified for template usage in configuration")
+		}
+		return configuration, nil
+	}
+
+	rendered, err := configurable.ExecuteConfigurationTemplate(configuration, memory)
+	if err != nil {
+		return "", errors.Wrap(err, "execute configuration template")
+	}
+	return rendered, nil
+}
+
 func CustomConfigHash(ctx context.Context, cl client.Client, cr *apiv1.PerconaServerMySQL, configurable Configurable, component string) (string, error) {
 	log := logf.FromContext(ctx).WithName("CustomConfigHash")
 
@@ -34,7 +66,7 @@ func CustomConfigHash(ctx context.Context, cl client.Client, cr *apiv1.PerconaSe
 		return "", errors.Wrapf(err, "get ConfigMap/%s", cmName)
 	}
 
-	if configurable.GetConfiguration() == "" {
+	if strings.TrimSpace(configurable.GetConfiguration()) == "" {
 		exists, err := ObjectExists(ctx, cl, nn, currCm)
 		if err != nil {
 			return "", errors.Wrapf(err, "check if ConfigMap/%s exists", cmName)
@@ -62,25 +94,9 @@ func CustomConfigHash(ctx context.Context, cl client.Client, cr *apiv1.PerconaSe
 		return "", nil
 	}
 
-	var memory *resource.Quantity
-	if res := configurable.GetResources(); res.Size() > 0 {
-		if _, ok := res.Requests[corev1.ResourceMemory]; ok {
-			memory = res.Requests.Memory()
-		}
-		if _, ok := res.Limits[corev1.ResourceMemory]; ok {
-			memory = res.Limits.Memory()
-		}
-	}
-
-	configuration := configurable.GetConfiguration()
-	if memory != nil {
-		var err error
-		configuration, err = configurable.ExecuteConfigurationTemplate(configurable.GetConfiguration(), memory)
-		if err != nil {
-			return "", errors.Wrap(err, "execute configuration template")
-		}
-	} else if strings.Contains(configuration, "{{") {
-		return "", errors.New("resources.limits[memory] or resources.requests[memory] should be specified for template usage in configuration")
+	configuration, err := RenderConfiguration(configurable)
+	if err != nil {
+		return "", err
 	}
 
 	cm := ConfigMap(cr, cmName, configurable.GetConfigMapKey(), configuration, component)

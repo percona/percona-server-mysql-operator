@@ -6,6 +6,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.8.1
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/Percona-Lab/percona-version-service v0.0.0-20230324081000-27de445df239
+	github.com/Tusamarco/mysqloperatorcalculator v1.21.1-0.20260906085949-3f1cd18285ff
 	github.com/cert-manager/cert-manager v1.21.2
 	github.com/dustin/go-humanize v1.0.1
 	github.com/flosch/pongo2 v0.0.0-20200913210552-0d938eb266f3
@@ -46,6 +47,7 @@ require (
 )
 
 require (
+	code.cloudfoundry.org/bytefmt v0.0.0-20230612151507-41ef4d1f67a4 // indirect
 	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.23.1 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.12.0 // indirect
@@ -120,6 +122,7 @@ require (
 	github.com/rs/zerolog v1.34.0 // indirect
 	github.com/sagikazarmark/locafero v0.12.0 // indirect
 	github.com/sergi/go-diff v1.4.0 // indirect
+	github.com/sirupsen/logrus v1.9.4 // indirect
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
 	github.com/spf13/cobra v1.10.2 // indirect

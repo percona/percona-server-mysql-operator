@@ -134,11 +134,22 @@ func EnsureObjectWithHash(
 	obj client.Object,
 	s *runtime.Scheme,
 ) error {
+	_, err := ensureObjectWithHash(ctx, cl, owner, obj, s)
+	return err
+}
+
+func ensureObjectWithHash(
+	ctx context.Context,
+	cl client.Client,
+	owner metav1.Object,
+	obj client.Object,
+	s *runtime.Scheme,
+) (bool, error) {
 	log := logf.FromContext(ctx)
 
 	if owner != nil {
 		if err := controllerutil.SetControllerReference(owner, obj, s); err != nil {
-			return errors.Wrapf(err, "set controller reference to %s/%s",
+			return false, errors.Wrapf(err, "set controller reference to %s/%s",
 				obj.GetObjectKind().GroupVersionKind().Kind,
 				obj.GetName())
 		}
@@ -154,7 +165,7 @@ func EnsureObjectWithHash(
 
 	hash, err := ObjectHash(obj)
 	if err != nil {
-		return errors.Wrap(err, "calculate object hash")
+		return false, errors.Wrap(err, "calculate object hash")
 	}
 
 	objAnnotations = obj.GetAnnotations()
@@ -173,16 +184,16 @@ func EnsureObjectWithHash(
 	}
 	if err = cl.Get(ctx, nn, oldObject); err != nil {
 		if !k8serrors.IsNotFound(err) {
-			return errors.Wrapf(err, "get %v", nn.String())
+			return false, errors.Wrapf(err, "get %v", nn.String())
 		}
 
 		log.V(1).Info("Creating object", "name", obj.GetName(), "kind", obj.GetObjectKind())
 
 		if err := cl.Create(ctx, obj); err != nil {
-			return errors.Wrapf(err, "create %v", nn.String())
+			return false, errors.Wrapf(err, "create %v", nn.String())
 		}
 
-		return nil
+		return true, nil
 	}
 
 	// Certain annotations should be preserved
@@ -230,11 +241,13 @@ func EnsureObjectWithHash(
 		}
 
 		if err := cl.Patch(ctx, obj, patch); err != nil {
-			return errors.Wrapf(err, "patch %v", nn.String())
+			return false, errors.Wrapf(err, "patch %v", nn.String())
 		}
+
+		return true, nil
 	}
 
-	return nil
+	return false, nil
 }
 
 type Component interface {
@@ -247,36 +260,100 @@ type Component interface {
 	Object(ctx context.Context, cl client.Client) (client.Object, error)
 }
 
+// EnsureResult reports what ensuring a component did to the object in the API.
+// PodsRestarting is true only when the write replaced the pod template.
+type EnsureResult struct {
+	Written        bool
+	PodsRestarting bool
+}
+
 func EnsureComponent(
 	ctx context.Context,
 	cl client.Client,
 	c Component,
-) error {
+) (EnsureResult, error) {
 	cr := c.PerconaServerMySQL()
 
 	obj, err := c.Object(ctx, cl)
 	if err != nil {
-		return errors.Wrap(err, "statefulset")
-	}
-	if err := EnsureObjectWithHash(ctx, cl, cr, obj, cl.Scheme()); err != nil {
-		return errors.Wrap(err, "failed to ensure statefulset")
+		return EnsureResult{}, errors.Wrap(err, "statefulset")
 	}
 
+	templateChanged, err := recordPodTemplateHash(ctx, cl, obj)
+	if err != nil {
+		return EnsureResult{}, errors.Wrap(err, "record pod template hash")
+	}
+
+	written, err := ensureObjectWithHash(ctx, cl, cr, obj, cl.Scheme())
+	if err != nil {
+		return EnsureResult{}, errors.Wrap(err, "failed to ensure statefulset")
+	}
+	result := EnsureResult{Written: written, PodsRestarting: written && templateChanged}
+
 	if cr.CompareVersion("0.12.0") < 0 {
-		return nil
+		return result, nil
 	}
 
 	podSpec := c.PodSpec()
 	if podSpec == nil || podSpec.PodDisruptionBudget == nil {
-		return nil
+		return result, nil
 	}
 
 	pdb := podDisruptionBudget(cr, podSpec.PodDisruptionBudget, c.Labels(), c.MatchLabels())
 	if err := EnsureObjectWithHash(ctx, cl, cr, pdb, cl.Scheme()); err != nil {
-		return errors.Wrap(err, "failed to create pdb")
+		return result, errors.Wrap(err, "failed to create pdb")
 	}
 
-	return nil
+	return result, nil
+}
+
+// recordPodTemplateHash annotates obj with the hash of its pod template and
+// reports whether it differs from the one the API holds. Hashes are compared
+// rather than templates, which the API server defaults. No hash reads as
+// unchanged.
+func recordPodTemplateHash(ctx context.Context, cl client.Reader, obj client.Object) (bool, error) {
+	var template corev1.PodTemplateSpec
+	switch object := obj.(type) {
+	case *appsv1.StatefulSet:
+		template = object.Spec.Template
+	case *appsv1.Deployment:
+		template = object.Spec.Template
+	default:
+		return false, nil
+	}
+
+	data, err := json.Marshal(template)
+	if err != nil {
+		return false, errors.Wrap(err, "marshal pod template")
+	}
+	sum := md5.Sum(data)
+	hash := hex.EncodeToString(sum[:])
+
+	annotations := obj.GetAnnotations()
+	if annotations == nil {
+		annotations = make(map[string]string)
+	}
+	annotations[naming.AnnotationLastPodTemplateHash.String()] = hash
+	obj.SetAnnotations(annotations)
+
+	val := reflect.ValueOf(obj)
+	if val.Kind() == reflect.Pointer {
+		val = reflect.Indirect(val)
+	}
+	current := reflect.New(val.Type()).Interface().(client.Object)
+
+	if err := cl.Get(ctx, client.ObjectKeyFromObject(obj), current); err != nil {
+		if k8serrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, errors.Wrapf(err, "get %s", client.ObjectKeyFromObject(obj))
+	}
+
+	recorded, ok := current.GetAnnotations()[naming.AnnotationLastPodTemplateHash.String()]
+	if !ok {
+		return false, nil
+	}
+	return recorded != hash, nil
 }
 
 func EnsureService(

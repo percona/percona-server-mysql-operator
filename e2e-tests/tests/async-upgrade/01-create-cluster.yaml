@@ -15,11 +15,14 @@ commands:
         exit 1
       fi
 
+      # autoConfig is not available in the latest released version,
+      # we can delete this after it's released
       # binlog server options were required in v1.0.0
       # we can delete them after v1.1.0 released
       get_cr_with_latest_versions_in_vs \
           | yq eval "$(printf '.spec.initImage="%s"' "${init_image}")" - \
           | yq eval "$(printf '.spec.crVersion="%s"' "${version}")" - \
+          | yq eval 'del(.spec.mysql.autoConfig)' - \
           | yq eval '.spec.mysql.clusterType="async"' - \
           | yq eval '.spec.secretsName="async-upgrade-secrets"' - \
           | yq eval '.spec.backup.pitr.enabled=false' - \

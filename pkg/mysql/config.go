@@ -4,19 +4,26 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/flosch/pongo2"
+	"github.com/go-ini/ini"
+	v "github.com/hashicorp/go-version"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/config"
+	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
+	"github.com/percona/percona-server-mysql-operator/pkg/mysql/autoconfig"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
@@ -58,6 +65,21 @@ func (c *Configurable) ExecuteConfigurationTemplate(input string, memory *resour
 	return result, nil
 }
 
+// loose_x and x are the same variable to mysqld and to SET GLOBAL.
+var loosePrefix = regexp.MustCompile(`^loose[-_]`)
+
+// IsLooseVariable reports whether key carries the loose prefix.
+func IsLooseVariable(key string) bool {
+	return loosePrefix.MatchString(key)
+}
+
+// CanonicalVariableName strips the loose prefix.
+func CanonicalVariableName(key string) string {
+	return loosePrefix.ReplaceAllString(key, "")
+}
+
+// GetAutoTuneParams derives innodb_buffer_pool_size, innodb_buffer_pool_chunk_size
+// and max_connections from the given memory quantity.
 func GetAutoTuneParams(cr *apiv1.PerconaServerMySQL, q *resource.Quantity) (string, error) {
 	autotuneParams := ""
 
@@ -108,21 +130,267 @@ func GetAutoTuneParams(cr *apiv1.PerconaServerMySQL, q *resource.Quantity) (stri
 	return autotuneParams, nil
 }
 
+// EffectiveResource returns the limit, else the request, else nil.
+func EffectiveResource(res corev1.ResourceRequirements, name corev1.ResourceName) *resource.Quantity {
+	if q, ok := res.Limits[name]; ok {
+		return &q
+	}
+	if q, ok := res.Requests[name]; ok {
+		return &q
+	}
+	return nil
+}
+
+// GetAutoConfigParams derives a full set of mysqld parameters from the pod's
+// CPU/memory allocation, the workload profile, the version and the topology.
+func GetAutoConfigParams(cr *apiv1.PerconaServerMySQL, version string, cpu, memory *resource.Quantity, storage int64) (string, error) {
+	if cpu == nil || cpu.IsZero() {
+		return "", errors.New("cpu is required for autoconfig")
+	}
+	if memory == nil || memory.IsZero() {
+		return "", errors.New("memory is required for autoconfig")
+	}
+
+	ver, err := parseMySQLVersion(version)
+	if err != nil {
+		return "", errors.Wrap(err, "parse mysql version")
+	}
+
+	dbType := autoconfig.DBTypeGroupReplication
+	if cr.Spec.MySQL.IsAsync() {
+		dbType = autoconfig.DBTypeAsync
+	}
+
+	res, err := autoconfig.Calculate(autoconfig.Request{
+		DBType:      dbType,
+		CPU:         int(cpu.MilliValue()),
+		MemoryBytes: memory.Value(),
+		Version:     ver,
+		LoadType:    autoConfigLoadType(cr.Spec.MySQL.AutoConfig.LoadType),
+	})
+	if err != nil {
+		return "", errors.Wrap(err, "calculate configuration")
+	}
+
+	params, err := res.MySQLdParams()
+	if err != nil {
+		return "", errors.Wrap(err, "get mysqld params")
+	}
+
+	if err := checkRedoLogFits(storage, params); err != nil {
+		return "", err
+	}
+
+	// a stable payload keeps the config hash from churning
+	names := make([]string, 0, len(params))
+	for name := range params {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	var b strings.Builder
+	for _, name := range names {
+		b.WriteString("\n")
+		b.WriteString(name)
+		b.WriteString("=")
+		b.WriteString(params[name])
+	}
+	return b.String(), nil
+}
+
+// ErrInsufficientStorage reports that the data volume cannot host the redo log
+// the calculated configuration asks for.
+var ErrInsufficientStorage = errors.New("data volume is too small for the calculated configuration")
+
+const maxRedoLogPercent = 25
+
+// DataVolumeSize returns the size the cr asks for the MySQL data volume, or zero
+// when nothing in the spec bounds it.
+func DataVolumeSize(cr *apiv1.PerconaServerMySQL) int64 {
+	vs := cr.Spec.MySQL.VolumeSpec
+	if vs == nil {
+		return 0
+	}
+
+	if pvc := vs.PersistentVolumeClaim; pvc != nil {
+		if q, ok := pvc.Resources.Requests[corev1.ResourceStorage]; ok {
+			return q.Value()
+		}
+		if q, ok := pvc.Resources.Limits[corev1.ResourceStorage]; ok {
+			return q.Value()
+		}
+		return 0
+	}
+
+	if vs.HostPath != nil {
+		return 0
+	}
+
+	if vs.EmptyDir != nil && vs.EmptyDir.SizeLimit != nil {
+		return vs.EmptyDir.SizeLimit.Value()
+	}
+
+	return 0
+}
+
+// checkRedoLogFits rejects a calculated configuration whose redo log claims more
+// than maxRedoLogPercent of the data volume. mysqld preallocates it in full, so
+// an oversized redo log stops the node from starting or cloning.
+func checkRedoLogFits(storage int64, params map[string]string) error {
+	if storage == 0 {
+		return nil
+	}
+
+	redo, err := redoLogBytes(params)
+	if err != nil || redo == 0 {
+		return err
+	}
+
+	if redo <= storage*maxRedoLogPercent/100 {
+		return nil
+	}
+
+	return errors.Wrapf(ErrInsufficientStorage,
+		"the calculated configuration needs a %d byte redo log, more than %d%% of the %d byte data volume; "+
+			"give mysql.volumeSpec.persistentVolumeClaim at least %d bytes, or lower the memory in mysql.resources",
+		redo, maxRedoLogPercent, storage, redo*100/maxRedoLogPercent)
+}
+
+// redoLogBytes totals the disk the calculated redo log will occupy.
+func redoLogBytes(params map[string]string) (int64, error) {
+	get := func(name string) (int64, error) {
+		v, ok := params[name]
+		if !ok {
+			return 0, nil
+		}
+		n, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			return 0, errors.Wrapf(err, "parse %s value %q", name, v)
+		}
+		return n, nil
+	}
+
+	capacity, err := get("innodb_redo_log_capacity")
+	if err != nil {
+		return 0, err
+	}
+	if capacity > 0 {
+		return capacity, nil
+	}
+
+	// Pre-8.4 spelling: total is the file size times the number of files.
+	size, err := get("innodb_log_file_size")
+	if err != nil {
+		return 0, err
+	}
+	files, err := get("innodb_log_files_in_group")
+	if err != nil {
+		return 0, err
+	}
+	if files == 0 {
+		files = 1
+	}
+	return size * files, nil
+}
+
+func autoConfigLoadType(lt apiv1.AutoConfigLoadType) int {
+	switch lt {
+	case apiv1.AutoConfigLoadTypeMostlyReads:
+		return autoconfig.LoadTypeMostlyReads
+	case apiv1.AutoConfigLoadTypeEqualReadsWrites:
+		return autoconfig.LoadTypeEqualReadsWrites
+	case apiv1.AutoConfigLoadTypeHeavyWrites:
+		return autoconfig.LoadTypeHeavyWrites
+	default:
+		return autoconfig.LoadTypeSomeWrites
+	}
+}
+
+func parseMySQLVersion(s string) (autoconfig.Version, error) {
+	if strings.TrimSpace(s) == "" {
+		return autoconfig.Version{}, errors.New("version is empty")
+	}
+	parsed, err := v.NewVersion(s)
+	if err != nil {
+		return autoconfig.Version{}, err
+	}
+	seg := parsed.Segments()
+	ver := autoconfig.Version{}
+	if len(seg) > 0 {
+		ver.Major = seg[0]
+	}
+	if len(seg) > 1 {
+		ver.Minor = seg[1]
+	}
+	if len(seg) > 2 {
+		ver.Patch = seg[2]
+	}
+	return ver, nil
+}
+
+// HasUserConfig reports whether the user supplied a MySQL configuration of their
+// own, through mysql.configuration or by creating the ConfigMap or Secret directly.
+func HasUserConfig(
+	ctx context.Context,
+	cl client.Reader,
+	cr *apiv1.PerconaServerMySQL,
+) (bool, error) {
+	if strings.TrimSpace(cr.Spec.MySQL.Configuration) != "" {
+		return true, nil
+	}
+
+	configurable := Configurable(*cr)
+	nn := types.NamespacedName{Name: configurable.GetConfigMapName(), Namespace: cr.Namespace}
+
+	cm := &corev1.ConfigMap{}
+	if err := cl.Get(ctx, nn, cm); client.IgnoreNotFound(err) != nil {
+		return false, errors.Wrap(err, "get configmap")
+	} else if err == nil && !metav1.IsControlledBy(cm, cr) &&
+		strings.TrimSpace(readConfig(cm, configurable)) != "" {
+		return true, nil
+	}
+
+	secret := &corev1.Secret{}
+	if err := cl.Get(ctx, nn, secret); client.IgnoreNotFound(err) != nil {
+		return false, errors.Wrap(err, "get secret")
+	} else if err == nil && strings.TrimSpace(readConfig(secret, configurable)) != "" {
+		return true, nil
+	}
+
+	return false, nil
+}
+
+// GetConfig merges the configuration mysqld runs with, in order: autoConf, the
+// user configuration and the user secret.
 func GetConfig(
 	ctx context.Context,
 	cl client.Reader,
 	cr *apiv1.PerconaServerMySQL,
+	autoConf string,
 ) (config.Section, error) {
 	configurable := Configurable(*cr)
 	cmName := configurable.GetConfigMapName()
 	nn := types.NamespacedName{Name: cmName, Namespace: cr.Namespace}
-	parts := make([]string, 0, 2)
+	parts := make([]string, 0, 3)
 
-	cm := &corev1.ConfigMap{}
-	if err := cl.Get(ctx, nn, cm); client.IgnoreNotFound(err) != nil {
-		return config.EmptySection, errors.Wrap(err, "get configmap")
-	} else if err == nil {
-		parts = append(parts, readConfig(cm, configurable))
+	if autoConf != "" {
+		parts = append(parts, autoConf)
+	}
+
+	// rendered from the cr: the cache can still hold the ConfigMap revision
+	// from before this reconcile wrote it
+	if rendered, err := k8s.RenderConfiguration(&configurable); err != nil {
+		return config.EmptySection, errors.Wrap(err, "render user configuration")
+	} else if strings.TrimSpace(rendered) != "" {
+		parts = append(parts, rendered)
+	} else {
+		// a ConfigMap this cr owns was rendered from the cleared configuration
+		cm := &corev1.ConfigMap{}
+		if err := cl.Get(ctx, nn, cm); client.IgnoreNotFound(err) != nil {
+			return config.EmptySection, errors.Wrap(err, "get configmap")
+		} else if err == nil && !metav1.IsControlledBy(cm, cr) {
+			parts = append(parts, readConfig(cm, configurable))
+		}
 	}
 
 	secret := &corev1.Secret{}
@@ -136,14 +404,49 @@ func GetConfig(
 		return config.EmptySection, nil
 	}
 
+	for i, part := range parts {
+		parts[i] = withMySQLdSection(part)
+	}
+
 	merged := strings.Join(parts, "\n")
 	section, err := config.ParseSection(io.NopCloser(strings.NewReader(merged)), "mysqld")
 	if err != nil {
 		return config.EmptySection, errors.Wrap(err, "parse config section")
 	}
 
+	dropAliasedKeys(section)
+
 	result := config.Section{Section: *section}
 	return result, nil
+}
+
+// dropAliasedKeys keeps the last key per canonical variable name. Parts are
+// merged user configuration last, so the surviving key is the user's.
+func dropAliasedKeys(section *ini.Section) {
+	lastByCanonical := make(map[string]string, len(section.Keys()))
+	for _, k := range section.Keys() {
+		lastByCanonical[CanonicalVariableName(k.Name())] = k.Name()
+	}
+
+	for _, k := range section.Keys() {
+		if lastByCanonical[CanonicalVariableName(k.Name())] != k.Name() {
+			section.DeleteKey(k.Name())
+		}
+	}
+}
+
+func withMySQLdSection(part string) string {
+	for line := range strings.SplitSeq(part, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
+			continue
+		}
+		if strings.HasPrefix(line, "[") {
+			return part
+		}
+		break
+	}
+	return "[mysqld]\n" + part
 }
 
 func readConfig(object client.Object, cfg Configurable) string {
@@ -197,10 +500,8 @@ func FormatConfigValue(value string) string {
 	return QuoteLiteral(value)
 }
 
-// QuoteLiteral renders value as a single SQL string literal, escaped so no part
-// of it can be parsed as SQL. Quotes are doubled rather than backslash-escaped
-// because doubling is the only form that holds under NO_BACKSLASH_ESCAPES too,
-// and sql_mode is itself one of the variables we set.
+// QuoteLiteral renders value as a single SQL string literal. Quotes are doubled
+// rather than backslash-escaped so it holds under NO_BACKSLASH_ESCAPES too.
 func QuoteLiteral(value string) string {
 	escaped := strings.ReplaceAll(value, `\`, `\\`)
 	escaped = strings.ReplaceAll(escaped, `'`, `''`)

@@ -21,6 +21,7 @@ if [[ -z ${MYSQL_VERSION-} && -n ${IMAGE_MYSQL-} ]]; then
 fi
 
 export MYSQL_VERSION=${MYSQL_VERSION:-"9.7"}
+export MYSQL_AUTOCONFIG_VERSION=${MYSQL_AUTOCONFIG_VERSION:-"${MYSQL_VERSION}.0"}
 
 export date=$(which gdate || which date)
 export sed=$(which gsed || which sed)

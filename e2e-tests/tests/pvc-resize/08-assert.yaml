@@ -18,7 +18,7 @@ metadata:
   name: datadir-pvc-resize-mysql-0
 status:
   capacity:
-    storage: 4Gi
+    storage: 12Gi
 ---
 # the volume claim template was stale, so it is expected to be updated here,
 # which the operator can only do by recreating the statefulset
@@ -37,7 +37,7 @@ spec:
       - ReadWriteOnce
       resources:
         requests:
-          storage: 4Gi
+          storage: 12Gi
       volumeMode: Filesystem
 status:
   replicas: 3

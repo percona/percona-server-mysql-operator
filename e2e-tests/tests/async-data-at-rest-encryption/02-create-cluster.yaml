@@ -11,6 +11,7 @@ commands:
           | yq eval '.spec.mysql.clusterType="async"' - \
           | yq eval '.spec.proxy.haproxy.enabled=true' - \
           | yq eval '.spec.mysql.size=3' - \
+          | yq eval '.spec.mysql.resources.requests.cpu="500m"' - \
           | yq eval '.spec.mysql.affinity.antiAffinityTopologyKey="none"' - \
           | yq eval '.spec.mysql.vaultSecretName="vault-keyring-secret"' - \
           | yq eval '.spec.backup.storages.local-s3.type="s3"' - \

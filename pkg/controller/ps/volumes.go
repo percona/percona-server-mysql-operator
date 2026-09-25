@@ -253,10 +253,13 @@ func (r *PerconaServerMySQLReconciler) reconcilePersistentVolumes(ctx context.Co
 		resizeSucceeded := updatedPVCs == len(pvcsToUpdate)
 		if resizeSucceeded {
 			// Recreated only to update the immutable volume claim template. The
-			// delete orphans the pods and the new set adopts them back, but its
-			// controller revision differs, which makes the smart update roll them.
+			// delete orphans the pods and the new set adopts them back.
 			if configured.Cmp(crRequest) != 0 {
 				log.Info("Deleting statefulset", "configured", configured, "requested", crRequest)
+
+				if err := r.stashAppliedConfig(ctx, cr, sts); err != nil {
+					return errors.Wrapf(err, "stash applied config of statefulset/%s", sts.Name)
+				}
 
 				if err := r.Delete(ctx, sts, client.PropagationPolicy("Orphan")); err != nil && !k8serrors.IsNotFound(err) {
 					return errors.Wrapf(err, "delete statefulset/%s", sts.Name)
@@ -359,6 +362,23 @@ func (r *PerconaServerMySQLReconciler) handlePVCResizeFailure(ctx context.Contex
 	return nil
 }
 
+// stashAppliedConfig copies the applied-configuration record from the
+// statefulset onto the cr so it survives the set being rebuilt for a resize.
+func (r *PerconaServerMySQLReconciler) stashAppliedConfig(
+	ctx context.Context,
+	cr *psv1.PerconaServerMySQL,
+	sts *appsv1.StatefulSet,
+) error {
+	applied, ok := sts.GetAnnotations()[naming.AnnotationLastAppliedConfig.String()]
+	if !ok {
+		return nil
+	}
+
+	return k8s.AnnotateObject(ctx, r.Client, cr, map[naming.AnnotationKey]string{
+		naming.AnnotationLastAppliedConfig: applied,
+	})
+}
+
 func (r *PerconaServerMySQLReconciler) revertVolumeTemplate(ctx context.Context, cr *psv1.PerconaServerMySQL, originalSize resource.Quantity) error {
 	log := logf.FromContext(ctx)
 
@@ -372,6 +392,41 @@ func (r *PerconaServerMySQLReconciler) revertVolumeTemplate(ctx context.Context,
 	}
 
 	return nil
+}
+
+func dataVolumeCapacity(ctx context.Context, cl client.Reader, cr *psv1.PerconaServerMySQL) (int64, error) {
+	pvcList := new(corev1.PersistentVolumeClaimList)
+	if err := cl.List(ctx, pvcList, &client.ListOptions{
+		Namespace:     cr.Namespace,
+		LabelSelector: labels.SelectorFromSet(mysql.MatchLabels(cr)),
+	}); err != nil {
+		return 0, errors.Wrap(err, "list PVCs")
+	}
+
+	stsName := mysql.Name(cr)
+
+	var smallest int64
+	for _, pvc := range pvcList.Items {
+		if !validatePVCName(pvc, stsName) {
+			continue
+		}
+
+		ordinal, ok := pvcOrdinal(pvc.Name, stsName)
+		if !ok || ordinal >= int(cr.Spec.MySQL.Size) {
+			continue
+		}
+
+		size := pvcSize(pvc).Value()
+		if size == 0 {
+			continue
+		}
+
+		if smallest == 0 || size < smallest {
+			smallest = size
+		}
+	}
+
+	return smallest, nil
 }
 
 // pvcOrdinal returns the ordinal of the replica a datadir PVC belongs to.
@@ -395,18 +450,16 @@ func pvcOrdinal(pvcName, stsName string) (int, bool) {
 	return ordinal, true
 }
 
-// filesystemResizePending reports that the volume is expanded and only its
-// filesystem is still to be grown. Unlike nodeResizePending this sticks around
-// until the volume is mounted, so it can outlive the resize that set it.
+// filesystemResizePending reports that only the filesystem is still to be
+// grown. Unlike nodeResizePending it can outlive the resize that set it.
 func filesystemResizePending(pvc corev1.PersistentVolumeClaim) bool {
 	return slices.ContainsFunc(pvc.Status.Conditions, func(c corev1.PersistentVolumeClaimCondition) bool {
 		return c.Type == corev1.PersistentVolumeClaimFileSystemResizePending && c.Status == corev1.ConditionTrue
 	})
 }
 
-// lastSeen reports when the event was last seen. Repeated events are coalesced
-// into one object that keeps its first timestamp and only moves the last one, so
-// the first timestamp can predate the resize that made the event recur.
+// lastSeen reports when the event was last seen. Repeated events keep their
+// first timestamp, which can predate the resize that made them recur.
 func lastSeen(event eventsv1.Event) time.Time {
 	times := []time.Time{
 		event.EventTime.Time,
@@ -428,14 +481,8 @@ func lastSeen(event eventsv1.Event) time.Time {
 	return latest
 }
 
-// pvcSize reports the size of the volume behind the PVC. It deliberately does
-// not look at pods: a claim keeps reporting its old capacity until kubelet grows
-// its filesystem on mount, and whether a pod object exists says nothing about
-// whether that has happened yet.
-//
-// The allocated size is used rather than the requested one because a new request
-// lands in the spec at once, while allocatedResources only follows when the
-// resize controller picks it up.
+// pvcSize reports the size of the volume behind the PVC. The allocated size is
+// used rather than the requested one, which lands in the spec at once.
 func pvcSize(pvc corev1.PersistentVolumeClaim) *resource.Quantity {
 	// An unbound claim has no volume to expand: it is created at the size its
 	// spec asks for, so that is the size it is going to have.
@@ -460,16 +507,14 @@ func pvcSize(pvc corev1.PersistentVolumeClaim) *resource.Quantity {
 	return pvc.Status.Capacity.Storage()
 }
 
-// nodeResizePending reports whether the volume is expanded up to its allocated
-// size and only its filesystem is still to be grown. Kept per resize request, so
-// it cannot outlive the resize that set it.
+// nodeResizePending reports whether only the filesystem is still to be grown.
+// Kept per resize request, so it cannot outlive the resize that set it.
 func nodeResizePending(pvc corev1.PersistentVolumeClaim) bool {
 	return pvc.Status.AllocatedResourceStatuses[corev1.ResourceStorage] == corev1.PersistentVolumeClaimNodeResizePending
 }
 
-// reportsResizeStatus reports whether the cluster fills in the per request resize
-// status at all. It needs RecoverVolumeExpansionFailure, which is not enabled on
-// every supported platform.
+// reportsResizeStatus reports whether the cluster fills in the per request
+// resize status. It needs RecoverVolumeExpansionFailure.
 func reportsResizeStatus(pvc corev1.PersistentVolumeClaim) bool {
 	_, ok := pvc.Status.AllocatedResourceStatuses[corev1.ResourceStorage]
 	return ok

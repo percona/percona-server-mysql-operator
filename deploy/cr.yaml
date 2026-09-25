@@ -28,7 +28,7 @@ spec:
 #    autoscaling:
 #      enabled: false
 #      growthStep: 2Gi
-#      maxSize: 10Gi
+#      maxSize: 40Gi
 #      triggerThresholdPercent: 80
 #    enableExternalAutoscaling: false
 #    enableVolumeScaling: false
@@ -121,9 +121,11 @@ spec:
 #      minAvailable: 0
     resources:
       limits:
-        memory: 4Gi
+        cpu: "4"
+        memory: 8Gi
       requests:
-        memory: 2Gi
+        cpu: "2"
+        memory: 4Gi
 #    startupProbe:
 #      failureThreshold: 1
 #      initialDelaySeconds: 15
@@ -207,7 +209,7 @@ spec:
 #          - ReadWriteOnce
         resources:
           requests:
-            storage: 2Gi
+            storage: 30Gi
 #        storageClassName: standard
 #    configuration: |-
 #      max_connections=250
@@ -257,6 +259,10 @@ spec:
 #          resources:
 #            requests:
 #              storage: 1Gi
+    autoConfig:
+      enabled: true
+      loadType: someWrites
+      version: 8.4.0
 #    bootstrap:
 #      mode: auto
   proxy:
@@ -1004,7 +1010,7 @@ spec:
 #              - ReadWriteOnce
 #            resources:
 #              requests:
-#                storage: 2Gi
+#                storage: 30Gi
 #            storageClassName: standard
 #    allowParallel: false
 #    encryptionKeySecret:

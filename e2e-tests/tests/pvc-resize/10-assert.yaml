@@ -26,7 +26,7 @@ metadata:
   name: datadir-pvc-resize-mysql-3
 status:
   capacity:
-    storage: 4Gi
+    storage: 12Gi
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -34,4 +34,4 @@ metadata:
   name: datadir-pvc-resize-mysql-4
 status:
   capacity:
-    storage: 4Gi
+    storage: 12Gi

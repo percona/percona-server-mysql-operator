@@ -120,6 +120,6 @@ metadata:
 data:
   my.cnf: |2-
 
-    innodb_buffer_pool_size=2147483648
-    innodb_buffer_pool_chunk_size=268435456
-    max_connections=341
+    innodb_buffer_pool_size=4294967296
+    innodb_buffer_pool_chunk_size=536870912
+    max_connections=682

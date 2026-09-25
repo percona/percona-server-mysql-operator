@@ -7,6 +7,14 @@ commands:
 
       source ../../functions
 
+      # This test exercises the dynamic-configuration path, where a change to
+      # spec.mysql.configuration must not roll the StatefulSet. autoConfig has
+      # to stay off for that: the first user configuration makes the operator
+      # drop the calculator output by design, and the ~30 variables that go
+      # with it cannot be unset at runtime, so the cluster would restart for
+      # reasons that have nothing to do with what is under test. The
+      # auto-config test covers autoConfig.
       get_cr \
           | yq eval '.spec.mysql.clusterType="async"' - \
+          | yq eval '.spec.mysql.autoConfig.enabled=false' - \
           | kubectl -n "${NAMESPACE}" apply -f -

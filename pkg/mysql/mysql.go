@@ -27,6 +27,8 @@ const (
 	configVolumeName      = "config"
 	configMountPath       = "/etc/mysql/config"
 	CustomMyCnfPath       = "/etc/mysql/config/my-config.cnf"
+	AutoConfigCnfPath     = "/etc/mysql/config/auto-config.cnf"
+	SecretMyCnfPath       = "/etc/mysql/config/my-secret.cnf"
 	credsVolumeName       = "users"
 	mysqlshVolumeName     = "mysqlsh"
 	mysqlshMountPath      = "/.mysqlsh"
