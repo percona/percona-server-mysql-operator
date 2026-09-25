@@ -9,7 +9,7 @@ commands:
 
       cluster=$(get_cluster_name)
       generation_before=$(kubectl -n "${NAMESPACE}" get sts "${cluster}-mysql" -o jsonpath='{.metadata.generation}')
-      uids_before=$(get_mysql_pod_uids "${cluster}")
+      uids_before=$(get_pod_uids "${cluster}" database)
 
       kubectl -n "${NAMESPACE}" patch ps "${cluster}" \
           --type merge \
@@ -22,7 +22,7 @@ commands:
       sleep 15
 
       generation_after=$(kubectl -n "${NAMESPACE}" get sts "${cluster}-mysql" -o jsonpath='{.metadata.generation}')
-      uids_after=$(get_mysql_pod_uids "${cluster}")
+      uids_after=$(get_pod_uids "${cluster}" database)
 
       restarted="false"
       [[ ${uids_before} == "${uids_after}" ]] || restarted="true"

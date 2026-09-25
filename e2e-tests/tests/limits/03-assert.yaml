@@ -445,6 +445,4 @@ spec:
           name: limits-no-requests-orc
         name: custom
   updateStrategy:
-    rollingUpdate:
-      partition: 0
-    type: RollingUpdate
+    type: OnDelete

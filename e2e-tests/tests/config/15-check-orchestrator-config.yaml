@@ -9,25 +9,26 @@ commands:
 
       cluster=$(get_cluster_name)
 
-      # The ConfigMap change rolls the orchestrator pods (config-hash
-      # annotation); wait for the rollout to finish first.
-      kubectl -n "${NAMESPACE}" rollout status sts "${cluster}-orc" --timeout=300s
-
       # Every orchestrator pod must run with the merged custom configuration.
       idx=0
-      for pod in $(kubectl -n "${NAMESPACE}" get pods -l 'app.kubernetes.io/component=orchestrator' -o jsonpath='{.items[*].metadata.name}'); do
+      deadline=$((SECONDS + 480))
+      for pod in $(kubectl -n "${NAMESPACE}" get pods -l "app.kubernetes.io/component=orchestrator,app.kubernetes.io/instance=${cluster}" -o jsonpath='{.items[*].metadata.name}'); do
           kubectl -n "${NAMESPACE}" wait --for=condition=ready pod "${pod}" --timeout=120s
 
           lag_minutes=""
           recovery_period=""
-          retry=0
-          until [[ -n ${lag_minutes} && ${lag_minutes} != "null" ]] || [[ ${retry} -ge 30 ]]; do
-              sleep 5
+          until [[ ${lag_minutes} == "30" && ${recovery_period} == "300" ]]; do
+              if (( SECONDS >= deadline )); then
+                  echo "Timed out waiting for ${pod} to use the updated orchestrator configuration" >&2
+                  exit 1
+              fi
               lag_minutes=$(kubectl -n "${NAMESPACE}" exec "${pod}" -c orchestrator -- \
                   jq -r '.FailMasterPromotionOnLagMinutes' /etc/orchestrator/config/orchestrator.conf.json || true)
               recovery_period=$(kubectl -n "${NAMESPACE}" exec "${pod}" -c orchestrator -- \
                   jq -r '.RecoveryPeriodBlockSeconds' /etc/orchestrator/config/orchestrator.conf.json || true)
-              retry=$((retry + 1))
+              if [[ ${lag_minutes} != "30" || ${recovery_period} != "300" ]]; then
+                  sleep 5
+              fi
           done
 
           echo "${pod}: FailMasterPromotionOnLagMinutes=${lag_minutes} RecoveryPeriodBlockSeconds=${recovery_period}"
