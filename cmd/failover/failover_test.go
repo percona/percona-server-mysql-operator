@@ -1288,7 +1288,7 @@ func TestWaitForRelayLogsApplied(t *testing.T) {
 			applying(target, 220, drainedState),
 		}}
 
-		require.NoError(t, waitForRelayLogsApplied(t.Context(), f, logs, target, startPos, poll, patience))
+		require.NoError(t, waitForRelayLogsApplied(t.Context(), f, logs, nil, target, startPos, poll, patience))
 		// Stability needs the same position twice, so poll 1 can never finish it.
 		assert.GreaterOrEqual(t, f.calls, 3)
 	})
@@ -1296,34 +1296,34 @@ func TestWaitForRelayLogsApplied(t *testing.T) {
 	t.Run("two polls are the minimum", func(t *testing.T) {
 		f := &fakeStatuser{statuses: []map[string]string{applying(target, 220, drainedState)}}
 
-		require.NoError(t, waitForRelayLogsApplied(t.Context(), f, logs, target, startPos, poll, patience))
+		require.NoError(t, waitForRelayLogsApplied(t.Context(), f, logs, nil, target, startPos, poll, patience))
 		assert.Equal(t, 2, f.calls)
 	})
 
 	t.Run("startPos 0 only requires the applier to drain", func(t *testing.T) {
 		f := &fakeStatuser{statuses: []map[string]string{applying(target, 4, drainedState)}}
 
-		require.NoError(t, waitForRelayLogsApplied(t.Context(), f, logs, target, 0, poll, patience))
+		require.NoError(t, waitForRelayLogsApplied(t.Context(), f, logs, nil, target, 0, poll, patience))
 	})
 
 	t.Run("a later relay log counts as progress", func(t *testing.T) {
 		f := &fakeStatuser{statuses: []map[string]string{applying("relay-bin.000003", 4, drainedState)}}
 
-		require.NoError(t, waitForRelayLogsApplied(t.Context(), f, logs, target, startPos, poll, patience))
+		require.NoError(t, waitForRelayLogsApplied(t.Context(), f, logs, nil, target, startPos, poll, patience))
 	})
 
 	t.Run("a lower suffix later in the index counts as progress", func(t *testing.T) {
 		mixed := relayIndex{"relay-bin.000009", target, "new-relay.000001"}
 		f := &fakeStatuser{statuses: []map[string]string{applying("new-relay.000001", 4, drainedState)}}
 
-		require.NoError(t, waitForRelayLogsApplied(t.Context(), f, mixed, target, startPos, poll, patience))
+		require.NoError(t, waitForRelayLogsApplied(t.Context(), f, mixed, nil, target, startPos, poll, patience))
 	})
 
 	t.Run("a higher suffix earlier in the index is not progress", func(t *testing.T) {
 		mixed := relayIndex{"relay-bin.000009", target, "new-relay.000001"}
 		f := &fakeStatuser{statuses: []map[string]string{applying("relay-bin.000009", 999, drainedState)}}
 
-		err := waitForRelayLogsApplied(t.Context(), f, mixed, target, startPos, poll, impatience)
+		err := waitForRelayLogsApplied(t.Context(), f, mixed, nil, target, startPos, poll, impatience)
 
 		require.Error(t, err)
 		assert.ErrorIs(t, err, context.DeadlineExceeded)
@@ -1332,7 +1332,7 @@ func TestWaitForRelayLogsApplied(t *testing.T) {
 	t.Run("the pre-8.0.22 state wording still counts as drained", func(t *testing.T) {
 		f := &fakeStatuser{statuses: []map[string]string{applying(target, 220, legacyDrainedState)}}
 
-		require.NoError(t, waitForRelayLogsApplied(t.Context(), f, logs, target, startPos, poll, patience))
+		require.NoError(t, waitForRelayLogsApplied(t.Context(), f, logs, nil, target, startPos, poll, patience))
 	})
 
 	t.Run("an empty poll does not reset progress", func(t *testing.T) {
@@ -1342,7 +1342,7 @@ func TestWaitForRelayLogsApplied(t *testing.T) {
 			applying(target, 101, drainedState),
 		}}
 
-		require.NoError(t, waitForRelayLogsApplied(t.Context(), f, logs, target, startPos, poll, patience))
+		require.NoError(t, waitForRelayLogsApplied(t.Context(), f, logs, nil, target, startPos, poll, patience))
 		assert.Equal(t, 3, f.calls)
 	})
 
@@ -1353,7 +1353,7 @@ func TestWaitForRelayLogsApplied(t *testing.T) {
 			applying(target, 220, drainedState),
 		}}
 
-		require.NoError(t, waitForRelayLogsApplied(t.Context(), f, logs, target, startPos, poll, patience))
+		require.NoError(t, waitForRelayLogsApplied(t.Context(), f, logs, nil, target, startPos, poll, patience))
 		assert.Equal(t, 3, f.calls)
 	})
 
@@ -1400,7 +1400,7 @@ func TestWaitForRelayLogsApplied(t *testing.T) {
 		t.Run("times out: "+tt.name, func(t *testing.T) {
 			f := &fakeStatuser{statuses: tt.statuses, cycle: tt.cycle}
 
-			err := waitForRelayLogsApplied(t.Context(), f, logs, target, startPos, poll, impatience)
+			err := waitForRelayLogsApplied(t.Context(), f, logs, nil, target, startPos, poll, impatience)
 
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "gave up after")
@@ -1472,7 +1472,7 @@ func TestWaitForRelayLogsApplied(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			f := &fakeStatuser{statuses: tt.statuses}
 
-			err := waitForRelayLogsApplied(t.Context(), f, logs, tt.relayLog, startPos, poll, impatience)
+			err := waitForRelayLogsApplied(t.Context(), f, logs, nil, tt.relayLog, startPos, poll, impatience)
 
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tt.wantErr)
@@ -1482,7 +1482,7 @@ func TestWaitForRelayLogsApplied(t *testing.T) {
 	t.Run("a target the index does not list fails before polling", func(t *testing.T) {
 		f := &fakeStatuser{statuses: []map[string]string{applying(target, 220, drainedState)}}
 
-		err := waitForRelayLogsApplied(t.Context(), f, logs, "relay-bin", startPos, poll, patience)
+		err := waitForRelayLogsApplied(t.Context(), f, logs, nil, "relay-bin", startPos, poll, patience)
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), `the index does not list the relay log "relay-bin"`)
@@ -1492,7 +1492,7 @@ func TestWaitForRelayLogsApplied(t *testing.T) {
 	t.Run("the status query fails", func(t *testing.T) {
 		f := &fakeStatuser{err: errors.New("connection lost")}
 
-		err := waitForRelayLogsApplied(t.Context(), f, logs, target, startPos, poll, patience)
+		err := waitForRelayLogsApplied(t.Context(), f, logs, nil, target, startPos, poll, patience)
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "show replica status: connection lost")
@@ -1503,20 +1503,20 @@ func TestWaitForRelayLogsApplied(t *testing.T) {
 		inner := &fakeStatuser{statuses: []map[string]string{applying(target, 150, busyState)}}
 		v := &vanishingStatuser{inner: inner, after: 2}
 
-		require.NoError(t, waitForRelayLogsApplied(t.Context(), v, logs, target, startPos, poll, patience))
+		require.NoError(t, waitForRelayLogsApplied(t.Context(), v, logs, nil, target, startPos, poll, patience))
 		assert.Equal(t, 2, inner.calls, "the wait ends on the read that finds no rows")
 	})
 
 	t.Run("a channel that is already gone is not a failure", func(t *testing.T) {
 		f := &fakeStatuser{err: sql.ErrNoRows}
 
-		require.NoError(t, waitForRelayLogsApplied(t.Context(), f, logs, target, startPos, poll, patience))
+		require.NoError(t, waitForRelayLogsApplied(t.Context(), f, logs, nil, target, startPos, poll, patience))
 	})
 
 	t.Run("the give-up message reports the injected timeout", func(t *testing.T) {
 		f := &fakeStatuser{statuses: []map[string]string{applying(target, startPos, drainedState)}}
 
-		err := waitForRelayLogsApplied(t.Context(), f, logs, target, startPos, poll, 20*time.Millisecond)
+		err := waitForRelayLogsApplied(t.Context(), f, logs, nil, target, startPos, poll, 20*time.Millisecond)
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "gave up after 20ms at relay-bin.000002:100")
@@ -1526,7 +1526,7 @@ func TestWaitForRelayLogsApplied(t *testing.T) {
 		f := &fakeStatuser{statuses: []map[string]string{applying(target, startPos, drainedState)}}
 
 		start := time.Now()
-		err := waitForRelayLogsApplied(t.Context(), f, logs, target, startPos, time.Second, 10*time.Millisecond)
+		err := waitForRelayLogsApplied(t.Context(), f, logs, nil, target, startPos, time.Second, 10*time.Millisecond)
 
 		require.Error(t, err)
 		assert.Less(t, time.Since(start), 500*time.Millisecond)
@@ -1537,7 +1537,7 @@ func TestWaitForRelayLogsApplied(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
 
-		err := waitForRelayLogsApplied(ctx, f, logs, target, startPos, poll, patience)
+		err := waitForRelayLogsApplied(ctx, f, logs, nil, target, startPos, poll, patience)
 
 		require.Error(t, err)
 		assert.ErrorIs(t, err, context.Canceled)
