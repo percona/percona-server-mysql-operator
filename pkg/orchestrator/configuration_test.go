@@ -77,7 +77,7 @@ func TestConfigMapDataUserConfiguration(t *testing.T) {
 
 	t.Run("operator-critical baked defaults cannot be overridden", func(t *testing.T) {
 		cr := &apiv1.PerconaServerMySQL{}
-		cr.Spec.CRVersion = "1.2.0"
+		cr.Spec.CRVersion = "1.3.0"
 		cr.Spec.Orchestrator.Configuration = `{
 			"PreFailoverProcesses": ["echo pwned"],
 			"PostUnsuccessfulFailoverProcesses": ["echo pwned"],
@@ -143,6 +143,24 @@ func TestConfigMapDataUserConfiguration(t *testing.T) {
 		assert.EqualValues(t, "evil", cfg["HostnameResolveMethod"])
 		assert.EqualValues(t, false, cfg["UseSuperReadOnly"])
 	})
+
+	t.Run("failover config is left alone before 1.3.0", func(t *testing.T) {
+		cr := &apiv1.PerconaServerMySQL{}
+		cr.Spec.CRVersion = "1.2.0"
+		cr.Spec.Orchestrator.Configuration = `{"FailMasterPromotionOnLagMinutes": 30, "RecoveryPeriodBlockSeconds": 300}`
+
+		cfg := parse(t, cr)
+
+		for _, k := range []string{
+			"PreFailoverProcesses", "PostFailoverProcesses", "PostUnsuccessfulFailoverProcesses",
+			"UnseenInstanceForgetHours", "ReasonableMaintenanceReplicationLagSeconds",
+		} {
+			_, ok := cfg[k]
+			assert.Falsef(t, ok, "%s must not be in the ConfigMap", k)
+		}
+		assert.EqualValues(t, 30, cfg["FailMasterPromotionOnLagMinutes"])
+		assert.EqualValues(t, 300, cfg["RecoveryPeriodBlockSeconds"])
+	})
 }
 
 func TestBakedConfigDisablesPromotionLagVeto(t *testing.T) {
@@ -188,7 +206,7 @@ func TestConfigMapDataRendersFailoverHook(t *testing.T) {
 
 	t.Run("defaults", func(t *testing.T) {
 		cr := &apiv1.PerconaServerMySQL{}
-		cr.Spec.CRVersion = "1.2.0"
+		cr.Spec.CRVersion = "1.3.0"
 
 		cfg := parse(t, cr)
 		hook := hookOf(t, cfg)
@@ -206,7 +224,7 @@ func TestConfigMapDataRendersFailoverHook(t *testing.T) {
 
 	t.Run("every post hook finishes the recovery", func(t *testing.T) {
 		cr := &apiv1.PerconaServerMySQL{}
-		cr.Spec.CRVersion = "1.2.0"
+		cr.Spec.CRVersion = "1.3.0"
 
 		cfg := parse(t, cr)
 
@@ -223,7 +241,7 @@ func TestConfigMapDataRendersFailoverHook(t *testing.T) {
 
 	t.Run("the recovery block outlasts the failover timeout", func(t *testing.T) {
 		cr := &apiv1.PerconaServerMySQL{}
-		cr.Spec.CRVersion = "1.2.0"
+		cr.Spec.CRVersion = "1.3.0"
 		cr.Spec.Orchestrator.Failover = &apiv1.FailoverSpec{Timeout: "30m"}
 
 		cfg := parse(t, cr)
@@ -234,7 +252,7 @@ func TestConfigMapDataRendersFailoverHook(t *testing.T) {
 
 	t.Run("the dead primary is never forgotten mid-failover", func(t *testing.T) {
 		cr := &apiv1.PerconaServerMySQL{}
-		cr.Spec.CRVersion = "1.2.0"
+		cr.Spec.CRVersion = "1.3.0"
 		cr.Spec.Orchestrator.Failover = &apiv1.FailoverSpec{Timeout: "90m"}
 
 		cfg := parse(t, cr)
@@ -247,7 +265,7 @@ func TestConfigMapDataRendersFailoverHook(t *testing.T) {
 
 	t.Run("spec values are plumbed through", func(t *testing.T) {
 		cr := &apiv1.PerconaServerMySQL{}
-		cr.Spec.CRVersion = "1.2.0"
+		cr.Spec.CRVersion = "1.3.0"
 		cr.Spec.Orchestrator.Failover = &apiv1.FailoverSpec{
 			Timeout:                  "30m",
 			OnTimeout:                apiv1.FailoverPolicyForce,

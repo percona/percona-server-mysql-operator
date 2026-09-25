@@ -541,12 +541,15 @@ var reservedOrchestratorConfigKeys = map[string]bool{
 	"RaftDataDir":                        true,
 	"SQLite3DataFile":                    true,
 	"BackendDB":                          true,
-	"PostUnsuccessfulFailoverProcesses":  true,
 	// failover/HA semantics the operator assumes
 	"ApplyMySQLPromotionAfterMasterFailover":    true,
 	"MasterFailoverDetachReplicaMasterHost":     true,
 	"DetachLostReplicasAfterMasterFailover":     true,
 	"FailMasterPromotionIfSQLThreadNotUpToDate": true,
+}
+
+var failoverConfigKeys = map[string]bool{
+	"PostUnsuccessfulFailoverProcesses": true,
 	// The pre-failover hook is the only thing gating promotion on the candidate
 	// having applied everything, so nothing may re-arm orchestrator's own gates.
 	// FailMasterPromotionOnLagMinutes is the worst of them: ReplicationLagQuery
@@ -649,13 +652,16 @@ func ConfigMapData(cr *apiv1.PerconaServerMySQL) (string, error) {
 		config["MySQLTopologySSLCAFile"] = filepath.Join(tlsMountPath, "ca.crt")
 	}
 
-	failover := cr.FailoverSpec()
-	config["PreFailoverProcesses"] = preFailoverProcesses(failover)
-	config["PostFailoverProcesses"] = postFailoverProcesses()
-	config["PostUnsuccessfulFailoverProcesses"] = postUnsuccessfulFailoverProcesses()
-	config["RecoveryPeriodBlockSeconds"] = recoveryPeriodBlockSeconds(failover)
-	config["UnseenInstanceForgetHours"] = unseenInstanceForgetHours(failover)
-	config["ReasonableMaintenanceReplicationLagSeconds"] = int(failover.SwitchoverCatchUp().Seconds())
+	post130 := cr.CompareVersion("1.3.0") >= 0
+	if post130 {
+		failover := cr.FailoverSpec()
+		config["PreFailoverProcesses"] = preFailoverProcesses(failover)
+		config["PostFailoverProcesses"] = postFailoverProcesses()
+		config["PostUnsuccessfulFailoverProcesses"] = postUnsuccessfulFailoverProcesses()
+		config["RecoveryPeriodBlockSeconds"] = recoveryPeriodBlockSeconds(failover)
+		config["UnseenInstanceForgetHours"] = unseenInstanceForgetHours(failover)
+		config["ReasonableMaintenanceReplicationLagSeconds"] = int(failover.SwitchoverCatchUp().Seconds())
+	}
 
 	if cfg := cr.Spec.Orchestrator.Configuration; cfg != "" {
 		userConfig := make(map[string]any)
@@ -666,7 +672,7 @@ func ConfigMapData(cr *apiv1.PerconaServerMySQL) (string, error) {
 			return "", errors.New("spec.orchestrator.configuration: must be a JSON object")
 		}
 		for k, v := range userConfig {
-			if reservedOrchestratorConfigKeys[k] {
+			if reservedOrchestratorConfigKeys[k] || (post130 && failoverConfigKeys[k]) {
 				continue
 			}
 			config[k] = v
