@@ -541,6 +541,21 @@ func TestReconcileMySQLConfig(t *testing.T) {
 			expectedStmts:  []string{"SET GLOBAL max_connections=200"},
 			expectedConfig: `{"max_connections":"200"}`,
 		},
+		{
+			// The set comes back from the recreate with the running pods
+			// readopted, not replaced, so a variable mysqld refuses at runtime
+			// only reaches them through a restart the operator starts here.
+			desc:          "static config changed during the recreate restarts the adopted pods",
+			state:         apiv1.StateReady,
+			currentConfig: "[mysqld]\ninnodb_buffer_pool_chunk_size=268435456\n",
+			stashedConfig: `{"innodb_buffer_pool_chunk_size":"536870912"}`,
+			expectedStmts: []string{"SET GLOBAL innodb_buffer_pool_chunk_size=268435456"},
+			stmtErrs: map[string]string{
+				"SET GLOBAL innodb_buffer_pool_chunk_size=268435456": stderrReadOnly,
+			},
+			expectRestart:  true,
+			expectedConfig: `{"innodb_buffer_pool_chunk_size":"268435456"}`,
+		},
 	}
 
 	for _, tt := range tests {
@@ -686,105 +701,6 @@ func TestReconcileMySQLConfig(t *testing.T) {
 				_, kept := updatedCR.GetAnnotations()[naming.AnnotationLastAppliedConfig.String()]
 				assert.False(t, kept, "the copy on the cr is dropped once it is back on the statefulset")
 			}
-		})
-	}
-}
-
-func TestRolloutInFlight(t *testing.T) {
-	tests := map[string]struct {
-		sts  *appsv1.StatefulSet
-		want bool
-	}{
-		"settled": {
-			sts: &appsv1.StatefulSet{
-				Generation: 4,
-				Status: appsv1.StatefulSetStatus{
-					ObservedGeneration: 4,
-					CurrentRevision:    "rev-a",
-					UpdateRevision:     "rev-a",
-					Replicas:           3,
-					UpdatedReplicas:    3,
-				},
-			},
-			want: false,
-		},
-		"spec write not observed yet": {
-			sts: &appsv1.StatefulSet{
-				Generation: 5,
-				Status: appsv1.StatefulSetStatus{
-					ObservedGeneration: 4,
-					CurrentRevision:    "rev-a",
-					UpdateRevision:     "rev-a",
-					Replicas:           3,
-					UpdatedReplicas:    3,
-				},
-			},
-			want: false,
-		},
-		// OnDelete leaves currentRevision behind for good, so a mismatch there
-		// says nothing about whether pods are still being replaced
-		"stale current revision with every pod updated": {
-			sts: &appsv1.StatefulSet{
-				Generation: 5,
-				Status: appsv1.StatefulSetStatus{
-					ObservedGeneration: 5,
-					CurrentRevision:    "rev-a",
-					UpdateRevision:     "rev-b",
-					Replicas:           3,
-					UpdatedReplicas:    3,
-				},
-			},
-			want: false,
-		},
-		"pods not yet on the newest revision": {
-			sts: &appsv1.StatefulSet{
-				Generation: 5,
-				Status: appsv1.StatefulSetStatus{
-					ObservedGeneration: 5,
-					CurrentRevision:    "rev-a",
-					UpdateRevision:     "rev-b",
-					Replicas:           3,
-					UpdatedReplicas:    0,
-				},
-			},
-			want: true,
-		},
-		// a pod being added, not one being replaced
-		"replica added to a template no pod is leaving": {
-			sts: &appsv1.StatefulSet{
-				Generation: 5,
-				Status: appsv1.StatefulSetStatus{
-					ObservedGeneration: 5,
-					CurrentRevision:    "rev-b",
-					UpdateRevision:     "rev-b",
-					Replicas:           3,
-					UpdatedReplicas:    2,
-				},
-			},
-			want: false,
-		},
-		"pods partway through a replacement": {
-			sts: &appsv1.StatefulSet{
-				Generation: 5,
-				Status: appsv1.StatefulSetStatus{
-					ObservedGeneration: 5,
-					CurrentRevision:    "rev-a",
-					UpdateRevision:     "rev-b",
-					Replicas:           3,
-					UpdatedReplicas:    2,
-				},
-			},
-			want: true,
-		},
-		"statefulset with no revisions recorded": {
-			sts:  &appsv1.StatefulSet{},
-			want: false,
-		},
-	}
-
-	for name, tt := range tests {
-		t.Run(name, func(t *testing.T) {
-			assert.Equal(t, tt.want, rolloutInFlight(tt.sts))
 		})
 	}
 }

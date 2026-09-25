@@ -75,7 +75,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfig(
 
 	confHash := fmt.Sprintf("%x", md5.Sum(confJson))
 	restartMySQL := func() error {
-		if podsRestarting || rolloutInFlight(sts) {
+		if podsRestarting {
 			log.Info("Pods are being replaced, they read the configuration as they start")
 			return nil
 		}
@@ -168,16 +168,6 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfig(
 		return errors.Wrap(err, "write status")
 	}
 	return nil
-}
-
-// rolloutInFlight reports whether sts is still replacing its pods with ones
-// built from the pod template it currently holds.
-func rolloutInFlight(sts *appsv1.StatefulSet) bool {
-	if sts.Status.ObservedGeneration != sts.Generation {
-		return false
-	}
-	return sts.Status.CurrentRevision != sts.Status.UpdateRevision &&
-		sts.Status.UpdatedReplicas != sts.Status.Replicas
 }
 
 const (
