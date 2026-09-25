@@ -18,7 +18,7 @@ commands:
           -p '{"spec":{"orchestrator":{"failover":{"timeout":"1m","onTimeout":"Abort"}}}}'
 
       # The spec has to reach the hook orchestrator actually runs, which takes
-      # a rollout of the orchestrator pods.
+      # a restart of every orchestrator pod.
       retry=0
       until [[ $(kubectl -n "${NAMESPACE}" get sts "${cluster}-orc" -o jsonpath='{.metadata.generation}') -gt ${generation} ]]; do
           if [[ ${retry} -ge 24 ]]; then
@@ -28,11 +28,9 @@ commands:
           sleep 5
           retry=$((retry + 1))
       done
-      kubectl -n "${NAMESPACE}" rollout status sts "${cluster}-orc" --timeout=300s
+      wait_for_sts_pods_updated "${cluster}-orc"
 
       for pod in $(kubectl -n "${NAMESPACE}" get pods -l 'app.kubernetes.io/component=orchestrator' -o jsonpath='{.items[*].metadata.name}'); do
-          kubectl -n "${NAMESPACE}" wait --for=condition=ready pod "${pod}" --timeout=120s
-
           retry=0
           until kubectl -n "${NAMESPACE}" exec "${pod}" -c orchestrator -- \
               jq -r '.PreFailoverProcesses[] | select(contains("orc-handler failover"))' \

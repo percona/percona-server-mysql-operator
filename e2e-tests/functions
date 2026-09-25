@@ -1310,6 +1310,38 @@ wait_for_pods_restart() {
 	done
 }
 
+# Waits, pod by pod, until every pod of the StatefulSet runs its update revision
+# and is ready. Unlike rollout status, this works with the OnDelete strategy.
+wait_for_sts_pods_updated() {
+	local sts=$1
+	local timeout=${2:-300}
+	local generation replicas revision pod elapsed
+
+	generation=$(kubectl -n "${NAMESPACE}" get sts "${sts}" -o jsonpath='{.metadata.generation}')
+	kubectl -n "${NAMESPACE}" wait sts "${sts}" \
+		--for=jsonpath='{.status.observedGeneration}'="${generation}" --timeout="${timeout}s"
+
+	replicas=$(kubectl -n "${NAMESPACE}" get sts "${sts}" -o jsonpath='{.spec.replicas}')
+	revision=$(kubectl -n "${NAMESPACE}" get sts "${sts}" -o jsonpath='{.status.updateRevision}')
+
+	for ((i = 0; i < replicas; i++)); do
+		pod="${sts}-${i}"
+		elapsed=0
+		until [[ $(kubectl -n "${NAMESPACE}" get pod "${pod}" \
+			-o jsonpath='{.metadata.labels.controller-revision-hash} {.status.conditions[?(@.type=="Ready")].status}' \
+			2>/dev/null) == "${revision} True" ]]; do
+			if ((elapsed >= timeout)); then
+				echo "Timeout (${timeout}s) exceeded while waiting for ${pod} to run revision ${revision}"
+				kubectl -n "${NAMESPACE}" get pod "${pod}" -o wide || true
+				return 1
+			fi
+			echo "waiting for ${pod} to run revision ${revision}"
+			sleep 5
+			elapsed=$((elapsed + 5))
+		done
+	done
+}
+
 # Prints the notBefore date of the certificate mysqld currently serves from every
 # database pod, in pod name order. Spaces inside a date become underscores so
 # that every pod stays one word; unreachable pods print "unavailable".

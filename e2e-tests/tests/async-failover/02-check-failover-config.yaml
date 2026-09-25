@@ -12,12 +12,10 @@ commands:
 
       # The spec has to reach the hook orchestrator actually runs, not just the
       # ConfigMap: the hook is what enforces the timeout and the policy.
-      kubectl -n "${NAMESPACE}" rollout status sts "${cluster}-orc" --timeout=300s
+      wait_for_sts_pods_updated "${cluster}-orc"
 
       idx=0
       for pod in $(kubectl -n "${NAMESPACE}" get pods -l 'app.kubernetes.io/component=orchestrator' -o jsonpath='{.items[*].metadata.name}'); do
-          kubectl -n "${NAMESPACE}" wait --for=condition=ready pod "${pod}" --timeout=120s
-
           hook=""
           catch_up=""
           retry=0
