@@ -56,7 +56,7 @@ spec:
         - name: PSO_LEADER_ELECTION_ENABLED
           value: "true"
         - name: PSO_LEADER_ELECTION_LEASE_NAME
-          value: ""
+          value: 08db2feb.percona.com
         - name: PSO_LEADER_ELECTION_LEASE_DURATION
           value: 60s
         - name: PSO_LEADER_ELECTION_RENEW_DEADLINE
