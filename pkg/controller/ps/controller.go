@@ -939,8 +939,6 @@ func (r *PerconaServerMySQLReconciler) teardownGR(
 	ctx context.Context,
 	cr *apiv1.PerconaServerMySQL,
 ) error {
-	log := logf.FromContext(ctx).WithName("teardownGR")
-
 	observed := cr
 	cr = cr.DeepCopy()
 	cr.Spec.MySQL.ClusterType = apiv1.ClusterTypeGR
@@ -998,7 +996,7 @@ func (r *PerconaServerMySQLReconciler) teardownGR(
 
 		db := database.NewReplicationManager(pod, r.ClientCmd, apiv1.UserOperator, operatorPass, mysql.PodFQDN(cr, pod))
 		if err := db.ResetGroupReplicationPersistedVars(ctx); err != nil {
-			log.Error(err, "Failed to reset persisted group replication variables", "pod", pod.Name)
+			return errors.Wrapf(err, "reset persisted group replication variables on pod %s", pod.Name)
 		}
 	}
 
