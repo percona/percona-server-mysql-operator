@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -39,7 +41,7 @@ func TestEnsureService(t *testing.T) {
 			cr: &apiv1.PerconaServerMySQL{
 				Name:      "test-cr",
 				Namespace: "default",
-				UID:       "test-uid",
+				UID:       types.UID("test-uid"),
 				Spec:      apiv1.PerconaServerMySQLSpec{},
 			},
 			svc: &corev1.Service{
@@ -68,7 +70,7 @@ func TestEnsureService(t *testing.T) {
 			cr: &apiv1.PerconaServerMySQL{
 				Name:      "test-cr",
 				Namespace: "default",
-				UID:       "test-uid",
+				UID:       types.UID("test-uid"),
 				Spec: apiv1.PerconaServerMySQLSpec{
 					IgnoreAnnotations: []string{"ignore.me"},
 				},
@@ -101,7 +103,7 @@ func TestEnsureService(t *testing.T) {
 			cr: &apiv1.PerconaServerMySQL{
 				Name:      "test-cr",
 				Namespace: "default",
-				UID:       "test-uid",
+				UID:       types.UID("test-uid"),
 				Spec:      apiv1.PerconaServerMySQLSpec{},
 			},
 			svc: &corev1.Service{
@@ -152,7 +154,7 @@ func TestEnsureService(t *testing.T) {
 			cr: &apiv1.PerconaServerMySQL{
 				Name:      "test-cr",
 				Namespace: "default",
-				UID:       "test-uid",
+				UID:       types.UID("test-uid"),
 				Spec:      apiv1.PerconaServerMySQLSpec{},
 			},
 			svc: &corev1.Service{
@@ -195,7 +197,7 @@ func TestEnsureService(t *testing.T) {
 			cr: &apiv1.PerconaServerMySQL{
 				Name:      "test-cr",
 				Namespace: "default",
-				UID:       "test-uid",
+				UID:       types.UID("test-uid"),
 				Spec: apiv1.PerconaServerMySQLSpec{
 					IgnoreAnnotations: []string{"ignore.annotation"},
 				},
@@ -242,7 +244,7 @@ func TestEnsureService(t *testing.T) {
 			cr: &apiv1.PerconaServerMySQL{
 				Name:      "test-cr",
 				Namespace: "default",
-				UID:       "test-uid",
+				UID:       types.UID("test-uid"),
 				Spec: apiv1.PerconaServerMySQLSpec{
 					IgnoreLabels: []string{"ignore.label"},
 				},
@@ -364,7 +366,6 @@ func TestEqualMetadata(t *testing.T) {
 						"test-fin-1",
 					},
 
-					SelfLink:        "selflink1",
 					UID:             "uid1",
 					ResourceVersion: "resourceVer1",
 					Generation:      1,
@@ -401,7 +402,6 @@ func TestEqualMetadata(t *testing.T) {
 						"test-fin-1",
 					},
 
-					SelfLink:        "selflink2",
 					UID:             "uid2",
 					ResourceVersion: "resourceVer2",
 					Generation:      2,
@@ -562,12 +562,13 @@ func TestSetCRVersion(t *testing.T) {
 func TestEnsureObjectWithHash(t *testing.T) {
 	scheme := runtime.NewScheme()
 	require.NoError(t, corev1.AddToScheme(scheme))
+	require.NoError(t, cm.AddToScheme(scheme))
 	require.NoError(t, apiv1.AddToScheme(scheme))
 
 	cr := &apiv1.PerconaServerMySQL{
 		Name:      "test-cr",
 		Namespace: "default",
-		UID:       "test-uid",
+		UID:       types.UID("test-uid"),
 		Spec: apiv1.PerconaServerMySQLSpec{
 			CRVersion: version.Version(),
 		},
@@ -622,7 +623,7 @@ func TestEnsureObjectWithHash(t *testing.T) {
 					APIVersion:         "ps.percona.com/v1",
 					Kind:               "PerconaServerMySQL",
 					Name:               "test-cr",
-					UID:                "test-uid",
+					UID:                types.UID("test-uid"),
 					Controller:         new(true),
 					BlockOwnerDeletion: new(true),
 				},
@@ -676,7 +677,7 @@ func TestEnsureObjectWithHash(t *testing.T) {
 					APIVersion:         "ps.percona.com/v1",
 					Kind:               "PerconaServerMySQL",
 					Name:               "test-cr",
-					UID:                "test-uid",
+					UID:                types.UID("test-uid"),
 					Controller:         new(true),
 					BlockOwnerDeletion: new(true),
 				},
@@ -708,6 +709,59 @@ func TestEnsureObjectWithHash(t *testing.T) {
 		err = cl.Get(context.Background(), types.NamespacedName{Name: "test-secret", Namespace: "default"}, got)
 		require.NoError(t, err)
 		assert.Equal(t, []byte("new-value"), got.Data["key"])
+	})
+
+	t.Run("updates certificate issuerRef when switching ClusterIssuer to Issuer", func(t *testing.T) {
+		existingCert := &cm.Certificate{
+			APIVersion: "cert-manager.io/v1",
+			Kind:       "Certificate",
+			Name:       "test-ssl",
+			Namespace:  "default",
+			Spec: cm.CertificateSpec{
+				SecretName: "test-ssl",
+				DNSNames:   []string{"test.example.com"},
+				IssuerRef: cmmeta.IssuerReference{
+					Name:  "my-org-issuer",
+					Kind:  cm.ClusterIssuerKind,
+					Group: "cert-manager.io",
+				},
+			},
+		}
+		oldHash, err := ObjectHash(existingCert)
+		require.NoError(t, err)
+		existingCert.Annotations = map[string]string{naming.AnnotationLastConfigHash.String(): oldHash}
+
+		cl := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(existingCert).
+			Build()
+
+		desired := &cm.Certificate{
+			APIVersion: "cert-manager.io/v1",
+			Kind:       "Certificate",
+			Name:       "test-ssl",
+			Namespace:  "default",
+			Spec: cm.CertificateSpec{
+				SecretName: "test-ssl",
+				DNSNames:   []string{"test.example.com"},
+				IssuerRef: cmmeta.IssuerReference{
+					Name:  "my-ns-issuer",
+					Kind:  cm.IssuerKind,
+					Group: "cert-manager.io",
+				},
+			},
+		}
+
+		err = EnsureObjectWithHash(context.Background(), cl, nil, desired, scheme)
+		require.NoError(t, err)
+
+		got := &cm.Certificate{}
+		err = cl.Get(context.Background(), types.NamespacedName{Name: "test-ssl", Namespace: "default"}, got)
+		require.NoError(t, err)
+
+		assert.Equal(t, "my-ns-issuer", got.Spec.IssuerRef.Name)
+		assert.Equal(t, cm.IssuerKind, got.Spec.IssuerRef.Kind)
+		assert.Equal(t, "cert-manager.io", got.Spec.IssuerRef.Group)
 	})
 }
 
