@@ -7,7 +7,7 @@ require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/Percona-Lab/percona-version-service v0.0.0-20230324081000-27de445df239
 	github.com/cert-manager/cert-manager v1.21.2
-	github.com/dustin/go-humanize v1.0.1
+	github.com/dustin/go-humanize v1.1.0
 	github.com/flosch/pongo2 v0.0.0-20200913210552-0d938eb266f3
 	github.com/go-ini/ini v1.67.0
 	github.com/go-logr/logr v1.4.4
