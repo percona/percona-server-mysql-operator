@@ -1,136 +1,17 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
-	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
+	failoverlock "github.com/percona/percona-server-mysql-operator/cmd/internal/failover"
 )
-
-func instance(host string, master string, logFile string, logPos int64, problems ...string) *orchestrator.Instance {
-	return &orchestrator.Instance{
-		Key:                   orchestrator.InstanceKey{Hostname: host, Port: 3306},
-		MasterKey:             orchestrator.InstanceKey{Hostname: master, Port: 3306},
-		Problems:              problems,
-		ExecBinlogCoordinates: orchestrator.BinlogCoordinates{LogFile: logFile, LogPos: logPos},
-	}
-}
-
-func TestReplicasOf(t *testing.T) {
-	tests := map[string]struct {
-		instances []*orchestrator.Instance
-		host      string
-		want      []string
-	}{
-		"replicas of the primary": {
-			instances: []*orchestrator.Instance{
-				instance("mysql-0", "", "binlog.000004", 100),
-				instance("mysql-1", "mysql-0", "binlog.000004", 90),
-				instance("mysql-2", "mysql-0", "binlog.000004", 80),
-			},
-			host: "mysql-0",
-			want: []string{"mysql-1", "mysql-2"},
-		},
-		"the primary has no source": {
-			instances: []*orchestrator.Instance{
-				instance("mysql-0", "", "binlog.000004", 100),
-			},
-			host: "mysql-0",
-			want: []string{},
-		},
-		"instances of another source are left alone": {
-			instances: []*orchestrator.Instance{
-				instance("mysql-1", "mysql-0", "binlog.000004", 90),
-				instance("mysql-2", "mysql-1", "binlog.000004", 80),
-			},
-			host: "mysql-1",
-			want: []string{"mysql-2"},
-		},
-		"unknown source": {
-			instances: []*orchestrator.Instance{
-				instance("mysql-1", "mysql-0", "binlog.000004", 90),
-			},
-			host: "mysql-9",
-			want: []string{},
-		},
-	}
-
-	for name, tt := range tests {
-		t.Run(name, func(t *testing.T) {
-			hosts := make([]string, 0)
-			for _, replica := range replicasOf(tt.instances, tt.host) {
-				hosts = append(hosts, replica.Key.Hostname)
-			}
-
-			assert.Equal(t, tt.want, hosts)
-		})
-	}
-}
-
-func TestMostUpToDate(t *testing.T) {
-	tests := map[string]struct {
-		replicas []*orchestrator.Instance
-		want     string
-	}{
-		"the furthest into the binary log": {
-			replicas: []*orchestrator.Instance{
-				instance("mysql-1", "mysql-0", "binlog.000004", 100),
-				instance("mysql-2", "mysql-0", "binlog.000004", 900),
-			},
-			want: "mysql-2",
-		},
-		"a later binary log beats a larger offset": {
-			replicas: []*orchestrator.Instance{
-				instance("mysql-1", "mysql-0", "binlog.000004", 900),
-				instance("mysql-2", "mysql-0", "binlog.000005", 100),
-			},
-			want: "mysql-2",
-		},
-		"the tenth binary log is later than the ninth": {
-			replicas: []*orchestrator.Instance{
-				instance("mysql-1", "mysql-0", "binlog.000009", 100),
-				instance("mysql-2", "mysql-0", "binlog.000010", 100),
-			},
-			want: "mysql-2",
-		},
-		"a replica with problems comes last even when it applied more": {
-			replicas: []*orchestrator.Instance{
-				instance("mysql-1", "mysql-0", "binlog.000005", 900, "not_replicating"),
-				instance("mysql-2", "mysql-0", "binlog.000004", 100),
-			},
-			want: "mysql-2",
-		},
-		"equal positions are broken by hostname": {
-			replicas: []*orchestrator.Instance{
-				instance("mysql-2", "mysql-0", "binlog.000004", 100),
-				instance("mysql-1", "mysql-0", "binlog.000004", 100),
-			},
-			want: "mysql-1",
-		},
-		"positions orchestrator did not report are broken by hostname": {
-			replicas: []*orchestrator.Instance{
-				instance("mysql-2", "mysql-0", "", 0),
-				instance("mysql-1", "mysql-0", "", 0),
-			},
-			want: "mysql-1",
-		},
-		"a single replica": {
-			replicas: []*orchestrator.Instance{
-				instance("mysql-1", "mysql-0", "binlog.000004", 100, "not_replicating"),
-			},
-			want: "mysql-1",
-		},
-	}
-
-	for name, tt := range tests {
-		t.Run(name, func(t *testing.T) {
-			assert.Equal(t, tt.want, mostUpToDate(tt.replicas).Hostname)
-		})
-	}
-}
 
 func TestPodName(t *testing.T) {
 	cr := &apiv1.PerconaServerMySQL{
@@ -203,6 +84,192 @@ func TestRunFailoverSkipsPlannedTakeovers(t *testing.T) {
 			})
 
 			require.NoError(t, err)
+		})
+	}
+}
+
+func TestRunFailoverRejectsBadInput(t *testing.T) {
+	tests := map[string]struct {
+		args []string
+		want string
+	}{
+		"no source": {
+			args: []string{"-failure-type", "DeadMaster"},
+			want: "source flag should not be empty",
+		},
+		"a non-positive timeout": {
+			args: []string{"-source", source, "-failure-type", "DeadMaster", "-timeout", "0s"},
+			want: "timeout must be positive",
+		},
+		"an unknown policy": {
+			args: []string{"-source", source, "-failure-type", "DeadMaster", "-on-timeout", "Force"},
+			want: "on-timeout must be Abort or ForceWithPossibleDataLoss",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			err := runFailover(context.Background(), tt.args)
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.want)
+		})
+	}
+}
+
+func TestBudget(t *testing.T) {
+	const timeout = time.Hour
+
+	t.Run("the first attempt gets the whole timeout", func(t *testing.T) {
+		g := testGate(t)
+
+		remaining, _, err := budget(g, source, timeout)
+
+		require.NoError(t, err)
+		assert.InDelta(t, timeout, remaining, float64(time.Minute))
+	})
+
+	t.Run("only the first attempt starts the clock", func(t *testing.T) {
+		g := testGate(t)
+
+		_, started, err := budget(g, source, timeout)
+		require.NoError(t, err)
+		assert.True(t, started)
+
+		_, started, err = budget(g, source, timeout)
+		require.NoError(t, err)
+		assert.False(t, started)
+	})
+
+	t.Run("later attempts get what is left", func(t *testing.T) {
+		g := testGate(t)
+		markSeen(t, g, source)
+		backdateSeen(t, g, source, 40*time.Minute)
+
+		remaining, _, err := budget(g, source, timeout)
+
+		require.NoError(t, err)
+		assert.InDelta(t, 20*time.Minute, remaining, float64(time.Minute))
+	})
+
+	t.Run("a spent budget goes negative", func(t *testing.T) {
+		g := testGate(t)
+		markSeen(t, g, source)
+		backdateSeen(t, g, source, 2*timeout)
+
+		remaining, _, err := budget(g, source, timeout)
+
+		require.NoError(t, err)
+		assert.Negative(t, remaining)
+	})
+
+	// Orchestrator retries a recovery every RecoveryPeriodBlockSeconds, and the
+	// attempts that leave a cluster stuck are the ones that fail in under a
+	// second. A per-attempt timeout would never fire for them.
+	t.Run("fast failures still spend the budget", func(t *testing.T) {
+		g := testGate(t)
+
+		for range 5 {
+			remaining, _, err := budget(g, source, timeout)
+			require.NoError(t, err)
+			require.Positive(t, remaining)
+		}
+
+		backdateSeen(t, g, source, 2*timeout)
+
+		remaining, _, err := budget(g, source, timeout)
+		require.NoError(t, err)
+		assert.Negative(t, remaining)
+	})
+
+	t.Run("a timeout longer than the idle bound still runs out", func(t *testing.T) {
+		const timeout = 3 * seenIdle
+		g := testGate(t)
+		markSeen(t, g, source)
+		backdateSeen(t, g, source, timeout+time.Hour)
+
+		remaining, _, err := budget(g, source, timeout)
+
+		require.NoError(t, err)
+		assert.Negative(t, remaining)
+	})
+
+	t.Run("an attempt longer than the idle bound still spends the budget", func(t *testing.T) {
+		g := testGate(t)
+		markSeen(t, g, source)
+		// The attempt started 2*seenIdle ago and is only now on its way out.
+		backdateSeen(t, g, source, 2*seenIdle)
+		require.NoError(t, backdate(t, g, seenDir, source, 2*seenIdle))
+
+		require.NoError(t, g.refreshSeen(source))
+
+		remaining, _, err := budget(g, source, timeout)
+		require.NoError(t, err)
+		assert.Negative(t, remaining)
+	})
+
+	t.Run("an idle mark is replaced, not just ignored", func(t *testing.T) {
+		g := testGate(t)
+		markSeen(t, g, source)
+		require.NoError(t, backdate(t, g, seenDir, source, seenIdle+time.Minute))
+
+		remaining, _, err := budget(g, source, timeout)
+		require.NoError(t, err)
+		assert.InDelta(t, timeout, remaining, float64(time.Minute))
+
+		// The clock has to start on this attempt, not the next one.
+		at, ok, err := g.firstSeen(source)
+		require.NoError(t, err)
+		require.True(t, ok)
+		assert.WithinDuration(t, time.Now(), at, time.Minute)
+	})
+
+	t.Run("sources are timed apart", func(t *testing.T) {
+		g := testGate(t)
+		markSeen(t, g, source)
+		backdateSeen(t, g, source, 2*timeout)
+
+		remaining, _, err := budget(g, "other-host", timeout)
+
+		require.NoError(t, err)
+		assert.Positive(t, remaining)
+	})
+}
+
+// timedOut needs a cluster to talk to for anything beyond the abort path, and
+// there is none in a unit test. What can be pinned down here is that aborting
+// stays the outcome that needs no cluster at all, and that it reports why.
+func TestTimedOutAborts(t *testing.T) {
+	g := testGate(t)
+
+	err := timedOut(context.Background(), g, source, "", time.Hour, apiv1.FailoverPolicyAbort)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "could not recover the transactions stranded on "+source)
+	assert.Contains(t, err.Error(), "within 1h0m0s")
+}
+
+// The attempt that hands the whole budget to the worker still has to probe
+// the source and acknowledge the recovery once the worker is done.
+func TestHookTimeoutOutlastsTheBudget(t *testing.T) {
+	timeout := time.Hour
+
+	assert.GreaterOrEqual(t, hookTimeout(timeout), timeout+sourcePodWait+probeTimeout+ackWait)
+}
+
+func TestIsSourceRecovered(t *testing.T) {
+	tests := map[string]struct {
+		err  error
+		want bool
+	}{
+		"no error":                     {err: nil},
+		"an ordinary failure":          {err: errors.New("exec failed, stdout: , stderr: ERROR: connection refused")},
+		"a failure naming the outcome": {err: errors.New("exec failed, stdout: " + failoverlock.ResultSourceRecovered + "\n, stderr: "), want: true},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, tt.want, isSourceRecovered(tt.err))
 		})
 	}
 }

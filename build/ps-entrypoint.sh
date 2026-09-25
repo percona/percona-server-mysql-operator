@@ -151,6 +151,23 @@ add_encryption_options() {
 	done < <(mysql_encryption_options)
 }
 
+SERVER_ID_FILE=/var/lib/mysql/server-id
+
+# An id derived from the pod's ordinal alone outlives the data directory: a pod
+# rebuilt on a new volume would filter out, as its own, every event its previous
+# incarnation wrote. So each data directory gets an id of its own, kept on the
+# volume. Data directories created before this keep their ordinal-derived id.
+server_id() {
+	if [[ ! -d ${DATADIR}/mysql ]]; then
+		# Above 2^31, clear of every ordinal-derived id.
+		echo $(($(od -An -N4 -tu4 /dev/urandom) % 2147483647 + 2147483648))
+	elif [[ -s ${SERVER_ID_FILE} ]]; then
+		cat "${SERVER_ID_FILE}"
+	else
+		echo "${CLUSTER_HASH}${SERVER_NUM}"
+	fi
+}
+
 create_default_cnf() {
 	# hostname -I can list a node-local RFC 3927 link-local address (the
 	# full range is 169.254.0.0/16), assigned by some CNI plugins - such as
@@ -178,7 +195,7 @@ create_default_cnf() {
 	else
 		CLUSTER_NAME="$(hostname -f | cut -d'.' -f2)"
 		SERVER_NUM=${HOSTNAME/$CLUSTER_NAME-/}
-		SERVER_ID=${CLUSTER_HASH}${SERVER_NUM}
+		SERVER_ID=$(server_id)
 		FQDN="${HOSTNAME}.${SERVICE_NAME}.$(</var/run/secrets/kubernetes.io/serviceaccount/namespace)"
 	fi
 
@@ -566,6 +583,11 @@ if [ "$1" = 'mysqld' ] && [ -z "$wantHelp" ]; then
 	if [[ ${fresh_datadir} == 1 ]]; then
 		touch /var/lib/mysql/bootstrap.lock
 		initialize_datadir "$@"
+	fi
+
+	# Written only now: initializing the data directory empties the volume.
+	if [[ -n ${SERVER_ID} ]]; then
+		echo "${SERVER_ID}" >"${SERVER_ID_FILE}"
 	fi
 
 	if [[ ${MYSQL_VERSION} == '8.4' || ${MYSQL_VERSION} == '9.7' ]]; then

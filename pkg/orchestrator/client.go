@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"time"
@@ -43,6 +44,9 @@ func (r *orcResponse) Error() error {
 	if strings.Contains(r.Message, "i/o timeout") {
 		return ErrTimeout
 	}
+	if strings.Contains(r.Message, "recovery not attempted") {
+		return ErrRecoveryNotAttempted
+	}
 	return errors.New(r.Message)
 }
 
@@ -59,9 +63,11 @@ type BinlogCoordinates struct {
 type Instance struct {
 	Key                   InstanceKey       `json:"Key"`
 	Alias                 string            `json:"InstanceAlias"`
+	ClusterName           string            `json:"ClusterName"`
 	MasterKey             InstanceKey       `json:"MasterKey"`
 	Replicas              []InstanceKey     `json:"Replicas"`
 	ReadOnly              bool              `json:"ReadOnly"`
+	IsLastCheckValid      bool              `json:"IsLastCheckValid"`
 	Problems              []string          `json:"Problems"`
 	IsDowntimed           bool              `json:"IsDowntimed"`
 	DowntimeReason        string            `json:"DowntimeReason"`
@@ -100,6 +106,10 @@ var (
 	ErrNoSuchHost             = errors.New("mysql host not found")
 	ErrTimeout                = errors.New("timeout")
 	ErrContainerNotFound      = errors.New("orchestrator container not found")
+
+	// ErrRecoveryNotAttempted is orchestrator turning a takeover away because
+	// another recovery of the same instance holds its place in the audit
+	ErrRecoveryNotAttempted = errors.New("recovery not attempted")
 )
 
 func exec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, endpoint string, outb, errb *bytes.Buffer) error {
@@ -235,12 +245,26 @@ func RemovePeer(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, p
 }
 
 const (
-	DowntimeOwner             = "percona-server-mysql-operator"
-	DowntimeReasonSwitchover  = "graceful-switchover"
-	switchoverDowntimeSeconds = 600
+	DowntimeOwner            = "percona-server-mysql-operator"
+	DowntimeReasonSwitchover = "graceful-switchover"
+
+	// switchoverDowntimeFactor scales the takeover's own catch-up wait, which
+	// orchestrator bounds by ReasonableMaintenanceReplicationLagSeconds. A
+	// downtime that merely matched it would expire just as the promotion starts,
+	// which is the case it is there to protect. It still expires on its own, so
+	// an operator that dies mid-switchover cannot leave behind an instance
+	// orchestrator won't recover.
+	switchoverDowntimeFactor = 2
 )
 
-func EnsureNodeIsPrimary(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, clusterHint, host string, port int) (err error) {
+// SwitchoverDowntime is how long the old primary is kept downtimed during a
+// graceful switchover, derived from the configured catch-up wait so the two
+// cannot drift apart.
+func SwitchoverDowntime(catchUp time.Duration) int {
+	return int(catchUp.Seconds()) * switchoverDowntimeFactor
+}
+
+func EnsureNodeIsPrimary(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, clusterHint, host string, port int, catchUp time.Duration) (err error) {
 	primary, err := ClusterPrimary(ctx, cliCmd, pod, clusterHint)
 	if err != nil {
 		return errors.Wrap(err, "get cluster primary")
@@ -251,7 +275,7 @@ func EnsureNodeIsPrimary(ctx context.Context, cliCmd clientcmd.Client, pod *core
 	}
 
 	if err := BeginDowntime(ctx, cliCmd, pod, primary.Key.Hostname, int(primary.Key.Port),
-		DowntimeOwner, DowntimeReasonSwitchover, switchoverDowntimeSeconds); err != nil {
+		DowntimeOwner, DowntimeReasonSwitchover, SwitchoverDowntime(catchUp)); err != nil {
 		return errors.Wrapf(err, "begin downtime on %s", primary.Key.Hostname)
 	}
 	defer func() {
@@ -313,6 +337,26 @@ func SetWriteable(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod,
 	return orcResp.Error()
 }
 
+// ForceMasterTakeover promotes host even though orchestrator sees no reason to.
+// It is the break-glass path for a cluster left without a writable primary
+// because the pre-failover hook could not recover the transactions stranded on
+// the dead one, so it gives those transactions up.
+func ForceMasterTakeover(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, clusterHint, host string, port int32) error {
+	url := fmt.Sprintf("api/force-master-takeover/%s/%s/%d", clusterHint, host, port)
+
+	var res, errb bytes.Buffer
+	if err := exec(ctx, cliCmd, pod, url, &res, &errb); err != nil {
+		return err
+	}
+
+	orcResp := new(orcResponse)
+	if err := unmarshalOrcResponse(res.Bytes(), orcResp); err != nil {
+		return err
+	}
+
+	return orcResp.Error()
+}
+
 // RegisterCandidate sets the promotion rule orchestrator applies to an instance
 // when it picks a replica to promote. The registration expires on its own after
 // CandidateInstanceExpireMinutes.
@@ -331,6 +375,30 @@ func RegisterCandidate(ctx context.Context, cliCmd clientcmd.Client, pod *corev1
 	}
 
 	return orcResp.Error()
+}
+
+// AckRecovery acknowledges the recovery orchestrator identifies by uid, which
+// ends the active period it holds on the cluster and on the instance it
+// promoted. Until then orchestrator starts no other recovery for either. The
+// comment is what the audit shows as the reason.
+func AckRecovery(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, uid, comment string) error {
+	var res, errb bytes.Buffer
+	if err := exec(ctx, cliCmd, pod, ackRecoveryEndpoint(uid, comment), &res, &errb); err != nil {
+		return err
+	}
+
+	orcResp := new(orcResponse)
+	if err := unmarshalOrcResponse(res.Bytes(), orcResp); err != nil {
+		return err
+	}
+
+	return orcResp.Error()
+}
+
+// ackRecoveryEndpoint is the API path that acknowledges the recovery uid.
+// Orchestrator refuses an acknowledgement that carries no comment.
+func ackRecoveryEndpoint(uid, comment string) string {
+	return fmt.Sprintf("api/ack-recovery/uid/%s?comment=%s", uid, url.QueryEscape(comment))
 }
 
 func Cluster(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, clusterHint string) ([]*Instance, error) {

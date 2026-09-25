@@ -12,7 +12,7 @@ sort_yaml() {
 	MYSQL_ORDER='"clusterType", "autoRecovery", "vaultSecretName", '"$POD_SPEC_ORDER"',"exposePrimary", "expose", "volumeSpec", "configuration", "sidecars", "sidecarVolumes", "sidecarPVCs"'
 	HAPROXY_ORDER='"enabled", "expose", '"$POD_SPEC_ORDER"', "sidecarResources"'
 	ROUTER_ORDER='"enabled", "expose", '"$POD_SPEC_ORDER"', "ports"'
-	ORCHESTRATOR_ORDER='"enabled", "expose", '"$POD_SPEC_ORDER"
+	ORCHESTRATOR_ORDER='"enabled", "expose", "failover", '"$POD_SPEC_ORDER"
 
 	PMM_ORDER='"enabled","image","imagePullPolicy","serverHost","customClusterName","mysqlParams","haproxyParams","containerSecurityContext", "resources", "readinessProbes", "livenessProbes"'
 	BINLOG_SERVER_ORDER='"enabled","binlogServer"'
@@ -117,6 +117,7 @@ del_fields_to_comment() {
 		| yq "del(.spec.mysql.initContainer)" \
 		| yq "del(.spec.mysql.vaultSecretName)" \
 		| yq "del(.spec.orchestrator.configuration)" \
+		| yq "del(.spec.orchestrator.failover)" \
 		| yq "del(.spec.mysql.env)" \
 		| yq "del(.spec.mysql.envFrom)" \
 		| yq "del(.spec.mysql.podDisruptionBudget.minAvailable)" \

@@ -292,7 +292,12 @@ func (r *PerconaServerMySQLReconciler) switchOverAsync(
 		return errors.Wrap(err, "get ready orchestrator pod")
 	}
 
-	err = orchestrator.EnsureNodeIsPrimary(ctx, r.ClientCmd, orcPod, cr.ClusterHint(), target.GetName(), mysql.DefaultPort)
+	cluster, err := orchestrator.ResolveCluster(ctx, r.ClientCmd, orcPod, cr.ClusterHint())
+	if err != nil {
+		return errors.Wrap(err, "resolve cluster")
+	}
+
+	err = orchestrator.EnsureNodeIsPrimary(ctx, r.ClientCmd, orcPod, cluster, target.GetName(), mysql.DefaultPort, cr.FailoverSpec().SwitchoverCatchUp())
 	if err != nil {
 		return errors.Wrap(err, "ensure node is primary")
 	}

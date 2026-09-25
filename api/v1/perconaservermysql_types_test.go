@@ -2,6 +2,7 @@ package v1
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
@@ -1061,4 +1062,110 @@ func TestOrchestratorEnabled(t *testing.T) {
 			assert.Equal(t, tt.expect, cr.OrchestratorEnabled())
 		})
 	}
+}
+
+func TestFailoverSpecDefaults(t *testing.T) {
+	t.Run("an unset block gets the safe defaults", func(t *testing.T) {
+		cr := new(PerconaServerMySQL)
+
+		spec := cr.FailoverSpec()
+
+		assert.Equal(t, 6*time.Hour, spec.TimeoutDuration())
+		assert.Equal(t, 5*time.Minute, spec.SwitchoverCatchUp())
+		// Losing committed transactions is never the default.
+		assert.Equal(t, FailoverPolicyAbort, spec.OnTimeout)
+	})
+
+	t.Run("a partially set block keeps what the user wrote", func(t *testing.T) {
+		cr := new(PerconaServerMySQL)
+		cr.Spec.Orchestrator.Failover = &FailoverSpec{OnTimeout: FailoverPolicyForce}
+
+		spec := cr.FailoverSpec()
+
+		assert.Equal(t, FailoverPolicyForce, spec.OnTimeout)
+		assert.Equal(t, 6*time.Hour, spec.TimeoutDuration())
+	})
+
+	t.Run("the accessor does not mutate the cr", func(t *testing.T) {
+		cr := new(PerconaServerMySQL)
+		cr.Spec.Orchestrator.Failover = &FailoverSpec{}
+
+		cr.FailoverSpec()
+
+		assert.Empty(t, cr.Spec.Orchestrator.Failover.Timeout)
+	})
+
+	t.Run("an unparsable duration falls back rather than returning zero", func(t *testing.T) {
+		// CheckNSetDefaults rejects these, so this only covers an object that
+		// never went through it. A zero timeout would mean "no limit" downstream.
+		spec := &FailoverSpec{Timeout: "soon", SwitchoverCatchUpTimeout: "-5m"}
+
+		assert.Equal(t, 6*time.Hour, spec.TimeoutDuration())
+		assert.Equal(t, 5*time.Minute, spec.SwitchoverCatchUp())
+	})
+}
+
+func TestCheckNSetDefaultsFailover(t *testing.T) {
+	newCR := func(failover *FailoverSpec) *PerconaServerMySQL {
+		cr := new(PerconaServerMySQL)
+		cr.Spec.MySQL.ClusterType = ClusterTypeAsync
+		cr.Spec.Orchestrator.Failover = failover
+		return cr
+	}
+
+	t.Run("defaults are filled in", func(t *testing.T) {
+		cr := newCR(&FailoverSpec{})
+
+		err := cr.CheckNSetDefaults(t.Context(), nil)
+
+		assert.EqualError(t, err, "reconcile mysql volumeSpec: volumeSpec provided is nil")
+		assert.Equal(t, "6h0m0s", cr.Spec.Orchestrator.Failover.Timeout)
+		assert.Equal(t, FailoverPolicyAbort, cr.Spec.Orchestrator.Failover.OnTimeout)
+		assert.Equal(t, "5m0s", cr.Spec.Orchestrator.Failover.SwitchoverCatchUpTimeout)
+	})
+
+	t.Run("an unparsable timeout is rejected", func(t *testing.T) {
+		cr := newCR(&FailoverSpec{Timeout: "soon"})
+
+		err := cr.CheckNSetDefaults(t.Context(), nil)
+
+		assert.ErrorContains(t, err, "failed to parse orchestrator.failover.timeout")
+	})
+
+	t.Run("a timeout under a second is rejected", func(t *testing.T) {
+		for _, timeout := range []string{"0s", "-1h", "500ms"} {
+			cr := newCR(&FailoverSpec{Timeout: timeout})
+
+			err := cr.CheckNSetDefaults(t.Context(), nil)
+
+			assert.EqualError(t, err, "orchestrator.failover.timeout should be at least 1s")
+		}
+	})
+
+	t.Run("a switchover catch-up timeout under a second is rejected", func(t *testing.T) {
+		for _, timeout := range []string{"-1m", "999ms"} {
+			cr := newCR(&FailoverSpec{SwitchoverCatchUpTimeout: timeout})
+
+			err := cr.CheckNSetDefaults(t.Context(), nil)
+
+			assert.EqualError(t, err, "orchestrator.failover.switchoverCatchUpTimeout should be at least 1s")
+		}
+	})
+
+	t.Run("an unknown policy is rejected", func(t *testing.T) {
+		cr := newCR(&FailoverSpec{OnTimeout: "Force"})
+
+		err := cr.CheckNSetDefaults(t.Context(), nil)
+
+		assert.EqualError(t, err, "orchestrator.failover.onTimeout should be one of Abort, ForceWithPossibleDataLoss")
+	})
+
+	t.Run("group replication has no failover to configure", func(t *testing.T) {
+		cr := newCR(&FailoverSpec{})
+		cr.Spec.MySQL.ClusterType = ClusterTypeGR
+
+		err := cr.CheckNSetDefaults(t.Context(), nil)
+
+		assert.EqualError(t, err, "orchestrator.failover only applies to async clusters")
+	})
 }

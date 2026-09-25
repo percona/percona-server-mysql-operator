@@ -432,6 +432,14 @@ func orcURL(path string) []string {
 
 var downtimeResp, _ = json.Marshal(map[string]string{"Code": "OK", "Message": "Downtime begun"})
 
+// allInstancesScript answers ResolveCluster with nothing discovered, which
+// leaves the lookups to the cluster hint.
+var allInstancesScript = allInstancesScriptWith([]byte("[]"))
+
+func allInstancesScriptWith(instances []byte) fakeClientScript {
+	return fakeClientScript{cmd: orcURL("api/all-instances"), stdout: instances}
+}
+
 func TestSwitchOverAsync(t *testing.T) {
 	cr := readDefaultCRForUpgrade("test-cluster", "test-ns")
 	cr.Spec.MySQL.ClusterType = apiv1.ClusterTypeAsync
@@ -485,6 +493,7 @@ func TestSwitchOverAsync(t *testing.T) {
 		fc := &fakeClient{
 			disableCheck: false,
 			scripts: []fakeClientScript{
+				allInstancesScript,
 				{
 					cmd:    orcURL(fmt.Sprintf("api/master/%s", clusterHint)),
 					stdout: clusterPrimaryResp,
@@ -516,7 +525,7 @@ func TestSwitchOverAsync(t *testing.T) {
 
 		err := r.switchOverAsync(context.Background(), cr, primary, target)
 		require.NoError(t, err)
-		assert.Equal(t, 4, fc.execCount)
+		assert.Equal(t, 5, fc.execCount)
 	})
 
 	t.Run("no ready orc pods", func(t *testing.T) {
@@ -547,6 +556,7 @@ func TestSwitchOverAsync(t *testing.T) {
 		fc := &fakeClient{
 			disableCheck: false,
 			scripts: []fakeClientScript{
+				allInstancesScript,
 				{
 					cmd:    []string{"sh", "-c", fmt.Sprintf(`curl -s -u "%s:$(cat %s/%s)" "localhost:3000/api/master/%s"`, apiv1.UserOrchestrator, orchestrator.CredsMountPath, apiv1.UserOrchestrator, clusterHint)},
 					stdout: alreadyPrimaryResp,
@@ -565,7 +575,7 @@ func TestSwitchOverAsync(t *testing.T) {
 
 		err := r.switchOverAsync(context.Background(), cr, primary, target)
 		require.NoError(t, err)
-		assert.Equal(t, 1, fc.execCount) // only ClusterPrimary was called
+		assert.Equal(t, 2, fc.execCount) // only ResolveCluster and ClusterPrimary were called
 	})
 
 	t.Run("exec fails", func(t *testing.T) {
@@ -589,7 +599,7 @@ func TestSwitchOverAsync(t *testing.T) {
 
 		err := r.switchOverAsync(context.Background(), cr, primary, target)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "ensure node is primary")
+		assert.Contains(t, err.Error(), "resolve cluster")
 	})
 }
 
@@ -669,6 +679,7 @@ func TestSwitchOverAndWait(t *testing.T) {
 		cli := fake.NewClientBuilder().WithScheme(s).WithObjects(makeReadyOrcPod(cr)).Build()
 		fc := &fakeClient{
 			scripts: []fakeClientScript{
+				allInstancesScript,
 				{
 					cmd:    []string{"sh", "-c", fmt.Sprintf(`curl -s -u "%s:$(cat %s/%s)" "localhost:3000/api/master/%s"`, apiv1.UserOrchestrator, orchestrator.CredsMountPath, apiv1.UserOrchestrator, clusterHint)},
 					stdout: oldPrimaryResp,
@@ -686,6 +697,7 @@ func TestSwitchOverAndWait(t *testing.T) {
 					cmd:    orcURL(fmt.Sprintf("api/end-downtime/%s/%d", primary.Name, mysql.DefaultPort)),
 					stdout: downtimeResp,
 				},
+				allInstancesScript,
 				{
 					cmd:    []string{"sh", "-c", fmt.Sprintf(`curl -s -u "%s:$(cat %s/%s)" "localhost:3000/api/master/%s"`, apiv1.UserOrchestrator, orchestrator.CredsMountPath, apiv1.UserOrchestrator, clusterHint)},
 					stdout: newPrimaryResp,
@@ -704,8 +716,8 @@ func TestSwitchOverAndWait(t *testing.T) {
 
 		err := r.switchOverAndWait(ctx, cr, primary, target)
 		require.NoError(t, err)
-		// 4 calls for switchOverAsync + 1 call for getPrimaryHost in the wait loop.
-		assert.Equal(t, 5, fc.execCount)
+		// 5 calls for switchOverAsync + 2 calls for getPrimaryHost in the wait loop.
+		assert.Equal(t, 7, fc.execCount)
 	})
 
 	t.Run("pending switch to GR still uses the async path", func(t *testing.T) {
@@ -850,12 +862,14 @@ func TestSwitchOverAndWait(t *testing.T) {
 		fc := &fakeClient{
 			disableCheck: true,
 			scripts: []fakeClientScript{
+				{stdout: []byte("[]")},
 				{stdout: oldPrimaryResp},
 				{stdout: downtimeResp},
 				{stdout: takeoverResp},
 				{stdout: downtimeResp},
-				// Wait-loop ClusterPrimary call fails with a non-retriable
-				// error so the loop exits immediately instead of polling.
+				// The wait loop's first call to orchestrator fails with a
+				// non-retriable error so the loop exits immediately instead
+				// of polling.
 				{err: fmt.Errorf("connection refused")},
 			},
 		}
@@ -872,6 +886,6 @@ func TestSwitchOverAndWait(t *testing.T) {
 		err := r.switchOverAndWait(ctx, cr, primary, target)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "wait for new primary")
-		assert.Equal(t, 5, fc.execCount)
+		assert.Equal(t, 6, fc.execCount)
 	})
 }

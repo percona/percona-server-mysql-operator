@@ -33,6 +33,7 @@ type fakeDatabase struct {
 	pathsErr error
 
 	stopErr   error
+	resetErr  error
 	flushErr  error
 	startErr  error
 	ioErr     error
@@ -50,6 +51,11 @@ var _ database = (*fakeDatabase)(nil)
 func (f *fakeDatabase) StopReplication(context.Context) error {
 	f.ops = append(f.ops, "StopReplication")
 	return f.stopErr
+}
+
+func (f *fakeDatabase) ResetReplication(context.Context) error {
+	f.ops = append(f.ops, "ResetReplication")
+	return f.resetErr
 }
 
 func (f *fakeDatabase) FlushRelayLogs(context.Context) error {
@@ -150,8 +156,7 @@ func newJobFixture(t *testing.T) *jobFixture {
 			logDir:        t.TempDir(),
 			lockPath:      filepath.Join(t.TempDir(), "failover.lock"),
 			applyPoll:     time.Millisecond,
-			applyTimeout:  time.Second,
-			fetchTimeout:  testFetchTimeout,
+			stallTimeout:  testFetchTimeout,
 			sourcePoll:    time.Millisecond,
 			sourceTimeout: time.Second,
 			receiverWait:  50 * time.Millisecond,
@@ -234,10 +239,9 @@ func TestRun(t *testing.T) {
 			"the splice must land even when the job does not wait for it")
 	})
 
-	t.Run("-wait=false ignores the wait timeout", func(t *testing.T) {
+	t.Run("-wait=false returns as soon as the applier is started", func(t *testing.T) {
 		j := newJobFixture(t)
 		j.cfg.wait = false
-		j.cfg.applyTimeout = 0
 
 		require.NoError(t, run(t.Context(), j.cfg))
 	})
@@ -269,28 +273,15 @@ func TestRun(t *testing.T) {
 		assert.Empty(t, j.fake.ops, "no statement may be issued without the input")
 	})
 
-	t.Run("a non-positive wait timeout stops nothing", func(t *testing.T) {
+	t.Run("a non-positive stall timeout stops nothing", func(t *testing.T) {
 		for _, timeout := range []time.Duration{0, -time.Second} {
 			j := newJobFixture(t)
-			j.cfg.applyTimeout = timeout
+			j.cfg.stallTimeout = timeout
 
 			err := run(t.Context(), j.cfg)
 
 			require.Error(t, err)
-			assert.Contains(t, err.Error(), "-wait-timeout must be positive")
-			assert.Empty(t, j.fake.ops, "no statement may be issued without the input")
-		}
-	})
-
-	t.Run("a non-positive fetch timeout stops nothing", func(t *testing.T) {
-		for _, timeout := range []time.Duration{0, -time.Second} {
-			j := newJobFixture(t)
-			j.cfg.fetchTimeout = timeout
-
-			err := run(t.Context(), j.cfg)
-
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), "-fetch-timeout must be positive")
+			assert.Contains(t, err.Error(), "-stall-timeout must be positive")
 			assert.Empty(t, j.fake.ops, "no statement may be issued without the input")
 		}
 	})
@@ -392,6 +383,7 @@ func TestRun(t *testing.T) {
 			assert.Contains(t, err.Error(), tt.wantErr)
 			assert.Equal(t, tt.wantOps, j.fake.ops)
 			assert.NotContains(t, j.fake.ops, "StartSQLThread")
+			assert.Contains(t, jobLog(t, j.cfg.logDir), "ERROR: "+tt.wantErr, "the error must reach the log file")
 		})
 	}
 
@@ -446,11 +438,14 @@ func TestRun(t *testing.T) {
 	t.Run("an applier that never drains the splice stops the promotion", func(t *testing.T) {
 		j := newJobFixture(t)
 		j.fake.statuses = []map[string]string{applying("relay-bin.000002", 4, drainedState)}
-		j.cfg.applyTimeout = 50 * time.Millisecond
 		before, err := os.ReadFile(j.relay.target)
 		require.NoError(t, err)
 
-		err = run(t.Context(), j.cfg)
+		// The drain has no budget of its own: it runs until the job's deadline.
+		ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
+		defer cancel()
+
+		err = run(ctx, j.cfg)
 
 		require.ErrorIs(t, err, errRelayApplyTimeout,
 			"a candidate that never caught up must not be promoted")
@@ -464,7 +459,6 @@ func TestRun(t *testing.T) {
 	t.Run("a job torn down mid-wait does not report success", func(t *testing.T) {
 		j := newJobFixture(t)
 		j.fake.statuses = []map[string]string{applying("relay-bin.000002", 4, busyState)}
-		j.cfg.applyTimeout = time.Hour
 
 		ctx, cancel := context.WithCancel(t.Context())
 		t.Cleanup(cancel)
@@ -517,6 +511,44 @@ func TestRun(t *testing.T) {
 		t.Cleanup(func() { released.Close() })
 	})
 
+	t.Run("a probe stands down when the source is back", func(t *testing.T) {
+		j := newJobFixture(t)
+		j.cfg.probe = true
+		j.source.up = []bool{true}
+		j.fake.statuses[0]["Replica_IO_Running"] = "Yes"
+
+		err := run(t.Context(), j.cfg)
+
+		require.ErrorIs(t, err, errSourceRecovered)
+		assert.Empty(t, j.fake.ops)
+	})
+
+	t.Run("a probe touches nothing when the source is still dead", func(t *testing.T) {
+		j := newJobFixture(t)
+		j.cfg.probe = true
+
+		err := run(t.Context(), j.cfg)
+
+		require.NoError(t, err)
+		assert.Empty(t, j.fake.ops, "a probe must not stop replication")
+		j.relay.assertUntouched(t)
+	})
+
+	t.Run("a probe after a completed splice hands the replica back", func(t *testing.T) {
+		j := newJobFixture(t)
+		j.cfg.probe = true
+		j.source.up = []bool{true}
+		// What a splice leaves behind: the applier drained, the receiver down.
+		j.fake.statuses[0]["Replica_IO_Running"] = "No"
+
+		err := run(t.Context(), j.cfg)
+
+		require.ErrorIs(t, err, errSourceRecovered)
+		assert.Equal(t, []string{"StartIOThread"}, j.fake.ops,
+			"the receiver the splice left down has to be started again")
+		j.relay.assertUntouched(t)
+	})
+
 	t.Run("a receiver a failed attempt left down is started again", func(t *testing.T) {
 		j := newJobFixture(t)
 		j.source.up = []bool{true}
@@ -541,7 +573,6 @@ func TestRun(t *testing.T) {
 			"Replica_IO_Running":        "Yes",
 			"Source_Host":               "mysql-0.mysql",
 		}}
-		j.cfg.applyTimeout = time.Minute
 		before, err := os.ReadFile(j.relay.target)
 		require.NoError(t, err)
 
@@ -596,14 +627,15 @@ func TestParseFlags(t *testing.T) {
 
 	assert.Equal(t, "mysql-1.mysql", f.source)
 	assert.True(t, f.wait, "the job waits for the applier unless told not to")
+	assert.False(t, f.probe, "the job fetches unless told only to look")
 	assert.Equal(t, sourceLogsDir, f.stagingDir, "the staging dir defaults to the path in the container")
-	assert.Equal(t, relayLogApplyTimeout, f.waitTimeout)
-	assert.Equal(t, sourceFetchTimeout, f.fetchTimeout)
+	assert.Equal(t, sourceStallTimeout, f.stallTimeout)
+	assert.Equal(t, jobTimeout, f.timeout, "the job bounds the fetch and the drain together")
 }
 
 func TestProductionConfig(t *testing.T) {
-	cfg := config(flags{source: "mysql-1.mysql", stagingDir: "/tmp/source-logs", wait: true,
-		waitTimeout: 5 * time.Minute, fetchTimeout: 2 * time.Minute})
+	cfg := config(flags{source: "mysql-1.mysql", stagingDir: "/tmp/source-logs", wait: true, probe: true,
+		stallTimeout: 2 * time.Minute, timeout: 5 * time.Minute})
 
 	require.NotNil(t, cfg.newDatabase)
 	require.NotNil(t, cfg.sourceURL)
@@ -611,16 +643,29 @@ func TestProductionConfig(t *testing.T) {
 	assert.Equal(t, "mysql-1.mysql", cfg.source)
 	assert.Equal(t, "/tmp/source-logs", cfg.stagingDir)
 	assert.Equal(t, mysql.DataMountPath, cfg.logDir)
-	assert.Equal(t, lockPath, cfg.lockPath)
+	assert.Equal(t, failover.LockPath, cfg.lockPath)
 	assert.True(t, cfg.wait)
+	assert.True(t, cfg.probe)
 	require.NotNil(t, cfg.newSourceDB)
 	assert.Equal(t, sourceProbePoll, cfg.sourcePoll)
 	assert.Equal(t, sourceProbeTimeout, cfg.sourceTimeout)
 	assert.Equal(t, receiverWait, cfg.receiverWait)
 	assert.Positive(t, cfg.sourcePoll)
 	assert.Equal(t, relayLogApplyPoll, cfg.applyPoll)
-	assert.Equal(t, 5*time.Minute, cfg.applyTimeout)
-	assert.Equal(t, 2*time.Minute, cfg.fetchTimeout)
+	assert.Equal(t, 2*time.Minute, cfg.stallTimeout)
 	assert.Positive(t, cfg.applyPoll)
-	assert.Greater(t, cfg.applyTimeout, cfg.applyPoll)
+}
+
+// jobLog returns the log file the one run in dir wrote.
+func jobLog(t *testing.T, dir string) string {
+	t.Helper()
+
+	logs, err := filepath.Glob(filepath.Join(dir, "failover.*.log"))
+	require.NoError(t, err)
+	require.Len(t, logs, 1)
+
+	b, err := os.ReadFile(logs[0])
+	require.NoError(t, err)
+
+	return string(b)
 }

@@ -1,5 +1,7 @@
 async-ignore-annotations,9.7
 async-global-metadata,9.7
+async-failover,8.4
+async-failover,9.7
 async-upgrade,8.4
 auto-config,9.7
 config,8.4

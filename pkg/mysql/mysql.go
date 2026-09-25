@@ -496,7 +496,7 @@ func HeadlessService(cr *apiv1.PerconaServerMySQL) *corev1.Service {
 			ClusterIP:                "None",
 			Ports:                    servicePorts(cr),
 			Selector:                 selector,
-			PublishNotReadyAddresses: cr.AppliedIsGR(),
+			PublishNotReadyAddresses: true,
 		},
 	}
 }

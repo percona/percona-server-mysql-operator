@@ -1,0 +1,28 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 300
+commands:
+  - script: |-
+      set -o errexit
+
+      source ../../functions
+
+      cluster=$(get_cluster_name)
+      primary=$(cat "${TEMP_DIR}/forced-primary")
+
+      annotation=$(kubectl -n "${NAMESPACE}" get ps "${cluster}" \
+          -o jsonpath='{.metadata.annotations.percona\.com/force-promote-with-possible-data-loss}')
+      if [[ -n ${annotation} ]]; then
+          echo "the force-promote annotation was not removed: ${annotation}"
+          exit 1
+      fi
+
+      kubectl -n "${NAMESPACE}" get events \
+          --field-selector "reason=FailoverForced,involvedObject.name=${cluster}" \
+          -o jsonpath='{.items[*].message}' | grep -q "Forced the promotion of ${primary}\..* on request"
+
+      blocked=$(get_cluster_condition "${cluster}" AsyncFailoverBlocked)
+      if [[ ${blocked} != "False" ]]; then
+          echo "AsyncFailoverBlocked is '${blocked}' after the forced promotion, expected False"
+          exit 1
+      fi

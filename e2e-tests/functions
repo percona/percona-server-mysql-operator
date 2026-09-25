@@ -1540,6 +1540,45 @@ get_primary_from_label() {
 	kubectl -n "${NAMESPACE}" get pods -l mysql.percona.com/primary=true -ojsonpath="{.items[0].metadata.name}"
 }
 
+# wait_for_primary waits until the primary label sits on the expected pod, or on
+# any pod other than the one named when the expectation is "changed".
+wait_for_primary() {
+	local expected=$1
+	local timeout=${2:-300}
+	local waited=0
+	local primary
+
+	while [[ ${waited} -lt ${timeout} ]]; do
+		primary=$(get_primary_from_label 2>/dev/null || true)
+
+		if [[ ${expected} == "changed:"* ]]; then
+			if [[ -n ${primary} && ${primary} != "${expected#changed:}" ]]; then
+				echo "${primary}"
+				return 0
+			fi
+		elif [[ ${primary} == "${expected}" ]]; then
+			echo "${primary}"
+			return 0
+		fi
+
+		sleep 5
+		waited=$((waited + 5))
+	done
+
+	echo "timed out after ${timeout}s waiting for primary ${expected}, it is ${primary}" >&2
+	kubectl -n "${NAMESPACE}" get pods -l mysql.percona.com/primary=true >&2
+
+	return 1
+}
+
+get_cluster_condition() {
+	local cluster=$1
+	local type=$2
+
+	kubectl -n "${NAMESPACE}" get ps "${cluster}" \
+		-o jsonpath="{.status.conditions[?(@.type==\"${type}\")].status}"
+}
+
 get_primary_from_haproxy() {
 	local haproxy_pod=$1
 	local haproxy_pod_ip=$(kubectl -n "${NAMESPACE}" get pods ${haproxy_pod} -o jsonpath="{.status.podIP}")
@@ -2569,11 +2608,11 @@ read_mysql_data_to_configmap() {
 # pass: MySQL password
 # host: MySQL host (service or pod)
 check_connect_user() {
-  local user="$1"
-  local pass="$2"
-  local host="$3"
-  kubectl -n "${NAMESPACE}" exec mysql-client -- \
-      env MYSQL_PWD="${pass}" mysql -sN -h "${host}" -u"${user}" -e "SELECT 1" >/dev/null 2>&1
+	local user="$1"
+	local pass="$2"
+	local host="$3"
+	kubectl -n "${NAMESPACE}" exec mysql-client -- \
+		env MYSQL_PWD="${pass}" mysql -sN -h "${host}" -u"${user}" -e "SELECT 1" >/dev/null 2>&1
 }
 
 # create_service_accounts creates ServiceAccounts for the given components

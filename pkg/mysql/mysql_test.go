@@ -919,3 +919,19 @@ func TestBackupVolumeMounts(t *testing.T) {
 
 	assert.Equal(t, expected, mounts)
 }
+
+func TestHeadlessServicePublishesNotReadyAddresses(t *testing.T) {
+	for _, clusterType := range []apiv1.ClusterType{apiv1.ClusterTypeAsync, apiv1.ClusterTypeGR} {
+		t.Run(string(clusterType), func(t *testing.T) {
+			cr := &apiv1.PerconaServerMySQL{
+				Name:      "test-cluster",
+				Namespace: "test-namespace",
+				Spec: apiv1.PerconaServerMySQLSpec{
+					MySQL: apiv1.MySQLSpec{ClusterType: clusterType},
+				},
+			}
+
+			assert.True(t, HeadlessService(cr).Spec.PublishNotReadyAddresses)
+		})
+	}
+}

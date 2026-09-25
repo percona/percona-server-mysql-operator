@@ -146,6 +146,7 @@ func TestCloneRequiredComparesLocalAgainstDonor(t *testing.T) {
 const (
 	host0 = "cluster1-mysql-0.cluster1-mysql.ps-7382"
 	host1 = "cluster1-mysql-1.cluster1-mysql.ps-7382"
+	host2 = "cluster1-mysql-2.cluster1-mysql.ps-7382"
 )
 
 func TestElectPrimary(t *testing.T) {
@@ -166,19 +167,28 @@ func TestElectPrimary(t *testing.T) {
 			},
 			want: host1,
 		},
-		"peers holding the same transactions leave the choice open": {
+		"peers holding the same transactions elect a pod other than ours": {
 			gtids: map[string]string{host0: behind, host1: behind},
 			results: map[[2]string]string{
 				{behind, behind}: "",
 			},
-			want: "",
+			want: host1,
 		},
-		"a fresh cluster leaves the choice open": {
+		"a fresh cluster elects a pod other than ours": {
 			gtids: map[string]string{host0: "", host1: ""},
 			results: map[[2]string]string{
 				{"", ""}: "",
 			},
-			want: "",
+			want: host1,
+		},
+		"a tie is settled among the complete peers only": {
+			gtids: map[string]string{host0: ahead, host1: behind, host2: ahead},
+			results: map[[2]string]string{
+				{ahead, behind}: selfUUID + ":46242-123853",
+				{behind, ahead}: "",
+				{ahead, ahead}:  "",
+			},
+			want: host2,
 		},
 		"a single peer is the primary": {
 			gtids:   map[string]string{host0: ahead},
@@ -204,7 +214,7 @@ func TestElectPrimary(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			s := &fakeSubtractor{t: t, results: tt.results}
 
-			got, err := electPrimary(context.Background(), s, tt.gtids)
+			got, err := electPrimary(context.Background(), s, host0, tt.gtids)
 
 			if tt.wantErr {
 				require.ErrorIs(t, err, errDivergedPeers)
@@ -219,7 +229,6 @@ func TestElectPrimary(t *testing.T) {
 
 func TestOrderDonors(t *testing.T) {
 	const (
-		host2  = "cluster1-mysql-2.cluster1-mysql.ps-7382"
 		behind = selfUUID + ":1-10"
 		mid    = selfUUID + ":1-20"
 		ahead  = selfUUID + ":1-30"

@@ -572,6 +572,10 @@ spec:
 #      loadBalancerSourceRanges:
 #        - 10.0.0.0/8
 #      type: ClusterIP
+#    failover:
+#      onTimeout: Abort
+#      switchoverCatchUpTimeout: 5m
+#      timeout: 6h
     size: 3
     image: perconalab/percona-server-mysql-operator:main-orchestrator
     imagePullPolicy: Always
@@ -619,7 +623,7 @@ spec:
 #      minAvailable: 0
     resources:
       limits:
-        memory: 256M
+        memory: 512M
       requests:
         memory: 128M
 #    startupProbe:
@@ -663,7 +667,7 @@ spec:
 #    podSecurityContext:
 #      supplementalGroups:
 #        - 1001
-#    configuration: '{"FailMasterPromotionOnLagMinutes": 10}'
+#    configuration: '{"ReasonableReplicationLagSeconds": 30}'
   pmm:
     enabled: false
     image: perconalab/pmm-client:3-dev-latest

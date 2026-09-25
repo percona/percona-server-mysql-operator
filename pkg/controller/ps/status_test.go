@@ -1384,43 +1384,50 @@ func getFakeClient(
 }
 
 func getFakeOrchestratorClient(cr *apiv1.PerconaServerMySQL) (clientcmd.Client, error) {
-	var scripts []fakeClientScript
+	const clusterName = "mysql-host-0:3306"
 
-	// Get async cluster from Orchestrator
-	orcClusterScript := func() fakeClientScript {
-		instances := []*orchestrator.Instance{
-			{
-				Alias:    "mysql-host-0",
-				Problems: []string{},
-			},
-			{
-				Alias:    "mysql-host-1",
-				Problems: []string{},
-			},
-			{
-				Alias:    "mysql-host-2",
-				Problems: []string{},
-			},
-		}
+	instances := []*orchestrator.Instance{
+		{
+			Alias:            "mysql-host-0",
+			ClusterName:      clusterName,
+			IsLastCheckValid: true,
+			Problems:         []string{},
+		},
+		{
+			Alias:            "mysql-host-1",
+			ClusterName:      clusterName,
+			IsLastCheckValid: true,
+			Problems:         []string{},
+		},
+		{
+			Alias:            "mysql-host-2",
+			ClusterName:      clusterName,
+			IsLastCheckValid: true,
+			Problems:         []string{},
+		},
+	}
 
-		res, err := json.Marshal(&instances)
-		if err != nil {
-			panic(err)
-		}
+	res, err := json.Marshal(&instances)
+	if err != nil {
+		return nil, err
+	}
 
+	orcScript := func(endpoint string) fakeClientScript {
 		credsFile := filepath.Join(orchestrator.CredsMountPath, string(apiv1.UserOrchestrator))
 		return fakeClientScript{
 			cmd: []string{
 				"sh", "-c",
 				fmt.Sprintf(`curl -s -u "%s:$(cat %s)" "localhost:%d/%s"`,
-					apiv1.UserOrchestrator, credsFile, 3000,
-					fmt.Sprintf("api/cluster/%s", cr.Name+"."+cr.Namespace)),
+					apiv1.UserOrchestrator, credsFile, 3000, endpoint),
 			},
 			stdout: res,
 		}
 	}
 
-	scripts = append(scripts, orcClusterScript())
+	scripts := []fakeClientScript{
+		orcScript("api/all-instances"),
+		orcScript("api/cluster/" + clusterName),
+	}
 
 	return &fakeClient{
 		scripts: scripts,

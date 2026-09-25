@@ -1,0 +1,34 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 300
+commands:
+  - script: |-
+      set -o errexit
+
+      source ../../functions
+
+      cluster=$(get_cluster_name)
+
+      # Nothing was promoted: the label went away with the pod and nobody
+      # moved it.
+      primary=$(get_primary_from_label 2>/dev/null || true)
+      if [[ -n ${primary} ]]; then
+          echo "a primary was promoted although the policy is Abort: ${primary}"
+          exit 1
+      fi
+
+      blocked=$(get_cluster_condition "${cluster}" AsyncFailoverBlocked)
+      if [[ ${blocked} != "True" ]]; then
+          echo "AsyncFailoverBlocked is '${blocked}' while the cluster has no primary, expected True"
+          exit 1
+      fi
+
+      # Abort never promotes on its own, so no forced event may come from
+      # this failover. Step 05's was a refusal.
+      forced=$(kubectl -n "${NAMESPACE}" get events \
+          --field-selector "reason=FailoverForced,involvedObject.name=${cluster}" \
+          -o jsonpath='{.items[*].message}')
+      if echo "${forced}" | grep -q "promoting .* anyway"; then
+          echo "the failover was forced although the policy is Abort"
+          exit 1
+      fi

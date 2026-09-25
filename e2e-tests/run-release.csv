@@ -1,5 +1,6 @@
 async-ignore-annotations
 async-global-metadata
+async-failover
 async-upgrade
 auto-config
 config

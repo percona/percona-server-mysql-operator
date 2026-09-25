@@ -3,7 +3,9 @@ package orchestrator
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"path/filepath"
+	"time"
 
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
@@ -29,11 +31,16 @@ const (
 	configVolumeName       = "config"
 	configMountPath        = "/etc/orchestrator/config"
 	customConfigMountPath  = "/etc/orchestrator/custom"
-	configFileKey          = "orchestrator.conf.json"
-	credsVolumeName        = "users"
-	CredsMountPath         = "/etc/orchestrator/orchestrator-users-secret"
-	tlsVolumeName          = "tls"
-	tlsMountPath           = "/etc/orchestrator/ssl"
+	// HandlerStateDir is where orc-handler keeps the marks a failover leaves
+	// between hook runs. It sits on the pod's config emptyDir, next to
+	// orchestrator's own database, so a container restart keeps both or
+	// neither.
+	HandlerStateDir = configMountPath + "/orc-handler"
+	configFileKey   = "orchestrator.conf.json"
+	credsVolumeName = "users"
+	CredsMountPath  = "/etc/orchestrator/orchestrator-users-secret"
+	tlsVolumeName   = "tls"
+	tlsMountPath    = "/etc/orchestrator/ssl"
 )
 
 type Exposer apiv1.PerconaServerMySQL
@@ -530,11 +537,92 @@ var reservedOrchestratorConfigKeys = map[string]bool{
 	"RaftDataDir":                        true,
 	"SQLite3DataFile":                    true,
 	"BackendDB":                          true,
+	"PostUnsuccessfulFailoverProcesses":  true,
 	// failover/HA semantics the operator assumes
 	"ApplyMySQLPromotionAfterMasterFailover":    true,
 	"MasterFailoverDetachReplicaMasterHost":     true,
 	"DetachLostReplicasAfterMasterFailover":     true,
 	"FailMasterPromotionIfSQLThreadNotUpToDate": true,
+	// The pre-failover hook is the only thing gating promotion on the candidate
+	// having applied everything, so nothing may re-arm orchestrator's own gates.
+	// FailMasterPromotionOnLagMinutes is the worst of them: ReplicationLagQuery
+	// reads sys_operator.heartbeat, whose newest row came from the dead primary,
+	// so the lag it measures is wall-clock since the failure and grows with the
+	// hook's own runtime. Any non-zero value vetoes exactly the failovers the
+	// hook just made safe.
+	"FailMasterPromotionOnLagMinutes":            true,
+	"DelayMasterPromotionIfSQLThreadNotUpToDate": true,
+	// derived from spec.orchestrator.failover.switchoverCatchUpTimeout
+	"ReasonableMaintenanceReplicationLagSeconds": true,
+	// derived from spec.orchestrator.failover.timeout. Shorter than the timeout
+	// it lets orchestrator run a second recovery of the same failure while the
+	// pre hook is still working on the first.
+	"RecoveryPeriodBlockSeconds": true,
+	// Orchestrator drops an instance it has not seen for this long, and the
+	// dead primary is exactly such an instance. Without its row there is no
+	// DeadMaster analysis to retry the hook for and no primary for a forced
+	// takeover to demote, so it has to stay known for as long as the failover
+	// may need it.
+	"UnseenInstanceForgetHours": true,
+}
+
+const handlerBinary = "/opt/percona/orc-handler"
+
+// preFailoverProcesses renders the hook that recovers the transactions stranded
+// on the dead primary. Orchestrator aborts the recovery when it exits non-zero,
+// which is what keeps an unsafe promotion from happening.
+func preFailoverProcesses(failover *apiv1.FailoverSpec) []string {
+	return []string{
+		"echo 'Will recover from {failureType} on {failureCluster}'",
+		fmt.Sprintf(
+			"echo 'PreFailoverProcesses:' && %s failover -source {failedHost} -failure-type '{failureType}' -command '{command}' -uid {recoveryUID} -timeout %s -on-timeout %s",
+			handlerBinary, failover.TimeoutDuration(), failover.OnTimeout,
+		),
+	}
+}
+
+// finishProcess closes the recovery on the hook's side. It ends every post
+// hook list, since orchestrator runs exactly one of them per recovery that got
+// past the pre hook.
+func finishProcess(hook string) string {
+	return fmt.Sprintf("echo '%s:' && %s finish -source {failedHost} -uid {recoveryUID}", hook, handlerBinary)
+}
+
+func postFailoverProcesses() []string {
+	return []string{
+		fmt.Sprintf("echo 'PostFailoverProcesses:' && %s set-primary-label -primary {successorHost}", handlerBinary),
+		finishProcess("PostFailoverProcesses"),
+	}
+}
+
+func postUnsuccessfulFailoverProcesses() []string {
+	return []string{
+		fmt.Sprintf(
+			"echo 'PostUnsuccessfulFailoverProcesses:' && %s report-failover -source {failedHost} -failure-type '{failureType}'",
+			handlerBinary,
+		),
+		finishProcess("PostUnsuccessfulFailoverProcesses"),
+	}
+}
+
+// recoveryPeriodBlockSeconds is how long orchestrator refuses a second
+// recovery of a cluster after starting one. Orchestrator measures it from the
+// start of the recovery, not its end, so it has to outlast the pre hook or
+// orchestrator registers a second recovery of the same failure while the hook
+// is still running. The finish hook acknowledges each recovery when it is over,
+// which ends the period early: the cluster is not left unrecoverable for this
+// long after a promotion.
+func recoveryPeriodBlockSeconds(failover *apiv1.FailoverSpec) int {
+	return int((failover.TimeoutDuration() + time.Hour).Seconds())
+}
+
+// unseenInstanceForgetHours is how long orchestrator keeps an instance it
+// cannot reach. The dead primary is unreachable from the moment the failure
+// is detected, and forgetting it ends the recovery attempts and disables the
+// forced promotion alike, so it has to outlast the failover timeout the same
+// way the recovery block does. Orchestrator only takes whole hours.
+func unseenInstanceForgetHours(failover *apiv1.FailoverSpec) int {
+	return int(math.Ceil((failover.TimeoutDuration() + time.Hour).Hours()))
 }
 
 func ConfigMapData(cr *apiv1.PerconaServerMySQL) (string, error) {
@@ -556,6 +644,14 @@ func ConfigMapData(cr *apiv1.PerconaServerMySQL) (string, error) {
 		config["MySQLTopologySSLCertFile"] = filepath.Join(tlsMountPath, "tls.crt")
 		config["MySQLTopologySSLCAFile"] = filepath.Join(tlsMountPath, "ca.crt")
 	}
+
+	failover := cr.FailoverSpec()
+	config["PreFailoverProcesses"] = preFailoverProcesses(failover)
+	config["PostFailoverProcesses"] = postFailoverProcesses()
+	config["PostUnsuccessfulFailoverProcesses"] = postUnsuccessfulFailoverProcesses()
+	config["RecoveryPeriodBlockSeconds"] = recoveryPeriodBlockSeconds(failover)
+	config["UnseenInstanceForgetHours"] = unseenInstanceForgetHours(failover)
+	config["ReasonableMaintenanceReplicationLagSeconds"] = int(failover.SwitchoverCatchUp().Seconds())
 
 	if cfg := cr.Spec.Orchestrator.Configuration; cfg != "" {
 		userConfig := make(map[string]any)
@@ -609,6 +705,11 @@ func RBAC(cr *apiv1.PerconaServerMySQL) (*rbacv1.Role, *rbacv1.RoleBinding, *cor
 			APIGroups: []string{cr.GroupVersionKind().Group},
 			Resources: []string{"perconaservermysqls"},
 			Verbs:     []string{"get"},
+		},
+		{
+			APIGroups: []string{corev1.SchemeGroupVersion.Group},
+			Resources: []string{"events"},
+			Verbs:     []string{"create"},
 		},
 	}
 

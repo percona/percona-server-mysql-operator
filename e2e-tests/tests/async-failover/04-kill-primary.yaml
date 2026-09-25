@@ -1,0 +1,66 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 900
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster=$(get_cluster_name)
+      primary_before=$(get_primary_from_label)
+      primary_host="${primary_before}.${cluster}-mysql"
+
+      replicas=($(get_mysql_pods | grep -v "^${primary_before}$"))
+      behind=${replicas[0]}
+      ahead=${replicas[1]}
+
+      # The replicas stop at different positions so that the failover has a
+      # wrong candidate to pick. The one that stops first misses a row the
+      # other one received, and only the one that received it may be promoted.
+      run_mysql "STOP REPLICA IO_THREAD" "-h ${behind}.${cluster}-mysql"
+
+      run_mysql "INSERT myDB.myTable (id) VALUES (100600)" "-h $(get_haproxy_svc "${cluster}")"
+
+      retry=0
+      until [[ $(run_mysql "SELECT id FROM myDB.myTable WHERE id=100600" "-h ${ahead}.${cluster}-mysql") == "100600" ]]; do
+          if [[ ${retry} -ge 30 ]]; then
+              echo "${ahead} never received row 100600"
+              exit 1
+          fi
+          sleep 1
+          retry=$((retry + 1))
+      done
+
+      run_mysql "STOP REPLICA IO_THREAD" "-h ${ahead}.${cluster}-mysql"
+
+      # The row has to be on the primary's binary log and nowhere else for the
+      # failover to have something to recover. Replication would ship it within
+      # milliseconds, so the replicas stop fetching first, and the primary is
+      # killed instead of shut down.
+      #
+      # Rotating the log around the row spreads what is stranded over several
+      # files, so the splice has to carry the replica across binary logs, not
+      # only append the tail of the one it was on.
+      run_mysql "FLUSH BINARY LOGS" "-h ${primary_host}"
+      run_mysql "INSERT myDB.myTable (id) VALUES (100501)" "-h $(get_haproxy_svc "${cluster}")"
+      run_mysql "FLUSH BINARY LOGS" "-h ${primary_host}"
+
+      kubectl -n "${NAMESPACE}" delete pod "${primary_before}" --force --grace-period=0
+
+      # Promoting the other replica would have thrown row 100600 away.
+      primary_after=$(wait_for_primary "${ahead}" 600)
+      echo "Primary changed from ${primary_before} to ${primary_after}"
+
+      wait_cluster_consistency_async "${cluster}" 3 3
+
+      # A safe failover promotes a candidate that has everything the old primary
+      # committed. Losing any row would mean it promoted too early.
+      rows=$(run_mysql "SELECT id FROM myDB.myTable ORDER BY id" "-h $(get_haproxy_svc "${cluster}")")
+      echo "rows after failover: ${rows}"
+
+      echo "${rows}" | grep -q 100500
+      echo "${rows}" | grep -q 100501
+      echo "${rows}" | grep -q 100600
+    timeout: 900
