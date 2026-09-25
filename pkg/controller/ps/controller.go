@@ -811,10 +811,8 @@ func (r *PerconaServerMySQLReconciler) reconcileClusterTypeChange(
 
 	// Mark before the first destructive step so a teardown that fails partway is
 	// retried regardless of the state the half-torn-down cluster reports.
-	if !switchInProgress {
-		if err := r.markClusterTypeSwitchInProgress(ctx, cr, observedType, desiredType); err != nil {
-			return errors.Wrap(err, "mark cluster type switch in progress")
-		}
+	if err := r.markClusterTypeSwitchInProgress(ctx, cr, observedType, desiredType); err != nil {
+		return errors.Wrap(err, "mark cluster type switch in progress")
 	}
 
 	switch observedType {
