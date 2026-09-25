@@ -164,7 +164,7 @@ build: generate ## Build docker image with the manager.
 
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.
-	go run ./cmd/manager/main.go
+	go run ./cmd/manager/
 
 ##@ Deployment
 

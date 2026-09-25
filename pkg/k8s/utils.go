@@ -33,32 +33,6 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/version"
 )
 
-const WatchNamespaceEnvVar = "WATCH_NAMESPACE"
-
-// GetWatchNamespace returns the namespace the operator should be watching for changes
-func GetWatchNamespace() (string, error) {
-	ns, found := os.LookupEnv(WatchNamespaceEnvVar)
-	if !found {
-		return "", fmt.Errorf("%s must be set", WatchNamespaceEnvVar)
-	}
-	return ns, nil
-}
-
-// GetOperatorNamespace returns the namespace of the operator pod
-func GetOperatorNamespace() (string, error) {
-	ns, found := os.LookupEnv("OPERATOR_NAMESPACE")
-	if found {
-		return ns, nil
-	}
-
-	nsBytes, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
-	if err != nil {
-		return "", err
-	}
-
-	return strings.TrimSpace(string(nsBytes)), nil
-}
-
 func objectMetaEqual(old, new metav1.Object) bool {
 	return util.SSMapEqual(old.GetLabels(), new.GetLabels()) && util.SSMapEqual(old.GetAnnotations(), new.GetAnnotations())
 }
