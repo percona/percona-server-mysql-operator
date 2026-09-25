@@ -1,0 +1,26 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 10
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      kubectl -n "${NAMESPACE}" apply -f "${TEST_CONFIG_DIR}/extra-logrotate-config.yaml"
+
+      get_cr \
+          | yq eval '.spec.mysql.clusterType="group-replication"' - \
+          | yq eval '.spec.mysql.size=3' - \
+          | yq eval '.spec.mysql.affinity.antiAffinityTopologyKey="none"' - \
+          | yq eval '.spec.proxy.router.enabled=true' - \
+          | yq eval '.spec.proxy.haproxy.enabled=false' - \
+          | yq eval '.spec.logcollector.enabled=true' - \
+          | yq eval '.spec.logcollector.logRotate.schedule="0 0 * * *"' - \
+          | yq eval '.spec.logcollector.logRotate.extraConfig.name="extra-logrotate-config"' - \
+          | FLUENTBIT_CONFIG="$(cat "${TEST_CONFIG_DIR}/fluentbit-config.yaml")" \
+              yq eval '.spec.logcollector.configuration=strenv(FLUENTBIT_CONFIG)' - \
+          | LOGROTATE_CONFIG="$(cat "${TEST_CONFIG_DIR}/logrotate-config.yaml")" \
+              yq eval '.spec.logcollector.logRotate.configuration=strenv(LOGROTATE_CONFIG)' - \
+          | kubectl -n "${NAMESPACE}" apply -f -

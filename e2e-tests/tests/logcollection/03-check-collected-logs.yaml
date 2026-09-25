@@ -1,0 +1,23 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 180
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      collecting=0
+      for pod in $(get_mysql_pod_names logcollection); do
+          # fluent-bit re-emits every tailed line as json_lines on its own stdout,
+          # so the error log is still reachable through kubectl logs.
+          retry 12 10 bash -c "
+              kubectl -n '${NAMESPACE}' logs '${pod}' -c logs --tail=-1 \
+                  | grep -q '\"file\":\"/var/lib/mysql/log/mysqld-error.log\"'
+          "
+
+          collecting=$((collecting + 1))
+      done
+
+      kubectl create configmap -n "${NAMESPACE}" 03-check-collected-logs --from-literal=collecting="${collecting}"

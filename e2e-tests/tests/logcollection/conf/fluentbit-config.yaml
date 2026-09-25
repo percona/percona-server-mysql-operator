@@ -1,0 +1,6 @@
+pipeline:
+  filters:
+    - name: record_modifier
+      match: "*"
+      record:
+        - cluster_name logcollection

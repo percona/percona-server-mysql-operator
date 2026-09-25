@@ -1,0 +1,50 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 900
+commands:
+  - timeout: 900
+    script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      before_uids=$(get_mysql_pod_uids logcollection)
+      before_hash=$(kubectl -n "${NAMESPACE}" get sts logcollection-mysql \
+          -o jsonpath='{.spec.template.metadata.annotations.percona\.com/logcollector-config-hash}')
+
+      FLUENTBIT_CONFIG=$(cat "${TEST_CONFIG_DIR}/fluentbit-custom-config.yaml") \
+          yq -n -o=json '.spec.logcollector.configuration = strenv(FLUENTBIT_CONFIG)' \
+          | kubectl -n "${NAMESPACE}" patch ps logcollection --type=merge -p "$(cat)"
+
+      wait_for_mysql_pods_restart logcollection "${before_uids}" 600
+      wait_cluster_consistency_gr logcollection 3 3
+
+      after_hash=$(kubectl -n "${NAMESPACE}" get sts logcollection-mysql \
+          -o jsonpath='{.spec.template.metadata.annotations.percona\.com/logcollector-config-hash}')
+      if [[ ${before_hash} == "${after_hash}" ]]; then
+          echo "log collector config hash did not change: ${before_hash}"
+          exit 1
+      fi
+
+      kubectl -n "${NAMESPACE}" get configmap logcollection-log-collector-config \
+          -o jsonpath='{.data.fluentbit_custom\.yaml}' | grep -q kuttl_config_check
+
+      tagged=0
+      for pod in $(get_mysql_pod_names logcollection); do
+          marker="kuttl-fluentbit-config-marker-${pod}"
+
+          kubectl -n "${NAMESPACE}" exec "${pod}" -c logrotate -- \
+              sh -c "echo '${marker}' >>/var/lib/mysql/log/mysqld-error.log"
+
+          # record_modifier stamps the field on every record fluent-bit emits, so the
+          # record carrying the marker must carry the new field too.
+          retry 18 10 bash -c "
+              kubectl -n '${NAMESPACE}' logs '${pod}' -c logs --tail=-1 \
+                  | grep '${marker}' | grep -q '\"kuttl_config_check\":\"applied\"'
+          "
+
+          tagged=$((tagged + 1))
+      done
+
+      kubectl create configmap -n "${NAMESPACE}" 08-update-fluentbit-config --from-literal=tagged="${tagged}"

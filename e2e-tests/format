@@ -4,10 +4,16 @@ TMP=$(mktemp)
 
 for f in "${@}"; do
 	yq -e eval 'has("commands")' "${f}" 2>/dev/null 1>&2 || continue
-	echo "Formatting ${f}"
 
-	yq eval '.commands[0].script' "${f}" >"${TMP}"
-	shfmt -bn -ci -s -i 4 -w $TMP
+	# Files can hold multiple YAML documents, so format each document that has
+	# commands on its own. Operating on the file as a whole would splice every
+	# document's value into a single script.
+	for i in $(yq eval 'select(has("commands")) | documentIndex' "${f}"); do
+		echo "Formatting ${f} (document ${i})"
 
-	SHFILE=$(cat ${TMP}) yq eval '.commands[0].script=strenv(SHFILE)' --inplace "${f}"
+		yq eval "select(documentIndex == ${i}) | .commands[0].script" "${f}" >"${TMP}"
+		shfmt -bn -ci -s -i 4 -w $TMP
+
+		SHFILE=$(cat ${TMP}) yq eval "(select(documentIndex == ${i}) | .commands[0].script)=strenv(SHFILE)" --inplace "${f}"
+	done
 done

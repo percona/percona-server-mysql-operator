@@ -816,7 +816,8 @@ get_cr() {
 	local image_haproxy=${7:-${IMAGE_HAPROXY}}
 	local image_pmm_client=${8:-${IMAGE_PMM_CLIENT}}
 	local image_binlog_server=${9:-${IMAGE_BINLOG_SERVER}}
-	local cr_file=${10:-${DEPLOY_DIR}/cr.yaml}
+	local image_log_collector=${10:-${IMAGE_LOG_COLLECTOR}}
+	local cr_file=${11:-${DEPLOY_DIR}/cr.yaml}
 
 	local platform="$(detect_k8s_platform)"
 	local cr_name="${test_name}${name_suffix:+-$name_suffix}"
@@ -845,6 +846,7 @@ get_cr() {
 		.spec.proxy.haproxy.image = "'"$image_haproxy"'" |
 		.spec.pmm.image = "'"$image_pmm_client"'" |
 		.spec.backup.pitr.binlogServer.image="'"${image_binlog_server}"'" |
+		with(select(.spec.logcollector != null); .spec.logcollector.image = "'"$image_log_collector"'") |
 		(.. | select(tag == "!!str")) |= sub("<namespace>"; "'"${NAMESPACE}"'")
 	' "${crs[@]}" \
 		| if [[ $platform == "minikube" ]]; then
@@ -2131,6 +2133,7 @@ get_cr_with_latest_versions_in_vs() {
 		${image_haproxy} \
 		${image_pmm_client} \
 		${image_binlog_server} \
+		${IMAGE_LOG_COLLECTOR} \
 		${TEMP_DIR}/cr.yaml
 }
 
@@ -2569,11 +2572,11 @@ read_mysql_data_to_configmap() {
 # pass: MySQL password
 # host: MySQL host (service or pod)
 check_connect_user() {
-  local user="$1"
-  local pass="$2"
-  local host="$3"
-  kubectl -n "${NAMESPACE}" exec mysql-client -- \
-      env MYSQL_PWD="${pass}" mysql -sN -h "${host}" -u"${user}" -e "SELECT 1" >/dev/null 2>&1
+	local user="$1"
+	local pass="$2"
+	local host="$3"
+	kubectl -n "${NAMESPACE}" exec mysql-client -- \
+		env MYSQL_PWD="${pass}" mysql -sN -h "${host}" -u"${user}" -e "SELECT 1" >/dev/null 2>&1
 }
 
 # create_service_accounts creates ServiceAccounts for the given components

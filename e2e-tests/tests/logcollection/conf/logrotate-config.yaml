@@ -1,0 +1,10 @@
+/var/lib/mysql/log/*.log {
+    daily
+    maxsize 100M
+    rotate 7
+    missingok
+    nocompress
+    notifempty
+    copytruncate
+    sharedscripts
+}

@@ -68,6 +68,9 @@ func printCluster(ctx context.Context) error {
 					EmptyDir: &corev1.EmptyDirVolumeSource{},
 				},
 			},
+			LogCollector: &apiv1.LogCollectorSpec{
+				LogRotate: &apiv1.LogRotateSpec{},
+			},
 		},
 		Status: apiv1.PerconaServerMySQLStatus{},
 	}

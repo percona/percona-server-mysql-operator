@@ -53,6 +53,8 @@ spec:
           name: datadir
         - mountPath: /etc/mysql/mysql-users-secret
           name: users
+      - name: logs
+      - name: logrotate
       volumes:
       - emptyDir: {}
         name: bin

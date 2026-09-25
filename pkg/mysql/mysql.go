@@ -14,6 +14,7 @@ import (
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/cmd/bootstrap/utils"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
+	"github.com/percona/percona-server-mysql-operator/pkg/logcollector"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/pmm"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
@@ -35,6 +36,7 @@ const (
 	BackupLogDir          = "/var/log/xtrabackup"
 	backupTmpVolumeName   = "xtrabackup-tmp"
 	backupTmpMountPath    = "/tmp"
+	backupLogsVolumeName  = "backup-logs"
 	vaultSecretVolumeName = "vault-keyring-secret"
 	vaultSecretMountPath  = "/etc/mysql/vault-keyring-secret"
 	crVersionEnvVar       = "CR_VERSION"
@@ -159,7 +161,7 @@ func MatchLabels(cr *apiv1.PerconaServerMySQL) map[string]string {
 	return cr.Labels(AppName, naming.ComponentDatabase)
 }
 
-func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, configHash, tlsHash string, secret *corev1.Secret) *appsv1.StatefulSet {
+func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, configHash, tlsHash, logCollectorHash string, secret *corev1.Secret) *appsv1.StatefulSet {
 	selector := MatchLabels(cr)
 	spec := cr.MySQLSpec()
 	replicas := spec.Size
@@ -171,6 +173,22 @@ func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, configHash, tlsHash st
 	if tlsHash != "" {
 		annotations[string(naming.AnnotationTLSHash)] = tlsHash
 	}
+	if logCollectorHash != "" {
+		annotations[string(naming.AnnotationLogCollectorConfigHash)] = logCollectorHash
+	}
+
+	initContainer := k8s.InitContainer(
+		cr,
+		AppName,
+		initImage,
+		spec.InitContainer,
+		spec.ImagePullPolicy,
+		spec.ContainerSecurityContext,
+		spec.Resources,
+		nil,
+	)
+	initContainer.Env = append(initContainer.Env, logcollector.InitEnv(cr)...)
+
 	sts := &appsv1.StatefulSet{
 		APIVersion:  "apps/v1",
 		Kind:        "StatefulSet",
@@ -193,18 +211,7 @@ func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, configHash, tlsHash st
 				Spec: spec.Core(
 					selector,
 					append(volumes(cr), spec.SidecarVolumes...),
-					[]corev1.Container{
-						k8s.InitContainer(
-							cr,
-							AppName,
-							initImage,
-							spec.InitContainer,
-							spec.ImagePullPolicy,
-							spec.ContainerSecurityContext,
-							spec.Resources,
-							nil,
-						),
-					},
+					[]corev1.Container{initContainer},
 					containers(cr, secret),
 				),
 			},
@@ -304,7 +311,7 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 			},
 		},
 		{
-			Name:     "backup-logs",
+			Name:     backupLogsVolumeName,
 			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		},
 	}
@@ -373,6 +380,8 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 	if cr.Spec.PMM != nil && cr.Spec.PMM.Enabled && cr.CompareVersion("1.3.0") >= 0 {
 		volumes = append(volumes, pmm.TmpVolume())
 	}
+
+	volumes = append(volumes, logcollector.Volumes(cr)...)
 
 	return volumes
 }
@@ -625,7 +634,19 @@ func containers(cr *apiv1.PerconaServerMySQL, secret *corev1.Secret) []corev1.Co
 		containers = append(containers, pmmC)
 	}
 
-	return appendUniqueContainers(containers, cr.Spec.MySQL.Sidecars...)
+	containers = appendUniqueContainers(containers, cr.Spec.MySQL.Sidecars...)
+
+	// Appended last so enabling the log collector does not shift the index of any
+	// container that was already in the pod.
+	return appendUniqueContainers(containers, logcollector.Containers(cr, dataVolumeMount(), backupLogsVolumeMount())...)
+}
+
+func dataVolumeMount() corev1.VolumeMount {
+	return corev1.VolumeMount{Name: DataVolumeName, MountPath: DataMountPath}
+}
+
+func backupLogsVolumeMount() corev1.VolumeMount {
+	return corev1.VolumeMount{Name: backupLogsVolumeName, MountPath: BackupLogDir}
 }
 
 func mysqldVolumeMounts(cr *apiv1.PerconaServerMySQL) []corev1.VolumeMount {
@@ -753,6 +774,8 @@ func mysqldContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 		})
 	}
 
+	env = append(env, logcollector.MySQLEnv(cr, DataMountPath)...)
+
 	container := corev1.Container{
 		Name:                     AppName,
 		Image:                    spec.Image,
@@ -800,7 +823,7 @@ func backupVolumeMounts(cr *apiv1.PerconaServerMySQL) []corev1.VolumeMount {
 			MountPath: naming.CredsMountPath,
 		},
 		{
-			Name:      "backup-logs",
+			Name:      backupLogsVolumeName,
 			MountPath: BackupLogDir,
 		},
 	}

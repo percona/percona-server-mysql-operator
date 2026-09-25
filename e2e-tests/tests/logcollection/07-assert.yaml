@@ -1,0 +1,28 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 420
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: logcollection-mysql
+status:
+  replicas: 3
+  readyReplicas: 3
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: logcollection
+status:
+  mysql:
+    ready: 3
+    size: 3
+    state: ready
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: 07-update-extra-config
+data:
+  applied: "3"
