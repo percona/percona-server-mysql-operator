@@ -212,13 +212,6 @@ func GetAutoConfigParams(cr *apiv1.PerconaServerMySQL, version string, cpu, memo
 // the calculated configuration asks for.
 var ErrInsufficientStorage = errors.New("data volume is too small for the calculated configuration")
 
-// maxRedoLogPercent bounds the share of the data volume the redo log may take.
-// The calculator sizes the redo log from memory alone and never sees the disk,
-// so on a small volume it produces a redo log that leaves no room for the data.
-// A node that joins by cloning is the tight case: it preallocates its own redo
-// log before the clone starts and then needs free space for the donor's estimate
-// on top, so the redo log has to stay a small fraction of the volume rather than
-// merely fit on it.
 const maxRedoLogPercent = 25
 
 // DataVolumeSize returns the size the cr asks for the MySQL data volume, or zero
@@ -254,10 +247,6 @@ func DataVolumeSize(cr *apiv1.PerconaServerMySQL) int64 {
 // than maxRedoLogPercent of the data volume. mysqld preallocates the redo log in
 // full during initialization, so an oversized one doesn't degrade the cluster -
 // it stops the node from ever starting, or from ever cloning a donor.
-//
-// It reports the mismatch instead of trimming the redo log to fit: how to resolve
-// it - a larger volume, less memory, a different load type - is the user's call,
-// and quietly rewriting a calculated value would hide the tradeoff being made.
 func checkRedoLogFits(storage int64, params map[string]string) error {
 	if storage == 0 {
 		return nil
@@ -406,10 +395,13 @@ func GetConfig(
 	} else if rendered != "" {
 		parts = append(parts, rendered)
 	} else {
+		// With the spec configuration cleared, a ConfigMap this cr owns is the
+		// one rendered from the previous configuration: it is on its way out and
+		// must not be merged back in.
 		cm := &corev1.ConfigMap{}
 		if err := cl.Get(ctx, nn, cm); client.IgnoreNotFound(err) != nil {
 			return config.EmptySection, errors.Wrap(err, "get configmap")
-		} else if err == nil {
+		} else if err == nil && !metav1.IsControlledBy(cm, cr) {
 			parts = append(parts, readConfig(cm, configurable))
 		}
 	}

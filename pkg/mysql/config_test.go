@@ -42,6 +42,7 @@ func TestGetConfig(t *testing.T) {
 		specConfig string
 		memory     string
 		configMap  *string
+		ownedCM    bool
 		secret     *string
 		want       map[string]string
 		wantErrMsg string
@@ -210,6 +211,16 @@ func TestGetConfig(t *testing.T) {
 			want:       map[string]string{"max_heap_table_size": "1073741824"},
 		},
 		{
+			// CustomConfigHash deletes it earlier in the reconcile, but the cache
+			// can still hold it; merging it back would let the configuration the
+			// user just cleared override the calculated one for a pass.
+			desc:       "the configmap the operator rendered is ignored once the spec configuration is cleared",
+			autoConfig: new("\nmax_connections=442"),
+			configMap:  new("[mysqld]\nmax_connections=100\n"),
+			ownedCM:    true,
+			want:       map[string]string{"max_connections": "442"},
+		},
+		{
 			desc:       "a template without a memory limit is an error",
 			specConfig: "max_heap_table_size={{ containerMemoryLimit }}",
 			wantErrMsg: "resources.limits[memory] or resources.requests[memory] should be specified",
@@ -232,10 +243,20 @@ func TestGetConfig(t *testing.T) {
 				autoConf = *tt.autoConfig
 			}
 			if tt.configMap != nil {
-				objs = append(objs, &corev1.ConfigMap{
+				cm := &corev1.ConfigMap{
 					Name: name, Namespace: ns,
 					Data: map[string]string{CustomConfigKey: *tt.configMap},
-				})
+				}
+				if tt.ownedCM {
+					cm.OwnerReferences = []metav1.OwnerReference{{
+						APIVersion: apiv1.GroupVersion.String(),
+						Kind:       "PerconaServerMySQL",
+						Name:       cr.Name,
+						UID:        cr.UID,
+						Controller: new(true),
+					}}
+				}
+				objs = append(objs, cm)
 			}
 			if tt.secret != nil {
 				objs = append(objs, &corev1.Secret{
