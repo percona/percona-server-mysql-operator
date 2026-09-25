@@ -301,14 +301,13 @@ func failover(ctx context.Context, source, target string, timeout time.Duration)
 		return nil
 	}
 
-	sourceIP, err := sourcePodIP(ctx, c, source, min(sourcePodWait, timeout))
-	if err != nil {
+	if err := waitForSourcePod(ctx, c, source, min(sourcePodWait, timeout)); err != nil {
 		return err
 	}
 
 	log.Info("Applying missing binary logs", "candidate", candidate.Hostname, "source", source)
 
-	if err := runWorker(ctx, c, sourceIP, candidate.Hostname, "-timeout", timeout.String()); err != nil {
+	if err := runWorker(ctx, c, source, candidate.Hostname, "-timeout", timeout.String()); err != nil {
 		return err
 	}
 
@@ -329,9 +328,9 @@ func failover(ctx context.Context, source, target string, timeout time.Duration)
 // probeSource asks the worker on the candidate whether the source is back. A
 // source whose pod is gone cannot be, so it is not an error.
 func probeSource(ctx context.Context, c *cluster, source, candidate string) error {
-	sourceIP, err := sourcePodIP(ctx, c, source, 0)
+	err := waitForSourcePod(ctx, c, source, 0)
 	if err == nil {
-		err = runWorker(ctx, c, sourceIP, candidate, "-probe", "-timeout", probeTimeout.String())
+		err = runWorker(ctx, c, source, candidate, "-probe", "-timeout", probeTimeout.String())
 	}
 	if errors.Is(err, errNoSourcePod) {
 		log.Info("Source pod is gone, nothing to probe", "source", source)
@@ -341,27 +340,27 @@ func probeSource(ctx context.Context, c *cluster, source, candidate string) erro
 	return err
 }
 
-// sourcePodIP returns the address the worker reaches the source at, waiting up
-// to wait for a pod that has not been scheduled yet. A zero wait looks once.
-func sourcePodIP(ctx context.Context, c *cluster, source string, wait time.Duration) (string, error) {
+// waitForSourcePod waits up to wait for the source's pod to be scheduled. A zero
+// wait looks once.
+func waitForSourcePod(ctx context.Context, c *cluster, source string, wait time.Duration) error {
 	deadline := time.Now().Add(wait)
 
 	for {
 		pod, err := c.pod(ctx, source)
 		switch {
 		case err != nil && !apierrors.IsNotFound(err):
-			return "", err
+			return err
 		case err == nil && pod.Status.PodIP != "":
-			return pod.Status.PodIP, nil
+			return nil
 		}
 
 		if !time.Now().Before(deadline) {
-			return "", errors.Wrapf(errNoSourcePod, "pod %s", podName(c.cr, source))
+			return errors.Wrapf(errNoSourcePod, "pod %s", podName(c.cr, source))
 		}
 
 		select {
 		case <-ctx.Done():
-			return "", ctx.Err()
+			return ctx.Err()
 		case <-time.After(sourcePodPoll):
 		}
 	}
@@ -370,9 +369,10 @@ func sourcePodIP(ctx context.Context, c *cluster, source string, wait time.Durat
 var errNoSourcePod = errors.New("the source pod is gone")
 
 // runWorker runs the failover binary in the candidate's mysql container against
-// the source's pod IP.
-func runWorker(ctx context.Context, c *cluster, sourceIP, candidate string, args ...string) error {
-	return execWorker(ctx, c, candidate, append([]string{"-source", sourceIP}, args...)...)
+// the source's hostname rather than its pod IP: a pod recreated while the worker
+// waits for it comes back at another address.
+func runWorker(ctx context.Context, c *cluster, source, candidate string, args ...string) error {
+	return execWorker(ctx, c, candidate, append([]string{"-source", source}, args...)...)
 }
 
 // execWorker runs the failover binary in the mysql container of host's pod. Its

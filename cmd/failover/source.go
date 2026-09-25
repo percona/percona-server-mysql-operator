@@ -34,9 +34,8 @@ type sourceDatabase interface {
 // sourceWatch reports whether the source that orchestrator gave up on is usable
 // again, so the job can hand the replica back instead of promoting it.
 //
-// It probes the source's FQDN rather than the pod IP the binary logs are fetched
-// from: that is the host the replication channel is configured with, so it is
-// what the receiver has to reach to reconnect.
+// It probes the host the replication channel is configured with rather than
+// -source: that is what the receiver has to reach to reconnect.
 type sourceWatch struct {
 	local        database
 	connect      func(ctx context.Context, host string) (sourceDatabase, error)

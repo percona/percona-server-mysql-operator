@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -1174,6 +1175,16 @@ func TestFetchLogsFromSource(t *testing.T) {
 		assert.ErrorIs(t, err, errFetchStalled)
 	})
 
+	t.Run("keeps waiting for a sidecar whose host does not resolve yet", func(t *testing.T) {
+		_, err := fetchLogsFromSource(t.Context(), filepath.Join(t.TempDir(), "source-logs"),
+			sourceStreamURL("mysql-0.source.invalid"), testSourcePassword, "binlog.000004", 157, 3*sidecarPoll)
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errFetchStalled)
+		var dnsErr *net.DNSError
+		assert.ErrorAs(t, err, &dnsErr)
+	})
+
 	t.Run("a source that stalls on the headers gives up once the stall bound is spent", func(t *testing.T) {
 		srv := stallServer(t, nil)
 
@@ -1693,6 +1704,30 @@ func TestStagingPath(t *testing.T) {
 			assert.Contains(t, err.Error(), "holds the MySQL data directory")
 		}
 	})
+}
+
+func TestIsDialError(t *testing.T) {
+	dial := func(err error) error { return &net.OpError{Op: "dial", Net: "tcp", Err: err} }
+
+	tests := []struct {
+		name     string
+		err      error
+		expected bool
+	}{
+		{name: "nil", err: nil, expected: false},
+		{name: "refused", err: dial(syscall.ECONNREFUSED), expected: true},
+		{name: "timeout on the address a deleted pod had", err: dial(os.ErrDeadlineExceeded), expected: true},
+		{name: "host not resolvable yet", err: dial(&net.DNSError{Err: "no such host", IsNotFound: true}), expected: true},
+		{name: "wrapped by the client", err: &url.Error{Op: "Post", URL: "http://mysql-0:6450", Err: dial(syscall.EHOSTUNREACH)}, expected: true},
+		{name: "reset after connecting", err: &net.OpError{Op: "read", Net: "tcp", Err: syscall.ECONNRESET}, expected: false},
+		{name: "cancelled", err: context.Canceled, expected: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, isDialError(tt.err))
+		})
+	}
 }
 
 func TestSourceStreamURL(t *testing.T) {

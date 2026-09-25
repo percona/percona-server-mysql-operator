@@ -18,7 +18,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
@@ -40,6 +39,11 @@ const (
 const (
 	relayLogApplyPoll = time.Second
 	sidecarPoll       = 500 * time.Millisecond
+
+	// sidecarDialTimeout bounds one attempt to reach the source's sidecar. A
+	// deleted pod's IP drops the connection rather than refusing it, and the
+	// system's own timeout would spend most of the stall bound on one attempt.
+	sidecarDialTimeout = 5 * time.Second
 	jobTimeout        = 6 * time.Hour
 
 	// sourceStallTimeout is how long the source may go without sending
@@ -516,8 +520,12 @@ func fetchLogsFromSource(ctx context.Context, stagingDir, sourceURL, password, b
 }
 
 // postStream asks the source's sidecar for the stream, waiting for it to listen.
+// Every attempt resolves the source again: a source whose pod was recreated
+// comes back at another address.
 func postStream(ctx context.Context, sourceURL, password string, body []byte) (*http.Response, error) {
-	client := &http.Client{}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.DialContext = (&net.Dialer{Timeout: sidecarDialTimeout}).DialContext
+	client := &http.Client{Transport: transport}
 	waiting := false
 
 	for {
@@ -529,7 +537,7 @@ func postStream(ctx context.Context, sourceURL, password string, body []byte) (*
 		req.SetBasicAuth(string(apiv1.UserOperator), password)
 
 		resp, err := client.Do(req)
-		if !errors.Is(err, syscall.ECONNREFUSED) {
+		if !isDialError(err) {
 			return resp, err
 		}
 		if !waiting {
@@ -543,6 +551,13 @@ func postStream(ctx context.Context, sourceURL, password string, body []byte) (*
 		case <-time.After(sidecarPoll):
 		}
 	}
+}
+
+// isDialError reports whether the request never reached the sidecar: its pod
+// is not resolvable yet, not listening yet, or gone from the address it had.
+func isDialError(err error) bool {
+	var opErr *net.OpError
+	return errors.As(err, &opErr) && opErr.Op == "dial"
 }
 
 // stalled names the watchdog as the reason when it is. The transport only
