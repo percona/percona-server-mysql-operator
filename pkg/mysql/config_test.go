@@ -15,7 +15,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
@@ -360,7 +359,7 @@ func TestHasUserConfig(t *testing.T) {
 						Kind:       "PerconaServerMySQL",
 						Name:       cr.Name,
 						UID:        cr.UID,
-						Controller: ptr.To(true),
+						Controller: new(true),
 					}}
 				}
 				objs = append(objs, cm)
@@ -640,13 +639,13 @@ func TestDataVolumeSize(t *testing.T) {
 		},
 		"emptyDir with a size limit": {
 			volumeSpec: &apiv1.VolumeSpec{EmptyDir: &corev1.EmptyDirVolumeSource{
-				SizeLimit: ptr.To(resource.MustParse("4Gi")),
+				SizeLimit: new(resource.MustParse("4Gi")),
 			}},
 			want: 4 * 1024 * 1024 * 1024,
 		},
 		"a claim takes precedence over a size limited emptyDir": {
 			volumeSpec: &apiv1.VolumeSpec{
-				EmptyDir: &corev1.EmptyDirVolumeSource{SizeLimit: ptr.To(resource.MustParse("4Gi"))},
+				EmptyDir: &corev1.EmptyDirVolumeSource{SizeLimit: new(resource.MustParse("4Gi"))},
 				PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
 					Resources: corev1.VolumeResourceRequirements{
 						Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("9Gi")},
@@ -657,7 +656,7 @@ func TestDataVolumeSize(t *testing.T) {
 		},
 		"hostPath takes precedence over a size limited emptyDir": {
 			volumeSpec: &apiv1.VolumeSpec{
-				EmptyDir: &corev1.EmptyDirVolumeSource{SizeLimit: ptr.To(resource.MustParse("4Gi"))},
+				EmptyDir: &corev1.EmptyDirVolumeSource{SizeLimit: new(resource.MustParse("4Gi"))},
 				HostPath: &corev1.HostPathVolumeSource{Path: "/data"},
 			},
 			want: 0,
