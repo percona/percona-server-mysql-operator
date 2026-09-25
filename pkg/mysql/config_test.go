@@ -14,6 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
@@ -292,6 +294,7 @@ func TestHasUserConfig(t *testing.T) {
 	tests := map[string]struct {
 		configuration string
 		configMap     *string
+		ownedConfig   bool
 		secret        *string
 		intercept     interceptor.Funcs
 
@@ -321,6 +324,11 @@ func TestHasUserConfig(t *testing.T) {
 			configMap: new(""),
 			want:      false,
 		},
+		"the configmap the operator rendered does not count": {
+			configMap:   new("[mysqld]\nmax_connections=100\n"),
+			ownedConfig: true,
+			want:        false,
+		},
 		"a whitespace-only secret does not count": {
 			secret: new("\n \n"),
 			want:   false,
@@ -342,10 +350,20 @@ func TestHasUserConfig(t *testing.T) {
 
 			objs := []client.Object{}
 			if tc.configMap != nil {
-				objs = append(objs, &corev1.ConfigMap{
+				cm := &corev1.ConfigMap{
 					Name: cmName, Namespace: ns,
 					Data: map[string]string{CustomConfigKey: *tc.configMap},
-				})
+				}
+				if tc.ownedConfig {
+					cm.OwnerReferences = []metav1.OwnerReference{{
+						APIVersion: apiv1.GroupVersion.String(),
+						Kind:       "PerconaServerMySQL",
+						Name:       cr.Name,
+						UID:        cr.UID,
+						Controller: ptr.To(true),
+					}}
+				}
+				objs = append(objs, cm)
 			}
 			if tc.secret != nil {
 				objs = append(objs, &corev1.Secret{
@@ -482,18 +500,6 @@ func newAutoConfigCR(clusterType apiv1.ClusterType, loadType apiv1.AutoConfigLoa
 	return cr
 }
 
-// withDataVolume declares a PVC of the given size for the MySQL data volume.
-func withDataVolume(cr *apiv1.PerconaServerMySQL, size string) *apiv1.PerconaServerMySQL {
-	cr.Spec.MySQL.VolumeSpec = &apiv1.VolumeSpec{
-		PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
-			Resources: corev1.VolumeResourceRequirements{
-				Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse(size)},
-			},
-		},
-	}
-	return cr
-}
-
 func TestGetAutoConfigParams(t *testing.T) {
 	cpu := resource.NewQuantity(4, resource.DecimalSI)    // 4 cores
 	mem := resource.NewQuantity(8<<30, resource.BinarySI) // 8Gi
@@ -503,6 +509,7 @@ func TestGetAutoConfigParams(t *testing.T) {
 		cr              *apiv1.PerconaServerMySQL
 		cpu             *resource.Quantity
 		memory          *resource.Quantity
+		storage         int64
 		wantErrContains string
 		// wantContains keys must appear in the output.
 		wantContains []string
@@ -531,19 +538,20 @@ func TestGetAutoConfigParams(t *testing.T) {
 		// a redo log over a quarter of the volume is rejected rather than
 		// resized. At 8Gi of memory the calculator asks for ~4.4Gi.
 		"a data volume too small for the calculated redo log is rejected": {
-			cr:              withDataVolume(newAutoConfigCR(apiv1.ClusterTypeGR, apiv1.AutoConfigLoadTypeSomeWrites, "8.4.8"), "2Gi"),
+			cr:              newAutoConfigCR(apiv1.ClusterTypeGR, apiv1.AutoConfigLoadTypeSomeWrites, "8.4.8"),
 			cpu:             cpu,
 			memory:          mem,
+			storage:         2 << 30,
 			wantErrContains: "data volume is too small",
 		},
 		"a data volume with room keeps the calculated redo log": {
-			cr:           withDataVolume(newAutoConfigCR(apiv1.ClusterTypeGR, apiv1.AutoConfigLoadTypeSomeWrites, "8.4.8"), "32Gi"),
+			cr:           newAutoConfigCR(apiv1.ClusterTypeGR, apiv1.AutoConfigLoadTypeSomeWrites, "8.4.8"),
 			cpu:          cpu,
 			memory:       mem,
+			storage:      32 << 30,
 			wantContains: []string{"innodb_redo_log_capacity=4714155900"},
 		},
-		// emptyDir and hostPath have no declared size to check against.
-		"no persistent volume keeps the calculated redo log": {
+		"an unknown volume size keeps the calculated redo log": {
 			cr:           newAutoConfigCR(apiv1.ClusterTypeGR, apiv1.AutoConfigLoadTypeSomeWrites, "8.4.8"),
 			cpu:          cpu,
 			memory:       mem,
@@ -571,7 +579,7 @@ func TestGetAutoConfigParams(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got, err := GetAutoConfigParams(tc.cr, tc.cr.Spec.MySQL.AutoConfig.Version, tc.cpu, tc.memory)
+			got, err := GetAutoConfigParams(tc.cr, tc.cr.Spec.MySQL.AutoConfig.Version, tc.cpu, tc.memory, tc.storage)
 
 			if tc.wantErrContains != "" {
 				require.ErrorContains(t, err, tc.wantErrContains)
@@ -626,9 +634,33 @@ func TestDataVolumeSize(t *testing.T) {
 			volumeSpec: nil,
 			want:       0,
 		},
-		"emptyDir": {
+		"emptyDir without a size limit": {
 			volumeSpec: &apiv1.VolumeSpec{EmptyDir: &corev1.EmptyDirVolumeSource{}},
 			want:       0,
+		},
+		"emptyDir with a size limit": {
+			volumeSpec: &apiv1.VolumeSpec{EmptyDir: &corev1.EmptyDirVolumeSource{
+				SizeLimit: ptr.To(resource.MustParse("4Gi")),
+			}},
+			want: 4 * 1024 * 1024 * 1024,
+		},
+		"a claim takes precedence over a size limited emptyDir": {
+			volumeSpec: &apiv1.VolumeSpec{
+				EmptyDir: &corev1.EmptyDirVolumeSource{SizeLimit: ptr.To(resource.MustParse("4Gi"))},
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
+					Resources: corev1.VolumeResourceRequirements{
+						Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("9Gi")},
+					},
+				},
+			},
+			want: 9 * 1024 * 1024 * 1024,
+		},
+		"hostPath takes precedence over a size limited emptyDir": {
+			volumeSpec: &apiv1.VolumeSpec{
+				EmptyDir: &corev1.EmptyDirVolumeSource{SizeLimit: ptr.To(resource.MustParse("4Gi"))},
+				HostPath: &corev1.HostPathVolumeSource{Path: "/data"},
+			},
+			want: 0,
 		},
 		"hostPath": {
 			volumeSpec: &apiv1.VolumeSpec{HostPath: &corev1.HostPathVolumeSource{Path: "/data"}},
@@ -666,7 +698,7 @@ func TestDataVolumeSize(t *testing.T) {
 			cr := &apiv1.PerconaServerMySQL{}
 			cr.Spec.MySQL.VolumeSpec = tc.volumeSpec
 
-			assert.Equal(t, tc.want, dataVolumeSize(cr))
+			assert.Equal(t, tc.want, DataVolumeSize(cr))
 		})
 	}
 }
@@ -679,44 +711,44 @@ func pvcVolumeSpec(res corev1.VolumeResourceRequirements) *apiv1.VolumeSpec {
 
 func TestCheckRedoLogFits(t *testing.T) {
 	tests := map[string]struct {
-		volume  string // empty => no persistent volume
+		storage int64
 		params  map[string]string
 		wantErr error
 	}{
-		"no persistent volume is not checked": {
+		"an unknown volume size is not checked": {
 			params: map[string]string{"innodb_redo_log_capacity": "4294967296"},
 		},
 		"no redo log in the calculated params": {
-			volume: "8Gi",
-			params: map[string]string{"innodb_buffer_pool_size": "1073741824"},
+			storage: 8 << 30,
+			params:  map[string]string{"innodb_buffer_pool_size": "1073741824"},
 		},
 		"redo log within budget": {
-			volume: "8Gi",
-			params: map[string]string{"innodb_redo_log_capacity": "1073741824"},
+			storage: 8 << 30,
+			params:  map[string]string{"innodb_redo_log_capacity": "1073741824"},
 		},
 		"redo log exactly at budget": {
-			volume: "8Gi",
-			params: map[string]string{"innodb_redo_log_capacity": "2147483648"},
+			storage: 8 << 30,
+			params:  map[string]string{"innodb_redo_log_capacity": "2147483648"},
 		},
 		"redo log over budget is rejected": {
-			volume:  "8Gi",
+			storage: 8 << 30,
 			params:  map[string]string{"innodb_redo_log_capacity": "2147483649"},
 			wantErr: ErrInsufficientStorage,
 		},
 		"a redo log that fits the volume but not the budget is rejected": {
-			volume:  "8Gi",
+			storage: 8 << 30,
 			params:  map[string]string{"innodb_redo_log_capacity": "4294967296"},
 			wantErr: ErrInsufficientStorage,
 		},
 		"pre-8.4 spelling is totalled across the file count": {
-			volume: "8Gi",
+			storage: 8 << 30,
 			params: map[string]string{
 				"innodb_log_file_size":      "1073741824",
 				"innodb_log_files_in_group": "2",
 			},
 		},
 		"pre-8.4 spelling over budget is rejected": {
-			volume: "8Gi",
+			storage: 8 << 30,
 			params: map[string]string{
 				"innodb_log_file_size":      "2147483648",
 				"innodb_log_files_in_group": "2",
@@ -724,11 +756,11 @@ func TestCheckRedoLogFits(t *testing.T) {
 			wantErr: ErrInsufficientStorage,
 		},
 		"pre-8.4 spelling without a file count assumes a single file": {
-			volume: "8Gi",
-			params: map[string]string{"innodb_log_file_size": "2147483648"},
+			storage: 8 << 30,
+			params:  map[string]string{"innodb_log_file_size": "2147483648"},
 		},
 		"an unparseable redo log value is an error": {
-			volume:  "8Gi",
+			storage: 8 << 30,
 			params:  map[string]string{"innodb_redo_log_capacity": "big"},
 			wantErr: strconv.ErrSyntax,
 		},
@@ -736,13 +768,9 @@ func TestCheckRedoLogFits(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			cr := &apiv1.PerconaServerMySQL{}
-			if tc.volume != "" {
-				withDataVolume(cr, tc.volume)
-			}
 			before := maps.Clone(tc.params)
 
-			err := checkRedoLogFits(cr, tc.params)
+			err := checkRedoLogFits(tc.storage, tc.params)
 			if tc.wantErr != nil {
 				require.ErrorIs(t, err, tc.wantErr)
 			} else {
@@ -766,7 +794,7 @@ func TestGetAutoConfigParamsLoadType(t *testing.T) {
 
 	got := make(map[apiv1.AutoConfigLoadType]string, len(loadTypes))
 	for _, lt := range loadTypes {
-		params, err := GetAutoConfigParams(newAutoConfigCR(apiv1.ClusterTypeGR, lt, "8.4.8"), "8.4.8", cpu, mem)
+		params, err := GetAutoConfigParams(newAutoConfigCR(apiv1.ClusterTypeGR, lt, "8.4.8"), "8.4.8", cpu, mem, 0)
 		require.NoErrorf(t, err, "load type %q", lt)
 		got[lt] = params
 	}
@@ -778,7 +806,7 @@ func TestGetAutoConfigParamsLoadType(t *testing.T) {
 	}
 
 	// An unset load type falls back to someWrites.
-	unset, err := GetAutoConfigParams(newAutoConfigCR(apiv1.ClusterTypeGR, "", "8.4.8"), "8.4.8", cpu, mem)
+	unset, err := GetAutoConfigParams(newAutoConfigCR(apiv1.ClusterTypeGR, "", "8.4.8"), "8.4.8", cpu, mem, 0)
 	require.NoError(t, err)
 	assert.Equal(t, got[apiv1.AutoConfigLoadTypeSomeWrites], unset)
 }

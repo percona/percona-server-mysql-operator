@@ -16,6 +16,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -151,7 +152,7 @@ func EffectiveResource(res corev1.ResourceRequirements, name corev1.ResourceName
 // GetAutoConfigParams derives a full, production-grade set of mysqld parameters
 // from the pod's CPU/memory allocation, the configured workload profile, the
 // given MySQL version and the replication topology, using the mysqloperatorcalculator library.
-func GetAutoConfigParams(cr *apiv1.PerconaServerMySQL, version string, cpu, memory *resource.Quantity) (string, error) {
+func GetAutoConfigParams(cr *apiv1.PerconaServerMySQL, version string, cpu, memory *resource.Quantity, storage int64) (string, error) {
 	if cpu == nil || cpu.IsZero() {
 		return "", errors.New("cpu is required for autoconfig")
 	}
@@ -185,7 +186,7 @@ func GetAutoConfigParams(cr *apiv1.PerconaServerMySQL, version string, cpu, memo
 		return "", errors.Wrap(err, "get mysqld params")
 	}
 
-	if err := checkRedoLogFits(cr, params); err != nil {
+	if err := checkRedoLogFits(storage, params); err != nil {
 		return "", err
 	}
 
@@ -220,21 +221,32 @@ var ErrInsufficientStorage = errors.New("data volume is too small for the calcul
 // merely fit on it.
 const maxRedoLogPercent = 25
 
-// dataVolumeSize returns the size requested for the MySQL data volume, or zero
-// when the pod uses an emptyDir or hostPath, or declares no volume at all -
-// there is no size to check against in those cases.
-func dataVolumeSize(cr *apiv1.PerconaServerMySQL) int64 {
+// DataVolumeSize returns the size the cr asks for the MySQL data volume, or zero
+// when nothing in the spec bounds it.
+func DataVolumeSize(cr *apiv1.PerconaServerMySQL) int64 {
 	vs := cr.Spec.MySQL.VolumeSpec
-	if vs == nil || vs.PersistentVolumeClaim == nil {
+	if vs == nil {
 		return 0
 	}
-	res := vs.PersistentVolumeClaim.Resources
-	if q, ok := res.Requests[corev1.ResourceStorage]; ok {
-		return q.Value()
+
+	if pvc := vs.PersistentVolumeClaim; pvc != nil {
+		if q, ok := pvc.Resources.Requests[corev1.ResourceStorage]; ok {
+			return q.Value()
+		}
+		if q, ok := pvc.Resources.Limits[corev1.ResourceStorage]; ok {
+			return q.Value()
+		}
+		return 0
 	}
-	if q, ok := res.Limits[corev1.ResourceStorage]; ok {
-		return q.Value()
+
+	if vs.HostPath != nil {
+		return 0
 	}
+
+	if vs.EmptyDir != nil && vs.EmptyDir.SizeLimit != nil {
+		return vs.EmptyDir.SizeLimit.Value()
+	}
+
 	return 0
 }
 
@@ -246,8 +258,7 @@ func dataVolumeSize(cr *apiv1.PerconaServerMySQL) int64 {
 // It reports the mismatch instead of trimming the redo log to fit: how to resolve
 // it - a larger volume, less memory, a different load type - is the user's call,
 // and quietly rewriting a calculated value would hide the tradeoff being made.
-func checkRedoLogFits(cr *apiv1.PerconaServerMySQL, params map[string]string) error {
-	storage := dataVolumeSize(cr)
+func checkRedoLogFits(storage int64, params map[string]string) error {
 	if storage == 0 {
 		return nil
 	}
@@ -356,7 +367,8 @@ func HasUserConfig(
 	cm := &corev1.ConfigMap{}
 	if err := cl.Get(ctx, nn, cm); client.IgnoreNotFound(err) != nil {
 		return false, errors.Wrap(err, "get configmap")
-	} else if err == nil && strings.TrimSpace(readConfig(cm, configurable)) != "" {
+	} else if err == nil && !metav1.IsControlledBy(cm, cr) &&
+		strings.TrimSpace(readConfig(cm, configurable)) != "" {
 		return true, nil
 	}
 

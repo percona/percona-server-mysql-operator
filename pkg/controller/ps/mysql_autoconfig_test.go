@@ -19,6 +19,7 @@ import (
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/version"
 )
 
@@ -217,6 +218,56 @@ func TestReconcileMySQLAutoConfig(t *testing.T) {
 			"no ConfigMap should be written when the calculated configuration does not fit")
 	})
 
+	t.Run("a pending expansion holds the configuration to the live claims", func(t *testing.T) {
+		ctx := t.Context()
+		cr := newCR(true, "8.4")
+		withDataVolume(cr, "32Gi")
+
+		scheme := newScheme(t)
+		objs := []client.Object{cr}
+		for _, name := range []string{"datadir-cluster1-mysql-0", "datadir-cluster1-mysql-1", "datadir-cluster1-mysql-2"} {
+			objs = append(objs, &corev1.PersistentVolumeClaim{
+				Name: name, Namespace: ns, Labels: mysql.MatchLabels(cr),
+				Status: corev1.PersistentVolumeClaimStatus{
+					Capacity: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("2Gi")},
+				},
+			})
+		}
+		cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).Build()
+		r := &PerconaServerMySQLReconciler{Client: cl, Scheme: scheme, Recorder: record.NewFakeRecorder(100)}
+
+		_, err := r.reconcileMySQLAutoConfig(ctx, cr)
+		assert.ErrorIs(t, err, mysql.ErrInsufficientStorage)
+
+		cm := new(corev1.ConfigMap)
+		nn := types.NamespacedName{Name: mysql.AutoConfigMapName(cr), Namespace: cr.Namespace}
+		assert.True(t, k8serrors.IsNotFound(r.Get(ctx, nn, cm)),
+			"no configuration should be written while the claims cannot host the redo log")
+	})
+
+	t.Run("expanded claims carry the configuration the request asks for", func(t *testing.T) {
+		ctx := t.Context()
+		cr := newCR(true, "8.4")
+		withDataVolume(cr, "32Gi")
+
+		scheme := newScheme(t)
+		objs := []client.Object{cr}
+		for _, name := range []string{"datadir-cluster1-mysql-0", "datadir-cluster1-mysql-1", "datadir-cluster1-mysql-2"} {
+			objs = append(objs, &corev1.PersistentVolumeClaim{
+				Name: name, Namespace: ns, Labels: mysql.MatchLabels(cr),
+				Status: corev1.PersistentVolumeClaimStatus{
+					Capacity: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("32Gi")},
+				},
+			})
+		}
+		cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).Build()
+		r := &PerconaServerMySQLReconciler{Client: cl, Scheme: scheme, Recorder: record.NewFakeRecorder(100)}
+
+		_, err := r.reconcileMySQLAutoConfig(ctx, cr)
+		require.NoError(t, err)
+		assert.Contains(t, autoConfig(t, r, cr), calculatedKey)
+	})
+
 	t.Run("correcting the version restores the calculated configuration", func(t *testing.T) {
 		ctx := t.Context()
 		cr := newCR(true, "5.7")
@@ -263,4 +314,35 @@ func withDataVolume(cr *apiv1.PerconaServerMySQL, size string) {
 			},
 		},
 	}
+}
+
+func TestReconcileDatabaseDuringPVCResize(t *testing.T) {
+	const ns = "resize-ns"
+
+	cr := &apiv1.PerconaServerMySQL{
+		Name: "cluster1", Namespace: ns,
+		Annotations: map[string]string{
+			naming.AnnotationPVCResizeInProgress.String(): "2026-09-25T10:00:00Z",
+		},
+	}
+	cr.Spec.CRVersion = version.Version()
+	cr.Spec.MySQL.ClusterType = apiv1.ClusterTypeGR
+	cr.Spec.MySQL.Size = 3
+	cr.Spec.MySQL.Resources = corev1.ResourceRequirements{
+		Limits: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("4"),
+			corev1.ResourceMemory: resource.MustParse("8Gi"),
+		},
+	}
+
+	scheme := newScheme(t)
+	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr).Build()
+	r := &PerconaServerMySQLReconciler{Client: cl, Scheme: scheme, Recorder: record.NewFakeRecorder(100)}
+
+	ctx := t.Context()
+	require.NoError(t, r.reconcileDatabase(ctx, cr))
+
+	nn := types.NamespacedName{Name: mysql.AutoConfigMapName(cr), Namespace: ns}
+	assert.True(t, k8serrors.IsNotFound(r.Get(ctx, nn, new(corev1.ConfigMap))),
+		"a configuration sized for the requested claims must not reach pods running on the old ones")
 }

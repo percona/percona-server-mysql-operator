@@ -402,6 +402,41 @@ func (r *PerconaServerMySQLReconciler) revertVolumeTemplate(ctx context.Context,
 	return nil
 }
 
+func dataVolumeCapacity(ctx context.Context, cl client.Reader, cr *psv1.PerconaServerMySQL) (int64, error) {
+	pvcList := new(corev1.PersistentVolumeClaimList)
+	if err := cl.List(ctx, pvcList, &client.ListOptions{
+		Namespace:     cr.Namespace,
+		LabelSelector: labels.SelectorFromSet(mysql.MatchLabels(cr)),
+	}); err != nil {
+		return 0, errors.Wrap(err, "list PVCs")
+	}
+
+	stsName := mysql.Name(cr)
+
+	var smallest int64
+	for _, pvc := range pvcList.Items {
+		if !validatePVCName(pvc, stsName) {
+			continue
+		}
+
+		ordinal, ok := pvcOrdinal(pvc.Name, stsName)
+		if !ok || ordinal >= int(cr.Spec.MySQL.Size) {
+			continue
+		}
+
+		size := pvcSize(pvc).Value()
+		if size == 0 {
+			continue
+		}
+
+		if smallest == 0 || size < smallest {
+			smallest = size
+		}
+	}
+
+	return smallest, nil
+}
+
 // pvcOrdinal returns the ordinal of the replica a datadir PVC belongs to.
 func pvcOrdinal(pvcName, stsName string) (int, bool) {
 	suffix, ok := strings.CutPrefix(pvcName, mysql.DataVolumeName+"-"+stsName+"-")

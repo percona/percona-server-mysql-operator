@@ -10,12 +10,14 @@ import (
 	eventsv1 "k8s.io/api/events/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 )
 
@@ -328,6 +330,106 @@ func TestStashAppliedConfig(t *testing.T) {
 				assert.False(t, ok, "nothing to stash must not annotate the cr")
 				return
 			}
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestDataVolumeCapacity(t *testing.T) {
+	const (
+		crName  = "cluster1"
+		ns      = "capacity-ns"
+		stsName = crName + "-mysql"
+	)
+
+	newCR := func(size int32) *apiv1.PerconaServerMySQL {
+		cr := &apiv1.PerconaServerMySQL{
+			Name: crName, Namespace: ns,
+		}
+		cr.Spec.MySQL.Size = size
+		return cr
+	}
+
+	newPVC := func(name, capacity string) *corev1.PersistentVolumeClaim {
+		pvc := &corev1.PersistentVolumeClaim{
+			Name:      name,
+			Namespace: ns,
+			Labels:    mysql.MatchLabels(newCR(3)),
+		}
+		if capacity != "" {
+			pvc.Status.Capacity = corev1.ResourceList{corev1.ResourceStorage: resource.MustParse(capacity)}
+		}
+		return pvc
+	}
+
+	tests := map[string]struct {
+		size int32
+		pvcs []*corev1.PersistentVolumeClaim
+		want int64
+	}{
+		"no claims yet": {
+			size: 3,
+			want: 0,
+		},
+		"every claim expanded": {
+			size: 3,
+			pvcs: []*corev1.PersistentVolumeClaim{
+				newPVC("datadir-"+stsName+"-0", "32Gi"),
+				newPVC("datadir-"+stsName+"-1", "32Gi"),
+				newPVC("datadir-"+stsName+"-2", "32Gi"),
+			},
+			want: 32 << 30,
+		},
+		"a claim left behind by a pending expansion": {
+			size: 3,
+			pvcs: []*corev1.PersistentVolumeClaim{
+				newPVC("datadir-"+stsName+"-0", "32Gi"),
+				newPVC("datadir-"+stsName+"-1", "2Gi"),
+				newPVC("datadir-"+stsName+"-2", "32Gi"),
+			},
+			want: 2 << 30,
+		},
+		"claims above the current size are ignored": {
+			size: 1,
+			pvcs: []*corev1.PersistentVolumeClaim{
+				newPVC("datadir-"+stsName+"-0", "32Gi"),
+				newPVC("datadir-"+stsName+"-1", "2Gi"),
+			},
+			want: 32 << 30,
+		},
+		"claims of another volume are ignored": {
+			size: 3,
+			pvcs: []*corev1.PersistentVolumeClaim{
+				newPVC("datadir-"+stsName+"-0", "32Gi"),
+				newPVC("backup-"+stsName+"-0", "2Gi"),
+			},
+			want: 32 << 30,
+		},
+		"a claim with no capacity is ignored": {
+			size: 3,
+			pvcs: []*corev1.PersistentVolumeClaim{
+				newPVC("datadir-"+stsName+"-0", ""),
+				newPVC("datadir-"+stsName+"-1", "8Gi"),
+			},
+			want: 8 << 30,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := newCR(tc.size)
+			objs := []client.Object{cr}
+			for _, pvc := range tc.pvcs {
+				objs = append(objs, pvc)
+			}
+
+			cl := fake.NewClientBuilder().
+				WithScheme(newScheme(t)).
+				WithObjects(objs...).
+				Build()
+
+			got, err := dataVolumeCapacity(t.Context(), cl, cr)
+			require.NoError(t, err)
 			assert.Equal(t, tc.want, got)
 		})
 	}

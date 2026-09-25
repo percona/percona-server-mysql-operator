@@ -1066,14 +1066,14 @@ func (r *PerconaServerMySQLReconciler) teardownAsync(
 func (r *PerconaServerMySQLReconciler) reconcileDatabase(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("reconcileDatabase")
 
-	autoConf, err := r.reconcileMySQLAutoConfig(ctx, cr)
-	if err != nil {
-		return errors.Wrap(err, "reconcile MySQL auto-config")
-	}
-
 	if cr.PVCResizeInProgress() {
 		log.V(1).Info("PVC resize in progress, skipping MySQL reconciliation")
 		return nil
+	}
+
+	autoConf, err := r.reconcileMySQLAutoConfig(ctx, cr)
+	if err != nil {
+		return errors.Wrap(err, "reconcile MySQL auto-config")
 	}
 
 	component := mysql.Component(*cr)
@@ -1270,7 +1270,16 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 			// this only happens against an outdated CRD.
 			params, err = autotune("autoconfig is enabled but mysql.autoConfig.version is not set")
 		default:
-			params, err = mysql.GetAutoConfigParams(cr, version, cpu, memory)
+			var storage int64
+			storage, err = dataVolumeCapacity(ctx, r.Client, cr)
+			if err != nil {
+				return "", errors.Wrap(err, "get data volume capacity")
+			}
+			if storage == 0 {
+				storage = mysql.DataVolumeSize(cr)
+			}
+
+			params, err = mysql.GetAutoConfigParams(cr, version, cpu, memory, storage)
 			if errors.Is(err, mysql.ErrInsufficientStorage) {
 				r.Recorder.Event(cr, corev1.EventTypeWarning, "AutoConfigInsufficientStorage", err.Error())
 				return "", errors.Wrap(err, "calculate autoconfig parameters")
