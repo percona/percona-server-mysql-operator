@@ -254,6 +254,18 @@ func TestReadMyCnf(t *testing.T) {
 			},
 			wantWorkers: "9",
 		},
+		"the secret wins over the user configuration and the auto-config": {
+			setup: func(t *testing.T) []string {
+				dir := t.TempDir()
+				secret := "[mysqld]\nreplica_parallel_workers=13\n"
+				return []string{
+					writeCnf(t, dir+"/my-secret.cnf", secret),
+					writeCnf(t, dir+"/my.cnf", userConf),
+					writeCnf(t, dir+"/auto.cnf", autoConf),
+				}
+			},
+			wantWorkers: "13",
+		},
 		"an unreadable file is an error rather than a silent fallback": {
 			setup: func(t *testing.T) []string {
 				dir := t.TempDir()

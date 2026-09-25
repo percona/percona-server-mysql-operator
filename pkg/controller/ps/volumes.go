@@ -362,16 +362,8 @@ func (r *PerconaServerMySQLReconciler) handlePVCResizeFailure(ctx context.Contex
 	return nil
 }
 
-// stashAppliedConfig copies the record of the configuration already applied to
-// the running mysqld from the statefulset onto the cr, so that it survives the
-// statefulset being deleted and rebuilt for a resize.
-//
-// The replacement set is built from the cr and comes back without the record.
-// EnsureObjectWithHash preserves the annotation when it updates a set but not
-// when it creates one, so without the copy the next configuration pass reads an
-// empty record, treats every calculated variable as new, and re-applies the lot.
-// The variables that cannot be set at runtime then restart the whole cluster
-// over a resize that needs no restart.
+// stashAppliedConfig copies the applied-configuration record from the
+// statefulset onto the cr so it survives the set being rebuilt for a resize.
 func (r *PerconaServerMySQLReconciler) stashAppliedConfig(
 	ctx context.Context,
 	cr *psv1.PerconaServerMySQL,
@@ -458,18 +450,16 @@ func pvcOrdinal(pvcName, stsName string) (int, bool) {
 	return ordinal, true
 }
 
-// filesystemResizePending reports that the volume is expanded and only its
-// filesystem is still to be grown. Unlike nodeResizePending this sticks around
-// until the volume is mounted, so it can outlive the resize that set it.
+// filesystemResizePending reports that only the filesystem is still to be
+// grown. Unlike nodeResizePending it can outlive the resize that set it.
 func filesystemResizePending(pvc corev1.PersistentVolumeClaim) bool {
 	return slices.ContainsFunc(pvc.Status.Conditions, func(c corev1.PersistentVolumeClaimCondition) bool {
 		return c.Type == corev1.PersistentVolumeClaimFileSystemResizePending && c.Status == corev1.ConditionTrue
 	})
 }
 
-// lastSeen reports when the event was last seen. Repeated events are coalesced
-// into one object that keeps its first timestamp and only moves the last one, so
-// the first timestamp can predate the resize that made the event recur.
+// lastSeen reports when the event was last seen. Repeated events keep their
+// first timestamp, which can predate the resize that made them recur.
 func lastSeen(event eventsv1.Event) time.Time {
 	times := []time.Time{
 		event.EventTime.Time,
@@ -491,14 +481,8 @@ func lastSeen(event eventsv1.Event) time.Time {
 	return latest
 }
 
-// pvcSize reports the size of the volume behind the PVC. It deliberately does
-// not look at pods: a claim keeps reporting its old capacity until kubelet grows
-// its filesystem on mount, and whether a pod object exists says nothing about
-// whether that has happened yet.
-//
-// The allocated size is used rather than the requested one because a new request
-// lands in the spec at once, while allocatedResources only follows when the
-// resize controller picks it up.
+// pvcSize reports the size of the volume behind the PVC. The allocated size is
+// used rather than the requested one, which lands in the spec at once.
 func pvcSize(pvc corev1.PersistentVolumeClaim) *resource.Quantity {
 	// An unbound claim has no volume to expand: it is created at the size its
 	// spec asks for, so that is the size it is going to have.
@@ -523,16 +507,14 @@ func pvcSize(pvc corev1.PersistentVolumeClaim) *resource.Quantity {
 	return pvc.Status.Capacity.Storage()
 }
 
-// nodeResizePending reports whether the volume is expanded up to its allocated
-// size and only its filesystem is still to be grown. Kept per resize request, so
-// it cannot outlive the resize that set it.
+// nodeResizePending reports whether only the filesystem is still to be grown.
+// Kept per resize request, so it cannot outlive the resize that set it.
 func nodeResizePending(pvc corev1.PersistentVolumeClaim) bool {
 	return pvc.Status.AllocatedResourceStatuses[corev1.ResourceStorage] == corev1.PersistentVolumeClaimNodeResizePending
 }
 
-// reportsResizeStatus reports whether the cluster fills in the per request resize
-// status at all. It needs RecoverVolumeExpansionFailure, which is not enabled on
-// every supported platform.
+// reportsResizeStatus reports whether the cluster fills in the per request
+// resize status. It needs RecoverVolumeExpansionFailure.
 func reportsResizeStatus(pvc corev1.PersistentVolumeClaim) bool {
 	_, ok := pvc.Status.AllocatedResourceStatuses[corev1.ResourceStorage]
 	return ok

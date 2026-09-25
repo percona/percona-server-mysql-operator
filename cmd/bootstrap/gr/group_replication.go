@@ -450,7 +450,7 @@ func Bootstrap(ctx context.Context) error {
 		log.Printf("WARNING: failed to clear group_replication_group_seeds: %v", err)
 	}
 
-	myCnf, err := readMyCnf(mysql.CustomMyCnfPath, mysql.AutoConfigCnfPath)
+	myCnf, err := readMyCnf(mysql.SecretMyCnfPath, mysql.CustomMyCnfPath, mysql.AutoConfigCnfPath)
 	if err != nil {
 		return err
 	}

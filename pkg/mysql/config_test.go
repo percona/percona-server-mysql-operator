@@ -211,9 +211,6 @@ func TestGetConfig(t *testing.T) {
 			want:       map[string]string{"max_heap_table_size": "1073741824"},
 		},
 		{
-			// CustomConfigHash deletes it earlier in the reconcile, but the cache
-			// can still hold it; merging it back would let the configuration the
-			// user just cleared override the calculated one for a pass.
 			desc:       "the configmap the operator rendered is ignored once the spec configuration is cleared",
 			autoConfig: new("\nmax_connections=442"),
 			configMap:  new("[mysqld]\nmax_connections=100\n"),

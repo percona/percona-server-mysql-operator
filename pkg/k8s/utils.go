@@ -307,11 +307,10 @@ func EnsureComponent(
 	return result, nil
 }
 
-// recordPodTemplateHash annotates obj with the hash of the pod template it
-// carries and reports whether that template differs from the one the API
-// already holds. Comparing the templates directly would put what the operator
-// built against what the API server defaulted, so two operator-written hashes
-// are compared instead. An object carrying no hash yet reads as unchanged.
+// recordPodTemplateHash annotates obj with the hash of its pod template and
+// reports whether it differs from the one the API holds. Hashes are compared
+// rather than templates, which the API server defaults. No hash reads as
+// unchanged.
 func recordPodTemplateHash(ctx context.Context, cl client.Reader, obj client.Object) (bool, error) {
 	var template corev1.PodTemplateSpec
 	switch object := obj.(type) {

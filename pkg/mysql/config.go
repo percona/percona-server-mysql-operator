@@ -65,27 +65,21 @@ func (c *Configurable) ExecuteConfigurationTemplate(input string, memory *resour
 	return result, nil
 }
 
-// loosePrefix matches the prefix that tells mysqld to ignore an option it
-// doesn't recognize. It is not part of the variable's identity: both mysqld and
-// SET GLOBAL read loose_x and x as the same variable, so the two spellings must
-// never be treated as separate options.
+// loose_x and x are the same variable to mysqld and to SET GLOBAL.
 var loosePrefix = regexp.MustCompile(`^loose[-_]`)
 
-// IsLooseVariable reports whether key carries the loose prefix, which tells
-// mysqld to ignore the option when the server doesn't know it.
+// IsLooseVariable reports whether key carries the loose prefix.
 func IsLooseVariable(key string) bool {
 	return loosePrefix.MatchString(key)
 }
 
-// CanonicalVariableName strips the loose prefix so that aliases of the same
-// mysqld variable compare equal.
+// CanonicalVariableName strips the loose prefix.
 func CanonicalVariableName(key string) string {
 	return loosePrefix.ReplaceAllString(key, "")
 }
 
 // GetAutoTuneParams derives innodb_buffer_pool_size, innodb_buffer_pool_chunk_size
-// and max_connections from the given memory quantity. Values the user already set
-// in .spec.mysql.configuration are left untouched.
+// and max_connections from the given memory quantity.
 func GetAutoTuneParams(cr *apiv1.PerconaServerMySQL, q *resource.Quantity) (string, error) {
 	autotuneParams := ""
 
@@ -136,9 +130,7 @@ func GetAutoTuneParams(cr *apiv1.PerconaServerMySQL, q *resource.Quantity) (stri
 	return autotuneParams, nil
 }
 
-// EffectiveResource returns the quantity autoconfig should size the MySQL
-// configuration against for the given resource, or nil when neither a limit nor
-// a request is set.
+// EffectiveResource returns the limit, else the request, else nil.
 func EffectiveResource(res corev1.ResourceRequirements, name corev1.ResourceName) *resource.Quantity {
 	if q, ok := res.Limits[name]; ok {
 		return &q
@@ -149,9 +141,8 @@ func EffectiveResource(res corev1.ResourceRequirements, name corev1.ResourceName
 	return nil
 }
 
-// GetAutoConfigParams derives a full, production-grade set of mysqld parameters
-// from the pod's CPU/memory allocation, the configured workload profile, the
-// given MySQL version and the replication topology, using the mysqloperatorcalculator library.
+// GetAutoConfigParams derives a full set of mysqld parameters from the pod's
+// CPU/memory allocation, the workload profile, the version and the topology.
 func GetAutoConfigParams(cr *apiv1.PerconaServerMySQL, version string, cpu, memory *resource.Quantity, storage int64) (string, error) {
 	if cpu == nil || cpu.IsZero() {
 		return "", errors.New("cpu is required for autoconfig")
@@ -190,8 +181,7 @@ func GetAutoConfigParams(cr *apiv1.PerconaServerMySQL, version string, cpu, memo
 		return "", err
 	}
 
-	// Sort for a stable ConfigMap payload so unchanged resources don't produce
-	// a churning config hash and needless rollout restarts.
+	// a stable payload keeps the config hash from churning
 	names := make([]string, 0, len(params))
 	for name := range params {
 		names = append(names, name)
@@ -244,9 +234,8 @@ func DataVolumeSize(cr *apiv1.PerconaServerMySQL) int64 {
 }
 
 // checkRedoLogFits rejects a calculated configuration whose redo log claims more
-// than maxRedoLogPercent of the data volume. mysqld preallocates the redo log in
-// full during initialization, so an oversized one doesn't degrade the cluster -
-// it stops the node from ever starting, or from ever cloning a donor.
+// than maxRedoLogPercent of the data volume. mysqld preallocates it in full, so
+// an oversized redo log stops the node from starting or cloning.
 func checkRedoLogFits(storage int64, params map[string]string) error {
 	if storage == 0 {
 		return nil
@@ -388,16 +377,14 @@ func GetConfig(
 		parts = append(parts, autoConf)
 	}
 
-	// Rendered from the cr, not read back from the ConfigMap generated from it:
-	// the cache can still hold the revision from before this reconcile wrote it.
+	// rendered from the cr: the cache can still hold the ConfigMap revision
+	// from before this reconcile wrote it
 	if rendered, err := k8s.RenderConfiguration(&configurable); err != nil {
 		return config.EmptySection, errors.Wrap(err, "render user configuration")
-	} else if rendered != "" {
+	} else if strings.TrimSpace(rendered) != "" {
 		parts = append(parts, rendered)
 	} else {
-		// With the spec configuration cleared, a ConfigMap this cr owns is the
-		// one rendered from the previous configuration: it is on its way out and
-		// must not be merged back in.
+		// a ConfigMap this cr owns was rendered from the cleared configuration
 		cm := &corev1.ConfigMap{}
 		if err := cl.Get(ctx, nn, cm); client.IgnoreNotFound(err) != nil {
 			return config.EmptySection, errors.Wrap(err, "get configmap")
@@ -433,13 +420,8 @@ func GetConfig(
 	return result, nil
 }
 
-// dropAliasedKeys keeps a single key per canonical variable name, the last one,
-// so that the same variable spelled two ways collapses the way the ini parser
-// already collapses identical spellings. Parts are merged auto-config first and
-// user configuration last, so the surviving key is the user's. Without this the
-// section would carry both loose_x and x, and the dynamic-configuration
-// reconciler would issue a SET GLOBAL for each in map iteration order, letting
-// a different value win on each pod.
+// dropAliasedKeys keeps the last key per canonical variable name. Parts are
+// merged user configuration last, so the surviving key is the user's.
 func dropAliasedKeys(section *ini.Section) {
 	lastByCanonical := make(map[string]string, len(section.Keys()))
 	for _, k := range section.Keys() {
@@ -518,10 +500,8 @@ func FormatConfigValue(value string) string {
 	return QuoteLiteral(value)
 }
 
-// QuoteLiteral renders value as a single SQL string literal, escaped so no part
-// of it can be parsed as SQL. Quotes are doubled rather than backslash-escaped
-// because doubling is the only form that holds under NO_BACKSLASH_ESCAPES too,
-// and sql_mode is itself one of the variables we set.
+// QuoteLiteral renders value as a single SQL string literal. Quotes are doubled
+// rather than backslash-escaped so it holds under NO_BACKSLASH_ESCAPES too.
 func QuoteLiteral(value string) string {
 	escaped := strings.ReplaceAll(value, `\`, `\\`)
 	escaped = strings.ReplaceAll(escaped, `'`, `''`)

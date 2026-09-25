@@ -11,8 +11,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-// readMyCnf returns the [mysqld] section of the first path that exists, or nil
-// when none do.
+// readMyCnf returns the [mysqld] section of the first path that exists, given
+// in priority order, or nil when none do.
 func readMyCnf(paths ...string) (*ini.Section, error) {
 	for _, path := range paths {
 		f, err := os.Open(path)

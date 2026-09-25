@@ -26,8 +26,8 @@ const (
 var (
 	ErrMemoryRequired = errors.New("memory is required")
 	ErrCPURequired    = errors.New("cpu is required")
-	// ErrVersionUnsupported guards the calculator's silent behavior outside its
-	// supported range: it returns an empty configuration instead of an error.
+	// outside its supported range the calculator returns an empty
+	// configuration rather than an error
 	ErrVersionUnsupported = errors.New("mysql version is out of the supported range")
 )
 
@@ -71,8 +71,8 @@ func (v Version) supported() bool {
 	return v.compare(MinSupportedVersion) >= 0 && v.compare(MaxSupportedVersion) <= 0
 }
 
-// Request describes the workload the operator wants MySQL tuned for. Only CPU
-// and Memory are strictly required; the rest fall back to sensible defaults.
+// Request describes the workload MySQL is tuned for. Only CPU and Memory are
+// required.
 type Request struct {
 	// DBType is the replication topology (one of the DBType* constants).
 	// Defaults to group replication.
@@ -83,8 +83,7 @@ type Request struct {
 	// string, e.g. "2.5G". Ignored when MemoryBytes is set.
 	Memory string
 	// MemoryBytes is the memory allocation for the whole pod in bytes. When
-	// greater than zero it takes precedence over Memory, letting callers that
-	// already hold an exact byte count skip string parsing.
+	// greater than zero it takes precedence over Memory.
 	MemoryBytes int64
 	// Connections is the target number of client connections.
 	Connections int
@@ -97,15 +96,12 @@ type Request struct {
 	// resources to account for provider overhead. Zero disables the adjustment.
 	ProviderCostPct float64
 	// SharedResources declares that CPU and Memory are a budget mysqld shares
-	// with the proxy and monitoring components, and asks the calculator to split
-	// it between them. The operator runs the proxies in their own pods and gives
-	// the monitoring sidecar its own allocation, so its request describes an
-	// instance dedicated to mysqld - the zero value.
+	// with the proxy and monitoring components. The operator gives those their
+	// own allocations, so its request leaves this at the zero value.
 	SharedResources bool
 }
 
-// Result holds the outcome of a Calculate call and the accessors the operator
-// uses to read the tuned configuration back out.
+// Result holds the outcome of a Calculate call.
 type Result struct {
 	// Message is the calculator's status message (warnings, notes). A MType > 0
 	// signals the caller may want to log it.
@@ -118,9 +114,7 @@ type Result struct {
 	req  mysqlcalc.ConfigurationRequest
 }
 
-// Calculate runs the operator calculator for the given request and returns the
-// tuned configuration. It returns an error if the request is malformed or the
-// calculator cannot produce a result.
+// Calculate runs the operator calculator for the given request.
 func Calculate(req Request) (*Result, error) {
 	if req.Memory == "" && req.MemoryBytes == 0 {
 		return nil, ErrMemoryRequired
@@ -184,8 +178,7 @@ func Calculate(req Request) (*Result, error) {
 	}, nil
 }
 
-// MySQLdConfig returns the tuned mysqld parameters rendered as an INI section,
-// suitable for writing into the auto-config ConfigMap.
+// MySQLdConfig returns the tuned mysqld parameters as an INI section.
 func (r *Result) MySQLdConfig() (string, error) {
 	family, err := r.calc.GetFamily(mysqlcalc.FamilyTypeMysql)
 	if err != nil {
@@ -198,8 +191,7 @@ func (r *Result) MySQLdConfig() (string, error) {
 	return buf.String(), nil
 }
 
-// MySQLdParams returns the tuned mysqld parameters as a name/value map for
-// callers that assemble configuration programmatically rather than as INI text.
+// MySQLdParams returns the tuned mysqld parameters as a name/value map.
 func (r *Result) MySQLdParams() (map[string]string, error) {
 	family, err := r.calc.GetFamily(mysqlcalc.FamilyTypeMysql)
 	if err != nil {

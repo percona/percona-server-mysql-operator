@@ -28,7 +28,7 @@ type Configurable interface {
 // the operator writes to the generated ConfigMap.
 func RenderConfiguration(configurable Configurable) (string, error) {
 	configuration := configurable.GetConfiguration()
-	if configuration == "" {
+	if strings.TrimSpace(configuration) == "" {
 		return "", nil
 	}
 
@@ -66,7 +66,7 @@ func CustomConfigHash(ctx context.Context, cl client.Client, cr *apiv1.PerconaSe
 		return "", errors.Wrapf(err, "get ConfigMap/%s", cmName)
 	}
 
-	if configurable.GetConfiguration() == "" {
+	if strings.TrimSpace(configurable.GetConfiguration()) == "" {
 		exists, err := ObjectExists(ctx, cl, nn, currCm)
 		if err != nil {
 			return "", errors.Wrapf(err, "check if ConfigMap/%s exists", cmName)

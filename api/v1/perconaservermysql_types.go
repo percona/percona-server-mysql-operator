@@ -279,9 +279,8 @@ type AutoConfigSpec struct {
 	Enabled *bool `json:"enabled,omitempty"`
 	// +kubebuilder:validation:Enum=mostlyReads;someWrites;equalReadsWrites;heavyWrites
 	LoadType AutoConfigLoadType `json:"loadType,omitempty"`
-	// Version is the MySQL version the configuration is calculated for. It is
-	// required when autoconfig is enabled and never changes which server is
-	// deployed; it only tells the calculator which parameters exist.
+	// Version is the MySQL version the configuration is calculated for. It does
+	// not change which server is deployed.
 	// +kubebuilder:validation:Pattern=`^\d+\.\d+\.\d+$`
 	Version string `json:"version,omitempty"`
 }

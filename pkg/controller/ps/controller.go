@@ -1234,12 +1234,8 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 	if memory != nil {
 		var params string
 
-		// autoconfig derives a full configuration from the calculator when it is
-		// enabled and we have everything it needs (a CPU allocation and a known
-		// MySQL version). Otherwise we keep the legacy buffer-pool +
-		// max_connections autotune, which only requires memory. The fallback is
-		// recomputed on every pass, so correcting the spec brings the calculated
-		// configuration back without any further intervention.
+		// the calculator needs a CPU allocation and a version; without them we
+		// keep the legacy autotune, recomputed on every pass
 		autotune := func(reason string) (string, error) {
 			log.Info("falling back to autotune", "reason", reason)
 			r.Recorder.Event(cr, corev1.EventTypeWarning, "AutoConfigFallback",
@@ -1262,12 +1258,9 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 			log.Info("a user configuration is set, skipping autoconfig")
 			params, err = mysql.GetAutoTuneParams(cr, memory)
 		case cpu == nil:
-			// Enabled but the user set no CPU request/limit: we cannot size the
-			// configuration.
 			params, err = autotune("autoconfig is enabled but no CPU request/limit is set")
 		case version == "":
-			// The CRD requires the version whenever autoconfig is enabled, so
-			// this only happens against an outdated CRD.
+			// only reachable against an outdated CRD
 			params, err = autotune("autoconfig is enabled but mysql.autoConfig.version is not set")
 		default:
 			var storage int64
