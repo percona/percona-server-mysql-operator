@@ -425,7 +425,3 @@ func mysqlCmd(pass, host, query string) []string {
 		"-p" + pass, "-u", string(apiv1.UserOperator), "-h", host, "-e", query,
 	}
 }
-
-func mysqlshCmd(uri, js string) []string {
-	return []string{"mysqlsh", "--js", "--no-wizard", "--uri", uri, "-e", js}
-}
