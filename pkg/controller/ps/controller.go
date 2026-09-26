@@ -780,9 +780,9 @@ func (r *PerconaServerMySQLReconciler) reconcileClusterTypeChange(
 	switchInProgress := meta.IsStatusConditionTrue(cr.Status.Conditions, apiv1.ConditionClusterTypeSwitchInProgress)
 
 	if desiredType == observedType {
-		// Nothing left to switch. Drop a marker left behind by a switch that was
-		// reverted mid-flight so it can't bypass the readiness gate later on.
-		if switchInProgress {
+		// If a switch is in progress, clear the condition only when the cluster is ready.
+		// This way the switch may be reverted if the cluster fails to become ready under the new type.
+		if switchInProgress && cr.Status.State == apiv1.StateReady {
 			if err := r.clearClusterTypeSwitchInProgress(ctx, cr); err != nil {
 				return errors.Wrap(err, "clear cluster type switch marker")
 			}
@@ -811,10 +811,8 @@ func (r *PerconaServerMySQLReconciler) reconcileClusterTypeChange(
 
 	// Mark before the first destructive step so a teardown that fails partway is
 	// retried regardless of the state the half-torn-down cluster reports.
-	if !switchInProgress {
-		if err := r.markClusterTypeSwitchInProgress(ctx, cr, observedType, desiredType); err != nil {
-			return errors.Wrap(err, "mark cluster type switch in progress")
-		}
+	if err := r.markClusterTypeSwitchInProgress(ctx, cr, observedType, desiredType); err != nil {
+		return errors.Wrap(err, "mark cluster type switch in progress")
 	}
 
 	switch observedType {
@@ -878,8 +876,7 @@ func (r *PerconaServerMySQLReconciler) reconcileClusterTypeChange(
 }
 
 // updateClusterTypeStatus records the cluster type the operator has applied. The
-// type only ever advances when a switch finishes, so this also ends any
-// in-progress switch, in the same status update.
+// type only ever advances when a switch finishes.
 func (r *PerconaServerMySQLReconciler) updateClusterTypeStatus(
 	ctx context.Context,
 	cr *apiv1.PerconaServerMySQL,
@@ -887,7 +884,6 @@ func (r *PerconaServerMySQLReconciler) updateClusterTypeStatus(
 ) error {
 	mutate := func(status *apiv1.PerconaServerMySQLStatus) error {
 		status.ClusterType = clusterType
-		meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionClusterTypeSwitchInProgress)
 		return nil
 	}
 	if err := writeStatus(ctx, r.Client, client.ObjectKeyFromObject(cr), mutate); err != nil {
@@ -943,41 +939,53 @@ func (r *PerconaServerMySQLReconciler) teardownGR(
 	ctx context.Context,
 	cr *apiv1.PerconaServerMySQL,
 ) error {
+	observed := cr
 	cr = cr.DeepCopy()
 	cr.Spec.MySQL.ClusterType = apiv1.ClusterTypeGR
-
-	primary, err := r.getPrimaryPod(ctx, cr)
-	if err != nil {
-		return errors.Wrap(err, "get primary pod")
-	}
 
 	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1.UserOperator)
 	if err != nil {
 		return errors.Wrap(err, "get operator password")
 	}
 
-	podFQDN := mysql.PodFQDN(cr, primary)
-	podUri := mysqlsh.URI(string(apiv1.UserOperator), operatorPass, podFQDN)
+	// Only a bootstrapped cluster has InnoDB cluster metadata to dissolve. The
+	// condition is dropped as soon as the dissolve succeeds, so a teardown that
+	// fails further down is not retried against a cluster that is already gone:
+	// after the dissolve there is no ONLINE primary left to connect to.
+	if meta.IsStatusConditionTrue(cr.Status.Conditions, apiv1.ConditionInnoDBClusterBootstrapped) {
+		primary, err := r.getPrimaryPod(ctx, cr)
+		if err != nil {
+			return errors.Wrap(err, "get primary pod")
+		}
 
-	opts := &mysqlsh.ExecOptions{
-		Pod:           primary,
-		ContainerName: mysql.AppName,
-		Client:        r.ClientCmd,
-		Stdout:        &bytes.Buffer{},
-	}
-	mysh, err := mysqlsh.NewWithExec(podUri, opts)
-	if err != nil {
-		return err
+		podFQDN := mysql.PodFQDN(cr, primary)
+		podUri := mysqlsh.URI(string(apiv1.UserOperator), operatorPass, podFQDN)
+
+		opts := &mysqlsh.ExecOptions{
+			Pod:           primary,
+			ContainerName: mysql.AppName,
+			Client:        r.ClientCmd,
+			Stdout:        &bytes.Buffer{},
+		}
+		mysh, err := mysqlsh.NewWithExec(podUri, opts)
+		if err != nil {
+			return err
+		}
+
+		if err := mysh.DissolveWithExec(ctx); err != nil {
+			return errors.Wrap(err, "dissolve GR")
+		}
+
+		mutate := func(status *apiv1.PerconaServerMySQLStatus) error {
+			meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionInnoDBClusterBootstrapped)
+			return nil
+		}
+		if err := writeStatus(ctx, r.Client, client.ObjectKeyFromObject(cr), mutate); err != nil {
+			return errors.Wrap(err, "clear innodb cluster bootstrapped condition")
+		}
+		mutate(&observed.Status) //nolint:errcheck
 	}
 
-	if err := mysh.DissolveWithExec(ctx); err != nil {
-		return errors.Wrap(err, "dissolve GR")
-	}
-
-	// Dissolving the cluster removes the GR metadata but leaves the
-	// group_replication_* system variables persisted in mysqld-auto.cnf on
-	// every node. Reset them so the nodes don't attempt to rejoin the group
-	// after the switch to async replication.
 	pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr), cr.Namespace)
 	if err != nil {
 		return errors.Wrap(err, "get pods")
@@ -985,6 +993,7 @@ func (r *PerconaServerMySQLReconciler) teardownGR(
 
 	for i := range pods {
 		pod := &pods[i]
+
 		db := database.NewReplicationManager(pod, r.ClientCmd, apiv1.UserOperator, operatorPass, mysql.PodFQDN(cr, pod))
 		if err := db.ResetGroupReplicationPersistedVars(ctx); err != nil {
 			return errors.Wrapf(err, "reset persisted group replication variables on pod %s", pod.Name)

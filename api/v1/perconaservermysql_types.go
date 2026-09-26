@@ -1745,9 +1745,7 @@ func (cr *PerconaServerMySQL) OrchestratorEnabled() bool {
 		return false
 	}
 
-	// The switch away from async tears Orchestrator down itself; don't bring it
-	// back while that is running.
-	if meta.IsStatusConditionTrue(cr.Status.Conditions, ConditionClusterTypeSwitchInProgress) {
+	if cr.MySQLSpec().IsGR() && meta.IsStatusConditionTrue(cr.Status.Conditions, ConditionClusterTypeSwitchInProgress) {
 		return false
 	}
 
