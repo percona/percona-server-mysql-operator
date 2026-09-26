@@ -1,13 +1,16 @@
 package pitr
 
 import (
+	"path"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/pkg/binlogserver"
 	k8sutil "github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
@@ -27,8 +30,14 @@ func TestRestoreJobS3CABundle(t *testing.T) {
 			}}},
 		},
 	}
-	restore := &apiv1.PerconaServerMySQLRestore{Name: "restore", Namespace: "ns"}
-	job := RestoreJob(cluster, restore, &apiv1.BackupStorageSpec{}, "init-image")
+	restore := &apiv1.PerconaServerMySQLRestore{
+		Name: "restore", Namespace: "ns",
+		Spec: apiv1.PerconaServerMySQLRestoreSpec{
+			PITR: &apiv1.RestorePITRSpec{Type: apiv1.PITRDate, Date: "2024-01-15 10:00:00"},
+		},
+	}
+	job, err := RestoreJob(cluster, restore, &apiv1.BackupStorageSpec{}, "init-image")
+	require.NoError(t, err)
 
 	container := job.Spec.Template.Spec.Containers[0]
 	assert.Equal(t, []string{"/opt/percona/run-pitr-restore.sh"}, container.Command)
@@ -36,16 +45,22 @@ func TestRestoreJobS3CABundle(t *testing.T) {
 	selector := apiv1.CABundleSecretSelector{Name: "cluster-ca", Key: apiv1.DefaultCABundleKey}
 	assert.Contains(t, container.Env, corev1.EnvVar{Name: naming.EnvSSLCertFile, Value: k8sutil.S3CAPath(selector)})
 	assert.Contains(t, container.VolumeMounts, corev1.VolumeMount{Name: naming.S3CertsInputVolumeName, MountPath: naming.S3CertsInputMountPath, ReadOnly: true})
-	assert.Len(t, job.Spec.Template.Spec.InitContainers, 1)
+	initContainers := job.Spec.Template.Spec.InitContainers
+	assert.Len(t, initContainers, 2)
+	assert.Contains(t, initContainers[0].VolumeMounts, corev1.VolumeMount{Name: naming.S3CertsInputVolumeName, MountPath: naming.S3CertsInputMountPath, ReadOnly: true})
+	assert.Contains(t, initContainers[0].VolumeMounts, corev1.VolumeMount{Name: naming.S3CertsVolumeName, MountPath: naming.S3CertsMountPath})
+	assert.Equal(t, binlogserver.SearchContainerName, initContainers[1].Name)
+	assert.Contains(t, initContainers[1].VolumeMounts, corev1.VolumeMount{Name: naming.S3CertsVolumeName, MountPath: naming.SystemCABundlePath, SubPath: "ca-bundle.crt", ReadOnly: true})
 }
 
 func TestRestoreJob(t *testing.T) {
 	tests := map[string]struct {
-		cluster   *apiv1.PerconaServerMySQL
-		restore   *apiv1.PerconaServerMySQLRestore
-		storage   *apiv1.BackupStorageSpec
-		initImage string
-		verify    func(t *testing.T, job *batchv1.Job)
+		cluster     *apiv1.PerconaServerMySQL
+		restore     *apiv1.PerconaServerMySQLRestore
+		storage     *apiv1.BackupStorageSpec
+		initImage   string
+		expectError string
+		verify      func(t *testing.T, job *batchv1.Job)
 	}{
 		"basic job metadata": {
 			cluster: &apiv1.PerconaServerMySQL{
@@ -179,7 +194,6 @@ func TestRestoreJob(t *testing.T) {
 				assert.True(t, volumeNames[dataVolumeName], "missing datadir volume")
 				assert.True(t, volumeNames[credsVolumeName], "missing creds volume")
 				assert.True(t, volumeNames[tlsVolumeName], "missing tls volume")
-				assert.True(t, volumeNames[binlogsVolumeName], "missing binlogs volume")
 			},
 		},
 		"secrets volume uses cluster secrets name": {
@@ -211,7 +225,74 @@ func TestRestoreJob(t *testing.T) {
 				}
 			},
 		},
-		"binlogs configmap volume references restore name": {
+		"binlogs file is shared by the search and restore containers": {
+			cluster: &apiv1.PerconaServerMySQL{
+				Name: "cluster", Namespace: "ns",
+				Spec: apiv1.PerconaServerMySQLSpec{
+					SecretsName:   "secrets",
+					SSLSecretName: "ssl",
+					Backup: &apiv1.BackupSpec{
+						PiTR: apiv1.PiTRSpec{
+							BinlogServer: &apiv1.BinlogServerSpec{
+								Image: "binlog-server:latest",
+							},
+						},
+					},
+				},
+			},
+			restore: &apiv1.PerconaServerMySQLRestore{
+				Name: "my-restore", Namespace: "ns",
+				Spec: apiv1.PerconaServerMySQLRestoreSpec{
+					PITR: &apiv1.RestorePITRSpec{
+						Type: apiv1.PITRDate,
+						Date: "2024-01-01 10:00:00",
+					},
+				},
+			},
+			storage:   &apiv1.BackupStorageSpec{},
+			initImage: "init:latest",
+			verify: func(t *testing.T, job *batchv1.Job) {
+				initContainers := job.Spec.Template.Spec.InitContainers
+				assert.Len(t, initContainers, 2)
+
+				search := initContainers[1]
+				assert.Equal(t, binlogserver.SearchContainerName, search.Name)
+				assert.Equal(t, "binlog-server:latest", search.Image)
+
+				require.Len(t, search.Args, 7)
+				assert.Equal(t, []string{
+					"binlog-search", "/var/lib/pitr-binlogs/binlogs.json", binlogserver.BinlogServerBinary,
+					binlogserver.SearchByTimestampCommand, path.Join(binlogserver.ConfigMountPath, binlogserver.ConfigKey),
+					"2024-01-01T10:00:00",
+				}, search.Args[1:])
+				assert.Contains(t, search.Args[0], `"$output_path"`)
+
+				mountPath := func(c corev1.Container, name string) string {
+					for _, m := range c.VolumeMounts {
+						if m.Name == name {
+							return m.MountPath
+						}
+					}
+					return ""
+				}
+				assert.Equal(t, binlogsMountPath, mountPath(search, binlogsVolumeName))
+				assert.Equal(t, binlogserver.ConfigMountPath, mountPath(search, binlogserver.ConfigVolumeName))
+				assert.Equal(t, binlogserver.BufferMountPath, mountPath(search, "binlog-server-buffer"))
+
+				restoreC := job.Spec.Template.Spec.Containers[0]
+				assert.Equal(t, binlogsMountPath, mountPath(restoreC, binlogsVolumeName))
+				assert.Equal(t, "/var/lib/pitr-binlogs/binlogs.json", envToMap(restoreC.Env)["BINLOGS_PATH"])
+
+				volumeNames := map[string]bool{}
+				for _, v := range job.Spec.Template.Spec.Volumes {
+					volumeNames[v.Name] = true
+				}
+				assert.True(t, volumeNames[binlogsVolumeName], "missing binlogs volume")
+				assert.True(t, volumeNames["binlog-server-buffer"], "missing buffer volume")
+				assert.True(t, volumeNames[binlogserver.ConfigVolumeName], "missing config volume")
+			},
+		},
+		"binlogs path is handed to the restore container": {
 			cluster: &apiv1.PerconaServerMySQL{
 				Name: "cluster", Namespace: "ns",
 				Spec: apiv1.PerconaServerMySQLSpec{
@@ -230,13 +311,48 @@ func TestRestoreJob(t *testing.T) {
 			storage:   &apiv1.BackupStorageSpec{},
 			initImage: "init:latest",
 			verify: func(t *testing.T, job *batchv1.Job) {
-				for _, v := range job.Spec.Template.Spec.Volumes {
-					if v.Name == binlogsVolumeName {
-						assert.Equal(t, "pitr-binlogs-my-restore", v.ConfigMap.Name)
-						return
-					}
-				}
-				t.Error("binlogs volume not found")
+				envMap := envToMap(job.Spec.Template.Spec.Containers[0].Env)
+				assert.Equal(t, "/var/lib/pitr-binlogs/binlogs.json", envMap["BINLOGS_PATH"])
+			},
+		},
+		"search target is independent of binlog server env": {
+			cluster: &apiv1.PerconaServerMySQL{
+				Name: "cluster", Namespace: "ns",
+				Spec: apiv1.PerconaServerMySQLSpec{
+					SecretsName:   "secrets",
+					SSLSecretName: "ssl",
+					Backup: &apiv1.BackupSpec{
+						PiTR: apiv1.PiTRSpec{
+							BinlogServer: &apiv1.BinlogServerSpec{
+								Image: "binlog-server:latest",
+								Env: []corev1.EnvVar{
+									{Name: "SEARCH_SUBCOMMAND", Value: binlogserver.SearchByGTIDCommand},
+									{Name: "SEARCH_ARG", Value: "wrong-target"},
+									{Name: "HTTP_PROXY", Value: "http://proxy.example"},
+								},
+							},
+						},
+					},
+				},
+			},
+			restore: &apiv1.PerconaServerMySQLRestore{
+				Name: "restore", Namespace: "ns",
+				Spec: apiv1.PerconaServerMySQLRestoreSpec{
+					PITR: &apiv1.RestorePITRSpec{Type: apiv1.PITRDate, Date: "2024-01-01 10:00:00"},
+				},
+			},
+			storage:   &apiv1.BackupStorageSpec{},
+			initImage: "init:latest",
+			verify: func(t *testing.T, job *batchv1.Job) {
+				search := job.Spec.Template.Spec.InitContainers[1]
+				env := envToMap(search.Env)
+				assert.Equal(t, binlogserver.SearchByGTIDCommand, env["SEARCH_SUBCOMMAND"])
+				assert.Equal(t, "wrong-target", env["SEARCH_ARG"])
+				assert.Equal(t, "http://proxy.example", env["HTTP_PROXY"])
+				require.Len(t, search.Args, 7)
+				assert.Equal(t, binlogserver.SearchByTimestampCommand, search.Args[4])
+				assert.Equal(t, "2024-01-01T10:00:00", search.Args[6])
+				assert.NotContains(t, search.Args[0], "2024-01-01T10:00:00")
 			},
 		},
 		"storage scheduling fields propagated to pod spec": {
@@ -346,7 +462,7 @@ func TestRestoreJob(t *testing.T) {
 				assert.NotContains(t, envMap, "SLEEP_FOREVER")
 			},
 		},
-		"restore container has correct env vars without pitr spec": {
+		"missing pitr spec is rejected": {
 			cluster: &apiv1.PerconaServerMySQL{
 				Name: "cluster", Namespace: "ns",
 				Spec: apiv1.PerconaServerMySQLSpec{
@@ -363,17 +479,9 @@ func TestRestoreJob(t *testing.T) {
 				Name: "my-restore", Namespace: "ns",
 				Spec: apiv1.PerconaServerMySQLRestoreSpec{},
 			},
-			storage:   &apiv1.BackupStorageSpec{},
-			initImage: "init:latest",
-			verify: func(t *testing.T, job *batchv1.Job) {
-				container := job.Spec.Template.Spec.Containers[0]
-				envMap := envToMap(container.Env)
-				assert.Equal(t, "my-restore", envMap["RESTORE_NAME"])
-				assert.Equal(t, binlogsMountPath+"/"+BinlogsConfigKey, envMap["BINLOGS_PATH"])
-				assert.NotContains(t, envMap, "PITR_TYPE")
-				assert.NotContains(t, envMap, "PITR_DATE")
-				assert.NotContains(t, envMap, "PITR_GTID")
-			},
+			storage:     &apiv1.BackupStorageSpec{},
+			initImage:   "init:latest",
+			expectError: "pitr spec is not set",
 		},
 		"restore container has pitr date env vars": {
 			cluster: &apiv1.PerconaServerMySQL{
@@ -393,7 +501,7 @@ func TestRestoreJob(t *testing.T) {
 				Spec: apiv1.PerconaServerMySQLRestoreSpec{
 					PITR: &apiv1.RestorePITRSpec{
 						Type: apiv1.PITRDate,
-						Date: "2024-01-15 10:00:00",
+						Date: "2024-01-15T12:00:00+02:00",
 					},
 				},
 			},
@@ -403,7 +511,7 @@ func TestRestoreJob(t *testing.T) {
 				container := job.Spec.Template.Spec.Containers[0]
 				envMap := envToMap(container.Env)
 				assert.Equal(t, "date", envMap["PITR_TYPE"])
-				assert.Equal(t, "2024-01-15 10:00:00", envMap["PITR_DATE"])
+				assert.Equal(t, "2024-01-15T10:00:00", envMap["PITR_DATE"])
 				assert.NotContains(t, envMap, "PITR_GTID")
 			},
 		},
@@ -425,7 +533,7 @@ func TestRestoreJob(t *testing.T) {
 				Spec: apiv1.PerconaServerMySQLRestoreSpec{
 					PITR: &apiv1.RestorePITRSpec{
 						Type: apiv1.PITRGtid,
-						GTID: "abc123:1-100",
+						GTID: "3E11FA47-71CA-11E1-9E33-C80AA9429562:1-100",
 					},
 				},
 			},
@@ -435,7 +543,7 @@ func TestRestoreJob(t *testing.T) {
 				container := job.Spec.Template.Spec.Containers[0]
 				envMap := envToMap(container.Env)
 				assert.Equal(t, "gtid", envMap["PITR_TYPE"])
-				assert.Equal(t, "abc123:1-100", envMap["PITR_GTID"])
+				assert.Equal(t, "3E11FA47-71CA-11E1-9E33-C80AA9429562:1-100", envMap["PITR_GTID"])
 				assert.NotContains(t, envMap, "PITR_DATE")
 				assert.NotContains(t, envMap, "PITR_FORCE")
 			},
@@ -489,7 +597,7 @@ func TestRestoreJob(t *testing.T) {
 				Spec: apiv1.PerconaServerMySQLRestoreSpec{
 					PITR: &apiv1.RestorePITRSpec{
 						Type: apiv1.PITRGtid,
-						GTID: "abc123:1-100",
+						GTID: "3E11FA47-71CA-11E1-9E33-C80AA9429562:1-100",
 					},
 				},
 			},
@@ -581,7 +689,6 @@ func TestRestoreJob(t *testing.T) {
 				assert.True(t, mountNames[dataVolumeName])
 				assert.True(t, mountNames[credsVolumeName])
 				assert.True(t, mountNames[tlsVolumeName])
-				assert.True(t, mountNames[binlogsVolumeName])
 			},
 		},
 		"keyring secret from cluster is mounted": {
@@ -678,7 +785,7 @@ func TestRestoreJob(t *testing.T) {
 				assert.Equal(t, keyringMountPath+"/restore-keyring.json", envMap["KEYRING_PATH"])
 			},
 		},
-		"one init container present": {
+		"init containers run in order": {
 			cluster: &apiv1.PerconaServerMySQL{
 				Name: "cluster", Namespace: "ns",
 				Spec: apiv1.PerconaServerMySQLSpec{
@@ -697,7 +804,10 @@ func TestRestoreJob(t *testing.T) {
 			storage:   &apiv1.BackupStorageSpec{},
 			initImage: "percona/init:1.0",
 			verify: func(t *testing.T, job *batchv1.Job) {
-				assert.Len(t, job.Spec.Template.Spec.InitContainers, 1)
+				initContainers := job.Spec.Template.Spec.InitContainers
+				assert.Len(t, initContainers, 2)
+				assert.Equal(t, "percona/init:1.0", initContainers[0].Image)
+				assert.Equal(t, binlogserver.SearchContainerName, initContainers[1].Name)
 			},
 		},
 		"vault secret is mounted when data at rest encryption is configured": {
@@ -780,7 +890,19 @@ func TestRestoreJob(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			job := RestoreJob(tt.cluster, tt.restore, tt.storage, tt.initImage)
+			if tt.restore.Spec.PITR == nil && tt.expectError == "" {
+				tt.restore.Spec.PITR = &apiv1.RestorePITRSpec{Type: apiv1.PITRDate, Date: "2024-01-15 10:00:00"}
+			} else if tt.restore.Spec.PITR != nil && tt.restore.Spec.PITR.Type == "" {
+				tt.restore.Spec.PITR.Type = apiv1.PITRDate
+				tt.restore.Spec.PITR.Date = "2024-01-15 10:00:00"
+			}
+			job, err := RestoreJob(tt.cluster, tt.restore, tt.storage, tt.initImage)
+			if tt.expectError != "" {
+				require.ErrorContains(t, err, tt.expectError)
+				assert.Nil(t, job)
+				return
+			}
+			require.NoError(t, err)
 			tt.verify(t, job)
 		})
 	}
@@ -819,90 +941,6 @@ func TestJobName(t *testing.T) {
 				Name: tt.restoreName,
 			}
 			assert.Equal(t, tt.expected, JobName(restore))
-		})
-	}
-}
-
-func TestBinlogsConfigMap(t *testing.T) {
-	tests := map[string]struct {
-		cluster *apiv1.PerconaServerMySQL
-		restore *apiv1.PerconaServerMySQLRestore
-		verify  func(t *testing.T, cm *corev1.ConfigMap)
-	}{
-		"basic metadata": {
-			cluster: &apiv1.PerconaServerMySQL{
-				Name: "my-cluster", Namespace: "test-ns",
-			},
-			restore: &apiv1.PerconaServerMySQLRestore{
-				Name: "my-restore",
-			},
-			verify: func(t *testing.T, cm *corev1.ConfigMap) {
-				assert.Equal(t, "pitr-binlogs-my-restore", cm.Name)
-				assert.Equal(t, "test-ns", cm.Namespace)
-				assert.Equal(t, "v1", cm.APIVersion)
-				assert.Equal(t, "ConfigMap", cm.Kind)
-			},
-		},
-		"no global labels or annotations": {
-			cluster: &apiv1.PerconaServerMySQL{
-				Name: "cluster", Namespace: "ns",
-			},
-			restore: &apiv1.PerconaServerMySQLRestore{
-				Name: "restore",
-			},
-			verify: func(t *testing.T, cm *corev1.ConfigMap) {
-				assert.Nil(t, cm.Annotations)
-			},
-		},
-		"global labels merged into configmap labels": {
-			cluster: &apiv1.PerconaServerMySQL{
-				Name: "cluster", Namespace: "ns",
-				Spec: apiv1.PerconaServerMySQLSpec{
-					Metadata: &apiv1.Metadata{
-						Labels: map[string]string{"env": "prod"},
-					},
-				},
-			},
-			restore: &apiv1.PerconaServerMySQLRestore{
-				Name: "restore",
-			},
-			verify: func(t *testing.T, cm *corev1.ConfigMap) {
-				assert.Equal(t, "prod", cm.Labels["env"])
-			},
-		},
-		"global annotations propagated": {
-			cluster: &apiv1.PerconaServerMySQL{
-				Name: "cluster", Namespace: "ns",
-				Spec: apiv1.PerconaServerMySQLSpec{
-					Metadata: &apiv1.Metadata{
-						Annotations: map[string]string{"team": "dba"},
-					},
-				},
-			},
-			restore: &apiv1.PerconaServerMySQLRestore{
-				Name: "restore",
-			},
-			verify: func(t *testing.T, cm *corev1.ConfigMap) {
-				assert.Equal(t, "dba", cm.Annotations["team"])
-			},
-		},
-		"name derived from restore name": {
-			cluster: &apiv1.PerconaServerMySQL{
-				Name: "cluster", Namespace: "ns",
-			},
-			restore: &apiv1.PerconaServerMySQLRestore{
-				Name: "weekly-restore",
-			},
-			verify: func(t *testing.T, cm *corev1.ConfigMap) {
-				assert.Equal(t, "pitr-binlogs-weekly-restore", cm.Name)
-			},
-		},
-	}
-
-	for name, tt := range tests {
-		t.Run(name, func(t *testing.T) {
-			cm := BinlogsConfigMap(tt.cluster, tt.restore)
-			tt.verify(t, cm)
 		})
 	}
 }

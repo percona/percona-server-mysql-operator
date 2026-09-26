@@ -1,10 +1,7 @@
 package binlogserver
 
 import (
-	"crypto/md5"
-	"fmt"
 	"path"
-	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -18,40 +15,52 @@ import (
 )
 
 const (
-	AppName                = "binlog-server"
-	credsVolumeName        = "users"
-	CredsMountPath         = "/etc/mysql/mysql-users-secret"
-	tlsVolumeName          = "tls"
-	TLSMountPath           = "/etc/mysql/mysql-tls-secret"
-	bufferVolumeName       = "buffer"
-	BufferMountPath        = "/var/lib/binlogsrv"
-	configVolumeName       = "config"
-	configMountPath        = "/etc/binlog_server/config"
-	storageCredsVolumeName = "storage"
-	ConfigKey              = "config.json"
-	customConfigKey        = "custom.json"
-	keyringMountPath       = "/etc/binlog_server/keyring"
-	keyringVolumeName      = "keyring"
+	AppName                 = "binlog-server"
+	credsVolumeName         = "users"
+	CredsMountPath          = "/etc/mysql/mysql-users-secret"
+	tlsVolumeName           = "tls"
+	TLSMountPath            = "/etc/mysql/mysql-tls-secret"
+	bufferVolumeName        = "buffer"
+	BufferMountPath         = "/var/lib/binlogsrv"
+	ConfigVolumeName        = "config"
+	ConfigMountPath         = "/etc/binlog_server/config"
+	storageCredsVolumeName  = "storage"
+	ConfigKey               = "config.json"
+	customConfigKey         = "custom.json"
+	keyringMountPath        = "/etc/binlog_server/keyring"
+	keyringVolumeName       = "keyring"
+	searchBufferVolumeName  = "binlog-server-buffer"
+	searchCredsVolumeName   = "binlog-server-users"
+	searchKeyringVolumeName = "binlog-server-keyring"
 )
-
-const controllerRevisionHashLength = 11
 
 func Name(cr *apiv1.PerconaServerMySQL) string {
 	return cr.Name + "-" + AppName
 }
 
-func RestoreName(cr *apiv1.PerconaServerMySQL, restore *apiv1.PerconaServerMySQLRestore) string {
-	maxRestoreStatefulSetNameLength := validation.DNS1123LabelMaxLength - controllerRevisionHashLength
-
-	name := Name(cr) + "-r-" + restore.Name
-	if len(name) <= maxRestoreStatefulSetNameLength {
-		return name
+func RestoreSpec(cr *apiv1.PerconaServerMySQL, restore *apiv1.PerconaServerMySQLRestore) *apiv1.BinlogServerSpec {
+	clusterSpec := cr.Spec.Backup.PiTR.BinlogServer
+	spec := clusterSpec
+	if restore.Spec.PITR != nil && restore.Spec.PITR.BackupSource != nil && restore.Spec.PITR.BackupSource.BinlogServer != nil {
+		spec = restore.Spec.PITR.BackupSource.BinlogServer
+	}
+	if spec == nil {
+		return nil
 	}
 
-	hash := fmt.Sprintf("%x", md5.Sum([]byte(name)))[:8]
-	suffix := "-" + hash
-	prefix := strings.TrimRight(name[:maxRestoreStatefulSetNameLength-len(suffix)], "-")
-	return prefix + suffix
+	spec = spec.DeepCopy()
+	if spec.Image == "" && clusterSpec != nil {
+		spec.Image = clusterSpec.Image
+	}
+	spec.SetDefaults()
+	return spec
+}
+
+func RestoreName(cr *apiv1.PerconaServerMySQL, restore *apiv1.PerconaServerMySQLRestore) string {
+	const controllerRevisionHashLength = 11
+	maxRestoreStatefulSetNameLength := validation.DNS1123LabelMaxLength - controllerRevisionHashLength
+	name := Name(cr) + "-r-" + restore.Name
+	return naming.TruncateNameWithHash(name, maxRestoreStatefulSetNameLength, "-")
 }
 
 func customConfigMapName(cr *apiv1.PerconaServerMySQL) string {
@@ -64,13 +73,7 @@ func ConfigSecretName(cr *apiv1.PerconaServerMySQL) string {
 
 func RestoreConfigSecretName(cr *apiv1.PerconaServerMySQL, restore *apiv1.PerconaServerMySQLRestore) string {
 	name := cr.Name + "-" + AppName + "-config-restore-" + restore.Name
-	if len(name) <= validation.DNS1123SubdomainMaxLength {
-		return name
-	}
-	hash := fmt.Sprintf("%x", md5.Sum([]byte(name)))[:8]
-	suffix := "-r-" + hash
-	prefix := strings.TrimRight(name[:validation.DNS1123SubdomainMaxLength-len(suffix)], "-")
-	return prefix + suffix
+	return naming.TruncateNameWithHash(name, validation.DNS1123SubdomainMaxLength, "-r-")
 }
 
 func MatchLabels(cr *apiv1.PerconaServerMySQL) map[string]string {
@@ -152,8 +155,6 @@ func sslDisabled(spec *apiv1.BinlogServerSpec) bool {
 }
 
 func volumes(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServerSpec, configSecretName string) []corev1.Volume {
-	t := true
-
 	vols := []corev1.Volume{
 		{
 			Name:     apiv1.BinVolumeName,
@@ -188,36 +189,7 @@ func volumes(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServerSpec, configS
 				SecretName: spec.Storage.S3.CredentialsSecret,
 			},
 		},
-		corev1.Volume{
-			Name: configVolumeName,
-			Projected: &corev1.ProjectedVolumeSource{
-				Sources: []corev1.VolumeProjection{
-					{
-						Secret: &corev1.SecretProjection{
-							Name: configSecretName,
-							Items: []corev1.KeyToPath{
-								{
-									Key:  ConfigKey,
-									Path: ConfigKey,
-								},
-							},
-						},
-					},
-					{
-						ConfigMap: &corev1.ConfigMapProjection{
-							Name: customConfigMapName(cr),
-							Items: []corev1.KeyToPath{
-								{
-									Key:  customConfigKey,
-									Path: customConfigKey,
-								},
-							},
-							Optional: &t,
-						},
-					},
-				},
-			},
-		},
+		ConfigVolume(cr, configSecretName),
 	)
 
 	if s := spec.Storage.S3; s != nil && s.CABundle != nil &&
@@ -241,22 +213,121 @@ func volumes(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServerSpec, configS
 	return vols
 }
 
+func ConfigVolume(cr *apiv1.PerconaServerMySQL, configSecretName string) corev1.Volume {
+	t := true
+
+	if configSecretName == "" {
+		configSecretName = ConfigSecretName(cr)
+	}
+
+	return corev1.Volume{
+		Name: ConfigVolumeName,
+		Projected: &corev1.ProjectedVolumeSource{
+			Sources: []corev1.VolumeProjection{
+				{
+					Secret: &corev1.SecretProjection{
+						Name: configSecretName,
+						Items: []corev1.KeyToPath{
+							{
+								Key:  ConfigKey,
+								Path: ConfigKey,
+							},
+						},
+					},
+				},
+				{
+					ConfigMap: &corev1.ConfigMapProjection{
+						Name: customConfigMapName(cr),
+						Items: []corev1.KeyToPath{
+							{
+								Key:  customConfigKey,
+								Path: customConfigKey,
+							},
+						},
+						Optional: &t,
+					},
+				},
+			},
+		},
+	}
+}
+
+func SearchVolumes(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServerSpec, configSecretName string) []corev1.Volume {
+	volumes := []corev1.Volume{
+		{
+			Name:     searchBufferVolumeName,
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		},
+		{
+			Name: searchCredsVolumeName,
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: cr.InternalSecretName(),
+			},
+		},
+		ConfigVolume(cr, configSecretName),
+	}
+	if spec.KeyringSecret != nil {
+		volumes = append(volumes, corev1.Volume{
+			Name: searchKeyringVolumeName,
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: spec.KeyringSecret.Name,
+			},
+		})
+	}
+	return volumes
+}
+
+func SearchContainer(spec *apiv1.BinlogServerSpec, subcommand, arg, outputVolumeName, outputMountPath, outputFile string) corev1.Container {
+	configPath := path.Join(ConfigMountPath, ConfigKey)
+	outputPath := path.Join(outputMountPath, outputFile)
+	searchScript := `output_path=$1
+shift
+if ! "$@" > "$output_path"; then
+	cat "$output_path" >&2
+	exit 1
+fi
+cat "$output_path"`
+
+	container := corev1.Container{
+		Name:            SearchContainerName,
+		Image:           spec.Image,
+		ImagePullPolicy: spec.ImagePullPolicy,
+		Command:         []string{"/bin/sh", "-c"},
+		Args:            []string{searchScript, "binlog-search", outputPath, BinlogServerBinary, subcommand, configPath, arg},
+		Env:             spec.Env,
+		EnvFrom:         spec.EnvFrom,
+		VolumeMounts: []corev1.VolumeMount{
+			{Name: outputVolumeName, MountPath: outputMountPath},
+			{Name: ConfigVolumeName, MountPath: ConfigMountPath},
+			{Name: searchBufferVolumeName, MountPath: BufferMountPath},
+			{Name: searchCredsVolumeName, MountPath: CredsMountPath},
+			{Name: tlsVolumeName, MountPath: TLSMountPath},
+		},
+		TerminationMessagePath:   "/dev/termination-log",
+		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
+		SecurityContext:          spec.ContainerSecurityContext,
+		Resources:                spec.Resources,
+	}
+	if spec.KeyringSecret != nil {
+		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
+			Name: searchKeyringVolumeName, MountPath: keyringMountPath,
+		})
+	}
+	return container
+}
+
 func containers(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServerSpec) []corev1.Container {
 	return []corev1.Container{binlogServerContainer(cr, spec)}
 }
 
 func binlogServerContainer(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServerSpec) corev1.Container {
-	env := []corev1.EnvVar{
-		{
-			Name:  "CONFIG_PATH",
-			Value: path.Join(configMountPath, ConfigKey),
-		},
-		{
-			Name:  "CUSTOM_CONFIG_PATH",
-			Value: path.Join(configMountPath, customConfigKey),
-		},
+	env := spec.Env
+	if cr.CompareVersion("1.3.0") < 0 {
+		env = append([]corev1.EnvVar{
+			{Name: "CONFIG_PATH", Value: path.Join(ConfigMountPath, ConfigKey)},
+			{Name: "CUSTOM_CONFIG_PATH", Value: path.Join(ConfigMountPath, customConfigKey)},
+		}, spec.Env...)
 	}
-	env = append(env, spec.Env...)
 
 	mounts := []corev1.VolumeMount{
 		{
@@ -277,8 +348,8 @@ func binlogServerContainer(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServe
 	mounts = append(
 		mounts,
 		corev1.VolumeMount{
-			Name:      configVolumeName,
-			MountPath: configMountPath,
+			Name:      ConfigVolumeName,
+			MountPath: ConfigMountPath,
 		},
 		corev1.VolumeMount{
 			Name:      bufferVolumeName,
@@ -302,13 +373,12 @@ func binlogServerContainer(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServe
 		EnvFrom:                  spec.EnvFrom,
 		VolumeMounts:             mounts,
 		Command:                  []string{"/opt/percona/binlog-server-entrypoint.sh"},
-		Args:                     []string{binlogServerBinary, "pull", path.Join(configMountPath, ConfigKey)},
+		Args:                     []string{BinlogServerBinary, "pull", path.Join(ConfigMountPath, ConfigKey)},
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 		SecurityContext:          spec.ContainerSecurityContext,
 	}
-	if s := spec.Storage.S3; s != nil && s.CABundle != nil &&
-		cr.CompareVersion("1.3.0") >= 0 {
+	if s := spec.Storage.S3; s != nil && s.CABundle != nil && cr.CompareVersion("1.3.0") >= 0 {
 		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
 			Name:      naming.S3CertsVolumeName,
 			MountPath: naming.SystemCABundlePath,

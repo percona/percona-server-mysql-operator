@@ -73,6 +73,53 @@ func GetOptionsFromBackupStatus(ctx context.Context, cl client.Client, cluster *
 	}
 }
 
+func GetS3OptionsFromSpec(ctx context.Context, cl client.Client, namespace string, spec *apiv1.BackupStorageS3Spec, verifyTLS bool) (*S3Options, error) {
+	if spec == nil {
+		return nil, errors.New("S3 storage is not configured")
+	}
+
+	credentials := new(corev1.Secret)
+	if err := cl.Get(ctx, types.NamespacedName{Name: spec.CredentialsSecret, Namespace: namespace}, credentials); err != nil {
+		return nil, errors.Wrap(err, "get S3 credentials secret")
+	}
+	accessKeyID, ok := credentials.Data[secret.CredentialsAWSAccessKey]
+	if !ok {
+		return nil, errors.Errorf("key %s is not found in the %s secret", secret.CredentialsAWSAccessKey, credentials.Name)
+	}
+	secretAccessKey, ok := credentials.Data[secret.CredentialsAWSSecretKey]
+	if !ok {
+		return nil, errors.Errorf("key %s is not found in the %s secret", secret.CredentialsAWSSecretKey, credentials.Name)
+	}
+
+	var caBundle []byte
+	if spec.CABundle != nil {
+		caSecret := new(corev1.Secret)
+		if err := cl.Get(ctx, types.NamespacedName{Name: spec.CABundle.Name, Namespace: namespace}, caSecret); err != nil {
+			return nil, errors.Wrap(err, "get S3 CA bundle secret")
+		}
+		caBundle, ok = caSecret.Data[spec.CABundle.Key]
+		if !ok {
+			return nil, errors.Errorf("key %s is not found in the %s secret", spec.CABundle.Key, caSecret.Name)
+		}
+	}
+
+	bucket, prefix := spec.BucketAndPrefix()
+	if bucket == "" {
+		return nil, errors.New("bucket name is not set")
+	}
+
+	return &S3Options{
+		Endpoint:        spec.EndpointURL,
+		AccessKeyID:     string(accessKeyID),
+		SecretAccessKey: string(secretAccessKey),
+		BucketName:      bucket,
+		Prefix:          prefix,
+		Region:          spec.Region,
+		VerifyTLS:       verifyTLS,
+		CABundle:        caBundle,
+	}, nil
+}
+
 func getGCSOptions(ctx context.Context, cl client.Client, cluster *apiv1.PerconaServerMySQL, storageName string, backupStatus apiv1.PerconaServerMySQLBackupStatus) (Options, error) {
 	s := new(corev1.Secret)
 	err := cl.Get(ctx, types.NamespacedName{

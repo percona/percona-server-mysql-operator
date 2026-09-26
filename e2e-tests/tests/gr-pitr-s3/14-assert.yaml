@@ -1,0 +1,66 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 180
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster_name=$(get_cluster_name)
+
+      desc=$(kubectl -n "${NAMESPACE}" get ps-restore gr-pitr-s3-restore-too-old-gtid -o jsonpath='{.status.stateDescription}')
+      echo "${desc}" | grep -F 'predates the binlog archive'
+      echo "${desc}" | grep -F 'missing 3e11fa47-71ca-11e1-9e33-c80aa9429562:5-10'
+
+      desc=$(kubectl -n "${NAMESPACE}" get ps-restore gr-pitr-s3-restore-bad-gtid -o jsonpath='{.status.stateDescription}')
+      echo "${desc}" | grep -F 'malformed GTID source'
+
+      for restore_name in gr-pitr-s3-restore-too-old-gtid gr-pitr-s3-restore-bad-gtid; do
+          if kubectl -n "${NAMESPACE}" get job "xb-restore-${restore_name}" >/dev/null 2>&1; then
+              echo "restore job for ${restore_name} exists, expected target validation to reject it first"
+              exit 1
+          fi
+          if kubectl -n "${NAMESPACE}" get job "pitr-restore-${restore_name}" >/dev/null 2>&1; then
+              echo "pitr job for ${restore_name} exists, expected target validation to reject it first"
+              exit 1
+          fi
+      done
+
+      paused=$(kubectl -n "${NAMESPACE}" get ps "${cluster_name}" -o jsonpath='{.spec.pause}')
+      if [[ "${paused}" == true ]]; then
+          echo "cluster ${cluster_name} is paused after invalid GTID restores"
+          exit 1
+      fi
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-pitr-s3
+  finalizers:
+    - percona.com/delete-mysql-pods-in-order
+status:
+  router:
+    ready: 3
+    size: 3
+    state: ready
+  mysql:
+    ready: 3
+    size: 3
+    state: ready
+  state: ready
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQLRestore
+metadata:
+  name: gr-pitr-s3-restore-too-old-gtid
+status:
+  state: Error
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQLRestore
+metadata:
+  name: gr-pitr-s3-restore-bad-gtid
+status:
+  state: Error

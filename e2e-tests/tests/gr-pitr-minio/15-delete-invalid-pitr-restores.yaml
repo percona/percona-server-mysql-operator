@@ -1,0 +1,11 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+delete:
+  - apiVersion: ps.percona.com/v1
+    kind: PerconaServerMySQLRestore
+    metadata:
+      name: gr-pitr-minio-restore-too-old
+  - apiVersion: ps.percona.com/v1
+    kind: PerconaServerMySQLRestore
+    metadata:
+      name: gr-pitr-minio-restore-bad-date
