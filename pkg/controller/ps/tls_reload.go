@@ -22,6 +22,10 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 )
 
+// mysqlLocalHost forces a TCP connection to the mysqld in the same pod. "localhost"
+// would make the client pick the unix socket, which bypasses TLS entirely.
+const mysqlLocalHost = "127.0.0.1"
+
 // reconcileTLSReload picks up a rotated leaf certificate on the running MySQL pods.
 func (r *PerconaServerMySQLReconciler) reconcileTLSReload(ctx context.Context, cr *apiv1.PerconaServerMySQL, sts *appsv1.StatefulSet) error {
 	if cr.CompareVersion("1.3.0") < 0 {
@@ -69,13 +73,13 @@ func (r *PerconaServerMySQLReconciler) reconcileTLSReload(ctx context.Context, c
 		return nil
 	}
 
-	pods, err := k8s.RunningPods(ctx, r.Client, mysql.MatchLabels(cr), cr.Namespace)
+	pods, err := k8s.ReadyPods(ctx, r.Client, mysql.MatchLabels(cr), cr.Namespace)
 	if err != nil {
-		return errors.Wrap(err, "get running pods")
+		return errors.Wrap(err, "get ready pods")
 	}
 
 	if cr.Spec.Pause || len(pods) < int(cr.Spec.MySQL.Size) {
-		log.Info("Not all pods are running, defer reloading TLS certificates", "running", len(pods), "desired", cr.Spec.MySQL.Size)
+		log.V(1).Info("Not all pods are ready, defer reloading TLS certificates", "ready", len(pods), "desired", cr.Spec.MySQL.Size)
 		return nil
 	}
 
@@ -98,7 +102,10 @@ func (r *PerconaServerMySQLReconciler) reconcileTLSReload(ctx context.Context, c
 	}
 
 	for _, pod := range pods {
-		mgr := db.NewAdminManager(&pod, r.ClientCmd, apiv1.UserOperator, operatorPass, mysql.PodFQDN(cr, &pod))
+		// The statement runs inside the pod, so it connects to the local mysqld
+		// directly. Going out through the pod FQDN would depend on cluster DNS,
+		// which does not resolve a pod the headless service has not published.
+		mgr := db.NewAdminManager(&pod, r.ClientCmd, apiv1.UserOperator, operatorPass, mysqlLocalHost)
 		if err := mgr.ReloadTLS(ctx); err != nil {
 			return errors.Wrapf(err, "reload TLS on pod %s", pod.Name)
 		}

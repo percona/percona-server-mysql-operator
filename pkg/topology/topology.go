@@ -28,7 +28,7 @@ type Topology struct {
 func GroupReplication(ctx context.Context, cli client.Client, cliCmd clientcmd.Client, cluster *apiv1.PerconaServerMySQL, operatorPass string) (Topology, error) {
 	logger := logf.FromContext(ctx)
 
-	if !cluster.Spec.MySQL.IsGR() {
+	if !cluster.AppliedIsGR() {
 		return Topology{}, errors.New("cluster type is not group replication")
 	}
 

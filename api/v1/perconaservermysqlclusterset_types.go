@@ -227,6 +227,7 @@ const (
 	EventTypeClusterSetMemberAdded           string = "ClusterSetMemberAdded"
 	EventTypeClusterSetMemberRemoved         string = "ClusterSetMemberRemoved"
 	EventTypeClusterSetMemberRejoined        string = "ClusterSetMemberRejoined"
+	EventTypeClusterSetMemberRejoinFailed    string = "ClusterSetMemberRejoinFailed"
 )
 
 const (

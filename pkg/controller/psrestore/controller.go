@@ -227,7 +227,7 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 		}
 
 		if cluster.Spec.Pause {
-			if cluster.CompareVersion("1.1.0") >= 0 || cluster.Spec.MySQL.IsGR() {
+			if cluster.CompareVersion("1.1.0") >= 0 || cluster.AppliedIsGR() {
 				if err := r.deletePVCs(ctx, cluster); err != nil {
 					return ctrl.Result{}, errors.Wrap(err, "delete PVCs")
 				}
@@ -308,7 +308,7 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	}
 	log.Info("Cluster paused", "cluster", cluster.Name)
 
-	if cluster.Spec.MySQL.IsGR() {
+	if cluster.AppliedIsGR() {
 		if err := r.removeBootstrapCondition(ctx, cluster); err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "remove bootstrap condition")
 		}
@@ -839,7 +839,7 @@ func clusterReadyAfterRestore(cluster *apiv1.PerconaServerMySQL) bool {
 	if cluster.Status.State != apiv1.StateReady {
 		return false
 	}
-	if cluster.Spec.MySQL.IsGR() {
+	if cluster.AppliedIsGR() {
 		return meta.IsStatusConditionTrue(cluster.Status.Conditions, apiv1.ConditionInnoDBClusterBootstrapped)
 	}
 	return true
