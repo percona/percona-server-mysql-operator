@@ -341,6 +341,7 @@ func TestValidateUserSecret(t *testing.T) {
 	tests := []struct {
 		name        string
 		clusterType apiv1.ClusterType
+		statusType  apiv1.ClusterType
 		secret      *corev1.Secret
 		wantError   string
 	}{
@@ -417,6 +418,23 @@ func TestValidateUserSecret(t *testing.T) {
 			secret:      s(apiv1.ClusterTypeGR, apiv1.UserReplication, bytes.Repeat([]byte{'a'}, mySQLReplicationSourcePasswordMaxLength+1)),
 		},
 		{
+			// The spec asks for GR but the cluster still runs async, so the
+			// password would break the running replication.
+			name:        "pending switch to GR keeps the source password limit",
+			clusterType: apiv1.ClusterTypeGR,
+			statusType:  apiv1.ClusterTypeAsync,
+			secret:      s(apiv1.ClusterTypeGR, apiv1.UserReplication, bytes.Repeat([]byte{'a'}, mySQLReplicationSourcePasswordMaxLength+1)),
+			wantError:   "password for replication user must not exceed 32 bytes",
+		},
+		{
+			// The reverse: still GR, but async is coming, so apply it early.
+			name:        "pending switch to async applies the source password limit",
+			clusterType: apiv1.ClusterTypeAsync,
+			statusType:  apiv1.ClusterTypeGR,
+			secret:      s(apiv1.ClusterTypeAsync, apiv1.UserReplication, bytes.Repeat([]byte{'a'}, mySQLReplicationSourcePasswordMaxLength+1)),
+			wantError:   "password for replication user must not exceed 32 bytes",
+		},
+		{
 			name:        "PMM server token is not a MySQL password",
 			clusterType: apiv1.ClusterTypeGR,
 			secret:      s(apiv1.ClusterTypeGR, apiv1.UserPMMServerToken, nil),
@@ -432,6 +450,7 @@ func TestValidateUserSecret(t *testing.T) {
 						ClusterType: tt.clusterType,
 					},
 				},
+				Status: apiv1.PerconaServerMySQLStatus{ClusterType: tt.statusType},
 			}
 			err := validateUserSecret(cr, tt.secret)
 			if tt.wantError == "" {

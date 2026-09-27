@@ -229,12 +229,12 @@ func (r *PerconaServerMySQLReconciler) switchOverAndWait(
 	log.Info("switchover", "current", primary.Name, "target", target.Name)
 
 	switch {
-	case cr.MySQLSpec().IsAsync():
+	case cr.AppliedIsAsync():
 		err := r.switchOverAsync(ctx, cr, primary, target)
 		if err != nil {
 			return errors.Wrap(err, "switchover async")
 		}
-	case cr.MySQLSpec().IsGR():
+	case cr.AppliedIsGR():
 		err := r.switchOverGR(ctx, cr, primary, target)
 		if err != nil {
 			if errors.Is(err, errPrimaryNotTheLowest) {
@@ -273,7 +273,7 @@ func (r *PerconaServerMySQLReconciler) switchOverAndWait(
 	log.Info("target is primary", "target", target.Name)
 
 	// in async clusters primary is labelled by orchestrator
-	if cr.MySQLSpec().IsGR() {
+	if cr.AppliedIsGR() {
 		if err := r.reconcileGRMySQLPrimaryLabel(ctx, cr); err != nil {
 			return errors.Wrap(err, "reconcile primary label")
 		}
