@@ -1,6 +1,5 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
-timeout: 360
 commands:
   - script: |-
       set -o errexit
@@ -47,3 +46,4 @@ commands:
       kubectl create configmap -n "${NAMESPACE}" 06-check-grants \
           --from-literal=delete_added="${delete_added}"
       kubectl get configmap -n "${NAMESPACE}" 06-check-grants -o yaml
+    timeout: 360

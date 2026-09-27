@@ -1,6 +1,5 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
-timeout: 360
 commands:
   - script: |-
       set -o errexit
@@ -79,3 +78,4 @@ commands:
           --from-literal=bob_grants="${bob_grants_result}" \
           --from-literal=bob_no_grant_option="${bob_no_grant_option_result}"
       kubectl get configmap -n "${NAMESPACE}" 03-check-users -o yaml
+    timeout: 360

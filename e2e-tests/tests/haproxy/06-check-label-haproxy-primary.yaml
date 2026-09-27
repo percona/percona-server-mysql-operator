@@ -1,6 +1,5 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
-timeout: 120
 commands:
   - script: |-
       set -o errexit
@@ -15,4 +14,4 @@ commands:
           exit 1
       fi
 
-      check_haproxy_backends "${test_name}"
+      check_haproxy_backends "${test_name}" "${primary_pod_from_label}"

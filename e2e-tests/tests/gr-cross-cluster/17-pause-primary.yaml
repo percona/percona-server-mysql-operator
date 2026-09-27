@@ -1,6 +1,5 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
-timeout: 480
 commands:
   - script: |-
       set -o errexit
@@ -17,4 +16,4 @@ commands:
       # (Connect_Retry=3s × Source_Retry_Count=10 = 30s, plus buffer for pod shutdown)
       # and permanently stop the IO thread.
       sleep 120
-
+    timeout: 480

@@ -5,7 +5,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/validation"
 
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
@@ -974,4 +976,89 @@ func TestAppliedClusterType(t *testing.T) {
 
 		assert.Equal(t, ClusterTypeAsync, cr.AppliedClusterType())
 	})
+}
+
+func TestOrchestratorEnabled(t *testing.T) {
+	tests := map[string]struct {
+		specType      ClusterType
+		statusType    ClusterType
+		unsafe        bool
+		enabled       bool
+		switchRunning bool
+		expect        bool
+	}{
+		"async cluster": {
+			specType: ClusterTypeAsync,
+			expect:   true,
+		},
+		"async cluster with unsafe opt-out and orchestrator disabled": {
+			specType: ClusterTypeAsync,
+			unsafe:   true,
+			expect:   false,
+		},
+		"async cluster with unsafe opt-out and orchestrator enabled": {
+			specType: ClusterTypeAsync,
+			unsafe:   true,
+			enabled:  true,
+			expect:   true,
+		},
+		"GR cluster": {
+			specType: ClusterTypeGR,
+			expect:   false,
+		},
+		"cluster type not set yet falls back to the spec": {
+			enabled: true,
+			expect:  true,
+		},
+		"settled async cluster": {
+			specType:   ClusterTypeAsync,
+			statusType: ClusterTypeAsync,
+			enabled:    true,
+			expect:     true,
+		},
+		// The switch has been requested but not carried out: the pods still run
+		// GR, so Orchestrator must not be deployed or pointed at them yet.
+		"GR cluster with a pending switch to async": {
+			specType:   ClusterTypeAsync,
+			statusType: ClusterTypeGR,
+			enabled:    true,
+			expect:     false,
+		},
+		// The reverse switch requires orchestrator.enabled=false up front, but the
+		// pods still run async and need Orchestrator to promote a primary, or the
+		// cluster never reaches Ready and the switch never runs.
+		"async cluster with a pending switch to GR": {
+			specType:   ClusterTypeGR,
+			statusType: ClusterTypeAsync,
+			enabled:    false,
+			expect:     true,
+		},
+		// Once the teardown has started, Orchestrator must not come back.
+		"async cluster with the switch to GR in progress": {
+			specType:      ClusterTypeGR,
+			statusType:    ClusterTypeAsync,
+			enabled:       false,
+			switchRunning: true,
+			expect:        false,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := new(PerconaServerMySQL)
+			cr.Spec.MySQL.ClusterType = tt.specType
+			cr.Status.ClusterType = tt.statusType
+			cr.Spec.Unsafe.Orchestrator = tt.unsafe
+			cr.Spec.Orchestrator.Enabled = tt.enabled
+			if tt.switchRunning {
+				meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
+					Type:   ConditionClusterTypeSwitchInProgress,
+					Status: metav1.ConditionTrue,
+					Reason: "TeardownStarted",
+				})
+			}
+
+			assert.Equal(t, tt.expect, cr.OrchestratorEnabled())
+		})
+	}
 }
