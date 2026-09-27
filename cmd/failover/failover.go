@@ -23,6 +23,7 @@ import (
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/cmd/bootstrap/utils"
 	"github.com/percona/percona-server-mysql-operator/cmd/internal/db"
+	"github.com/percona/percona-server-mysql-operator/cmd/internal/failover"
 	"github.com/percona/percona-server-mysql-operator/cmd/sidecar/handler"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 )
@@ -33,15 +34,17 @@ const (
 	// create and must not touch.
 	stagingMarker = ".failover-staging"
 	sourceLogsDir = "/var/lib/mysql/source-logs"
-	lockPath      = "/var/lib/mysql/failover.lock"
+	lockPath      = failover.LockPath
 )
 
 const (
-	relayLogApplyTimeout = 6 * time.Minute
+	relayLogApplyTimeout = 1 * time.Hour
 	relayLogApplyPoll    = time.Second
 	sourceFetchTimeout   = 2 * time.Minute
-	jobTimeout           = 10 * time.Minute
+	jobTimeout           = 6 * time.Hour
 )
+
+var errRelayApplyTimeout = fmt.Errorf("timeout while waiting for relay log apply")
 
 var binlogMagic = []byte{0xfe, 'b', 'i', 'n'}
 
@@ -63,6 +66,7 @@ type failoverConfig struct {
 	sourceURL    func(host string) string
 	source       string
 	stagingDir   string
+	logDir       string
 	lockPath     string
 	wait         bool
 	applyPoll    time.Duration
@@ -98,6 +102,7 @@ func config(f flags) failoverConfig {
 		sourceURL:    sourceStreamURL,
 		source:       f.source,
 		stagingDir:   f.stagingDir,
+		logDir:       mysql.DataMountPath,
 		lockPath:     lockPath,
 		wait:         f.wait,
 		applyPoll:    relayLogApplyPoll,
@@ -107,22 +112,20 @@ func config(f flags) failoverConfig {
 }
 
 func main() {
-	f := parseFlags()
+	flags := parseFlags()
 
 	// Nothing else bounds the fetch, and the job runs from a failover hook that
 	// holds up the promotion for as long as it takes.
 	ctx := context.Background()
-	if f.timeout > 0 {
+	if flags.timeout > 0 {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, f.timeout)
+		ctx, cancel = context.WithTimeout(ctx, flags.timeout)
 		defer cancel()
 	}
 
-	if err := run(ctx, config(f)); err != nil {
+	if err := run(ctx, config(flags)); err != nil {
 		log.Fatalf("ERROR: %v", err)
 	}
-
-	log.Printf("DONE.")
 }
 
 func run(ctx context.Context, cfg failoverConfig) error {
@@ -147,11 +150,22 @@ func run(ctx context.Context, cfg failoverConfig) error {
 		return err
 	}
 
-	lock, err := lockSplice(cfg.lockPath)
+	lock, err := failover.Lock(cfg.lockPath)
 	if err != nil {
 		return err
 	}
 	defer lock.Close() //nolint:errcheck
+
+	logFile := filepath.Join(cfg.logDir, fmt.Sprintf("failover.%s.log", time.Now().Format(time.RFC3339)))
+
+	if f, err := os.OpenFile(logFile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666); err != nil {
+		log.Printf("WARNING: keeping the log on stderr only: %v", err)
+	} else {
+		defer f.Close() //nolint:errcheck
+		defer log.SetOutput(os.Stderr)
+
+		log.SetOutput(io.MultiWriter(os.Stderr, f))
+	}
 
 	log.Printf("Fetching binary logs from %s", host)
 
@@ -227,8 +241,14 @@ func run(ctx context.Context, cfg failoverConfig) error {
 	}
 
 	if err := waitForRelayLogsApplied(ctx, d, relayLogs, relayLog, startPos, cfg.applyPoll, cfg.applyTimeout); err != nil {
+		if errors.Is(err, errRelayApplyTimeout) && ctx.Err() == nil {
+			log.Printf("Timed out while waiting for applier, it will continue in the server anyway")
+			return nil
+		}
 		return fmt.Errorf("apply relay logs: %w", err)
 	}
+
+	log.Println("DONE.")
 
 	return nil
 }
@@ -740,7 +760,7 @@ func waitForRelayLogsApplied(
 
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("gave up after %s at %s:%d: %w", timeout, prevLog, prevPos, ctx.Err())
+			return fmt.Errorf("gave up after %s at %s:%d: %w: %w", timeout, prevLog, prevPos, errRelayApplyTimeout, ctx.Err())
 		case <-ticker.C:
 		}
 	}

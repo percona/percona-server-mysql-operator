@@ -13,6 +13,7 @@ import (
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	database "github.com/percona/percona-server-mysql-operator/cmd/internal/db"
+	"github.com/percona/percona-server-mysql-operator/cmd/internal/failover"
 	state "github.com/percona/percona-server-mysql-operator/cmd/internal/naming"
 	mysqldb "github.com/percona/percona-server-mysql-operator/pkg/db"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
@@ -129,10 +130,11 @@ func checkReadinessAsync(ctx context.Context) error {
 	case replStatus == mysqldb.ReplicationStatusActive && !readOnly:
 		return errors.New("replica is not read only")
 	case replStatus == mysqldb.ReplicationStatusStopped:
-		// If replication is stopped, check if it is because of a running backup
-		if running, err := isBackupRunning(ctx); err != nil {
-			return errors.Wrap(err, "check backup running")
-		} else if !running {
+		expected, err := isReplicationStopExpected(ctx, failover.LockPath)
+		if err != nil {
+			return err
+		}
+		if !expected {
 			return errors.New("replication is stopped")
 		}
 	}
@@ -340,6 +342,25 @@ func fileExists(name string) (bool, error) {
 		return false, errors.Wrap(err, "os stat")
 	}
 	return true, nil
+}
+
+// isReplicationStopExpected reports whether something is holding replication
+// down on purpose.
+func isReplicationStopExpected(ctx context.Context, lockPath string) (bool, error) {
+	running, err := isBackupRunning(ctx)
+	if err != nil {
+		return false, errors.Wrap(err, "check backup running")
+	}
+	if running {
+		return true, nil
+	}
+
+	failingOver, err := failover.InProgress(lockPath)
+	if err != nil {
+		return false, errors.Wrap(err, "check failover in progress")
+	}
+
+	return failingOver, nil
 }
 
 func isBackupRunning(ctx context.Context) (bool, error) {
