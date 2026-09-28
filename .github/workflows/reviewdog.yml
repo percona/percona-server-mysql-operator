@@ -91,7 +91,8 @@ jobs:
           startsWith(github.base_ref, 'security/') ||
           (startsWith(github.base_ref, 'release-') && !startsWith(github.head_ref, 'after-release-'))
         run: |
-          make release VERSION="$(cat pkg/version/version.txt)" IMAGE_TAG_BASE="percona/percona-server-mysql-operator"
+          OPERATOR_IMAGE="$(sed -n 's/^IMAGE_OPERATOR=//p' e2e-tests/release_versions)"
+          make release VERSION="$(cat pkg/version/version.txt)" IMAGE="$OPERATOR_IMAGE"
           git diff --exit-code
       - name: check on non release branches
         if: |
