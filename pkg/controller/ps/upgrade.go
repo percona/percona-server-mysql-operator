@@ -88,6 +88,10 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 	switch component {
 	case naming.ComponentDatabase:
 		last, err = r.mysqlPrimaryPod(ctx, cr)
+		if errors.Is(err, mysql.ErrNoReadyPods) {
+			log.Info("Can't start/continue 'SmartUpdate': no ready pod to identify the primary")
+			return nil
+		}
 		if err != nil {
 			return errors.Wrap(err, "get primary pod")
 		}
