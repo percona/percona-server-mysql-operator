@@ -13,12 +13,8 @@ run_cron() {
 	local schedule="$1"
 	local cmd="$2"
 
-	if [ -f /usr/bin/supercronic ]; then
-		printf '%s %s\n' "$schedule" "$cmd" >/tmp/crontab
-		exec supercronic /tmp/crontab
-	else
-		exec go-cron "$schedule" sh -c "$cmd"
-	fi
+	printf '%s %s\n' "$schedule" "$cmd" >/tmp/crontab
+	exec supercronic /tmp/crontab
 }
 
 # logrotate resolves the running UID through /etc/passwd. OpenShift's restricted

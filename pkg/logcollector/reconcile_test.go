@@ -8,7 +8,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,12 +20,9 @@ import (
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/logcollector/logrotate"
-	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 )
 
 const testNamespace = "ns"
-
-var testMySQLSTS = types.NamespacedName{Name: "cluster1-mysql", Namespace: testNamespace}
 
 func buildFakeClient(t *testing.T, objs ...client.Object) client.WithWatch {
 	t.Helper()
@@ -61,73 +57,13 @@ func ownedConfigMap(t *testing.T, cr *apiv1.PerconaServerMySQL, name string, dat
 	}
 }
 
-func TestResolveDefaultEnabled(t *testing.T) {
-	tests := map[string]struct {
-		enabled     *bool
-		stsExists   bool
-		annotation  string
-		wantEnabled *bool
-	}{
-		"recorded decision wins over the statefulset check": {
-			annotation:  "false",
-			wantEnabled: new(false),
-		},
-		"recorded decision survives once the statefulset exists": {
-			stsExists:   true,
-			annotation:  "true",
-			wantEnabled: new(true),
-		},
-		"new cluster defaults to on": {
-			wantEnabled: new(true),
-		},
-		"existing cluster defaults to off": {
-			stsExists:   true,
-			wantEnabled: new(false),
-		},
-		"explicit true is kept on an existing cluster": {
-			enabled:     new(true),
-			stsExists:   true,
-			wantEnabled: new(true),
-		},
-		"explicit false is kept on a new cluster": {
-			enabled:     new(false),
-			wantEnabled: new(false),
-		},
-	}
-
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			cr := testCR(func(cr *apiv1.PerconaServerMySQL) {
-				cr.Spec.LogCollector.Enabled = tc.enabled
-				if tc.annotation != "" {
-					cr.Annotations = map[string]string{
-						string(naming.AnnotationLogCollectorDefaulted): tc.annotation,
-					}
-				}
-			})
-
-			objs := []client.Object{cr}
-			if tc.stsExists {
-				objs = append(objs, &appsv1.StatefulSet{
-					Name: testMySQLSTS.Name, Namespace: testMySQLSTS.Namespace,
-				})
-			}
-			cl := buildFakeClient(t, objs...)
-
-			require.NoError(t, Reconcile(t.Context(), cl, cr, testMySQLSTS))
-			require.NotNil(t, cr.Spec.LogCollector.Enabled)
-			assert.Equal(t, *tc.wantEnabled, *cr.Spec.LogCollector.Enabled)
-		})
-	}
-}
-
 func TestReconcileSpecAbsent(t *testing.T) {
 	cr := testCR(func(cr *apiv1.PerconaServerMySQL) {
 		cr.Spec.LogCollector = nil
 	})
 	cl := buildFakeClient(t, cr)
 
-	require.NoError(t, Reconcile(t.Context(), cl, cr, testMySQLSTS))
+	require.NoError(t, Reconcile(t.Context(), cl, cr))
 	assert.Nil(t, cr.Spec.LogCollector)
 }
 
@@ -139,7 +75,7 @@ func TestReconcileSkipsOldCRVersion(t *testing.T) {
 	})
 	cl := buildFakeClient(t, cr)
 
-	require.NoError(t, Reconcile(t.Context(), cl, cr, testMySQLSTS))
+	require.NoError(t, Reconcile(t.Context(), cl, cr))
 
 	assert.Nil(t, cr.Spec.LogCollector.Enabled, "enabled must not be defaulted below 1.3.0")
 
@@ -154,7 +90,7 @@ func TestReconcileFluentBitConfigMap(t *testing.T) {
 		})
 		cl := buildFakeClient(t, cr)
 
-		require.NoError(t, Reconcile(t.Context(), cl, cr, testMySQLSTS))
+		require.NoError(t, Reconcile(t.Context(), cl, cr))
 
 		cm, err := getConfigMap(t.Context(), cl, ConfigMapName(testClusterName))
 		require.NoError(t, err)
@@ -171,7 +107,7 @@ func TestReconcileFluentBitConfigMap(t *testing.T) {
 		})
 		cl := buildFakeClient(t, cr, existing)
 
-		require.NoError(t, Reconcile(t.Context(), cl, cr, testMySQLSTS))
+		require.NoError(t, Reconcile(t.Context(), cl, cr))
 
 		cm, err := getConfigMap(t.Context(), cl, ConfigMapName(testClusterName))
 		require.NoError(t, err)
@@ -185,7 +121,7 @@ func TestReconcileFluentBitConfigMap(t *testing.T) {
 		})
 		cl := buildFakeClient(t, cr, existing)
 
-		require.NoError(t, Reconcile(t.Context(), cl, cr, testMySQLSTS))
+		require.NoError(t, Reconcile(t.Context(), cl, cr))
 
 		_, err := getConfigMap(t.Context(), cl, ConfigMapName(testClusterName))
 		assert.True(t, k8serrors.IsNotFound(err))
@@ -201,7 +137,7 @@ func TestReconcileFluentBitConfigMap(t *testing.T) {
 		})
 		cl := buildFakeClient(t, cr, existing)
 
-		require.NoError(t, Reconcile(t.Context(), cl, cr, testMySQLSTS))
+		require.NoError(t, Reconcile(t.Context(), cl, cr))
 
 		_, err := getConfigMap(t.Context(), cl, ConfigMapName(testClusterName))
 		assert.True(t, k8serrors.IsNotFound(err))
@@ -216,11 +152,33 @@ func TestReconcileFluentBitConfigMap(t *testing.T) {
 		}
 		cl := buildFakeClient(t, cr, foreign)
 
-		require.NoError(t, Reconcile(t.Context(), cl, cr, testMySQLSTS))
+		require.NoError(t, Reconcile(t.Context(), cl, cr))
 
 		cm, err := getConfigMap(t.Context(), cl, ConfigMapName(testClusterName))
 		require.NoError(t, err)
 		assert.Equal(t, "me", cm.Data["keep"])
+	})
+
+	t.Run("refuses to take over a config map the operator does not own", func(t *testing.T) {
+		cr := testCR(func(cr *apiv1.PerconaServerMySQL) {
+			cr.Spec.LogCollector.Configuration = "pipeline: {}"
+		})
+		foreign := &corev1.ConfigMap{
+			Name:      ConfigMapName(testClusterName),
+			Namespace: testNamespace,
+			Data:      map[string]string{"keep": "me"},
+		}
+		cl := buildFakeClient(t, cr, foreign)
+
+		err := Reconcile(t.Context(), cl, cr)
+
+		require.EqualError(t, err, "fluent-bit config map: ConfigMap/"+
+			ConfigMapName(testClusterName)+" already exists and is not controlled by this cluster")
+
+		cm, err := getConfigMap(t.Context(), cl, ConfigMapName(testClusterName))
+		require.NoError(t, err)
+		assert.Equal(t, map[string]string{"keep": "me"}, cm.Data)
+		assert.Empty(t, cm.OwnerReferences)
 	})
 }
 
@@ -233,7 +191,7 @@ func TestReconcileLogRotateConfigMap(t *testing.T) {
 		})
 		cl := buildFakeClient(t, cr)
 
-		require.NoError(t, Reconcile(t.Context(), cl, cr, testMySQLSTS))
+		require.NoError(t, Reconcile(t.Context(), cl, cr))
 
 		cm, err := getConfigMap(t.Context(), cl, name)
 		require.NoError(t, err)
@@ -247,7 +205,7 @@ func TestReconcileLogRotateConfigMap(t *testing.T) {
 		})
 		cl := buildFakeClient(t, cr)
 
-		require.NoError(t, Reconcile(t.Context(), cl, cr, testMySQLSTS))
+		require.NoError(t, Reconcile(t.Context(), cl, cr))
 
 		_, err := getConfigMap(t.Context(), cl, name)
 		assert.True(t, k8serrors.IsNotFound(err))
@@ -258,7 +216,7 @@ func TestReconcileLogRotateConfigMap(t *testing.T) {
 		existing := ownedConfigMap(t, cr, name, map[string]string{logrotate.MySQLConfig: "old"})
 		cl := buildFakeClient(t, cr, existing)
 
-		require.NoError(t, Reconcile(t.Context(), cl, cr, testMySQLSTS))
+		require.NoError(t, Reconcile(t.Context(), cl, cr))
 
 		_, err := getConfigMap(t.Context(), cl, name)
 		assert.True(t, k8serrors.IsNotFound(err))
@@ -272,12 +230,12 @@ func TestReconcileIsIdempotent(t *testing.T) {
 	})
 	cl := buildFakeClient(t, cr)
 
-	require.NoError(t, Reconcile(t.Context(), cl, cr, testMySQLSTS))
+	require.NoError(t, Reconcile(t.Context(), cl, cr))
 
 	first, err := getConfigMap(t.Context(), cl, ConfigMapName(testClusterName))
 	require.NoError(t, err)
 
-	require.NoError(t, Reconcile(t.Context(), cl, cr, testMySQLSTS))
+	require.NoError(t, Reconcile(t.Context(), cl, cr))
 
 	second, err := getConfigMap(t.Context(), cl, ConfigMapName(testClusterName))
 	require.NoError(t, err)
@@ -375,6 +333,30 @@ func TestConfigHash(t *testing.T) {
 		assert.NotEqual(t, before, after)
 	})
 
+	t.Run("changes with the extra config map binary contents", func(t *testing.T) {
+		cr := testCR(func(cr *apiv1.PerconaServerMySQL) {
+			cr.Spec.LogCollector.LogRotate = &apiv1.LogRotateSpec{
+				ExtraConfig: corev1.LocalObjectReference{Name: "extra"},
+			}
+		})
+		extra := &corev1.ConfigMap{
+			Name: "extra", Namespace: testNamespace,
+			BinaryData: map[string][]byte{"a.conf": []byte("first")},
+		}
+		cl := buildFakeClient(t, cr, extra)
+
+		before, err := ConfigHash(ctx, cl, cr)
+		require.NoError(t, err)
+
+		extra.BinaryData["a.conf"] = []byte("second")
+		require.NoError(t, cl.Update(ctx, extra))
+
+		after, err := ConfigHash(ctx, cl, cr)
+		require.NoError(t, err)
+
+		assert.NotEqual(t, before, after)
+	})
+
 	t.Run("missing extra config map is not an error", func(t *testing.T) {
 		cr := testCR(func(cr *apiv1.PerconaServerMySQL) {
 			cr.Spec.LogCollector.LogRotate = &apiv1.LogRotateSpec{
@@ -387,34 +369,6 @@ func TestConfigHash(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotEmpty(t, got)
 	})
-}
-
-func TestResolveDefaultEnabledIsStableAcrossReconciles(t *testing.T) {
-	cr := testCR(func(cr *apiv1.PerconaServerMySQL) {
-		cr.Spec.LogCollector.Enabled = nil
-	})
-	cl := buildFakeClient(t, cr)
-
-	require.NoError(t, Reconcile(t.Context(), cl, cr, testMySQLSTS))
-	require.NotNil(t, cr.Spec.LogCollector.Enabled)
-	require.True(t, *cr.Spec.LogCollector.Enabled, "a new cluster must default to on")
-
-	// reconcileDatabase creates the StatefulSet after this step runs; the next
-	// reconcile must not read that as "pre-existing cluster" and turn the
-	// collector back off, which would roll the pods on every other reconcile.
-	require.NoError(t, cl.Create(t.Context(), &appsv1.StatefulSet{
-		Name: testMySQLSTS.Name, Namespace: testMySQLSTS.Namespace,
-	}))
-
-	// The controller re-reads the CR from the API on every reconcile.
-	next := new(apiv1.PerconaServerMySQL)
-	require.NoError(t, cl.Get(t.Context(), types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, next))
-	next.Spec.LogCollector.Enabled = nil
-
-	require.NoError(t, Reconcile(t.Context(), cl, next, testMySQLSTS))
-
-	require.NotNil(t, next.Spec.LogCollector.Enabled)
-	assert.True(t, *next.Spec.LogCollector.Enabled, "log collector must stay enabled once defaulted on")
 }
 
 var errBoom = goerrors.New("boom")
@@ -442,21 +396,6 @@ func TestReconcileErrors(t *testing.T) {
 		fns        interceptor.Funcs
 		wantErrMsg string
 	}{
-		"statefulset lookup fails": {
-			mutate: func(cr *apiv1.PerconaServerMySQL) { cr.Spec.LogCollector.Enabled = nil },
-			fns:    failGet(new(appsv1.StatefulSet), testMySQLSTS.Name),
-			wantErrMsg: "resolve log collector default: get StatefulSet/" +
-				testMySQLSTS.Name + ": boom",
-		},
-		"recording the default fails": {
-			mutate: func(cr *apiv1.PerconaServerMySQL) { cr.Spec.LogCollector.Enabled = nil },
-			fns: interceptor.Funcs{
-				Patch: func(ctx context.Context, cl client.WithWatch, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
-					return errBoom
-				},
-			},
-			wantErrMsg: "resolve log collector default: record log collector default: boom",
-		},
 		"fluent-bit config map lookup fails": {
 			mutate: func(cr *apiv1.PerconaServerMySQL) {
 				cr.Spec.LogCollector.Configuration = "pipeline: {}"
@@ -504,7 +443,7 @@ func TestReconcileErrors(t *testing.T) {
 				ownedConfigMap(t, cr, logrotate.ConfigMapName(testClusterName), map[string]string{"a": "b"}),
 			)
 
-			err := Reconcile(t.Context(), cl, cr, testMySQLSTS)
+			err := Reconcile(t.Context(), cl, cr)
 
 			require.ErrorIs(t, err, errBoom)
 			assert.EqualError(t, err, tc.wantErrMsg)

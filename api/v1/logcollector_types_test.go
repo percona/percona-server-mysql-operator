@@ -147,11 +147,10 @@ func TestValidateLogCollector(t *testing.T) {
 			sidecars:   []corev1.Container{{Name: LogRotateContainerName}},
 			wantErrMsg: "mysql.sidecars can't use the container name logrotate, it's reserved by the log collector",
 		},
-		"sidecar name is reserved while enabled is unset": {
-			crVersion:  "1.3.0",
-			spec:       new(LogCollectorSpec),
-			sidecars:   []corev1.Container{{Name: LogCollectorContainerName}},
-			wantErrMsg: "mysql.sidecars can't use the container name logs, it's reserved by the log collector",
+		"sidecar name is free while enabled is unset": {
+			crVersion: "1.3.0",
+			spec:      new(LogCollectorSpec),
+			sidecars:  []corev1.Container{{Name: LogCollectorContainerName}},
 		},
 		"sidecar name is free when the collector is off": {
 			crVersion: "1.3.0",

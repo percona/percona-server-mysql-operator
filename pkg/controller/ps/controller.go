@@ -672,7 +672,7 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	if err := r.reconcilePersistentVolumes(ctx, cr); err != nil {
 		return errors.Wrap(err, "persistent volumes")
 	}
-	if err := logcollector.Reconcile(ctx, r.Client, cr, mysql.NamespacedName(cr)); err != nil {
+	if err := logcollector.Reconcile(ctx, r.Client, cr); err != nil {
 		return errors.Wrap(err, "log collector")
 	}
 	if err := r.reconcileDatabase(ctx, cr); err != nil {

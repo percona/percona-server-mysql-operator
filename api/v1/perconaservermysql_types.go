@@ -1713,8 +1713,7 @@ const (
 // LogCollectorSpec configures the log collector sidecars that tail, rotate and
 // ship the on-disk logs of the cluster components.
 type LogCollectorSpec struct {
-	// Enabled turns the log collector on or off. When unset, it defaults to on
-	// for new clusters and off for existing ones.
+	// Enabled turns the log collector on or off. When unset, it is off.
 	// +optional
 	Enabled *bool `json:"enabled,omitempty"`
 
@@ -1813,15 +1812,16 @@ func (cr *PerconaServerMySQL) LogRotateExtraConfigMaps() []string {
 	return []string{cr.Spec.LogCollector.LogRotate.ExtraConfig.Name}
 }
 
-// logCollectorConfigured reports whether the log collector sidecars may end up
-// in the pods. Unlike LogCollectorEnabled it also covers an unset `enabled`,
-// which the reconciler may still default to on.
+// logCollectorConfigured reports whether the log collector sidecars end up in
+// the pods. Unlike LogCollectorEnabled it tolerates an empty crVersion, since
+// validation runs before the defaults are applied.
 func (cr *PerconaServerMySQL) logCollectorConfigured() bool {
 	// An empty crVersion is defaulted to the current version, so it reads as
 	// new enough here (and CompareVersion panics on it).
 	return (cr.Spec.CRVersion == "" || cr.CompareVersion("1.3.0") >= 0) &&
 		cr.Spec.LogCollector != nil &&
-		(cr.Spec.LogCollector.Enabled == nil || *cr.Spec.LogCollector.Enabled)
+		cr.Spec.LogCollector.Enabled != nil &&
+		*cr.Spec.LogCollector.Enabled
 }
 
 // validateLogCollector rejects a log collector configuration the operator cannot
