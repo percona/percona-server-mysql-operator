@@ -1041,6 +1041,20 @@ func TestOrchestratorEnabled(t *testing.T) {
 			switchRunning: true,
 			expect:        false,
 		},
+		"GR cluster with the switch to async in progress": {
+			specType:      ClusterTypeAsync,
+			statusType:    ClusterTypeGR,
+			enabled:       true,
+			switchRunning: true,
+			expect:        false,
+		},
+		"async cluster reverting a failed switch to GR": {
+			specType:      ClusterTypeAsync,
+			statusType:    ClusterTypeAsync,
+			enabled:       true,
+			switchRunning: true,
+			expect:        true,
+		},
 	}
 
 	for name, tt := range tests {

@@ -83,6 +83,10 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 
 	primaryHost, err := r.getPrimaryHost(ctx, cr)
 	if err != nil {
+		if errors.Is(err, mysql.ErrNoReadyPods) {
+			log.Info("Can't start/continue 'SmartUpdate': no ready pod to identify the primary")
+			return nil
+		}
 		return err
 	}
 	idx, err := getPodIndexFromHostname(primaryHost)
