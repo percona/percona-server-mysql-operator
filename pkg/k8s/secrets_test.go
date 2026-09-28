@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -23,7 +22,7 @@ func TestUserPassword(t *testing.T) {
 	)
 
 	cr := &apiv1.PerconaServerMySQL{
-		ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: ns},
+		Name: crName, Namespace: ns,
 	}
 
 	scheme := runtime.NewScheme()
@@ -39,16 +38,16 @@ func TestUserPassword(t *testing.T) {
 	}{
 		"returns the password": {
 			objects: []client.Object{&corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{Name: cr.InternalSecretName(), Namespace: ns},
-				Data:       map[string][]byte{string(apiv1.UserConfigurator): []byte("cfg-pass")},
+				Name: cr.InternalSecretName(), Namespace: ns,
+				Data: map[string][]byte{string(apiv1.UserConfigurator): []byte("cfg-pass")},
 			}},
 			user: apiv1.UserConfigurator,
 			want: "cfg-pass",
 		},
 		"user absent from the secret": {
 			objects: []client.Object{&corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{Name: cr.InternalSecretName(), Namespace: ns},
-				Data:       map[string][]byte{string(apiv1.UserOperator): []byte("op-pass")},
+				Name: cr.InternalSecretName(), Namespace: ns,
+				Data: map[string][]byte{string(apiv1.UserOperator): []byte("op-pass")},
 			}},
 			user:       apiv1.UserConfigurator,
 			wantErr:    ErrPasswordNotFound,

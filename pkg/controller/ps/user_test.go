@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -549,7 +548,7 @@ func TestBackfillInternalSecret(t *testing.T) {
 
 	userSecret := func() *corev1.Secret {
 		return &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: "user-secret", Namespace: ns},
+			Name: "user-secret", Namespace: ns,
 			Data: map[string][]byte{
 				"operator":     []byte("op-pass"),
 				"configurator": []byte("cfg-pass"),
@@ -564,8 +563,8 @@ func TestBackfillInternalSecret(t *testing.T) {
 	}{
 		"adds the user missing after an upgrade": {
 			internal: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{Name: "internal-secret", Namespace: ns},
-				Data:       map[string][]byte{"operator": []byte("op-pass")},
+				Name: "internal-secret", Namespace: ns,
+				Data: map[string][]byte{"operator": []byte("op-pass")},
 			},
 			want: map[string][]byte{
 				"operator":     []byte("op-pass"),
@@ -575,8 +574,8 @@ func TestBackfillInternalSecret(t *testing.T) {
 		},
 		"keeps a password that differs from the user secret": {
 			internal: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{Name: "internal-secret", Namespace: ns},
-				Data:       map[string][]byte{"operator": []byte("old-pass")},
+				Name: "internal-secret", Namespace: ns,
+				Data: map[string][]byte{"operator": []byte("old-pass")},
 			},
 			want: map[string][]byte{
 				"operator":     []byte("old-pass"),
@@ -586,7 +585,7 @@ func TestBackfillInternalSecret(t *testing.T) {
 		},
 		"writes nothing when no user is missing": {
 			internal: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{Name: "internal-secret", Namespace: ns},
+				Name: "internal-secret", Namespace: ns,
 				Data: map[string][]byte{
 					"operator":     []byte("op-pass"),
 					"configurator": []byte("cfg-pass"),
@@ -599,7 +598,7 @@ func TestBackfillInternalSecret(t *testing.T) {
 		},
 		"populates a nil map": {
 			internal: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{Name: "internal-secret", Namespace: ns},
+				Name: "internal-secret", Namespace: ns,
 			},
 			want: map[string][]byte{
 				"operator":     []byte("op-pass"),
@@ -641,12 +640,12 @@ func TestBackfillInternalSecretUpdateError(t *testing.T) {
 	require.NoError(t, apiv1.AddToScheme(scheme))
 
 	internal := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "internal-secret", Namespace: ns},
-		Data:       map[string][]byte{"operator": []byte("op-pass")},
+		Name: "internal-secret", Namespace: ns,
+		Data: map[string][]byte{"operator": []byte("op-pass")},
 	}
 	user := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "user-secret", Namespace: ns},
-		Data:       map[string][]byte{"configurator": []byte("cfg-pass")},
+		Name: "user-secret", Namespace: ns,
+		Data: map[string][]byte{"configurator": []byte("cfg-pass")},
 	}
 
 	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(user).Build()
