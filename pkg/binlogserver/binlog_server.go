@@ -39,7 +39,10 @@ func Name(cr *apiv1.PerconaServerMySQL) string {
 }
 
 func RestoreSpec(cr *apiv1.PerconaServerMySQL, restore *apiv1.PerconaServerMySQLRestore) *apiv1.BinlogServerSpec {
-	clusterSpec := cr.Spec.Backup.PiTR.BinlogServer
+	var clusterSpec *apiv1.BinlogServerSpec
+	if cr.Spec.Backup != nil {
+		clusterSpec = cr.Spec.Backup.PiTR.BinlogServer
+	}
 	spec := clusterSpec
 	if restore.Spec.PITR != nil && restore.Spec.PITR.BackupSource != nil && restore.Spec.PITR.BackupSource.BinlogServer != nil {
 		spec = restore.Spec.PITR.BackupSource.BinlogServer
