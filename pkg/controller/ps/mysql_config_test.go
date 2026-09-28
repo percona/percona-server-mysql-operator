@@ -250,6 +250,18 @@ func TestReconcileMySQLConfig(t *testing.T) {
 			expectedConfig:    `{"max_connections":"100"}`,
 		},
 		{
+			desc:              "config is deferred until the configurator password exists",
+			state:             apiv1.StateReady,
+			currentConfig:     "[mysqld]\nmax_connections=200\n",
+			lastAppliedConfig: `{"max_connections":"100"}`,
+			object: append([]client.Object{&corev1.Secret{
+				Name:      newCR("", "").InternalSecretName(),
+				Namespace: ns,
+				Data:      map[string][]byte{string(apiv1.UserOperator): []byte("operator-password")},
+			}}, newPods(podCount)...),
+			expectedConfig: `{"max_connections":"100"}`,
+		},
+		{
 			desc:              "corrupt last applied annotation is returned",
 			state:             apiv1.StateReady,
 			currentConfig:     "[mysqld]\nmax_connections=200\n",
@@ -488,12 +500,12 @@ func TestReconcileMySQLConfig(t *testing.T) {
 			expectedConfig: `{}`,
 		},
 		{
-			desc:              "missing configurator password is returned",
+			desc:              "missing internal secret is returned",
 			state:             apiv1.StateReady,
 			currentConfig:     "[mysqld]\nmax_connections=300\n",
 			lastAppliedConfig: `{"max_connections":"200"}`,
 			object:            newPods(podCount), // everything but the internal secret
-			expectedError:     errors.New("get operator password"),
+			expectedError:     errors.New("get configurator password"),
 			expectedConfig:    `{"max_connections":"200"}`,
 		},
 		{

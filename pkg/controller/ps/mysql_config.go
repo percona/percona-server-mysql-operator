@@ -3,6 +3,7 @@ package ps
 import (
 	"context"
 	"crypto/md5"
+	stderrors "errors"
 	"fmt"
 	"strings"
 
@@ -147,6 +148,10 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfig(
 	log.Info("Setting MySQL configuration", "variables", toApply)
 
 	if restartNeeded, err := setGlobalVariables(ctx, r.Client, r.ClientCmd, cr, &conf, toApply, pods); err != nil {
+		if stderrors.Is(err, k8s.ErrPasswordNotFound) {
+			log.Info("Configurator credentials are not in the internal secret yet, deferring applying configuration")
+			return nil
+		}
 		return errors.Wrap(err, "set global variables")
 	} else if restartNeeded {
 		log.Info("One or more variables require MySQL restart to take effect", "variables", toApply)
@@ -195,7 +200,7 @@ func setGlobalVariables(
 ) (bool, error) {
 	pass, err := k8s.UserPassword(ctx, cl, cr, apiv1.UserConfigurator)
 	if err != nil {
-		return false, errors.Wrap(err, "get operator password")
+		return false, errors.Wrap(err, "get configurator password")
 	}
 
 	kv := make(map[string]string)
