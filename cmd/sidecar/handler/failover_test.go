@@ -236,10 +236,9 @@ func TestCopyFirstBinlogToTar(t *testing.T) {
 		{
 			name: "position at EOF", position: 14, expectedSize: 0, expected: "",
 		},
-		{
-			name: "position 0 sends the magic too", position: 0, expectedSize: 14, expected: magic + payload,
-		},
 		{name: "past EOF", position: 15, wantErr: "is outside"},
+		{name: "inside the magic number", position: 2, wantErr: "is outside"},
+		{name: "position 0 would send the magic number", position: 0, wantErr: "is outside"},
 		{name: "negative", position: -1, wantErr: "is outside"},
 	}
 
@@ -294,18 +293,15 @@ func TestCopyFirstBinlogToTar(t *testing.T) {
 		assert.Zero(t, buf.Len())
 	})
 
-	t.Run("an empty log", func(t *testing.T) {
+	t.Run("an empty log has no position to cut at", func(t *testing.T) {
 		h := newHandler(t)
 		require.NoError(t, os.WriteFile(filepath.Join(h.DataDir, "binlog.000004"), nil, 0o644))
 
 		var buf bytes.Buffer
-		tw := tar.NewWriter(&buf)
+		err := h.copyFirstBinlogToTar("binlog.000004", 0, tar.NewWriter(&buf))
 
-		require.NoError(t, h.copyFirstBinlogToTar("binlog.000004", 0, tw))
-		require.NoError(t, tw.Close())
-
-		_, contents := tarEntries(t, buf.Bytes())
-		assert.Equal(t, "", contents["binlog.000004"])
+		require.ErrorIs(t, err, errInvalidRequest)
+		assert.Zero(t, buf.Len())
 	})
 }
 
@@ -540,7 +536,7 @@ func TestServeHTTP(t *testing.T) {
 		assert.Equal(t, "requested binary log is not available\n", string(body))
 	})
 
-	for _, position := range []int64{999999, -1} {
+	for _, position := range []int64{999999, 0, -1} {
 		t.Run("position outside the log", func(t *testing.T) {
 			resp, body, err := postStream(t, threeBinlogs(t), streamRequest(t, "binlog.000002", position))
 
