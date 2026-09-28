@@ -1305,7 +1305,7 @@ get_mysql_cert_not_before_on_pods() {
 	local cluster_name=$1
 	local values=()
 
-	for pod in $(get_mysql_pod_names "${cluster_name}"); do
+	for pod in $(get_pod_names "${cluster_name}" database); do
 		values+=("$(kubectl -n "${NAMESPACE}" exec "${pod}" -c mysql -- bash -c \
 			'mysql -uroot -p"$(cat /etc/mysql/mysql-users-secret/root)" -NB -e "SHOW GLOBAL STATUS LIKE \"Ssl_server_not_before\"" | cut -f2 | tr " " "_"' \
 			2>/dev/null || echo 'unavailable')")
