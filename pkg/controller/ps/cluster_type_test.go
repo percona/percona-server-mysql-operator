@@ -16,6 +16,7 @@ import (
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
+	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 )
 
 func clusterTypeCR(name, namespace string, clusterType apiv1.ClusterType) *apiv1.PerconaServerMySQL {
@@ -190,6 +191,62 @@ func TestReconcileClusterTypeChange(t *testing.T) {
 		assert.True(t, k8serrors.IsNotFound(err), "the MySQL StatefulSet must be recreated for the new type")
 	})
 
+	t.Run("removes orchestrator before tearing down async replication", func(t *testing.T) {
+		cr := clusterTypeCR("cluster1", "ns", apiv1.ClusterTypeGR)
+		cr.Status.ClusterType = apiv1.ClusterTypeAsync
+		cr.Status.State = apiv1.StateReady
+		cr.Spec.Orchestrator.Enabled = false
+		sts := mysqlStsWithClusterType(cr, apiv1.ClusterTypeAsync)
+		orcSts := &appsv1.StatefulSet{Name: orchestrator.Name(cr), Namespace: cr.Namespace}
+		orcPod := &corev1.Pod{
+			Name:      orchestrator.PodName(cr, 0),
+			Namespace: cr.Namespace,
+			Labels:    orchestrator.MatchLabels(cr),
+		}
+
+		cli := fake.NewClientBuilder().WithScheme(newScheme(t)).
+			WithObjects(cr, sts, orcSts, orcPod).WithStatusSubresource(cr).Build()
+		r := &PerconaServerMySQLReconciler{Client: cli}
+
+		require.NoError(t, r.reconcileClusterTypeChange(t.Context(), cr))
+
+		err := cli.Get(t.Context(), client.ObjectKeyFromObject(orcSts), &appsv1.StatefulSet{})
+		assert.True(t, k8serrors.IsNotFound(err), "the Orchestrator StatefulSet must be deleted first")
+
+		require.NoError(t, cli.Get(t.Context(), client.ObjectKeyFromObject(sts), &appsv1.StatefulSet{}),
+			"the teardown must wait for the Orchestrator pods to go away")
+
+		stored := new(apiv1.PerconaServerMySQL)
+		require.NoError(t, cli.Get(t.Context(), client.ObjectKeyFromObject(cr), stored))
+		assert.Equal(t, apiv1.ClusterTypeAsync, stored.Status.ClusterType,
+			"the switch must not be recorded as done while it is still waiting")
+		assert.True(t, meta.IsStatusConditionTrue(stored.Status.Conditions, apiv1.ConditionClusterTypeSwitchInProgress),
+			"the in-progress marker keeps Orchestrator from being recreated while waiting")
+	})
+
+	t.Run("tears down async replication once orchestrator pods are gone", func(t *testing.T) {
+		cr := clusterTypeCR("cluster1", "ns", apiv1.ClusterTypeGR)
+		cr.Status.ClusterType = apiv1.ClusterTypeAsync
+		cr.Status.State = apiv1.StateReady
+		cr.Spec.Orchestrator.Enabled = false
+		sts := mysqlStsWithClusterType(cr, apiv1.ClusterTypeAsync)
+		secret := &corev1.Secret{
+			Name:      cr.InternalSecretName(),
+			Namespace: cr.Namespace,
+			Data:      map[string][]byte{string(apiv1.UserOperator): []byte("pass")},
+		}
+
+		cli := fake.NewClientBuilder().WithScheme(newScheme(t)).
+			WithObjects(cr, sts, secret).WithStatusSubresource(cr).Build()
+		r := &PerconaServerMySQLReconciler{Client: cli}
+
+		require.NoError(t, r.reconcileClusterTypeChange(t.Context(), cr))
+
+		stored := new(apiv1.PerconaServerMySQL)
+		require.NoError(t, cli.Get(t.Context(), client.ObjectKeyFromObject(cr), stored))
+		assert.Equal(t, apiv1.ClusterTypeGR, stored.Status.ClusterType)
+	})
+
 	t.Run("keeps the switch pending when the teardown fails", func(t *testing.T) {
 		cr := clusterTypeCR("cluster1", "ns", apiv1.ClusterTypeGR)
 		cr.Status.ClusterType = apiv1.ClusterTypeAsync
@@ -241,15 +298,62 @@ func TestReconcileClusterTypeChange(t *testing.T) {
 		stored := new(apiv1.PerconaServerMySQL)
 		require.NoError(t, cli.Get(t.Context(), client.ObjectKeyFromObject(cr), stored))
 		assert.Equal(t, apiv1.ClusterTypeGR, stored.Status.ClusterType)
-		assert.False(t,
+		assert.True(t,
 			meta.IsStatusConditionTrue(stored.Status.Conditions, apiv1.ConditionClusterTypeSwitchInProgress),
-			"the marker must be cleared once the switch completes")
+			"the marker must survive the teardown until the cluster is ready under the new type")
 	})
 
-	t.Run("clears a stale in-progress condition when no switch is pending", func(t *testing.T) {
+	t.Run("reverts a switch to GR that never bootstrapped", func(t *testing.T) {
+		const operatorPass = "pass"
+
+		cr := clusterTypeCR("cluster1", "ns", apiv1.ClusterTypeAsync)
+		cr.Status.ClusterType = apiv1.ClusterTypeGR
+		cr.Status.State = apiv1.StateError
+		cr.Spec.Orchestrator.Enabled = false
+		meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
+			Type:   apiv1.ConditionClusterTypeSwitchInProgress,
+			Status: metav1.ConditionTrue,
+			Reason: "TeardownStarted",
+		})
+		sts := mysqlStsWithClusterType(cr, apiv1.ClusterTypeGR)
+		secret := &corev1.Secret{
+			Name:      cr.InternalSecretName(),
+			Namespace: cr.Namespace,
+			Data:      map[string][]byte{string(apiv1.UserOperator): []byte(operatorPass)},
+		}
+
+		objs := []client.Object{cr, sts, secret}
+		pods := make([]*corev1.Pod, 3)
+		for i := range pods {
+			// GR never came up, so no pod ever passed its readiness probe.
+			pods[i] = mysqlPod(cr, i, false)
+			objs = append(objs, pods[i])
+		}
+
+		cli := fake.NewClientBuilder().WithScheme(newScheme(t)).
+			WithObjects(objs...).WithStatusSubresource(cr).Build()
+		fc := &fakeClient{scripts: []fakeClientScript{
+			{cmd: mysqlCmd(operatorPass, mysql.PodFQDN(cr, pods[0]), persistedGRVarsQuery)},
+			{cmd: mysqlCmd(operatorPass, mysql.PodFQDN(cr, pods[1]), persistedGRVarsQuery)},
+			{cmd: mysqlCmd(operatorPass, mysql.PodFQDN(cr, pods[2]), persistedGRVarsQuery)},
+		}}
+		r := &PerconaServerMySQLReconciler{Client: cli, ClientCmd: fc}
+
+		require.NoError(t, r.reconcileClusterTypeChange(t.Context(), cr))
+
+		stored := new(apiv1.PerconaServerMySQL)
+		require.NoError(t, cli.Get(t.Context(), client.ObjectKeyFromObject(cr), stored))
+		assert.Equal(t, apiv1.ClusterTypeAsync, stored.Status.ClusterType,
+			"a switch to GR that never bootstrapped must be revertible without the cluster ever being ready")
+
+		err := cli.Get(t.Context(), client.ObjectKeyFromObject(sts), &appsv1.StatefulSet{})
+		assert.True(t, k8serrors.IsNotFound(err), "the MySQL StatefulSet must be recreated for the reverted type")
+	})
+
+	t.Run("clears the in-progress marker once the cluster is ready under the desired type", func(t *testing.T) {
 		cr := clusterTypeCR("cluster1", "ns", apiv1.ClusterTypeAsync)
 		cr.Status.ClusterType = apiv1.ClusterTypeAsync
-		cr.Status.State = apiv1.StateError
+		cr.Status.State = apiv1.StateReady
 		meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
 			Type:   apiv1.ConditionClusterTypeSwitchInProgress,
 			Status: metav1.ConditionTrue,
@@ -268,4 +372,56 @@ func TestReconcileClusterTypeChange(t *testing.T) {
 		assert.False(t,
 			meta.IsStatusConditionTrue(stored.Status.Conditions, apiv1.ConditionClusterTypeSwitchInProgress))
 	})
+
+	t.Run("keeps the in-progress marker while the switched cluster is not ready", func(t *testing.T) {
+		cr := clusterTypeCR("cluster1", "ns", apiv1.ClusterTypeGR)
+		cr.Status.ClusterType = apiv1.ClusterTypeGR
+		cr.Status.State = apiv1.StateInitializing
+		meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
+			Type:   apiv1.ConditionClusterTypeSwitchInProgress,
+			Status: metav1.ConditionTrue,
+			Reason: "TeardownStarted",
+		})
+		sts := mysqlStsWithClusterType(cr, apiv1.ClusterTypeGR)
+
+		cli := fake.NewClientBuilder().WithScheme(newScheme(t)).
+			WithObjects(cr, sts).WithStatusSubresource(cr).Build()
+		r := &PerconaServerMySQLReconciler{Client: cli}
+
+		require.NoError(t, r.reconcileClusterTypeChange(t.Context(), cr))
+
+		stored := new(apiv1.PerconaServerMySQL)
+		require.NoError(t, cli.Get(t.Context(), client.ObjectKeyFromObject(cr), stored))
+		assert.True(t,
+			meta.IsStatusConditionTrue(stored.Status.Conditions, apiv1.ConditionClusterTypeSwitchInProgress),
+			"a switch that never converged must stay marked so the revert is not gated on readiness")
+	})
+}
+
+// mysqlPod builds a MySQL pod the way the StatefulSet would have created it.
+func mysqlPod(cr *apiv1.PerconaServerMySQL, idx int, ready bool) *corev1.Pod {
+	pod := &corev1.Pod{
+		Name:      mysql.PodName(cr, idx),
+		Namespace: cr.Namespace,
+		Labels:    mysql.MatchLabels(cr),
+		Status:    corev1.PodStatus{Phase: corev1.PodRunning},
+	}
+	if ready {
+		pod.Status.Conditions = []corev1.PodCondition{
+			{Type: corev1.ContainersReady, Status: corev1.ConditionTrue},
+		}
+	}
+	return pod
+}
+
+const (
+	persistedGRVarsQuery = "SELECT VARIABLE_NAME as name FROM performance_schema.persisted_variables WHERE VARIABLE_NAME LIKE 'group_replication_%'"
+	grPrimaryQuery       = "SELECT MEMBER_HOST as host FROM replication_group_members WHERE MEMBER_ROLE='PRIMARY' AND MEMBER_STATE='ONLINE'"
+)
+
+func mysqlCmd(pass, host, query string) []string {
+	return []string{
+		"mysql", "--database", "performance_schema",
+		"-p" + pass, "-u", string(apiv1.UserOperator), "-h", host, "-e", query,
+	}
 }

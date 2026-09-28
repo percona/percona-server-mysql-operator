@@ -433,7 +433,7 @@ func servicePorts(cr *apiv1.PerconaServerMySQL) []corev1.ServicePort {
 		},
 	}
 
-	if cr.Spec.MySQL.IsGR() {
+	if cr.AppliedIsGR() {
 		ports = append(ports, corev1.ServicePort{Name: AppName + "-gr", Port: DefaultGRPort})
 	}
 
@@ -456,7 +456,7 @@ func containerPorts(cr *apiv1.PerconaServerMySQL) []corev1.ContainerPort {
 		},
 	}
 
-	if cr.Spec.MySQL.IsGR() {
+	if cr.AppliedIsGR() {
 		ports = append(ports, corev1.ContainerPort{Name: AppName + "-gr", ContainerPort: DefaultGRPort})
 	}
 
@@ -496,7 +496,7 @@ func HeadlessService(cr *apiv1.PerconaServerMySQL) *corev1.Service {
 			ClusterIP:                "None",
 			Ports:                    servicePorts(cr),
 			Selector:                 selector,
-			PublishNotReadyAddresses: cr.Spec.MySQL.IsGR(),
+			PublishNotReadyAddresses: cr.AppliedIsGR(),
 		},
 	}
 }
@@ -610,7 +610,7 @@ func containers(cr *apiv1.PerconaServerMySQL, secret *corev1.Secret) []corev1.Co
 		containers = append(containers, backupContainer(cr))
 	}
 
-	if toolkit := cr.Spec.Toolkit; toolkit != nil && cr.Spec.MySQL.IsAsync() && cr.OrchestratorEnabled() {
+	if toolkit := cr.Spec.Toolkit; toolkit != nil && cr.AppliedIsAsync() && cr.OrchestratorEnabled() {
 		containers = append(containers, heartbeatContainer(cr))
 	}
 
