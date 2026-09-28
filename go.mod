@@ -1,6 +1,6 @@
 module github.com/percona/percona-server-mysql-operator
 
-go 1.26.0
+go 1.26.8
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.8.0
