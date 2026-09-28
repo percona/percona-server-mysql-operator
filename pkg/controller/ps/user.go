@@ -421,7 +421,7 @@ func (r *PerconaServerMySQLReconciler) backfillInternalSecret(
 		return nil
 	}
 
-	if err := r.Client.Update(ctx, internalSecret); err != nil {
+	if err := r.Update(ctx, internalSecret); err != nil {
 		return errors.Wrapf(err, "update Secret/%s", internalSecret.Name)
 	}
 
