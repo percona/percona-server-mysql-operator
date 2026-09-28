@@ -97,6 +97,11 @@ func TestLastEventEnd(t *testing.T) {
 			start:   binlogStartPos,
 			want:    int64(len(magic + one)),
 		},
+		"an event with no body is walked past": {
+			content: magic + one + binlogEvent("") + two,
+			start:   binlogStartPos,
+			want:    int64(len(magic + one + binlogEvent("") + two)),
+		},
 		"a length past the end of the file stops the walk": {
 			content: magic + one + eventOfLength("three", 1<<20),
 			start:   binlogStartPos,
