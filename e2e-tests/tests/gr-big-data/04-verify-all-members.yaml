@@ -1,0 +1,20 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 120
+commands:
+  - script: |-
+      set -o errexit
+      set -o pipefail
+      set -o xtrace
+      source ../../functions
+      mysql_user="-uroot -p'$(get_user_pass root test-secrets)'"
+
+      cluster_name=$(get_cluster_name)
+      expected=$'81\n1000000\ntestdb.sbtest1\t3064150972\n10\n55'
+      for i in 0 1 2; do
+          member_host=$(get_mysql_headless_fqdn "${cluster_name}" "${i}")
+          actual=$(run_mysql \
+              "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='testdb'; SELECT COUNT(*) FROM testdb.sbtest1; CHECKSUM TABLE testdb.sbtest1; SELECT COUNT(*) FROM testdb.pvc_recovery; SELECT SUM(id) FROM testdb.pvc_recovery" \
+              "-h ${member_host}" "${mysql_user}")
+          test "${actual}" = "${expected}"
+      done

@@ -1,0 +1,28 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 10
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+      source ../../functions
+
+      case "${MYSQL_VERSION}" in
+          8.4)
+              backup_destination="s3://percona-jenkins-artifactory/big-data-test/ps-cluster1-2026-09-29-06:21:56-full"
+              ;;
+          9.7)
+              backup_destination="s3://percona-jenkins-artifactory/big-data-test/ps-cluster1-2026-09-29-07:12:13-full"
+              ;;
+          *)
+              echo "No big-data backup is configured for MySQL ${MYSQL_VERSION}" >&2
+              exit 1
+              ;;
+      esac
+
+      run_restore \
+          "gr-big-data" \
+          "" \
+          "gr-big-data" \
+          "backup-source" \
+          "${backup_destination}"

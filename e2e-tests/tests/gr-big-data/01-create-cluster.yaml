@@ -1,0 +1,20 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 10
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      get_cr \
+          | yq eval '.spec.secretsName="test-secrets"' - \
+          | yq eval '.spec.mysql.clusterType="group-replication"' - \
+          | yq eval '.spec.mysql.autoConfig.enabled=false' - \
+          | yq eval '.spec.mysql.resources.limits.memory="4Gi"' - \
+          | yq eval '.spec.mysql.resources.requests.memory="2Gi"' - \
+          | yq eval '.spec.mysql.resources.requests.cpu="500m"' - \
+          | yq eval '.spec.proxy.haproxy.enabled=false' - \
+          | yq eval '.spec.proxy.router.enabled=true' - \
+          | kubectl -n "${NAMESPACE}" apply -f -

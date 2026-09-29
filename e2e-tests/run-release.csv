@@ -1,5 +1,6 @@
 async-ignore-annotations
 async-global-metadata
+async-big-data
 async-upgrade
 auto-config
 config
@@ -15,6 +16,7 @@ demand-backup-retry
 demand-backup-incremental
 async-data-at-rest-encryption
 gr-global-metadata
+gr-big-data
 gr-data-at-rest-encryption
 gr-cross-cluster
 gr-cross-cluster-backup

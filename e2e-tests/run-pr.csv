@@ -1,5 +1,6 @@
 async-ignore-annotations,9.7
 async-global-metadata,9.7
+async-big-data,9.7
 async-upgrade,8.4
 auto-config,9.7
 config,8.4
@@ -17,6 +18,7 @@ demand-backup-cloud,9.7
 demand-backup-retry,9.7
 demand-backup-incremental,9.7
 async-data-at-rest-encryption,9.7
+gr-big-data,9.7
 gr-cross-cluster,9.7
 gr-cross-cluster-backup,9.7
 gr-global-metadata,9.7
