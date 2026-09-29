@@ -162,6 +162,42 @@ func TestReconcileMySQLAutoConfig(t *testing.T) {
 		})
 	}
 
+	t.Run("a paused cluster keeps the configuration it already has", func(t *testing.T) {
+		ctx := t.Context()
+		cr := newCR(true, "8.4")
+		cr.Spec.MySQL.Size = 1
+		cr.Spec.Orchestrator.Enabled = false
+		withDataVolume(cr, "32Gi")
+		r := newReconciler(t, cr)
+
+		running, err := r.reconcileMySQLAutoConfig(ctx, cr)
+		require.NoError(t, err)
+		require.Contains(t, running, "read_only=0")
+
+		cr.Spec.Pause = true
+		require.NoError(t, cr.CheckNSetDefaults(ctx, nil))
+		require.Zero(t, cr.Spec.MySQL.Size, "pausing zeroes the size the write mode is derived from")
+
+		paused, err := r.reconcileMySQLAutoConfig(ctx, cr)
+		require.NoError(t, err)
+		assert.Equal(t, running, paused)
+		assert.Equal(t, running, autoConfig(t, r, cr))
+	})
+
+	t.Run("a paused cluster without a configmap returns nothing", func(t *testing.T) {
+		ctx := t.Context()
+		cr := newCR(true, "8.4")
+		cr.Spec.Pause = true
+		r := newReconciler(t, cr)
+
+		config, err := r.reconcileMySQLAutoConfig(ctx, cr)
+		require.NoError(t, err)
+		assert.Empty(t, config)
+
+		nn := types.NamespacedName{Name: mysql.AutoConfigMapName(cr), Namespace: cr.Namespace}
+		assert.True(t, k8serrors.IsNotFound(r.Get(ctx, nn, new(corev1.ConfigMap))))
+	})
+
 	t.Run("a failure to read the user configuration fails the reconcile", func(t *testing.T) {
 		errBoom := errors.New("boom")
 

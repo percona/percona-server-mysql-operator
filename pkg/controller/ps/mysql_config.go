@@ -88,6 +88,10 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfig(
 		return writeAnnotation()
 	}
 
+	if cr.Spec.Pause {
+		return nil
+	}
+
 	// a statefulset rebuilt for a resize comes back without the record, so the
 	// cr carries a copy across that window
 	if stashed, ok := cr.GetAnnotations()[naming.AnnotationLastAppliedConfig.String()]; ok {
@@ -223,7 +227,7 @@ func setGlobalVariables(
 			if err != nil {
 				if isReadOnlyVariableError(err) || isGRRunningVariableError(err) {
 					if current, getErr := mgr.GetGlobalVariable(ctx, k); getErr == nil &&
-						mysql.FormatConfigValue(current) == v {
+						mysql.MatchesConfigValue(current, v) {
 						log.V(1).Info("Variable already holds the configured value", "variable", k, "pod", pod.Name)
 						continue
 					}

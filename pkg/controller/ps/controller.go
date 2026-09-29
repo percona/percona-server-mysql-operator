@@ -1208,6 +1208,11 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 		return "", errors.Wrapf(err, "get ConfigMap/%s", nn.Name)
 	}
 
+	// pausing zeroes the sizes the configuration is derived from
+	if cr.Spec.Pause {
+		return currentConfigMap.Data[mysql.CustomConfigKey], nil
+	}
+
 	setWriteMode := cr.MySQLSpec().Size == 1 && !cr.Spec.Orchestrator.Enabled
 
 	if memory == nil && !setWriteMode {

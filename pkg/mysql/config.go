@@ -500,6 +500,28 @@ func FormatConfigValue(value string) string {
 	return QuoteLiteral(value)
 }
 
+// MatchesConfigValue reports whether the raw value mysqld currently holds is
+// the one the already formatted value asks for.
+func MatchesConfigValue(current, formatted string) bool {
+	if FormatConfigValue(current) == formatted {
+		return true
+	}
+
+	c, cok := canonicalBool(current)
+	f, fok := canonicalBool(formatted)
+	return cok && fok && c == f
+}
+
+func canonicalBool(value string) (string, bool) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "on", "true", "1":
+		return "ON", true
+	case "off", "false", "0":
+		return "OFF", true
+	}
+	return "", false
+}
+
 // QuoteLiteral renders value as a single SQL string literal. Quotes are doubled
 // rather than backslash-escaped so it holds under NO_BACKSLASH_ESCAPES too.
 func QuoteLiteral(value string) string {

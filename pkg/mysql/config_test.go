@@ -466,6 +466,40 @@ func TestFormatConfigValue(t *testing.T) {
 	}
 }
 
+func TestMatchesConfigValue(t *testing.T) {
+	tests := map[string]struct {
+		current   string
+		formatted string
+		want      bool
+	}{
+		"identical numbers":                     {current: "562", formatted: "562", want: true},
+		"differing numbers":                     {current: "562", formatted: "1872", want: false},
+		"quotes the current enum":               {current: "ALL", formatted: "'ALL'", want: true},
+		"differing enums":                       {current: "ALL", formatted: "'NONE'", want: false},
+		"boolean read back as 1 against ON":     {current: "1", formatted: "ON", want: true},
+		"boolean read back as 0 against OFF":    {current: "0", formatted: "OFF", want: true},
+		"boolean read back as 1 against OFF":    {current: "1", formatted: "OFF", want: false},
+		"boolean read back as 0 against ON":     {current: "0", formatted: "ON", want: false},
+		"boolean read back as ON against ON":    {current: "ON", formatted: "ON", want: true},
+		"boolean read back as ON against 1":     {current: "ON", formatted: "1", want: true},
+		"boolean read back as OFF against 0":    {current: "OFF", formatted: "0", want: true},
+		"lowercase boolean readback":            {current: "on", formatted: "ON", want: true},
+		"true against ON":                       {current: "true", formatted: "ON", want: true},
+		"false against ON":                      {current: "false", formatted: "ON", want: false},
+		"surrounding whitespace on the current": {current: "  1  ", formatted: "ON", want: true},
+		"enum resembling a bool":                {current: "ON_PERMISSIVE", formatted: "ON", want: false},
+		"quoted enum against a bool":            {current: "1", formatted: "'ON'", want: false},
+		"empty current against a quoted empty":  {current: "", formatted: "''", want: true},
+		"empty current against a bool":          {current: "", formatted: "OFF", want: false},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, tt.want, MatchesConfigValue(tt.current, tt.formatted))
+		})
+	}
+}
+
 func TestEffectiveResource(t *testing.T) {
 	tests := map[string]struct {
 		res  corev1.ResourceRequirements

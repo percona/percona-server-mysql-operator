@@ -147,6 +147,7 @@ func TestReconcileMySQLConfig(t *testing.T) {
 	tests := []struct {
 		desc              string
 		crVersion         string                 // defaults to 1.3.0
+		pause             bool                   // spec.pause
 		state             apiv1.StatefulAppState // status.state
 		mysqlState        apiv1.StatefulAppState // status.mysql.state; defaults to ready
 		currentConfig     string
@@ -227,6 +228,19 @@ func TestReconcileMySQLConfig(t *testing.T) {
 			lastAppliedConfig: `{"max_connections":"100"}`,
 			object:            world(0),
 			expectedConfig:    `{"max_connections":"100"}`,
+		},
+		{
+			// Pausing zeroes every size in the spec, so the configuration derived
+			// from the paused spec drops keys the running pods were given. Acting
+			// on that difference would restart a cluster that is meant to be down.
+			desc:              "paused cluster does not restart over keys the pause dropped",
+			pause:             true,
+			state:             apiv1.StatePaused,
+			mysqlState:        apiv1.StatePaused,
+			currentConfig:     "[mysqld]\nmax_connections=200\n",
+			lastAppliedConfig: `{"max_connections":"200","read_only":"0","super_read_only":"0"}`,
+			object:            world(0),
+			expectedConfig:    `{"max_connections":"200","read_only":"0","super_read_only":"0"}`,
 		},
 		{
 			// A partly ready cluster is deferred for the same reason: applying
@@ -581,6 +595,7 @@ func TestReconcileMySQLConfig(t *testing.T) {
 				mysqlState = apiv1.StateReady
 			}
 			cr := newCR(crVersion, tt.state)
+			cr.Spec.Pause = tt.pause
 			cr.Status.MySQL.State = mysqlState
 			if tt.stashedConfig != "" {
 				cr.Annotations = map[string]string{
