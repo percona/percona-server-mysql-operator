@@ -538,3 +538,119 @@ func (c *routerRolloutRecordingClient) Patch(ctx context.Context, obj client.Obj
 
 	return c.Client.Patch(ctx, obj, patch, opts...)
 }
+
+func TestBackfillInternalSecret(t *testing.T) {
+	const ns = "backfill-ns"
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(scheme))
+	require.NoError(t, apiv1.AddToScheme(scheme))
+
+	userSecret := func() *corev1.Secret {
+		return &corev1.Secret{
+			Name: "user-secret", Namespace: ns,
+			Data: map[string][]byte{
+				"operator":     []byte("op-pass"),
+				"configurator": []byte("cfg-pass"),
+			},
+		}
+	}
+
+	tests := map[string]struct {
+		internal *corev1.Secret
+		want     map[string][]byte
+		wantSave bool
+	}{
+		"adds the user missing after an upgrade": {
+			internal: &corev1.Secret{
+				Name: "internal-secret", Namespace: ns,
+				Data: map[string][]byte{"operator": []byte("op-pass")},
+			},
+			want: map[string][]byte{
+				"operator":     []byte("op-pass"),
+				"configurator": []byte("cfg-pass"),
+			},
+			wantSave: true,
+		},
+		"keeps a password that differs from the user secret": {
+			internal: &corev1.Secret{
+				Name: "internal-secret", Namespace: ns,
+				Data: map[string][]byte{"operator": []byte("old-pass")},
+			},
+			want: map[string][]byte{
+				"operator":     []byte("old-pass"),
+				"configurator": []byte("cfg-pass"),
+			},
+			wantSave: true,
+		},
+		"writes nothing when no user is missing": {
+			internal: &corev1.Secret{
+				Name: "internal-secret", Namespace: ns,
+				Data: map[string][]byte{
+					"operator":     []byte("op-pass"),
+					"configurator": []byte("cfg-pass"),
+				},
+			},
+			want: map[string][]byte{
+				"operator":     []byte("op-pass"),
+				"configurator": []byte("cfg-pass"),
+			},
+		},
+		"populates a nil map": {
+			internal: &corev1.Secret{
+				Name: "internal-secret", Namespace: ns,
+			},
+			want: map[string][]byte{
+				"operator":     []byte("op-pass"),
+				"configurator": []byte("cfg-pass"),
+			},
+			wantSave: true,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			user := userSecret()
+			cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tc.internal.DeepCopy(), user).Build()
+			r := &PerconaServerMySQLReconciler{Client: cl, Scheme: scheme}
+
+			internal := tc.internal.DeepCopy()
+			require.NoError(t, r.backfillInternalSecret(t.Context(), internal, user))
+			assert.Equal(t, tc.want, internal.Data)
+
+			stored := new(corev1.Secret)
+			require.NoError(t, cl.Get(t.Context(), types.NamespacedName{Name: internal.Name, Namespace: ns}, stored))
+			if tc.wantSave {
+				assert.Equal(t, tc.want, stored.Data)
+			} else {
+				assert.Equal(t, tc.internal.Data, stored.Data)
+			}
+
+			user.Data["configurator"][0] = 'X'
+			assert.Equal(t, byte('c'), internal.Data["configurator"][0])
+		})
+	}
+}
+
+func TestBackfillInternalSecretUpdateError(t *testing.T) {
+	const ns = "backfill-err-ns"
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(scheme))
+	require.NoError(t, apiv1.AddToScheme(scheme))
+
+	internal := &corev1.Secret{
+		Name: "internal-secret", Namespace: ns,
+		Data: map[string][]byte{"operator": []byte("op-pass")},
+	}
+	user := &corev1.Secret{
+		Name: "user-secret", Namespace: ns,
+		Data: map[string][]byte{"configurator": []byte("cfg-pass")},
+	}
+
+	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(user).Build()
+	r := &PerconaServerMySQLReconciler{Client: cl, Scheme: scheme}
+
+	err := r.backfillInternalSecret(t.Context(), internal, user)
+	require.EqualError(t, err, `update Secret/internal-secret: secrets "internal-secret" not found`)
+}
