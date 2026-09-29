@@ -1,0 +1,177 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 1200
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster=$(get_cluster_name)
+
+      rm -f "${TEMP_DIR}/stop-sampler" "${TEMP_DIR}/writable-samples"
+
+      kubectl -n "${NAMESPACE}" delete resourcequota no-new-pods --ignore-not-found
+
+      generation=$(kubectl -n "${NAMESPACE}" get sts "${cluster}-orc" -o jsonpath='{.metadata.generation}')
+
+      # Long enough for the pod to come back inside one attempt.
+      kubectl -n "${NAMESPACE}" patch ps "${cluster}" --type merge \
+          -p '{"spec":{"orchestrator":{"failover":{"timeout":"15m","onTimeout":"Abort"}}}}'
+
+      retry=0
+      until [[ $(kubectl -n "${NAMESPACE}" get sts "${cluster}-orc" -o jsonpath='{.metadata.generation}') -gt ${generation} ]]; do
+          if [[ ${retry} -ge 24 ]]; then
+              echo "the orchestrator StatefulSet never picked up the new failover spec"
+              exit 1
+          fi
+          sleep 5
+          retry=$((retry + 1))
+      done
+      wait_for_sts_pods_updated "${cluster}-orc"
+
+      for pod in $(kubectl -n "${NAMESPACE}" get pods -l 'app.kubernetes.io/component=orchestrator' -o jsonpath='{.items[*].metadata.name}'); do
+          retry=0
+          until kubectl -n "${NAMESPACE}" exec "${pod}" -c orchestrator -- \
+              jq -r '.PreFailoverProcesses[] | select(contains("orc-handler failover"))' \
+              /etc/orchestrator/config/orchestrator.conf.json \
+              | grep -q -- "-timeout 15m0s -on-timeout Abort"; do
+              if [[ ${retry} -ge 30 ]]; then
+                  echo "${pod} never got the 15m budget"
+                  exit 1
+              fi
+              sleep 5
+              retry=$((retry + 1))
+          done
+      done
+
+      wait_cluster_consistency_async "${cluster}" 3 3
+
+      primary=$(get_primary_from_label)
+      echo "${primary}" > "${TEMP_DIR}/returning-primary"
+
+      # Earlier steps leave recoveries behind; the assert only cares about new ones.
+      run_curl_orc "http://$(get_orc_svc "${cluster}"):3000/api/audit-recovery" \
+          | jq '[.[] | select(.Acknowledged == false) | .Id]' > "${TEMP_DIR}/unacknowledged-before"
+      replicas=$(get_mysql_pods | grep -v "^${primary}$")
+
+      # Sample every pod's read_only, one pass over the pods and a second's
+      # pause per sample, until the assert stops it or this step and the
+      # assert have both timed out. More than one writable pod in any sample
+      # fails the assert.
+      (
+          set +o errexit
+          set +o xtrace
+          deadline=$(($(date +%s) + 1200 + 600))
+          while [[ ! -f ${TEMP_DIR}/stop-sampler && $(date +%s) -lt ${deadline} ]]; do
+              writable=0
+              for pod in $(get_mysql_pods); do
+                  ro=$(run_mysql "SELECT @@read_only" "-h ${pod}.${cluster}-mysql" 2>/dev/null || echo 1)
+                  [[ ${ro} == "0" ]] && writable=$((writable + 1))
+              done
+              echo "${writable}" >> "${TEMP_DIR}/writable-samples"
+              sleep 1
+          done
+      ) >/dev/null 2>&1 &
+
+      for pod in ${replicas}; do
+          kubectl -n "${NAMESPACE}" exec "${pod}" -c mysql -- sh -c 'ls /var/lib/mysql/failover.*.log 2>/dev/null || true' \
+              > "${TEMP_DIR}/logs-before-${pod}"
+      done
+
+      # Events from steps 05 and 08 persist, and an identical repeat only bumps
+      # an Event's count, so the occurrences are summed.
+      kubectl -n "${NAMESPACE}" get events \
+          --field-selector "reason=FailoverForced,involvedObject.name=${cluster}" \
+          -o jsonpath='{range .items[*]}{.count}{"\n"}{end}' \
+          | awk '{ n += ($1 == "" ? 1 : $1) } END { print n + 0 }' > "${TEMP_DIR}/forced-events-before"
+
+      # Holding a read lock blocks the applier on the spliced insert, so the
+      # drain stays open while the pod comes back. Nothing writes to the table
+      # before the insert, so the lock can be taken while replication runs.
+      for pod in ${replicas}; do
+          run_mysql "LOCK TABLES myDB.myTable READ; SELECT SLEEP(900)" "-h ${pod}.${cluster}-mysql" >/dev/null 2>&1 &
+      done
+
+      for pod in ${replicas}; do
+          retry=0
+          until [[ -n $(run_mysql "SELECT ID FROM information_schema.PROCESSLIST WHERE INFO LIKE 'SELECT SLEEP(900)%'" "-h ${pod}.${cluster}-mysql") ]]; do
+              if [[ ${retry} -ge 24 ]]; then
+                  echo "${pod} never started holding the read lock"
+                  exit 1
+              fi
+              sleep 5
+              retry=$((retry + 1))
+          done
+      done
+
+      # A replica with a stopped receiver fails readiness within ~15s, and the
+      # OrderedReady StatefulSet recreates the deleted primary only while the
+      # lower ordinals are Ready. Stopping, inserting and deleting in one exec
+      # gets the pod recreated before the replicas turn NotReady.
+      primary_uid=$(kubectl -n "${NAMESPACE}" get pod "${primary}" -o jsonpath='{.metadata.uid}')
+      stop_receivers=""
+      for pod in ${replicas}; do
+          stop_receivers+="mysql -sN -h ${pod}.${cluster}-mysql -uroot -p\"\${ROOT_PASS}\" -e 'STOP REPLICA IO_THREAD' && "
+      done
+      kubectl -n "${NAMESPACE}" exec "$(get_client_pod)" -- env ROOT_PASS="$(get_user_pass root)" bash -c \
+          "${stop_receivers} mysql -sN -h $(get_haproxy_svc "${cluster}") -uroot -p\"\${ROOT_PASS}\" -e 'INSERT myDB.myTable (id) VALUES (100901)'"
+      kubectl -n "${NAMESPACE}" delete pod "${primary}" --force --grace-period=0
+
+      retry=0
+      until [[ $(kubectl -n "${NAMESPACE}" get pod "${primary}" -o jsonpath='{.metadata.uid}/{.status.podIP}' 2>/dev/null) =~ ^([^/]+)/.+$ \
+          && ${BASH_REMATCH[1]} != "${primary_uid}" ]]; do
+          if [[ ${retry} -ge 24 ]]; then
+              echo "the StatefulSet never recreated ${primary}, replicas Ready:"
+              kubectl -n "${NAMESPACE}" get pods -o jsonpath='{range .items[*]}{.metadata.name}={.status.conditions[?(@.type=="Ready")].status}{"\n"}{end}'
+              exit 1
+          fi
+          sleep 5
+          retry=$((retry + 1))
+      done
+
+      # The candidate is the replica with a new worker log. The other one is
+      # never touched by the hook, so its receiver goes back up as it would
+      # after a real crash.
+      candidate=""
+      retry=0
+      until [[ -n ${candidate} ]]; do
+          for pod in ${replicas}; do
+              new=$(kubectl -n "${NAMESPACE}" exec "${pod}" -c mysql -- sh -c 'ls /var/lib/mysql/failover.*.log 2>/dev/null || true' \
+                  | grep -vxFf "${TEMP_DIR}/logs-before-${pod}" || true)
+              [[ -n ${new} ]] && candidate=${pod}
+          done
+          if [[ ${retry} -ge 60 ]]; then
+              echo "no replica ever started a failover worker"
+              exit 1
+          fi
+          sleep 5
+          retry=$((retry + 1))
+      done
+      echo "${candidate}" > "${TEMP_DIR}/returning-candidate"
+
+      for pod in ${replicas}; do
+          [[ ${pod} == "${candidate}" ]] || run_mysql "START REPLICA IO_THREAD" "-h ${pod}.${cluster}-mysql"
+      done
+
+      retry=0
+      new_logs=""
+      until [[ -n ${new_logs} ]] && kubectl -n "${NAMESPACE}" exec "${candidate}" -c mysql -- \
+          grep -l "standing down without promoting" ${new_logs}; do
+          new_logs=$(kubectl -n "${NAMESPACE}" exec "${candidate}" -c mysql -- sh -c 'ls /var/lib/mysql/failover.*.log' \
+              | grep -vxFf "${TEMP_DIR}/logs-before-${candidate}" || true)
+          if [[ ${retry} -ge 120 ]]; then
+              echo "the worker on ${candidate} never stood down"
+              exit 1
+          fi
+          sleep 5
+          retry=$((retry + 1))
+      done
+
+      for pod in ${replicas}; do
+          for id in $(run_mysql "SELECT ID FROM information_schema.PROCESSLIST WHERE INFO LIKE 'SELECT SLEEP(900)%'" "-h ${pod}.${cluster}-mysql"); do
+              run_mysql "KILL ${id}" "-h ${pod}.${cluster}-mysql"
+          done
+      done
+    timeout: 1200
