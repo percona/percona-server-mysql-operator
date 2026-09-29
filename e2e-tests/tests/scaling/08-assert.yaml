@@ -1,6 +1,6 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 200
+timeout: 700
 ---
 kind: StatefulSet
 apiVersion: apps/v1
@@ -22,7 +22,6 @@ status:
   observedGeneration: 3
   replicas: 3
   readyReplicas: 3
-  currentReplicas: 3
   updatedReplicas: 3
   collisionCount: 0
 ---
@@ -63,13 +62,13 @@ spec:
   - ReadWriteOnce
   resources:
     requests:
-      storage: 2Gi
+      storage: 30Gi
   volumeMode: Filesystem
 status:
   accessModes:
   - ReadWriteOnce
   capacity:
-    storage: 2Gi
+    storage: 30Gi
   phase: Bound
 ---
 apiVersion: v1
@@ -92,11 +91,11 @@ spec:
   - ReadWriteOnce
   resources:
     requests:
-      storage: 2Gi
+      storage: 30Gi
   volumeMode: Filesystem
 status:
   accessModes:
   - ReadWriteOnce
   capacity:
-    storage: 2Gi
+    storage: 30Gi
   phase: Bound

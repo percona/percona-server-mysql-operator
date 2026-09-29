@@ -47,7 +47,38 @@ func runFailover(ctx context.Context, args []string) error {
 	ctx, cancel := context.WithTimeout(ctx, *timeout+execSlack)
 	defer cancel()
 
-	return failover(ctx, *source, *target, *timeout)
+	return guardedFailover(ctx, newGate(), *source, func(ctx context.Context) error {
+		return failover(ctx, *source, *target, *timeout)
+	})
+}
+
+// guardedFailover runs one failover at a time and skips the ones another attempt
+// has already handled. Orchestrator keeps starting recoveries while this hook
+// runs, and each of those picks its own promotion candidate.
+//
+// The source is marked only once the failover succeeds, so a failed attempt
+// leaves the next one free to retry straight away.
+func guardedFailover(ctx context.Context, g *gate, source string, do func(context.Context) error) error {
+	release, err := g.enter(ctx)
+	if err != nil {
+		return errors.Wrap(err, "wait for the failover in flight")
+	}
+	defer release()
+
+	handled, err := g.handled(source)
+	if err != nil {
+		return err
+	}
+	if handled {
+		log.Info("A failover for this source already completed, nothing to apply", "source", source)
+		return nil
+	}
+
+	if err := do(ctx); err != nil {
+		return err
+	}
+
+	return g.markHandled(source)
 }
 
 func failover(ctx context.Context, source, target string, timeout time.Duration) error {

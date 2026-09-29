@@ -12,7 +12,7 @@ commands:
       wait_for_mysql_variable "${cluster}" max_connections 250 120 || true
       wait_for_mysql_variable "${cluster}" max_connect_errors 150 120 || true
 
-      for pod in $(get_mysql_pod_names "${cluster}"); do
+      for pod in $(get_pod_names "${cluster}" database); do
           echo "${pod}"
           kubectl exec -n "${NAMESPACE}" "${pod}" -c mysql -- cat /etc/my.cnf.d/node.cnf
       done
