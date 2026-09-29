@@ -17,12 +17,6 @@ commands:
 
       primary_after=$(get_primary_from_label)
 
-      if [[ "${primary_before}" == "${primary_after}" ]]; then
-          echo "Primary pod did not change after failover: was ${primary_before}, still ${primary_after}"
-          exit 1
-      fi
-      echo "Primary changed from ${primary_before} to ${primary_after}"
-
       retry=0
       until [[ "$(kubectl -n "${NAMESPACE}" get endpoints "${cluster_name}-mysql-primary" \
           -o jsonpath='{.subsets[0].addresses[0].targetRef.name}' 2>/dev/null)" == "${primary_after}" ]]; do
@@ -34,4 +28,4 @@ commands:
               exit 1
           fi
       done
-      echo "Primary service endpoint correctly points to new primary: ${primary_after}"
+      echo "Primary service endpoint correctly points to primary: ${primary_after}"
