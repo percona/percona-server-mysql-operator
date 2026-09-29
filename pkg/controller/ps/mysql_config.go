@@ -3,6 +3,7 @@ package ps
 import (
 	"context"
 	"crypto/md5"
+	stderrors "errors"
 	"fmt"
 	"strings"
 
@@ -28,13 +29,15 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfig(
 	ctx context.Context,
 	cr *apiv1.PerconaServerMySQL,
 	sts *appsv1.StatefulSet,
+	autoConf string,
+	podsRestarting bool,
 ) error {
 	if cr.CompareVersion("1.2.0") <= 0 {
 		return nil
 	}
 
 	log := logf.FromContext(ctx)
-	conf, err := mysql.GetConfig(ctx, r.Client, cr)
+	conf, err := mysql.GetConfig(ctx, r.Client, cr, autoConf)
 	if err != nil {
 		return errors.Wrap(err, "get MySQL config")
 	}
@@ -73,6 +76,10 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfig(
 
 	confHash := fmt.Sprintf("%x", md5.Sum(confJson))
 	restartMySQL := func() error {
+		if podsRestarting {
+			log.Info("Pods are being replaced, they read the configuration as they start")
+			return nil
+		}
 		return k8s.RolloutRestart(ctx, r.Client, sts, naming.AnnotationConfigHash, confHash)
 	}
 
@@ -81,6 +88,27 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfig(
 		return writeAnnotation()
 	}
 
+	if cr.Spec.Pause {
+		return nil
+	}
+
+	// a statefulset rebuilt for a resize comes back without the record, so the
+	// cr carries a copy across that window
+	if stashed, ok := cr.GetAnnotations()[naming.AnnotationLastAppliedConfig.String()]; ok {
+		if _, onSts := sts.GetAnnotations()[naming.AnnotationLastAppliedConfig.String()]; !onSts {
+			if err := k8s.AnnotateObject(ctx, r.Client, sts, map[naming.AnnotationKey]string{
+				naming.AnnotationLastAppliedConfig: stashed,
+			}); err != nil {
+				return errors.Wrap(err, "restore last applied config")
+			}
+		}
+
+		if err := k8s.DeannotateObject(ctx, r.Client, cr, naming.AnnotationLastAppliedConfig); err != nil {
+			return errors.Wrap(err, "drop the stashed last applied config")
+		}
+	}
+
+	// an absent record reads as an empty one: the whole config is applied
 	lastAppliedConf, err := mysql.GetLastAppliedConfig(sts)
 	if err != nil {
 		return errors.Wrap(err, "get last applied MySQL config")
@@ -124,6 +152,10 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfig(
 	log.Info("Setting MySQL configuration", "variables", toApply)
 
 	if restartNeeded, err := setGlobalVariables(ctx, r.Client, r.ClientCmd, cr, &conf, toApply, pods); err != nil {
+		if stderrors.Is(err, k8s.ErrPasswordNotFound) {
+			log.Info("Configurator credentials are not in the internal secret yet, deferring applying configuration")
+			return nil
+		}
 		return errors.Wrap(err, "set global variables")
 	} else if restartNeeded {
 		log.Info("One or more variables require MySQL restart to take effect", "variables", toApply)
@@ -172,7 +204,7 @@ func setGlobalVariables(
 ) (bool, error) {
 	pass, err := k8s.UserPassword(ctx, cl, cr, apiv1.UserConfigurator)
 	if err != nil {
-		return false, errors.Wrap(err, "get operator password")
+		return false, errors.Wrap(err, "get configurator password")
 	}
 
 	kv := make(map[string]string)
@@ -184,6 +216,8 @@ func setGlobalVariables(
 		kv[k] = mysql.FormatConfigValue(key.Value())
 	}
 
+	log := logf.FromContext(ctx)
+
 	unknownVariables := map[string]struct{}{}
 	restartNeeded := false
 	for _, pod := range pods {
@@ -192,10 +226,19 @@ func setGlobalVariables(
 			err := mgr.SetGlobalVariable(ctx, k, v)
 			if err != nil {
 				if isReadOnlyVariableError(err) || isGRRunningVariableError(err) {
+					if current, getErr := mgr.GetGlobalVariable(ctx, k); getErr == nil &&
+						mysql.MatchesConfigValue(current, v) {
+						log.V(1).Info("Variable already holds the configured value", "variable", k, "pod", pod.Name)
+						continue
+					}
 					restartNeeded = true
 					continue
 				}
 				if isUnknownVariableError(err) {
+					if mysql.IsLooseVariable(k) {
+						log.V(1).Info("Skipping unknown loose variable", "variable", k, "pod", pod.Name)
+						continue
+					}
 					unknownVariables[k] = struct{}{}
 					continue
 				}
@@ -212,7 +255,6 @@ func setGlobalVariables(
 		return strings.Join(keys, ", ")
 	}
 
-	log := logf.FromContext(ctx)
 	if len(unknownVariables) > 0 {
 		err := fmt.Errorf("unknown configuration variables: [%s]", printUnknownVariables())
 		log.Error(err, "setGlobalVariables failed", "unknownVariables", printUnknownVariables())

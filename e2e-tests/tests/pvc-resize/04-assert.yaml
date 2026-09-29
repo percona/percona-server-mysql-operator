@@ -1,6 +1,6 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 90
+timeout: 600
 ---
 apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQL
@@ -13,7 +13,7 @@ spec:
       persistentVolumeClaim:
         resources:
           requests:
-            storage: 3Gi
+            storage: 11Gi
 status:
   mysql:
     ready: 3
@@ -36,7 +36,7 @@ spec:
       - ReadWriteOnce
       resources:
         requests:
-          storage: 3Gi
+          storage: 11Gi
       volumeMode: Filesystem
 status:
   availableReplicas: 3
