@@ -8,7 +8,7 @@ commands:
       storage_name=$(kubectl get ps demand-backup -n "$NAMESPACE" -o yaml \
         | yq '(.spec.backup.storages // {}) | keys | .[0]')
       first_job="xb-demand-backup-${storage_name}"
-      second_job="xb-demand-backup-parallel-${storage_name}"
+      second_job="xb-demand-backup-second-${storage_name}"
 
       first_started=$(kubectl get job "$first_job" -n "$NAMESPACE" \
         -o jsonpath='{.status.startTime}')
@@ -22,8 +22,8 @@ commands:
       echo "$first_job ran from $first_started to $first_completed"
       echo "$second_job ran from $second_started to $second_completed"
 
-      if [[ ! "$first_started" < "$second_completed" || \
-            ! "$second_started" < "$first_completed" ]]; then
-        echo "Backup Jobs did not run in parallel"
+      if [[ "$first_completed" > "$second_started" && \
+            "$second_completed" > "$first_started" ]]; then
+        echo "Backup Jobs overlapped"
         exit 1
       fi

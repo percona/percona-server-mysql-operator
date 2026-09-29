@@ -55,8 +55,6 @@ spec:
             properties:
               backup:
                 properties:
-                  allowParallel:
-                    type: boolean
                   backoffLimit:
                     format: int32
                     type: integer

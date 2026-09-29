@@ -437,7 +437,6 @@ type CABundleSecretSelector struct {
 }
 
 type BackupSpec struct {
-	AllowParallel            *bool                         `json:"allowParallel,omitempty"`
 	Enabled                  bool                          `json:"enabled,omitempty"`
 	SourcePod                string                        `json:"sourcePod,omitempty"`
 	Image                    string                        `json:"image,omitempty"`
@@ -462,13 +461,6 @@ type BackupSpec struct {
 
 	// EncryptionKeySecret is the secret key selector for the backup encryption key.
 	EncryptionKeySecret *EncryptionKeySecretSelector `json:"encryptionKeySecret,omitempty"`
-}
-
-func (s *BackupSpec) GetAllowParallel() bool {
-	if s.AllowParallel == nil {
-		return false
-	}
-	return *s.AllowParallel
 }
 
 func (s *BackupSpec) GetEncryptionEnabled(storage *BackupStorageSpec) bool {
