@@ -155,7 +155,7 @@ func TestLockWait(t *testing.T) {
 		f, err := LockWait(t.Context(), path, time.Second, time.Millisecond)
 
 		require.NoError(t, err)
-		t.Cleanup(func() { f.Close() })
+		t.Cleanup(func() { f.Close() }) //nolint:errcheck
 		assert.FileExists(t, path)
 	})
 
@@ -172,14 +172,14 @@ func TestLockWait(t *testing.T) {
 		f, err := LockWait(t.Context(), path, 5*time.Second, time.Millisecond)
 
 		require.NoError(t, err)
-		t.Cleanup(func() { f.Close() })
+		t.Cleanup(func() { f.Close() }) //nolint:errcheck
 	})
 
 	t.Run("gives up once the wait is spent", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "failover.lock")
 		held, err := Lock(path)
 		require.NoError(t, err)
-		t.Cleanup(func() { held.Close() })
+		t.Cleanup(func() { held.Close() }) //nolint:errcheck
 
 		_, err = LockWait(t.Context(), path, 20*time.Millisecond, time.Millisecond)
 
@@ -190,7 +190,7 @@ func TestLockWait(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "failover.lock")
 		held, err := Lock(path)
 		require.NoError(t, err)
-		t.Cleanup(func() { held.Close() })
+		t.Cleanup(func() { held.Close() }) //nolint:errcheck
 
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
