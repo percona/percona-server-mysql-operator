@@ -168,9 +168,11 @@ func Bootstrap(ctx context.Context) error {
 
 	cloneLock := filepath.Join(mysql.DataMountPath, "clone.lock")
 
-	donorExecuted, donorPurged, err := donorGTIDs(ctx, donor, operatorPass)
+	// Replication is started from the primary, so it is the primary's binary
+	// logs that decide whether we can catch up without a clone.
+	primaryExecuted, primaryPurged, err := gtidSets(ctx, primary, operatorPass)
 	if err != nil {
-		return errors.Wrapf(err, "get GTID sets from donor %s", donor)
+		return errors.Wrapf(err, "get GTID sets from primary %s", primary)
 	}
 
 	localExecuted, err := db.GetGTIDExecuted(ctx)
@@ -178,7 +180,7 @@ func Bootstrap(ctx context.Context) error {
 		return errors.Wrap(err, "get local GTID_EXECUTED")
 	}
 
-	requireClone, err := cloneRequired(ctx, db, localExecuted, donorExecuted, donorPurged)
+	requireClone, err := cloneRequired(ctx, db, localExecuted, primaryExecuted, primaryPurged)
 	if err != nil {
 		return err
 	}
@@ -194,6 +196,22 @@ func Bootstrap(ctx context.Context) error {
 		log.Printf("Clone in progress: %t", inProgress)
 		if inProgress {
 			return nil
+		}
+
+		if donor != primary {
+			donorExecuted, _, err := gtidSets(ctx, donor, operatorPass)
+			if err != nil {
+				return errors.Wrapf(err, "get GTID sets from donor %s", donor)
+			}
+
+			covers, err := donorCoversPurged(ctx, db, donorExecuted, primaryPurged)
+			if err != nil {
+				return err
+			}
+			if !covers {
+				log.Printf("Donor %s lacks transactions the primary has purged, cloning from the primary instead", donor)
+				donor = primary
+			}
 		}
 
 		if err := db.DisableSuperReadonly(ctx); err != nil {
@@ -392,8 +410,8 @@ func selectDonor(ctx context.Context, fqdn, primary string, replicas []string) (
 }
 
 var (
-	errAheadOfDonor  = errors.New("local data is ahead of the donor")
-	errDivergedPeers = errors.New("peers have diverged")
+	errAheadOfPrimary = errors.New("local data is ahead of the primary")
+	errDivergedPeers  = errors.New("peers have diverged")
 )
 
 // orderDonors puts the replica worth cloning from first: the one holding the most transactions.
@@ -492,32 +510,42 @@ type gtidSubtractor interface {
 }
 
 // cloneRequired reports whether the local data directory has to be re-provisioned
-// from the donor before it can replicate.
-func cloneRequired(ctx context.Context, s gtidSubtractor, local, donorExecuted, donorPurged string) (bool, error) {
-	ahead, err := s.GTIDSubtract(ctx, local, donorExecuted)
+// before it can replicate from the primary.
+func cloneRequired(ctx context.Context, s gtidSubtractor, local, primaryExecuted, primaryPurged string) (bool, error) {
+	ahead, err := s.GTIDSubtract(ctx, local, primaryExecuted)
 	if err != nil {
-		return false, errors.Wrap(err, "compare local GTID set against the donor")
+		return false, errors.Wrap(err, "compare local GTID set against the primary")
 	}
 	if ahead != "" {
-		// CLONE INSTANCE drops all user data. These transactions are on no other
-		// node, so cloning is the thing that would lose them.
-		return false, errors.Wrapf(errAheadOfDonor, "donor is missing %s", ahead)
+		// CLONE INSTANCE drops all user data. The primary doesn't have these
+		// transactions, so cloning is the thing that would lose them.
+		return false, errors.Wrapf(errAheadOfPrimary, "primary is missing %s", ahead)
 	}
 
-	missing, err := s.GTIDSubtract(ctx, donorPurged, local)
+	missing, err := s.GTIDSubtract(ctx, primaryPurged, local)
 	if err != nil {
-		return false, errors.Wrap(err, "compare donor's purged GTID set against the local one")
+		return false, errors.Wrap(err, "compare primary's purged GTID set against the local one")
 	}
 
-	// The donor no longer has the binary logs we would need to catch up.
+	// The primary no longer has the binary logs we would need to catch up.
 	return missing != "", nil
 }
 
-func donorGTIDs(ctx context.Context, donor, operatorPass string) (string, string, error) {
+// donorCoversPurged reports whether a clone of the donor could catch up with the primary.
+func donorCoversPurged(ctx context.Context, s gtidSubtractor, donorExecuted, primaryPurged string) (bool, error) {
+	missing, err := s.GTIDSubtract(ctx, primaryPurged, donorExecuted)
+	if err != nil {
+		return false, errors.Wrap(err, "compare primary's purged GTID set against the donor")
+	}
+
+	return missing == "", nil
+}
+
+func gtidSets(ctx context.Context, host, operatorPass string) (string, string, error) {
 	params := database.DBParams{
 		User: apiv1.UserOperator,
 		Pass: operatorPass,
-		Host: donor,
+		Host: host,
 	}
 	readTimeout, err := utils.GetReadTimeout()
 	if err != nil {
@@ -527,7 +555,7 @@ func donorGTIDs(ctx context.Context, donor, operatorPass string) (string, string
 
 	db, err := database.NewDatabase(ctx, params)
 	if err != nil {
-		return "", "", errors.Wrapf(err, "connect to %s", donor)
+		return "", "", errors.Wrapf(err, "connect to %s", host)
 	}
 
 	defer func() {

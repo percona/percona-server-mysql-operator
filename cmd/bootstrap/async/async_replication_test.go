@@ -32,37 +32,37 @@ func (f *fakeSubtractor) GTIDSubtract(_ context.Context, set, other string) (str
 
 func TestCloneRequired(t *testing.T) {
 	tests := map[string]struct {
-		local         string
-		donorExecuted string
-		donorPurged   string
-		results       map[[2]string]string
-		want          bool
-		wantAhead     string
+		local           string
+		primaryExecuted string
+		primaryPurged   string
+		results         map[[2]string]string
+		want            bool
+		wantAhead       string
 	}{
 		"a replica that is only behind replicates": {
-			local:         donorUUID + ":1-100",
-			donorExecuted: donorUUID + ":1-200",
-			donorPurged:   donorUUID + ":1-18",
+			local:           donorUUID + ":1-100",
+			primaryExecuted: donorUUID + ":1-200",
+			primaryPurged:   donorUUID + ":1-18",
 			results: map[[2]string]string{
 				{donorUUID + ":1-100", donorUUID + ":1-200"}: "",
 				{donorUUID + ":1-18", donorUUID + ":1-100"}:  "",
 			},
 			want: false,
 		},
-		"an empty data directory clones from a donor that has purged": {
-			local:         "",
-			donorExecuted: donorUUID + ":1-200",
-			donorPurged:   donorUUID + ":1-18",
+		"an empty data directory clones from a primary that has purged": {
+			local:           "",
+			primaryExecuted: donorUUID + ":1-200",
+			primaryPurged:   donorUUID + ":1-18",
 			results: map[[2]string]string{
 				{"", donorUUID + ":1-200"}: "",
 				{donorUUID + ":1-18", ""}:  donorUUID + ":1-18",
 			},
 			want: true,
 		},
-		"an empty data directory replicates from a donor that has not purged": {
-			local:         "",
-			donorExecuted: donorUUID + ":1-200",
-			donorPurged:   "",
+		"an empty data directory replicates from a primary that has not purged": {
+			local:           "",
+			primaryExecuted: donorUUID + ":1-200",
+			primaryPurged:   "",
 			results: map[[2]string]string{
 				{"", donorUUID + ":1-200"}: "",
 				{"", ""}:                   "",
@@ -70,37 +70,47 @@ func TestCloneRequired(t *testing.T) {
 			want: false,
 		},
 		"a fresh cluster that has executed nothing replicates": {
-			local:         "",
-			donorExecuted: "",
-			donorPurged:   "",
+			local:           "",
+			primaryExecuted: "",
+			primaryPurged:   "",
 			results: map[[2]string]string{
 				{"", ""}: "",
 			},
 			want: false,
 		},
-		"a donor that purged past us clones": {
-			local:         donorUUID + ":1-100",
-			donorExecuted: donorUUID + ":1-200",
-			donorPurged:   donorUUID + ":1-150",
+		"a primary that purged past us clones": {
+			local:           donorUUID + ":1-100",
+			primaryExecuted: donorUUID + ":1-200",
+			primaryPurged:   donorUUID + ":1-150",
 			results: map[[2]string]string{
 				{donorUUID + ":1-100", donorUUID + ":1-200"}: "",
 				{donorUUID + ":1-150", donorUUID + ":1-100"}: donorUUID + ":101-150",
 			},
 			want: true,
 		},
-		"being ahead of the donor refuses the clone": {
-			local:         selfUUID + ":1-123853",
-			donorExecuted: selfUUID + ":1-50146",
-			donorPurged:   selfUUID + ":1-18",
+		"a primary that purged everything clones": {
+			local:           donorUUID + ":1-40",
+			primaryExecuted: donorUUID + ":1-100",
+			primaryPurged:   donorUUID + ":1-100",
+			results: map[[2]string]string{
+				{donorUUID + ":1-40", donorUUID + ":1-100"}: "",
+				{donorUUID + ":1-100", donorUUID + ":1-40"}: donorUUID + ":41-100",
+			},
+			want: true,
+		},
+		"being ahead of the primary refuses the clone": {
+			local:           selfUUID + ":1-123853",
+			primaryExecuted: selfUUID + ":1-50146",
+			primaryPurged:   selfUUID + ":1-18",
 			results: map[[2]string]string{
 				{selfUUID + ":1-123853", selfUUID + ":1-50146"}: selfUUID + ":50147-123853",
 			},
 			wantAhead: selfUUID + ":50147-123853",
 		},
-		"being ahead wins over the donor having purged past us": {
-			local:         selfUUID + ":1-123853",
-			donorExecuted: selfUUID + ":1-50146",
-			donorPurged:   selfUUID + ":1-50146",
+		"being ahead wins over the primary having purged past us": {
+			local:           selfUUID + ":1-123853",
+			primaryExecuted: selfUUID + ":1-50146",
+			primaryPurged:   selfUUID + ":1-50146",
 			results: map[[2]string]string{
 				{selfUUID + ":1-123853", selfUUID + ":1-50146"}: selfUUID + ":50147-123853",
 			},
@@ -112,10 +122,10 @@ func TestCloneRequired(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			s := &fakeSubtractor{t: t, results: tt.results}
 
-			got, err := cloneRequired(context.Background(), s, tt.local, tt.donorExecuted, tt.donorPurged)
+			got, err := cloneRequired(context.Background(), s, tt.local, tt.primaryExecuted, tt.primaryPurged)
 
 			if tt.wantAhead != "" {
-				require.ErrorIs(t, err, errAheadOfDonor)
+				require.ErrorIs(t, err, errAheadOfPrimary)
 				assert.Contains(t, err.Error(), tt.wantAhead)
 				assert.False(t, got, "a refused clone must not also report that a clone is required")
 				return
@@ -127,7 +137,7 @@ func TestCloneRequired(t *testing.T) {
 	}
 }
 
-func TestCloneRequiredComparesLocalAgainstDonor(t *testing.T) {
+func TestCloneRequiredComparesLocalAgainstPrimary(t *testing.T) {
 	s := &fakeSubtractor{
 		t: t,
 		results: map[[2]string]string{
@@ -141,6 +151,50 @@ func TestCloneRequiredComparesLocalAgainstDonor(t *testing.T) {
 
 	require.NotEmpty(t, s.calls)
 	assert.Equal(t, [2]string{selfUUID + ":1-100", selfUUID + ":1-200"}, s.calls[0])
+}
+
+func TestDonorCoversPurged(t *testing.T) {
+	tests := map[string]struct {
+		donorExecuted string
+		primaryPurged string
+		results       map[[2]string]string
+		want          bool
+	}{
+		"a donor holding the primary's purged history can be cloned from": {
+			donorExecuted: donorUUID + ":1-150",
+			primaryPurged: donorUUID + ":1-100",
+			results: map[[2]string]string{
+				{donorUUID + ":1-100", donorUUID + ":1-150"}: "",
+			},
+			want: true,
+		},
+		"a lagging donor behind the primary's purged history can't": {
+			donorExecuted: donorUUID + ":1-50",
+			primaryPurged: donorUUID + ":1-100",
+			results: map[[2]string]string{
+				{donorUUID + ":1-100", donorUUID + ":1-50"}: donorUUID + ":51-100",
+			},
+			want: false,
+		},
+		"any donor will do when the primary has purged nothing": {
+			donorExecuted: donorUUID + ":1-50",
+			primaryPurged: "",
+			results: map[[2]string]string{
+				{"", donorUUID + ":1-50"}: "",
+			},
+			want: true,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			s := &fakeSubtractor{t: t, results: tt.results}
+
+			got, err := donorCoversPurged(context.Background(), s, tt.donorExecuted, tt.primaryPurged)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }
 
 const (
