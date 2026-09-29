@@ -824,6 +824,9 @@ get_cr() {
 	local test_cr="$(get_test_cr "$cr_name")"
 	[[ -f $test_cr ]] && crs+=("$test_cr")
 
+	# autoConfig tunes mysqld per version and the parameters differ between
+	# releases: one removed in a later version stops the server from starting, so
+	# the configured version has to follow the MySQL under test.
 	yq eval-all '
 		select(fileIndex == 0) as $base |
 		select(fileIndex == 1) as $test |
@@ -838,6 +841,7 @@ get_cr() {
 		.spec.mysql.gracePeriod = 30 |
 		.spec.orchestrator.enabled = true |
 		.spec.mysql.image = "'"$image_mysql"'" |
+		(.spec.mysql | select(has("autoConfig")) | .autoConfig.version) = "'"${MYSQL_AUTOCONFIG_VERSION}"'" |
 		.spec.backup.image = "'"$image_backup"'" |
 		.spec.orchestrator.image = "'"$image_orchestrator"'" |
 		.spec.proxy.router.image = "'"$image_router"'" |

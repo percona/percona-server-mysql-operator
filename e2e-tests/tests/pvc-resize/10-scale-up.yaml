@@ -40,8 +40,8 @@ commands:
       # the leftovers had to be expanded before their replica could recover
       for i in 3 4; do
           size=$(kubectl -n "${NAMESPACE}" get pvc "datadir-${cluster_name}-mysql-${i}" -o jsonpath='{.status.capacity.storage}')
-          if [[ ${size} != "4Gi" ]]; then
-              echo "ERROR: reused claim datadir-${cluster_name}-mysql-${i} is ${size}, expected 4Gi"
+          if [[ ${size} != "12Gi" ]]; then
+              echo "ERROR: reused claim datadir-${cluster_name}-mysql-${i} is ${size}, expected 12Gi"
               exit 1
           fi
       done

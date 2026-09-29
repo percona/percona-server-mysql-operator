@@ -115,7 +115,8 @@ spec:
           timeoutSeconds: 3
         resources:
           requests:
-            memory: 2Gi
+            cpu: 500m
+            memory: 4Gi
         startupProbe:
           exec:
             command:
@@ -263,7 +264,7 @@ spec:
       - ReadWriteOnce
       resources:
         requests:
-          storage: 2Gi
+          storage: 30Gi
       volumeMode: Filesystem
     status:
       phase: Pending
