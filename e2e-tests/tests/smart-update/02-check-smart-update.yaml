@@ -7,15 +7,15 @@ commands:
 
       source ../../functions
 
-      initialPrimary=$(get_primary_from_haproxy ${test_name}-haproxy-0)
-      newMysqlImage='percona/percona-server:8.4.10-10.1'
+      initial_primary=$(get_primary_from_haproxy ${test_name}-haproxy-0)
+      new_mysql_image='percona/percona-server:8.4.10-10.1'
 
       # Upgrade cluster
       kubectl -n "${NAMESPACE}" patch ps "$(get_cluster_name)" \
           --type json \
-          -p "[{"op": "replace", "path": "/spec/mysql/image", "value": "${newMysqlImage}"}]"
+          -p "[{"op": "replace", "path": "/spec/mysql/image", "value": "${new_mysql_image}"}]"
 
-      until [[ "$(kubectl -n "${NAMESPACE}" get sts "$(get_cluster_name)-mysql" -o jsonpath='{.spec.template.spec.containers[0].image}')" == "${newMysqlImage}" ]]; do
+      until [[ "$(kubectl -n "${NAMESPACE}" get sts "$(get_cluster_name)-mysql" -o jsonpath='{.spec.template.spec.containers[0].image}')" == "${new_mysql_image}" ]]; do
           echo "waiting for cluster new image"
       done
 
@@ -23,9 +23,9 @@ commands:
 
       pods=$(kubectl get pods -n "${NAMESPACE}" --sort-by=.status.startTime --no-headers --selector=app.kubernetes.io/name=mysql -ojson | jq --raw-output '.items[].metadata.name')
 
-      lastRestarted=$(echo $pods | awk '{print $NF}')
+      last_restarted=$(echo $pods | awk '{print $NF}')
 
-      if [ "$lastRestarted" == "$initialPrimary" ]; then
+      if [ "$last_restarted" == "$initial_primary" ]; then
           exit 0
       fi
 

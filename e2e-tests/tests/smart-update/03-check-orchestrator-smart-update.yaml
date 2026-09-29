@@ -1,0 +1,43 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o pipefail
+      set -o xtrace
+
+      source ../../functions
+
+      cluster_name=$(get_cluster_name)
+
+      initial_leader=""
+      for i in 0 1 2; do
+          raft_state=$(run_curl_orc "http://$(get_orc_headless_fqdn "${cluster_name}" "${i}"):3000/api/raft-state" | jq -r '.')
+          if [[ "${raft_state}" == "Leader" ]]; then
+              initial_leader="${cluster_name}-orc-${i}"
+          fi
+      done
+
+      if [[ -z "${initial_leader}" ]]; then
+          echo "no orchestrator pod reports being the raft leader"
+          exit 1
+      fi
+
+      uids_before=$(get_pod_uids "${cluster_name}" orchestrator)
+
+      kubectl -n "${NAMESPACE}" patch ps "${cluster_name}" \
+          --type json \
+          -p '[{"op":"add","path":"/spec/orchestrator/env","value":[{"name":"SMART_UPDATE_E2E","value":"enabled"}]}]'
+
+      wait_for_pods_restart "${cluster_name}" orchestrator "${uids_before}" 600
+      wait_cluster_consistency_async "${test_name}" "3" "3"
+
+      pods=$(kubectl get pods -n "${NAMESPACE}" --sort-by=.status.startTime --no-headers --selector="$(pod_selector "${cluster_name}" orchestrator)" -ojson | jq --raw-output '.items[].metadata.name')
+
+      last_restarted=$(echo $pods | awk '{print $NF}')
+
+      if [[ "${last_restarted}" != "${initial_leader}" ]]; then
+          echo "last restarted pod ${last_restarted} is not the initial raft leader ${initial_leader}"
+          exit 1
+      fi
+    timeout: 700
