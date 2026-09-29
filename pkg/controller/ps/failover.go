@@ -23,8 +23,9 @@ const (
 	// replica to promote to the operator.
 	forcePromoteAny = "true"
 
-	reasonNoWritablePrimary = "NoWritablePrimary"
-	reasonPrimaryWritable   = "PrimaryWritable"
+	reasonNoWritablePrimary    = "NoWritablePrimary"
+	reasonPrimaryWritable      = "PrimaryWritable"
+	reasonAutoRecoveryDisabled = "AutoRecoveryDisabled"
 )
 
 // reconcileAsyncFailover keeps the cluster's failover state visible and serves
@@ -76,6 +77,24 @@ func hasWritablePrimary(primary *orchestrator.Instance) bool {
 	return !primary.ReadOnly && primary.IsLastCheckValid
 }
 
+// primaryNeedsWriteable reports whether the operator has to clear a live
+// primary's read-only itself. Orchestrator doesn't for a single pod, and its
+// recovery filters gate RecoverNonWriteableMaster, so it doesn't with
+// autoRecovery off either. A downtimed primary is mid-switchover and must stay
+// read-only. Like orchestrator, it leaves alone a primary nothing replicates
+// from: that is an old primary orphaned by a forced takeover.
+func primaryNeedsWriteable(cr *apiv1.PerconaServerMySQL, primary *orchestrator.Instance) bool {
+	if !primary.ReadOnly || !primary.IsLastCheckValid || primary.IsDowntimed {
+		return false
+	}
+
+	if cr.MySQLSpec().Size == 1 {
+		return true
+	}
+
+	return orchestrator.AutoRecoveryOff(cr) && len(primary.Replicas) > 0
+}
+
 func (r *PerconaServerMySQLReconciler) reconcileFailoverCondition(
 	ctx context.Context,
 	cr *apiv1.PerconaServerMySQL,
@@ -107,6 +126,13 @@ func (r *PerconaServerMySQLReconciler) reconcileFailoverCondition(
 		condition.Message = "The cluster has no writable primary. A failover may have aborted because the" +
 			" transactions stranded on the old primary could not be recovered; see the cluster's events." +
 			" Annotating the cluster with " + naming.AnnotationForcePromote.String() + " promotes a replica anyway."
+
+		if orchestrator.AutoRecoveryOff(cr) {
+			condition.Reason = reasonAutoRecoveryDisabled
+			condition.Message = "The cluster has no writable primary and spec.mysql.autoRecovery is off, so" +
+				" orchestrator does not fail over. Annotating the cluster with " +
+				naming.AnnotationForcePromote.String() + " promotes a replica."
+		}
 	}
 
 	existing := meta.FindStatusCondition(cr.Status.Conditions, apiv1.ConditionAsyncFailoverBlocked)

@@ -161,6 +161,51 @@ func TestConfigMapDataUserConfiguration(t *testing.T) {
 		assert.EqualValues(t, 30, cfg["FailMasterPromotionOnLagMinutes"])
 		assert.EqualValues(t, 300, cfg["RecoveryPeriodBlockSeconds"])
 	})
+
+	t.Run("automated recovery is off without autoRecovery", func(t *testing.T) {
+		cr := &apiv1.PerconaServerMySQL{}
+		cr.Spec.CRVersion = "1.3.0"
+		cr.Spec.Orchestrator.Configuration = `{"RecoverMasterClusterFilters": [".*"], "RecoverIntermediateMasterClusterFilters": [".*"]}`
+
+		data, err := ConfigMapData(cr)
+		require.NoError(t, err)
+		// null would replace the baked filters just the same, but say nothing
+		assert.Contains(t, data, `"RecoverMasterClusterFilters":[]`)
+		assert.Contains(t, data, `"RecoverIntermediateMasterClusterFilters":[]`)
+	})
+
+	t.Run("automated recovery follows the baked filters with autoRecovery", func(t *testing.T) {
+		cr := &apiv1.PerconaServerMySQL{}
+		cr.Spec.CRVersion = "1.3.0"
+		cr.Spec.MySQL.AutoRecovery = true
+
+		cfg := parse(t, cr)
+		for _, k := range []string{"RecoverMasterClusterFilters", "RecoverIntermediateMasterClusterFilters"} {
+			_, ok := cfg[k]
+			assert.Falsef(t, ok, "%s must not be in the ConfigMap", k)
+		}
+	})
+
+	t.Run("recovery filters stay user-tunable with autoRecovery", func(t *testing.T) {
+		cr := &apiv1.PerconaServerMySQL{}
+		cr.Spec.CRVersion = "1.3.0"
+		cr.Spec.MySQL.AutoRecovery = true
+		cr.Spec.Orchestrator.Configuration = `{"RecoverMasterClusterFilters": ["cluster1"]}`
+
+		cfg := parse(t, cr)
+		assert.Equal(t, []any{"cluster1"}, cfg["RecoverMasterClusterFilters"])
+	})
+
+	t.Run("recovery filters are left alone before 1.3.0", func(t *testing.T) {
+		cr := &apiv1.PerconaServerMySQL{}
+		cr.Spec.CRVersion = "1.2.0"
+		cr.Spec.Orchestrator.Configuration = `{"RecoverMasterClusterFilters": ["cluster1"]}`
+
+		cfg := parse(t, cr)
+		assert.Equal(t, []any{"cluster1"}, cfg["RecoverMasterClusterFilters"])
+		_, ok := cfg["RecoverIntermediateMasterClusterFilters"]
+		assert.False(t, ok)
+	})
 }
 
 func TestBakedConfigDisablesPromotionLagVeto(t *testing.T) {

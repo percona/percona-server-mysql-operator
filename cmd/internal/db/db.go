@@ -268,7 +268,7 @@ func (d *DB) ReplicationStatus(ctx context.Context) (db.ReplicationStatus, strin
 		return db.ReplicationStatusActive, host, nil
 	}
 
-	return db.ReplicationStatusStopped, "", nil
+	return db.ReplicationStatusStopped, host, nil
 }
 
 func (d *DB) IsReplica(ctx context.Context) (bool, error) {

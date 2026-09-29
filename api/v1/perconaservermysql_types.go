@@ -260,7 +260,10 @@ type MySQLSpec struct {
 	AutoConfig    AutoConfigSpec         `json:"autoConfig,omitempty"`
 	ExposePrimary ServiceExposeTogglable `json:"exposePrimary,omitempty"`
 	Expose        ServiceExposeTogglable `json:"expose,omitempty"`
-	AutoRecovery  bool                   `json:"autoRecovery,omitempty"`
+	// AutoRecovery lets the cluster recover from failures on its own: a full
+	// cluster crash with group replication, orchestrator's failover of a dead
+	// primary with async replication (crVersion 1.3.0 and later).
+	AutoRecovery bool `json:"autoRecovery,omitempty"`
 
 	Sidecars       []corev1.Container `json:"sidecars,omitempty"`
 	SidecarVolumes []corev1.Volume    `json:"sidecarVolumes,omitempty"`

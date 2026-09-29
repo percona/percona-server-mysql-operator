@@ -1,0 +1,39 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 900
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster=$(get_cluster_name)
+      dead=$(cat "${TEMP_DIR}/dead-primary")
+
+      # A forced takeover bypasses the recovery filters, so it is the way to
+      # fail over by hand.
+      kubectl -n "${NAMESPACE}" annotate ps "${cluster}" \
+          "percona.com/force-promote-with-possible-data-loss=true" --overwrite
+
+      primary_after=$(wait_for_primary "changed:${dead}" 600)
+      echo "Forced the promotion of ${primary_after}"
+
+      kubectl -n "${NAMESPACE}" delete resourcequota no-new-pods
+      # The StatefulSet controller backs off after the refused creations; an
+      # update wakes it up.
+      kubectl -n "${NAMESPACE}" annotate sts "${cluster}-mysql" "percona.com/e2e-nudge=$(date +%s)" --overwrite
+
+      wait_cluster_consistency_async "${cluster}" 3 3
+
+      source_host=$(run_mysql "SELECT HOST FROM performance_schema.replication_connection_configuration WHERE CHANNEL_NAME=''" "-h ${dead}.${cluster}-mysql")
+      if [[ ${source_host} != "${primary_after}."* ]]; then
+          echo "${dead} replicates from '${source_host}', expected ${primary_after}"
+          exit 1
+      fi
+
+      if [[ $(get_primary_from_label) != "${primary_after}" ]]; then
+          echo "the primary moved away from ${primary_after} on its own"
+          exit 1
+      fi
+    timeout: 900

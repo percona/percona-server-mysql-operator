@@ -1,0 +1,48 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 900
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster=$(get_cluster_name)
+      wait_cluster_consistency_async "${cluster}" 3 3
+
+      primary=$(get_primary_from_label)
+
+      # A restarted primary comes back read-only. The empty recovery filters
+      # keep orchestrator from clearing that, so the operator must, or every
+      # restart of the primary is an outage.
+      kubectl -n "${NAMESPACE}" delete pod "${primary}"
+
+      wait_cluster_consistency_async "${cluster}" 3 3
+
+      retry=0
+      until [[ $(run_mysql "SELECT @@read_only" "-h ${primary}.${cluster}-mysql") == "0" ]]; do
+          if [[ ${retry} -ge 60 ]]; then
+              echo "${primary} stayed read-only after its restart"
+              exit 1
+          fi
+          sleep 5
+          retry=$((retry + 1))
+      done
+
+      if [[ $(get_primary_from_label) != "${primary}" ]]; then
+          echo "the primary moved away from ${primary} although autoRecovery is off"
+          exit 1
+      fi
+
+      retry=0
+      until [[ $(get_cluster_condition "${cluster}" AsyncFailoverBlocked) == "False" ]]; do
+          if [[ ${retry} -ge 24 ]]; then
+              echo "AsyncFailoverBlocked never went back to False"
+              kubectl -n "${NAMESPACE}" get ps "${cluster}" -o jsonpath='{.status.conditions}'
+              exit 1
+          fi
+          sleep 5
+          retry=$((retry + 1))
+      done
+    timeout: 900

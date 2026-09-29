@@ -326,7 +326,8 @@ func getTopology(ctx context.Context, fqdn string, peers sets.Set[string]) (stri
 		gtids[replicaHost] = gtid
 		log.Printf("Peer %s GTIDExecuted=%s", replicaHost, gtid)
 
-		if status == mysqldb.ReplicationStatusActive {
+		if status == mysqldb.ReplicationStatusActive || status == mysqldb.ReplicationStatusStopped {
+			log.Printf("Peer %s is replicating from %s", replicaHost, source)
 			primary = source
 		}
 	}

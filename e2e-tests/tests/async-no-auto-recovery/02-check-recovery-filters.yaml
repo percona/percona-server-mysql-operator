@@ -1,0 +1,25 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 600
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster=$(get_cluster_name)
+      wait_for_sts_pods_updated "${cluster}-orc"
+
+      # The entrypoint merges the ConfigMap over the baked config, so this is
+      # the file that decides whether orchestrator recovers the cluster.
+      for pod in $(kubectl -n "${NAMESPACE}" get pods -l 'app.kubernetes.io/component=orchestrator' -o jsonpath='{.items[*].metadata.name}'); do
+          filters=$(kubectl -n "${NAMESPACE}" exec "${pod}" -c orchestrator -- \
+              jq -c '[.RecoverMasterClusterFilters, .RecoverIntermediateMasterClusterFilters]' \
+              /etc/orchestrator/config/orchestrator.conf.json)
+          if [[ ${filters} != "[[],[]]" ]]; then
+              echo "${pod} recovers clusters matching ${filters} although autoRecovery is off"
+              exit 1
+          fi
+      done
+    timeout: 600

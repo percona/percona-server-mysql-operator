@@ -573,6 +573,20 @@ var failoverConfigKeys = map[string]bool{
 	"UnseenInstanceForgetHours": true,
 }
 
+// autoRecoveryConfigKeys hold the clusters orchestrator recovers on its own.
+// With spec.mysql.autoRecovery off they are pinned empty, which stops the
+// automated failover but leaves forced and graceful takeovers working.
+var autoRecoveryConfigKeys = map[string]bool{
+	"RecoverMasterClusterFilters":             true,
+	"RecoverIntermediateMasterClusterFilters": true,
+}
+
+// AutoRecoveryOff reports whether orchestrator is kept from recovering the
+// cluster on its own.
+func AutoRecoveryOff(cr *apiv1.PerconaServerMySQL) bool {
+	return cr.CompareVersion("1.3.0") >= 0 && !cr.Spec.MySQL.AutoRecovery
+}
+
 const handlerBinary = "/opt/percona/orc-handler"
 
 // preFailoverProcesses renders the hook that recovers the transactions stranded
@@ -653,6 +667,11 @@ func ConfigMapData(cr *apiv1.PerconaServerMySQL) (string, error) {
 	}
 
 	post130 := cr.CompareVersion("1.3.0") >= 0
+	autoRecoveryOff := AutoRecoveryOff(cr)
+	if autoRecoveryOff {
+		config["RecoverMasterClusterFilters"] = []string{}
+		config["RecoverIntermediateMasterClusterFilters"] = []string{}
+	}
 	if post130 {
 		failover := cr.FailoverSpec()
 		config["PreFailoverProcesses"] = preFailoverProcesses(failover)
@@ -672,7 +691,7 @@ func ConfigMapData(cr *apiv1.PerconaServerMySQL) (string, error) {
 			return "", errors.New("spec.orchestrator.configuration: must be a JSON object")
 		}
 		for k, v := range userConfig {
-			if reservedOrchestratorConfigKeys[k] || (post130 && failoverConfigKeys[k]) {
+			if reservedOrchestratorConfigKeys[k] || (post130 && failoverConfigKeys[k]) || (autoRecoveryOff && autoRecoveryConfigKeys[k]) {
 				continue
 			}
 			config[k] = v

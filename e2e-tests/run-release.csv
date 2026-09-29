@@ -1,8 +1,9 @@
 async-big-data
 async-data-at-rest-encryption
-async-global-metadata
 async-failover
+async-global-metadata
 async-ignore-annotations
+async-no-auto-recovery
 async-pitr-s3
 async-upgrade
 auto-config

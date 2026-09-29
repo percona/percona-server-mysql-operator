@@ -1,0 +1,40 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 600
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster=$(get_cluster_name)
+      generation=$(kubectl -n "${NAMESPACE}" get sts "${cluster}-orc" -o jsonpath='{.metadata.generation}')
+
+      kubectl -n "${NAMESPACE}" patch ps "${cluster}" --type merge -p '{"spec":{"mysql":{"autoRecovery":true}}}'
+
+      # Orchestrator reads its config only at startup, so the change has to
+      # roll every orchestrator pod.
+      retry=0
+      until [[ $(kubectl -n "${NAMESPACE}" get sts "${cluster}-orc" -o jsonpath='{.metadata.generation}') -gt ${generation} ]]; do
+          if [[ ${retry} -ge 24 ]]; then
+              echo "the orchestrator StatefulSet never picked up autoRecovery"
+              exit 1
+          fi
+          sleep 5
+          retry=$((retry + 1))
+      done
+      wait_for_sts_pods_updated "${cluster}-orc"
+
+      for pod in $(kubectl -n "${NAMESPACE}" get pods -l 'app.kubernetes.io/component=orchestrator' -o jsonpath='{.items[*].metadata.name}'); do
+          filters=$(kubectl -n "${NAMESPACE}" exec "${pod}" -c orchestrator -- \
+              jq -c '[.RecoverMasterClusterFilters, .RecoverIntermediateMasterClusterFilters]' \
+              /etc/orchestrator/config/orchestrator.conf.json)
+          if [[ ${filters} != '[[".*"],[".*"]]' ]]; then
+              echo "${pod} recovers clusters matching ${filters}, expected the baked filters"
+              exit 1
+          fi
+      done
+
+      wait_cluster_consistency_async "${cluster}" 3 3
+    timeout: 600

@@ -11,6 +11,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -40,6 +42,87 @@ func TestHasWritablePrimary(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			assert.Equal(t, tt.writable, hasWritablePrimary(&tt.primary))
+		})
+	}
+}
+
+// Orchestrator only clears a read-only primary for clusters its recovery filters
+// match, so a single pod or a cluster with autoRecovery off needs the operator.
+func TestPrimaryNeedsWriteable(t *testing.T) {
+	replicas := []orchestrator.InstanceKey{{Hostname: "cluster1-mysql-1", Port: 3306}}
+	readOnly := orchestrator.Instance{
+		Alias: "cluster1-mysql-0", IsLastCheckValid: true, ReadOnly: true, Replicas: replicas,
+	}
+
+	tests := map[string]struct {
+		crVersion    string
+		size         int32
+		autoRecovery bool
+		primary      orchestrator.Instance
+		expected     bool
+	}{
+		"read only with autoRecovery off": {
+			crVersion: "1.3.0",
+			size:      3,
+			primary:   readOnly,
+			expected:  true,
+		},
+		"read only with autoRecovery on": {
+			crVersion:    "1.3.0",
+			size:         3,
+			autoRecovery: true,
+			primary:      readOnly,
+		},
+		"read only with autoRecovery off before 1.3.0": {
+			crVersion: "1.2.0",
+			size:      3,
+			primary:   readOnly,
+		},
+		"read only single pod with autoRecovery on": {
+			crVersion:    "1.3.0",
+			size:         1,
+			autoRecovery: true,
+			primary:      readOnly,
+			expected:     true,
+		},
+		"read only without replicas with autoRecovery off": {
+			crVersion: "1.3.0",
+			size:      3,
+			primary:   orchestrator.Instance{Alias: "cluster1-mysql-0", IsLastCheckValid: true, ReadOnly: true},
+		},
+		"read only single pod without replicas": {
+			crVersion: "1.3.0",
+			size:      1,
+			primary:   orchestrator.Instance{Alias: "cluster1-mysql-0", IsLastCheckValid: true, ReadOnly: true},
+			expected:  true,
+		},
+		"writable": {
+			crVersion: "1.3.0",
+			size:      3,
+			primary:   orchestrator.Instance{Alias: "cluster1-mysql-0", IsLastCheckValid: true},
+		},
+		"dead and remembered as read only": {
+			crVersion: "1.3.0",
+			size:      3,
+			primary:   orchestrator.Instance{Alias: "cluster1-mysql-0", ReadOnly: true, Replicas: replicas},
+		},
+		"downtimed for a switchover": {
+			crVersion: "1.3.0",
+			size:      3,
+			primary: orchestrator.Instance{
+				Alias: "cluster1-mysql-0", IsLastCheckValid: true, ReadOnly: true, IsDowntimed: true, Replicas: replicas,
+			},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := &apiv1.PerconaServerMySQL{}
+			cr.Spec.CRVersion = tt.crVersion
+			cr.Spec.MySQL.Size = tt.size
+			cr.Spec.MySQL.AutoRecovery = tt.autoRecovery
+
+			assert.Equal(t, tt.expected, primaryNeedsWriteable(cr, &tt.primary))
 		})
 	}
 }
@@ -318,6 +401,50 @@ func TestStaleRecoveries(t *testing.T) {
 			}
 
 			assert.Equal(t, tt.want, staleRecoveries(tt.recs, live, tt.claimsKnown, now))
+		})
+	}
+}
+
+// With automated recovery off nothing tries a failover, so the condition must
+// not send the user looking for one that aborted.
+func TestReconcileFailoverConditionWithAutoRecoveryOff(t *testing.T) {
+	tests := map[string]struct {
+		autoRecovery bool
+		reason       string
+		message      string
+	}{
+		"off": {
+			reason:  reasonAutoRecoveryDisabled,
+			message: "spec.mysql.autoRecovery is off",
+		},
+		"on": {
+			autoRecovery: true,
+			reason:       reasonNoWritablePrimary,
+			message:      "A failover may have aborted",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr, err := readDefaultCR("async-failover", "auto-recovery")
+			require.NoError(t, err)
+			cr.Spec.MySQL.ClusterType = apiv1.ClusterTypeAsync
+			cr.Spec.MySQL.AutoRecovery = tt.autoRecovery
+
+			r := &PerconaServerMySQLReconciler{
+				Client: fake.NewClientBuilder().WithScheme(newScheme(t)).
+					WithObjects(cr).WithStatusSubresource(cr).Build(),
+			}
+
+			primary := &orchestrator.Instance{Alias: "async-failover-mysql-0"}
+			require.NoError(t, r.reconcileFailoverCondition(t.Context(), cr, primary))
+
+			require.NoError(t, r.Get(t.Context(), client.ObjectKeyFromObject(cr), cr))
+			cond := meta.FindStatusCondition(cr.Status.Conditions, apiv1.ConditionAsyncFailoverBlocked)
+			require.NotNil(t, cond)
+			assert.Equal(t, metav1.ConditionTrue, cond.Status)
+			assert.Equal(t, tt.reason, cond.Reason)
+			assert.Contains(t, cond.Message, tt.message)
 		})
 	}
 }

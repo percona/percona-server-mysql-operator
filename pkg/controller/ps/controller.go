@@ -1646,10 +1646,15 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 		return nil
 	}
 
-	// orchestrator doesn't attempt to recover from NonWriteableMaster if there's only 1 MySQL pod
-	if cr.MySQLSpec().Size == 1 && primary.ReadOnly {
+	if primaryNeedsWriteable(cr, primary) {
+		log.Info("Making primary writable", "primary", primary.Key.Hostname)
 		if err := orchestrator.SetWriteable(ctx, r.ClientCmd, pod, primary.Key.Hostname, int(primary.Key.Port)); err != nil {
 			return errors.Wrapf(err, "set %s writeable", primary.Key.Hostname)
+		}
+
+		log.Info("Labelling primary pod", "primary", primary.Alias)
+		if err := r.assignPrimaryLabel(ctx, &corev1.Pod{Name: primary.Alias, Namespace: cr.Namespace}); err != nil {
+			return errors.Wrap(err, "assign primary label")
 		}
 	}
 

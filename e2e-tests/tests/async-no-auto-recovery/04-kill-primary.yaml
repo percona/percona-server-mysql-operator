@@ -1,0 +1,55 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 900
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster=$(get_cluster_name)
+      wait_cluster_consistency_async "${cluster}" 3 3
+
+      primary_before=$(get_primary_from_label)
+      echo "${primary_before}" > "${TEMP_DIR}/dead-primary"
+
+      # A quota of zero pods keeps the StatefulSet from bringing the primary
+      # back. A restarted primary is made writable again without a failover.
+      kubectl -n "${NAMESPACE}" apply -f - <<-QUOTA
+      	apiVersion: v1
+      	kind: ResourceQuota
+      	metadata:
+      	  name: no-new-pods
+      	spec:
+      	  hard:
+      	    pods: "0"
+      	QUOTA
+      kubectl -n "${NAMESPACE}" wait --for=jsonpath='{.status.hard.pods}'=0 resourcequota/no-new-pods --timeout=60s
+
+      kubectl -n "${NAMESPACE}" delete pod "${primary_before}" --force --grace-period=0
+
+      retry=0
+      until [[ $(get_cluster_condition "${cluster}" AsyncFailoverBlocked) == "True" ]]; do
+          if [[ ${retry} -ge 24 ]]; then
+              echo "AsyncFailoverBlocked never became True"
+              kubectl -n "${NAMESPACE}" get ps "${cluster}" -o jsonpath='{.status.conditions}'
+              exit 1
+          fi
+          sleep 5
+          retry=$((retry + 1))
+      done
+
+      # Orchestrator sees the DeadMaster within seconds, and a recovery it
+      # starts runs the hook, which records FailoverWaiting on its first
+      # attempt. The promotion itself would wait out the whole failover budget,
+      # so the step's assert looks for the event, not a new primary.
+      for _ in $(seq 24); do
+          primary=$(get_primary_from_label 2>/dev/null || true)
+          if [[ -n ${primary} ]]; then
+              echo "${primary} was promoted although autoRecovery is off"
+              exit 1
+          fi
+          sleep 5
+      done
+    timeout: 900

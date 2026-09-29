@@ -1,0 +1,26 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 120
+commands:
+  - script: |-
+      set -o errexit
+
+      source ../../functions
+
+      cluster=$(get_cluster_name)
+
+      reason=$(kubectl -n "${NAMESPACE}" get ps "${cluster}" \
+          -o jsonpath='{.status.conditions[?(@.type=="AsyncFailoverBlocked")].reason}')
+      if [[ ${reason} != "AutoRecoveryDisabled" ]]; then
+          echo "AsyncFailoverBlocked reason is '${reason}', expected AutoRecoveryDisabled"
+          exit 1
+      fi
+
+      # No recovery ran, so the hook never did either. FailoverWaiting is the
+      # hook's first event; the others come only once its budget is spent.
+      if kubectl -n "${NAMESPACE}" get events --field-selector "involvedObject.name=${cluster}" \
+          -o jsonpath='{range .items[*]}{.reason}{"\n"}{end}' | grep -qE '^(FailoverWaiting|FailoverBlocked|FailoverForced)$'; then
+          kubectl -n "${NAMESPACE}" get events --field-selector "involvedObject.name=${cluster}"
+          echo "a failover ran although autoRecovery is off"
+          exit 1
+      fi

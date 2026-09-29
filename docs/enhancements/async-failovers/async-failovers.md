@@ -150,6 +150,7 @@ A failover that aborts leaves every pod read-only. To make that visible in the c
 | Status | Reason | When |
 |---|---|---|
 | `True` | `NoWritablePrimary` | The primary is read-only, or orchestrator's last check of it failed (`!IsLastCheckValid`). The message points at the cluster's events and at the `percona.com/force-promote-with-possible-data-loss` annotation. |
+| `True` | `AutoRecoveryDisabled` | As `NoWritablePrimary`, but `spec.mysql.autoRecovery` is off (`crVersion` 1.3.0 and later), so orchestrator doesn't try a failover at all. The message points at the annotation. |
 | `False` | `PrimaryWritable` | The primary is writable and orchestrator's last check of it succeeded. |
 
 The condition is left untouched when:
@@ -251,6 +252,14 @@ The pre hook is the only thing that decides whether the candidate is safe to pro
 | `PreFailoverProcesses`, `PostFailoverProcesses`, `PostUnsuccessfulFailoverProcesses` | the `orc-handler` hooks | The mechanism itself. |
 
 With the default `6h` timeout, the shipped `build/orchestrator.conf.json` already carries the derived values (`RecoveryPeriodBlockSeconds: 25200`, `UnseenInstanceForgetHours: 7`).
+
+### Disabling automated failover (`spec.mysql.autoRecovery`)
+
+From `crVersion` 1.3.0 on, `spec.mysql.autoRecovery: false` (or leaving it out) stops orchestrator from failing over on its own. The operator renders `RecoverMasterClusterFilters` and `RecoverIntermediateMasterClusterFilters` as `[]` and ignores any user override of them while `autoRecovery` is off. With `autoRecovery: true` they aren't rendered, so the baked `[".*"]` applies and they stay user-tunable.
+
+Orchestrator checks the filters only for recoveries it starts itself. Graceful switchovers and forced takeovers bypass them, so the `percona.com/force-promote-with-possible-data-loss` annotation still promotes a replica. `RecoverNonWriteableMaster` isn't gated by the filters either, so a primary that restarts still gets its read-only cleared. When the primary is dead, `AsyncFailoverBlocked` is `True` with reason `AutoRecoveryDisabled`.
+
+Failing the pre-failover hook would also stop a failover, but orchestrator then abandons the recovery and blocks retries for `RecoveryPeriodBlockSeconds`, leaving every pod read-only. The filters stop the recovery before it's registered.
 
 ### Hook deadline (`hookTimeout`)
 

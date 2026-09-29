@@ -5,6 +5,7 @@ async-global-metadata,9.7
 async-global-metadata,9.7
 async-ignore-annotations,9.7
 async-ignore-annotations,9.7
+async-no-auto-recovery,8.4
 async-pitr-s3,8.4
 async-pitr-s3,9.7
 async-upgrade,8.4
