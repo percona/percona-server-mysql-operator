@@ -50,6 +50,7 @@ const (
 	AnnotationClusterSetRejoinCluster  AnnotationKey = perconaPrefix + "clusterset-rejoin-cluster"
 	AnnotationLastAppliedConfig        AnnotationKey = perconaPrefix + "last-applied-config"
 	AnnotationLastReloadedTLS          AnnotationKey = perconaPrefix + "last-reloaded-tls"
+	AnnotationLastPodTemplateHash      AnnotationKey = perconaPrefix + "last-pod-template-hash"
 )
 
 const (
