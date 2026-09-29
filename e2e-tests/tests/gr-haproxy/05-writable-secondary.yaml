@@ -1,0 +1,54 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster=$(get_cluster_name)
+      primary=$(get_primary_from_label)
+
+      for i in 0 1 2; do
+          if [[ "${cluster}-mysql-${i}" != "${primary}" ]]; then
+              secondary_idx=${i}
+              break
+          fi
+      done
+      secondary=${cluster}-mysql-${secondary_idx}
+      secondary_host=$(get_mysql_headless_fqdn "${cluster}" "${secondary_idx}")
+      # server names come from DNS and differ between kube-dns and CoreDNS, so match on the address
+      addr=$(kubectl -n "${NAMESPACE}" get pod "${secondary}" -o jsonpath='{.status.podIP}'):3306
+
+      wait_server_status() {
+          local backend=$1 want=$2 i pod status retry
+
+          for i in 0 1 2; do
+              pod=${cluster}-haproxy-${i}
+              for retry in $(seq 30); do
+                  status=$(kubectl -n "${NAMESPACE}" exec "${pod}" -c haproxy -- bash -c \
+                      'echo "show stat" | socat stdio /etc/haproxy/mysql/haproxy.sock' \
+                      | awk -F, -v b="${backend}" -v a="${addr}" 'NR == 1 {for (f = 1; f <= NF; f++) if ($f == "addr") c = f} $1 == b && $c == a {print $18}')
+                  if [[ ${status} == "${want}" ]]; then
+                      continue 2
+                  fi
+                  sleep 3
+              done
+              echo "${pod}: ${secondary} is '${status}' in ${backend}, expected ${want}"
+              exit 1
+          done
+      }
+
+      wait_server_status mysql-replicas UP
+      wait_server_status mysql-primary DOWN
+
+      run_mysql "SET GLOBAL super_read_only=0; SET GLOBAL read_only=0" "-h ${secondary_host}"
+      sleep 30
+      wait_server_status mysql-primary DOWN
+      wait_server_status mysql-replicas DOWN
+
+      run_mysql "SET GLOBAL super_read_only=1" "-h ${secondary_host}"
+      wait_server_status mysql-replicas UP
+      wait_server_status mysql-primary DOWN
+    timeout: 600
