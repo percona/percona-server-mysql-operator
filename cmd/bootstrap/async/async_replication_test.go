@@ -122,7 +122,7 @@ func TestCloneRequired(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			s := &fakeSubtractor{t: t, results: tt.results}
 
-			got, err := cloneRequired(context.Background(), s, tt.local, tt.primaryExecuted, tt.primaryPurged)
+			got, err := cloneRequired(t.Context(), s, tt.local, tt.primaryExecuted, tt.primaryPurged)
 
 			if tt.wantAhead != "" {
 				require.ErrorIs(t, err, errAheadOfPrimary)
@@ -146,7 +146,7 @@ func TestCloneRequiredComparesLocalAgainstPrimary(t *testing.T) {
 		},
 	}
 
-	_, err := cloneRequired(context.Background(), s, selfUUID+":1-100", selfUUID+":1-200", selfUUID+":1-18")
+	_, err := cloneRequired(t.Context(), s, selfUUID+":1-100", selfUUID+":1-200", selfUUID+":1-18")
 	require.NoError(t, err)
 
 	require.NotEmpty(t, s.calls)
@@ -190,7 +190,7 @@ func TestDonorCoversPurged(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			s := &fakeSubtractor{t: t, results: tt.results}
 
-			got, err := donorCoversPurged(context.Background(), s, tt.donorExecuted, tt.primaryPurged)
+			got, err := donorCoversPurged(t.Context(), s, tt.donorExecuted, tt.primaryPurged)
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, got)
 		})
@@ -258,7 +258,7 @@ func TestElectPrimary(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			s := &fakeSubtractor{t: t, results: tt.results}
 
-			got, err := electPrimary(context.Background(), s, tt.gtids)
+			got, err := electPrimary(t.Context(), s, tt.gtids)
 
 			if tt.wantErr {
 				require.ErrorIs(t, err, errDivergedPeers)
@@ -334,7 +334,7 @@ func TestOrderDonors(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			s := &fakeSubtractor{t: t, results: tt.results}
 
-			got, err := orderDonors(context.Background(), s, tt.replicas, tt.fqdn, tt.gtids)
+			got, err := orderDonors(t.Context(), s, tt.replicas, tt.fqdn, tt.gtids)
 
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, got)

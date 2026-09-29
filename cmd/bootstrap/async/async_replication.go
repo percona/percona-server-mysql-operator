@@ -416,7 +416,10 @@ var (
 
 // orderDonors puts the replica worth cloning from first: the one holding the most transactions.
 func orderDonors(ctx context.Context, s gtidSubtractor, replicas []string, fqdn string, gtids map[string]string) ([]string, error) {
-	local := gtids[fqdn]
+	local, ok := gtids[fqdn]
+	if !ok {
+		return nil, errors.Errorf("no gtid for %s", fqdn)
+	}
 
 	rest := make([]string, 0, len(replicas))
 	for _, replica := range replicas {
