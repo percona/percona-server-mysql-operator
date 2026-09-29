@@ -10,6 +10,7 @@ import (
 	"io"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/gocarina/gocsv"
@@ -41,6 +42,12 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/router"
 )
+
+var noReplicationLagCondition = metav1.Condition{
+	Type:   apiv1.ConditionReplicationLagging,
+	Status: metav1.ConditionFalse,
+	Reason: reasonNoReplicationLag,
+}
 
 func TestReconcileStatusAsync(t *testing.T) {
 	ctx := context.Background()
@@ -128,6 +135,7 @@ func TestReconcileStatusAsync(t *testing.T) {
 				State: apiv1.StateInitializing,
 				Host:  cr.Name + "-haproxy." + cr.Namespace,
 				Conditions: []metav1.Condition{
+					noReplicationLagCondition,
 					{
 						Type:   apiv1.StateInitializing.String(),
 						Status: metav1.ConditionTrue,
@@ -168,6 +176,7 @@ func TestReconcileStatusAsync(t *testing.T) {
 				State: apiv1.StateReady,
 				Host:  cr.Name + "-haproxy." + cr.Namespace,
 				Conditions: []metav1.Condition{
+					noReplicationLagCondition,
 					{
 						Type:   apiv1.StateInitializing.String(),
 						Status: metav1.ConditionFalse,
@@ -224,6 +233,7 @@ func TestReconcileStatusAsync(t *testing.T) {
 				State: apiv1.StateInitializing,
 				Host:  cr.Name + "-haproxy." + cr.Namespace,
 				Conditions: []metav1.Condition{
+					noReplicationLagCondition,
 					{
 						Type:   apiv1.StateInitializing.String(),
 						Status: metav1.ConditionTrue,
@@ -274,6 +284,7 @@ func TestReconcileStatusAsync(t *testing.T) {
 				State: apiv1.StateReady,
 				Host:  cr.Name + "-haproxy." + cr.Namespace,
 				Conditions: []metav1.Condition{
+					noReplicationLagCondition,
 					{
 						Type:   apiv1.StateInitializing.String(),
 						Status: metav1.ConditionFalse,
@@ -354,6 +365,7 @@ func TestReconcileStatusAsync(t *testing.T) {
 				State: apiv1.StateReady,
 				Host:  cr.Name + "-mysql." + cr.Namespace,
 				Conditions: []metav1.Condition{
+					noReplicationLagCondition,
 					{
 						Type:   apiv1.StateInitializing.String(),
 						Status: metav1.ConditionFalse,
@@ -1383,29 +1395,33 @@ func getFakeClient(
 	}, nil
 }
 
-func getFakeOrchestratorClient(cr *apiv1.PerconaServerMySQL) (clientcmd.Client, error) {
-	const clusterName = "mysql-host-0:3306"
+const fakeOrchestratorClusterName = "mysql-host-0:3306"
 
-	instances := []*orchestrator.Instance{
+func getFakeOrchestratorClient(cr *apiv1.PerconaServerMySQL) (clientcmd.Client, error) {
+	return getFakeOrchestratorClientWith([]*orchestrator.Instance{
 		{
 			Alias:            "mysql-host-0",
-			ClusterName:      clusterName,
+			ClusterName:      fakeOrchestratorClusterName,
 			IsLastCheckValid: true,
 			Problems:         []string{},
 		},
 		{
 			Alias:            "mysql-host-1",
-			ClusterName:      clusterName,
+			ClusterName:      fakeOrchestratorClusterName,
 			IsLastCheckValid: true,
 			Problems:         []string{},
 		},
 		{
 			Alias:            "mysql-host-2",
-			ClusterName:      clusterName,
+			ClusterName:      fakeOrchestratorClusterName,
 			IsLastCheckValid: true,
 			Problems:         []string{},
 		},
-	}
+	})
+}
+
+func getFakeOrchestratorClientWith(instances []*orchestrator.Instance) (clientcmd.Client, error) {
+	const clusterName = fakeOrchestratorClusterName
 
 	res, err := json.Marshal(&instances)
 	if err != nil {
@@ -1532,6 +1548,7 @@ func TestReconcileStatusBinlogServer(t *testing.T) {
 				State: apiv1.StateInitializing,
 				Host:  cr.Name + "-haproxy." + cr.Namespace,
 				Conditions: []metav1.Condition{
+					noReplicationLagCondition,
 					{
 						Type:   apiv1.StateInitializing.String(),
 						Status: metav1.ConditionTrue,
@@ -1575,6 +1592,7 @@ func TestReconcileStatusBinlogServer(t *testing.T) {
 				State: apiv1.StateReady,
 				Host:  cr.Name + "-haproxy." + cr.Namespace,
 				Conditions: []metav1.Condition{
+					noReplicationLagCondition,
 					{
 						Type:   apiv1.StateInitializing.String(),
 						Status: metav1.ConditionFalse,
@@ -1612,6 +1630,7 @@ func TestReconcileStatusBinlogServer(t *testing.T) {
 				State: apiv1.StateReady,
 				Host:  cr.Name + "-haproxy." + cr.Namespace,
 				Conditions: []metav1.Condition{
+					noReplicationLagCondition,
 					{
 						Type:   apiv1.StateInitializing.String(),
 						Status: metav1.ConditionFalse,
@@ -1675,4 +1694,160 @@ func appendSlices[T any](s ...[]T) []T {
 		result = append(result, v...)
 	}
 	return result
+}
+
+func TestReconcileStatusAsyncReplicationLag(t *testing.T) {
+	cr, err := readDefaultCR("ps-cluster1", "status-lag")
+	require.NoError(t, err)
+	cr.Spec.MySQL.ClusterType = apiv1.ClusterTypeAsync
+	cr.Spec.UpdateStrategy = appsv1.OnDeleteStatefulSetStrategyType
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(scheme))
+	require.NoError(t, apiv1.AddToScheme(scheme))
+
+	cliCmd, err := getFakeOrchestratorClientWith([]*orchestrator.Instance{
+		{
+			Alias:                 "mysql-host-0",
+			ClusterName:           fakeOrchestratorClusterName,
+			IsLastCheckValid:      true,
+			Problems:              []string{orchestrator.ProblemReplicationLag},
+			ReplicationLagSeconds: sql.NullInt64{Int64: 320, Valid: true},
+		},
+		{
+			Alias:                 "mysql-host-1",
+			ClusterName:           fakeOrchestratorClusterName,
+			MasterKey:             orchestrator.InstanceKey{Hostname: "mysql-host-0", Port: 3306},
+			IsLastCheckValid:      true,
+			Problems:              []string{orchestrator.ProblemReplicationLag},
+			ReplicationLagSeconds: sql.NullInt64{Int64: 142, Valid: true},
+		},
+		{
+			Alias:            "mysql-host-2",
+			ClusterName:      fakeOrchestratorClusterName,
+			MasterKey:        orchestrator.InstanceKey{Hostname: "mysql-host-0", Port: 3306},
+			IsLastCheckValid: true,
+		},
+	})
+	require.NoError(t, err)
+
+	recorder := record.NewFakeRecorder(10)
+	r := &PerconaServerMySQLReconciler{
+		Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr).WithStatusSubresource(cr).
+			WithObjects(appendSlices(
+				makeFakeReadyPods(cr, 3, "mysql"),
+				makeFakeReadyPods(cr, 3, "haproxy"),
+				makeFakeReadyPods(cr, 3, "orchestrator"),
+			)...).Build(),
+		Scheme:        scheme,
+		ClientCmd:     cliCmd,
+		Recorder:      recorder,
+		ServerVersion: &platform.ServerVersion{Platform: platform.Kubernetes},
+	}
+
+	require.NoError(t, r.reconcileCRStatus(t.Context(), cr, nil))
+	require.NoError(t, r.Get(t.Context(), client.ObjectKeyFromObject(cr), cr))
+
+	assert.Equal(t, apiv1.StateReady, cr.Status.State)
+
+	cond := meta.FindStatusCondition(cr.Status.Conditions, apiv1.ConditionReplicationLagging)
+	require.NotNil(t, cond)
+	assert.Equal(t, metav1.ConditionTrue, cond.Status)
+	assert.Equal(t, reasonReplicationLagDetected, cond.Reason)
+	assert.Contains(t, cond.Message, "mysql-host-1 (142s)")
+	assert.NotContains(t, cond.Message, "mysql-host-0")
+
+	close(recorder.Events)
+	lagEvents := 0
+	for e := range recorder.Events {
+		if strings.Contains(e, apiv1.ConditionReplicationLagging) {
+			lagEvents++
+		}
+	}
+	assert.Equal(t, 1, lagEvents)
+}
+
+func TestReconcileStatusRemovesReplicationLagWithoutOrchestrator(t *testing.T) {
+	cr, err := readDefaultCR("ps-cluster1", "status-lag-no-orc")
+	require.NoError(t, err)
+	cr.Spec.MySQL.ClusterType = apiv1.ClusterTypeAsync
+	cr.Spec.UpdateStrategy = appsv1.OnDeleteStatefulSetStrategyType
+	cr.Spec.Unsafe.Orchestrator = true
+	cr.Spec.Orchestrator.Enabled = false
+	cr.Status.Conditions = []metav1.Condition{{
+		Type:   apiv1.ConditionReplicationLagging,
+		Status: metav1.ConditionTrue,
+		Reason: reasonReplicationLagDetected,
+	}}
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(scheme))
+	require.NoError(t, apiv1.AddToScheme(scheme))
+
+	r := &PerconaServerMySQLReconciler{
+		Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr).WithStatusSubresource(cr).
+			WithObjects(appendSlices(
+				makeFakeReadyPods(cr, 3, "mysql"),
+				makeFakeReadyPods(cr, 3, "haproxy"),
+			)...).Build(),
+		Scheme:        scheme,
+		ClientCmd:     &fakeClient{},
+		Recorder:      new(record.FakeRecorder),
+		ServerVersion: &platform.ServerVersion{Platform: platform.Kubernetes},
+	}
+
+	require.NoError(t, r.reconcileCRStatus(t.Context(), cr, nil))
+	require.NoError(t, r.Get(t.Context(), client.ObjectKeyFromObject(cr), cr))
+
+	assert.Nil(t, meta.FindStatusCondition(cr.Status.Conditions, apiv1.ConditionReplicationLagging))
+}
+
+func TestFormatProblems(t *testing.T) {
+	tests := map[string]struct {
+		problems map[string][]string
+		expected string
+	}{
+		"nil": {
+			problems: nil,
+			expected: "",
+		},
+		"empty": {
+			problems: map[string][]string{},
+			expected: "",
+		},
+		"single instance with single problem": {
+			problems: map[string][]string{
+				"ps-cluster1-mysql-1": {"not_replicating"},
+			},
+			expected: "ps-cluster1-mysql-1: [not_replicating]",
+		},
+		"single instance with multiple problems": {
+			problems: map[string][]string{
+				"ps-cluster1-mysql-1": {"not_replicating", "replication_lag"},
+			},
+			expected: "ps-cluster1-mysql-1: [not_replicating, replication_lag]",
+		},
+		"instance without problems": {
+			problems: map[string][]string{
+				"ps-cluster1-mysql-1": nil,
+			},
+			expected: "ps-cluster1-mysql-1: []",
+		},
+		"multiple instances are sorted": {
+			problems: map[string][]string{
+				"ps-cluster1-mysql-2": {"not_replicating"},
+				"ps-cluster1-mysql-0": {"not_replicating", "replication_lag"},
+				"ps-cluster1-mysql-1": {"errant_gtid"},
+			},
+			expected: "ps-cluster1-mysql-0: [not_replicating, replication_lag], ps-cluster1-mysql-1: [errant_gtid], ps-cluster1-mysql-2: [not_replicating]",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			msg, err := formatProblems(tt.problems)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, msg)
+		})
+	}
 }

@@ -87,13 +87,6 @@ func MatchLabels(cr *apiv1.PerconaServerMySQL) map[string]string {
 	)
 }
 
-func RestoreMatchLabels(cr *apiv1.PerconaServerMySQL, restore *apiv1.PerconaServerMySQLRestore) map[string]string {
-	return util.SSMapMerge(
-		cr.GlobalLabels(),
-		restore.Labels(AppName, naming.ComponentPITR),
-	)
-}
-
 func StatefulSet(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServerSpec, labels map[string]string, initImage, configHash, configSecretName string) *appsv1.StatefulSet {
 	if configSecretName == "" {
 		configSecretName = ConfigSecretName(cr)
