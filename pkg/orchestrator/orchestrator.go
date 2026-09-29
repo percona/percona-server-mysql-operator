@@ -575,6 +575,9 @@ var failoverConfigKeys = map[string]bool{
 
 const handlerBinary = "/opt/percona/orc-handler"
 
+// reasonableReplicationLagSeconds is the lag past which orchestrator reports a replica with replication_lag
+const reasonableReplicationLagSeconds = 60
+
 // preFailoverProcesses renders the hook that recovers the transactions stranded
 // on the dead primary. Orchestrator aborts the recovery when it exits non-zero,
 // which is what keeps an unsafe promotion from happening.
@@ -664,6 +667,7 @@ func ConfigMapData(cr *apiv1.PerconaServerMySQL) (string, error) {
 		config["RecoveryPeriodBlockSeconds"] = recoveryPeriodBlockSeconds(failover)
 		config["UnseenInstanceForgetHours"] = unseenInstanceForgetHours(failover)
 		config["ReasonableMaintenanceReplicationLagSeconds"] = int(failover.SwitchoverCatchUp().Seconds())
+		config["ReasonableReplicationLagSeconds"] = reasonableReplicationLagSeconds
 	}
 
 	if cfg := cr.Spec.Orchestrator.Configuration; cfg != "" {

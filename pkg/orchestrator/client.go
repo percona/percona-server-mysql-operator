@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
@@ -77,9 +78,14 @@ type Instance struct {
 	ElapsedDowntime       time.Duration     `json:"ElapsedDowntime"`
 	ExecBinlogCoordinates BinlogCoordinates `json:"ExecBinlogCoordinates"`
 	ExecutedGtidSet       string            `json:"ExecutedGtidSet"`
+	ReplicationLagSeconds sql.NullInt64     `json:"ReplicationLagSeconds"`
 }
 
 const PromotionRulePrefer = "prefer"
+
+// ProblemReplicationLag is reported for a replica lagging more than
+// ReasonableReplicationLagSeconds.
+const ProblemReplicationLag = "replication_lag"
 
 var masterFailoverAnalyses = map[string]bool{
 	"DeadMaster":                true,

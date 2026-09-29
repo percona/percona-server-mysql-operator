@@ -1,6 +1,7 @@
 package ps
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -11,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -194,7 +196,7 @@ func TestIsAsyncReadyReportsSplitTopology(t *testing.T) {
 		ClientCmd: &fakeClient{scripts: []fakeClientScript{allInstancesScriptWith(instances)}},
 	}
 
-	ready, msg, err := r.isAsyncReady(t.Context(), cr)
+	ready, msg, _, err := r.isAsyncReady(t.Context(), cr)
 	require.NoError(t, err)
 	assert.False(t, ready)
 	assert.Contains(t, msg, "orchestrator sees more than one live cluster: async-failover-mysql-0:3306, async-failover-mysql-2:3306")
@@ -320,4 +322,121 @@ func TestStaleRecoveries(t *testing.T) {
 			assert.Equal(t, tt.want, staleRecoveries(tt.recs, live, tt.claimsKnown, now))
 		})
 	}
+}
+
+// A lagging replica is still replicating, so it is reported in its own
+// condition instead of holding the whole cluster back from ready.
+func TestIsAsyncReadyIgnoresReplicationLag(t *testing.T) {
+	cr, err := readDefaultCR("async-failover", "lag")
+	require.NoError(t, err)
+
+	orcPod := &corev1.Pod{
+		Name:      orchestrator.PodName(cr, 0),
+		Namespace: cr.Namespace,
+		Labels:    orchestrator.MatchLabels(cr),
+		Status: corev1.PodStatus{
+			Phase:      corev1.PodRunning,
+			Conditions: []corev1.PodCondition{{Type: corev1.ContainersReady, Status: corev1.ConditionTrue}},
+		},
+	}
+
+	const cluster = "async-failover-mysql-0:3306"
+	lag := func(seconds int64) sql.NullInt64 { return sql.NullInt64{Int64: seconds, Valid: true} }
+	primary := orchestrator.InstanceKey{Hostname: "async-failover-mysql-0", Port: 3306}
+
+	tests := map[string]struct {
+		instances []orchestrator.Instance
+		ready     bool
+		msg       string
+		lagging   []string
+	}{
+		"no lag": {
+			instances: []orchestrator.Instance{
+				{Alias: "async-failover-mysql-0", ClusterName: cluster, IsLastCheckValid: true},
+				{Alias: "async-failover-mysql-1", ClusterName: cluster, MasterKey: primary, IsLastCheckValid: true},
+			},
+			ready:   true,
+			lagging: []string{},
+		},
+		"lag only": {
+			instances: []orchestrator.Instance{
+				{Alias: "async-failover-mysql-0", ClusterName: cluster, IsLastCheckValid: true},
+				{Alias: "async-failover-mysql-2", ClusterName: cluster, MasterKey: primary, IsLastCheckValid: true, Problems: []string{"replication_lag"}, ReplicationLagSeconds: lag(75)},
+				{Alias: "async-failover-mysql-1", ClusterName: cluster, MasterKey: primary, IsLastCheckValid: true, Problems: []string{"replication_lag"}, ReplicationLagSeconds: lag(142)},
+			},
+			ready:   true,
+			lagging: []string{"async-failover-mysql-1", "async-failover-mysql-2"},
+		},
+		"lag with another problem": {
+			instances: []orchestrator.Instance{
+				{Alias: "async-failover-mysql-0", ClusterName: cluster, IsLastCheckValid: true},
+				{Alias: "async-failover-mysql-1", ClusterName: cluster, MasterKey: primary, IsLastCheckValid: true, Problems: []string{"not_replicating", "replication_lag"}},
+			},
+			msg:     "async-failover-mysql-1: [not_replicating]",
+			lagging: []string{"async-failover-mysql-1"},
+		},
+		"lagging primary": {
+			instances: []orchestrator.Instance{
+				{Alias: "async-failover-mysql-0", ClusterName: cluster, IsLastCheckValid: true, Problems: []string{"replication_lag"}, ReplicationLagSeconds: lag(320)},
+				{Alias: "async-failover-mysql-1", ClusterName: cluster, MasterKey: primary, IsLastCheckValid: true},
+			},
+			ready:   true,
+			lagging: []string{},
+		},
+		"downtimed lagging replica": {
+			instances: []orchestrator.Instance{
+				{Alias: "async-failover-mysql-0", ClusterName: cluster, IsLastCheckValid: true},
+				{Alias: "async-failover-mysql-1", ClusterName: cluster, MasterKey: primary, IsLastCheckValid: true, IsDowntimed: true, Problems: []string{"replication_lag"}},
+			},
+			ready:   true,
+			lagging: []string{},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			instances, err := json.Marshal(tt.instances)
+			require.NoError(t, err)
+
+			r := &PerconaServerMySQLReconciler{
+				Client: fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(orcPod).Build(),
+				ClientCmd: &fakeClient{scripts: []fakeClientScript{
+					allInstancesScriptWith(instances),
+					{cmd: orcURL("api/cluster/" + cluster), stdout: instances},
+				}},
+			}
+
+			ready, msg, lagging, err := r.isAsyncReady(t.Context(), cr)
+			require.NoError(t, err)
+			assert.Equal(t, tt.ready, ready)
+			assert.Equal(t, tt.msg, msg)
+
+			aliases := []string{}
+			for _, i := range lagging {
+				aliases = append(aliases, i.Alias)
+			}
+			assert.Equal(t, tt.lagging, aliases)
+		})
+	}
+}
+
+func TestReplicationLagCondition(t *testing.T) {
+	cr, err := readDefaultCR("async-failover", "lag")
+	require.NoError(t, err)
+	cr.Generation = 3
+
+	cond := replicationLagCondition(cr, []*orchestrator.Instance{})
+	assert.Equal(t, apiv1.ConditionReplicationLagging, cond.Type)
+	assert.Equal(t, metav1.ConditionFalse, cond.Status)
+	assert.Equal(t, reasonNoReplicationLag, cond.Reason)
+	assert.EqualValues(t, 3, cond.ObservedGeneration)
+
+	cond = replicationLagCondition(cr, []*orchestrator.Instance{
+		{Alias: "async-failover-mysql-1", ReplicationLagSeconds: sql.NullInt64{Int64: 142, Valid: true}},
+		{Alias: "async-failover-mysql-2"},
+	})
+	assert.Equal(t, metav1.ConditionTrue, cond.Status)
+	assert.Equal(t, reasonReplicationLagDetected, cond.Reason)
+	assert.Contains(t, cond.Message, "async-failover-mysql-1 (142s), async-failover-mysql-2")
+	assert.Contains(t, cond.Message, "ReasonableReplicationLagSeconds")
 }
