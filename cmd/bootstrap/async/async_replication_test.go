@@ -324,7 +324,7 @@ func TestOrderDonors(t *testing.T) {
 		"no replicas": {
 			replicas: []string{},
 			fqdn:     host0,
-			gtids:    map[string]string{},
+			gtids:    map[string]string{host0: mid},
 			results:  map[[2]string]string{},
 			want:     []string{},
 		},
