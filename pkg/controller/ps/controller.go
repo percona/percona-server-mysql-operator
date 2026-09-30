@@ -1663,9 +1663,7 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 		return errors.Wrap(err, "get mysql pods")
 	}
 
-	if err := r.discoverMissingInstances(ctx, cr, pod, clusterInstances, mysqlPods); err != nil {
-		return errors.Wrap(err, "discover missing instances")
-	}
+	r.discoverMissingInstances(ctx, cr, pod, clusterInstances, mysqlPods)
 
 	// In the case of a cluster downscale, we need to forget replicas that are not part of the cluster
 	if len(clusterInstances) > int(cr.MySQLSpec().Size) {
@@ -1698,7 +1696,7 @@ func (r *PerconaServerMySQLReconciler) discoverMissingInstances(
 	orcPod *corev1.Pod,
 	instances []*orchestrator.Instance,
 	pods []corev1.Pod,
-) error {
+) {
 	log := logf.FromContext(ctx).WithName("discoverMissingInstances")
 
 	known := make(map[string]struct{}, len(instances))
@@ -1724,8 +1722,6 @@ func (r *PerconaServerMySQLReconciler) discoverMissingInstances(
 
 		log.Info("Discovered instance orchestrator was missing", "instance", p.Name)
 	}
-
-	return nil
 }
 
 // bootstrapped reports whether the pod's mysql container passed its startup probe.

@@ -640,9 +640,9 @@ func (r relayIndex) lastClosed() (string, error) {
 	return r[len(r)-2], nil
 }
 
-// readMagic consumes the binary log magic number a relay log may only carry at
-// offset 0.
-func readMagic(src io.Reader) error {
+// consumeBinlogMagic consumes the binary log magic number a relay log may only
+// carry at offset 0.
+func consumeBinlogMagic(src io.Reader) error {
 	magic := make([]byte, len(binlogMagic))
 	if _, err := io.ReadFull(src, magic); err != nil {
 		return fmt.Errorf("read magic number: %w", err)
@@ -664,7 +664,7 @@ func appendLog(dst io.Writer, srcPath string, stripMagic bool) (int64, error) {
 	defer src.Close() //nolint:errcheck
 
 	if stripMagic {
-		if err := readMagic(src); err != nil {
+		if err := consumeBinlogMagic(src); err != nil {
 			return 0, err
 		}
 	}
@@ -689,7 +689,7 @@ func validateSourceLogs(sourceLogs []string) error {
 			return err
 		}
 
-		err = readMagic(src)
+		err = consumeBinlogMagic(src)
 		src.Close() //nolint:errcheck
 
 		if err != nil {

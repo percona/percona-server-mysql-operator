@@ -65,7 +65,7 @@ func TestDiscoverMissingInstances(t *testing.T) {
 		cliCmd := &fakeDiscoverClientCmd{}
 		r := &PerconaServerMySQLReconciler{ClientCmd: cliCmd}
 
-		require.NoError(t, r.discoverMissingInstances(t.Context(), cr, &corev1.Pod{}, instances, pods))
+		r.discoverMissingInstances(t.Context(), cr, &corev1.Pod{}, instances, pods)
 
 		require.Len(t, cliCmd.commands, 1)
 		assert.Contains(t, cliCmd.commands[0], "api/discover/cluster1-mysql-2.cluster1-mysql.ns/3306")
@@ -78,7 +78,7 @@ func TestDiscoverMissingInstances(t *testing.T) {
 		cliCmd := &fakeDiscoverClientCmd{}
 		r := &PerconaServerMySQLReconciler{ClientCmd: cliCmd}
 
-		require.NoError(t, r.discoverMissingInstances(t.Context(), cr, &corev1.Pod{}, instances, pods))
+		r.discoverMissingInstances(t.Context(), cr, &corev1.Pod{}, instances, pods)
 
 		assert.Empty(t, cliCmd.commands)
 	})
@@ -96,7 +96,7 @@ func TestDiscoverMissingInstances(t *testing.T) {
 		cliCmd := &fakeDiscoverClientCmd{}
 		r := &PerconaServerMySQLReconciler{ClientCmd: cliCmd}
 
-		require.NoError(t, r.discoverMissingInstances(t.Context(), cr, &corev1.Pod{}, instances, []corev1.Pod{starting}))
+		r.discoverMissingInstances(t.Context(), cr, &corev1.Pod{}, instances, []corev1.Pod{starting})
 
 		assert.Empty(t, cliCmd.commands)
 	})
@@ -106,8 +106,8 @@ func TestDiscoverMissingInstances(t *testing.T) {
 		cliCmd := &fakeDiscoverClientCmd{stdout: `{"Code":"ERROR","Message":"Cannot discover instance"}`}
 		r := &PerconaServerMySQLReconciler{ClientCmd: cliCmd}
 
-		assert.NoError(t, r.discoverMissingInstances(t.Context(), cr, &corev1.Pod{}, instances, pods),
-			"a mysqld that is still starting must not fail the reconcile")
+		r.discoverMissingInstances(t.Context(), cr, &corev1.Pod{}, instances, pods)
+
 		assert.Len(t, cliCmd.commands, 1, "the attempt still has to be made")
 	})
 }

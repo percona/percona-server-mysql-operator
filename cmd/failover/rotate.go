@@ -42,7 +42,7 @@ func readSourceHeader(path string) (sourceHeader, error) {
 
 	name := filepath.Base(path)
 
-	if err := readMagic(f); err != nil {
+	if err := consumeBinlogMagic(f); err != nil {
 		return sourceHeader{}, fmt.Errorf("%w: %s: %w", errNoFDE, name, err)
 	}
 
