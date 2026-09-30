@@ -32,14 +32,14 @@ type fakeDatabase struct {
 	index    string
 	pathsErr error
 
-	stopErr   error
-	flushErr  error
-	startErr  error
-	ioErr     error
-	gtidErr   error
-	gtidMu    sync.Mutex
-	gtid      string
-	gtidAhead string
+	stopErr    error
+	flushErr   error
+	startErr   error
+	threadsErr error
+	gtidErr    error
+	gtidMu     sync.Mutex
+	gtid       string
+	gtidAhead  string
 
 	closed   int
 	closeErr error
@@ -79,9 +79,9 @@ func (f *fakeDatabase) Close() error {
 	return f.closeErr
 }
 
-func (f *fakeDatabase) StartIOThread(context.Context) error {
-	f.ops = append(f.ops, "StartIOThread")
-	return f.ioErr
+func (f *fakeDatabase) StartReplicaThreads(context.Context) error {
+	f.ops = append(f.ops, "StartReplicaThreads")
+	return f.threadsErr
 }
 
 // The GTID reads run on the source watch's goroutine, so they stay off ops.
@@ -499,6 +499,7 @@ func TestRun(t *testing.T) {
 		j := newJobFixture(t)
 		j.source.up = []bool{true}
 		j.fake.statuses[0]["Replica_IO_Running"] = "Yes"
+		j.fake.statuses[0]["Replica_SQL_Running"] = "Yes"
 		before, err := os.ReadFile(j.relay.target)
 		require.NoError(t, err)
 
@@ -517,16 +518,28 @@ func TestRun(t *testing.T) {
 		t.Cleanup(func() { released.Close() })
 	})
 
-	t.Run("a receiver a failed attempt left down is started again", func(t *testing.T) {
-		j := newJobFixture(t)
-		j.source.up = []bool{true}
-		j.fake.statuses[0]["Replica_IO_Running"] = "No"
+	t.Run("a replica a failed attempt left stopped is started again", func(t *testing.T) {
+		for _, tt := range []struct {
+			name    string
+			io, sql string
+		}{
+			{name: "both threads down", io: "No", sql: "No"},
+			{name: "applier down", io: "Yes", sql: "No"},
+			{name: "receiver down", io: "No", sql: "Yes"},
+		} {
+			t.Run(tt.name, func(t *testing.T) {
+				j := newJobFixture(t)
+				j.source.up = []bool{true}
+				j.fake.statuses[0]["Replica_IO_Running"] = tt.io
+				j.fake.statuses[0]["Replica_SQL_Running"] = tt.sql
 
-		err := run(t.Context(), j.cfg)
+				err := run(t.Context(), j.cfg)
 
-		require.ErrorIs(t, err, errSourceRecovered)
-		assert.Equal(t, []string{"StartIOThread"}, j.fake.ops,
-			"the replica may not be left stopped just because we are standing down")
+				require.ErrorIs(t, err, errSourceRecovered)
+				assert.Equal(t, []string{"StartReplicaThreads"}, j.fake.ops,
+					"the replica may not be left stopped just because we are standing down")
+			})
+		}
 	})
 
 	t.Run("a source that comes back mid-drain gets the replica handed back", func(t *testing.T) {
@@ -548,7 +561,7 @@ func TestRun(t *testing.T) {
 		err = run(t.Context(), j.cfg)
 
 		require.ErrorIs(t, err, errSourceRecovered, "an applier that never drained must not be promoted")
-		assert.Equal(t, append(slices.Clone(wantOps), "StartIOThread"), j.fake.ops,
+		assert.Equal(t, append(slices.Clone(wantOps), "StartReplicaThreads"), j.fake.ops,
 			"the stand-down has to happen after the splice, not instead of it")
 
 		after, err := os.ReadFile(j.relay.target)

@@ -157,15 +157,15 @@ func watchSource(ctx context.Context, w *sourceWatch) <-chan struct{} {
 		defer ticker.Stop()
 
 		for {
+			if w.confirmed(ctx) {
+				close(recovered)
+				return
+			}
+
 			select {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-			}
-
-			if w.confirmed(ctx) {
-				close(recovered)
-				return
 			}
 		}
 	}()
@@ -176,12 +176,13 @@ func watchSource(ctx context.Context, w *sourceWatch) <-chan struct{} {
 // standDown hands the replica back to the source that came back. The splice
 // stays where it is: the applier keeps working through it out of the relay log
 // while the receiver re-requests the overlapping range, and auto-position skips
-// whatever has already been executed by the time it arrives.
+// whatever has already been executed by the time it arrives. The applier is
+// started too, since an earlier attempt may have failed with it stopped.
 func (w *sourceWatch) standDown(ctx context.Context) error {
-	if err := w.local.StartIOThread(ctx); err != nil {
-		return fmt.Errorf("start IO_THREAD: %w", err)
+	if err := w.local.StartReplicaThreads(ctx); err != nil {
+		return fmt.Errorf("start replica threads: %w", err)
 	}
-	log.Printf("Started IO_THREAD")
+	log.Printf("Started replication")
 
 	waitForReceiver(ctx, w.local, w.poll, w.receiverWait)
 

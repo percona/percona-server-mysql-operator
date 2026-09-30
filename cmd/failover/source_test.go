@@ -185,6 +185,22 @@ func TestWatchSource(t *testing.T) {
 		}
 	})
 
+	t.Run("probes as soon as it starts", func(t *testing.T) {
+		conn := &fakeSourceConn{}
+		w := newSourceWatch(failoverConfig{
+			newSourceDB:   conn.connect,
+			sourcePoll:    time.Hour,
+			sourceTimeout: time.Second,
+		}, &fakeDatabase{}, "mysql-0.mysql")
+
+		watchSource(t.Context(), w)
+
+		assert.Eventually(t, func() bool {
+			dials, _ := conn.count()
+			return dials == 1
+		}, 10*time.Second, time.Millisecond, "a drain shorter than one poll must still be covered")
+	})
+
 	t.Run("a torn-down watch never reports the source back", func(t *testing.T) {
 		conn := &fakeSourceConn{}
 		w := newWatch(t, conn, &fakeDatabase{})
@@ -212,7 +228,7 @@ func TestStandDown(t *testing.T) {
 		err := newWatch(t, &fakeSourceConn{}, f).standDown(t.Context())
 
 		require.ErrorIs(t, err, errSourceRecovered)
-		assert.Equal(t, []string{"StartIOThread"}, f.ops, "the splice must be left alone")
+		assert.Equal(t, []string{"StartReplicaThreads"}, f.ops, "the splice must be left alone")
 	})
 
 	t.Run("a receiver that never connects still stands down", func(t *testing.T) {
@@ -229,14 +245,14 @@ func TestStandDown(t *testing.T) {
 	t.Run("a receiver that will not start fails the job", func(t *testing.T) {
 		f := &fakeDatabase{
 			fakeStatuser: &fakeStatuser{statuses: []map[string]string{{}}},
-			ioErr:        errors.New("access denied"),
+			threadsErr:   errors.New("access denied"),
 		}
 
 		err := newWatch(t, &fakeSourceConn{}, f).standDown(t.Context())
 
 		require.Error(t, err)
 		assert.NotErrorIs(t, err, errSourceRecovered)
-		assert.Contains(t, err.Error(), "start IO_THREAD")
+		assert.Contains(t, err.Error(), "start replica threads")
 	})
 }
 

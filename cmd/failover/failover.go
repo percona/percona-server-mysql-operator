@@ -56,7 +56,7 @@ type database interface {
 	GetSourceLogPos(ctx context.Context) (db.ReplicaPosition, error)
 	RelayLogPaths(ctx context.Context) (string, string, error)
 	StartSQLThread(ctx context.Context) error
-	StartIOThread(ctx context.Context) error
+	StartReplicaThreads(ctx context.Context) error
 	GetGTIDExecuted(ctx context.Context) (string, error)
 	GTIDSubtract(ctx context.Context, set, other string) (string, error)
 	Close() error
@@ -206,11 +206,11 @@ func run(ctx context.Context, cfg failoverConfig) error {
 	// only the probe.
 	watch := newSourceWatch(cfg, d, status["Source_Host"])
 	if watch.confirmed(ctx) {
-		if status["Replica_IO_Running"] == "Yes" {
+		if status["Replica_IO_Running"] == "Yes" && status["Replica_SQL_Running"] == "Yes" {
 			return errSourceRecovered
 		}
 
-		// An attempt that failed after its STOP REPLICA left the receiver down.
+		// An attempt that failed after its STOP REPLICA left both threads down.
 		return watch.standDown(ctx)
 	}
 
