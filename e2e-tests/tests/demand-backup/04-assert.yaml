@@ -14,7 +14,7 @@ status:
 kind: PerconaServerMySQLBackup
 apiVersion: ps.percona.com/v1
 metadata:
-  name: demand-backup-parallel
+  name: demand-backup-second
   finalizers:
     - percona.com/delete-backup
 status:

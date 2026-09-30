@@ -1012,7 +1012,6 @@ spec:
 #              requests:
 #                storage: 30Gi
 #            storageClassName: standard
-#    allowParallel: false
 #    encryptionKeySecret:
 #      key: encryptionKey
 #      name: my-encryption-key-secret
