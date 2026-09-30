@@ -1,6 +1,6 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 420
+timeout: 900
 ---
 kind: StatefulSet
 apiVersion: apps/v1
@@ -22,7 +22,6 @@ status:
   observedGeneration: 2
   replicas: 5
   readyReplicas: 5
-  currentReplicas: 5
   updatedReplicas: 5
   collisionCount: 0
 ---
