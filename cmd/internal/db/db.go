@@ -107,6 +107,7 @@ func NewDatabase(ctx context.Context, params DBParams) (*DB, error) {
 	}
 
 	if err := db.PingContext(ctx); err != nil {
+		db.Close() //nolint:errcheck
 		return nil, errors.Wrap(err, "ping DB")
 	}
 
@@ -144,6 +145,13 @@ func (d *DB) StartReplication(ctx context.Context, host, replicaPass string, por
 func (d *DB) StartSQLThread(ctx context.Context) error {
 	_, err := d.db.ExecContext(ctx, "START REPLICA SQL_THREAD")
 	return errors.Wrap(err, "start SQL_THREAD")
+}
+
+// StartReplicaThreads starts whichever replication threads are stopped, leaving
+// the channel's configuration as it is.
+func (d *DB) StartReplicaThreads(ctx context.Context) error {
+	_, err := d.db.ExecContext(ctx, "START REPLICA")
+	return errors.Wrap(err, "start replica threads")
 }
 
 func (d *DB) StopReplication(ctx context.Context) error {
