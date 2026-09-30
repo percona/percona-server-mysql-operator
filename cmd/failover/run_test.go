@@ -515,7 +515,7 @@ func TestRun(t *testing.T) {
 
 		released, err := failover.Lock(j.cfg.lockPath)
 		require.NoError(t, err, "standing down must release the splice lock")
-		t.Cleanup(func() { released.Close() })
+		t.Cleanup(func() { released.Close() }) //nolint:errcheck
 	})
 
 	t.Run("a replica a failed attempt left stopped is started again", func(t *testing.T) {
