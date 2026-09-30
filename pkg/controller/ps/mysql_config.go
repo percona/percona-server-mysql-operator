@@ -179,6 +179,8 @@ const (
 	readOnlyErrorString                = "ERROR 1238"
 	unknownVariableErrorString         = "ERROR 1193"
 	groupReplicationRunningErrorString = "ERROR 3093"
+	sqlThreadRunningErrorString        = "ERROR 3017"
+	replicaApplierRunningErrorString   = "ERROR 3747"
 )
 
 func isReadOnlyVariableError(err error) bool {
@@ -191,6 +193,17 @@ func isUnknownVariableError(err error) bool {
 
 func isGRRunningVariableError(err error) bool {
 	return strings.Contains(err.Error(), groupReplicationRunningErrorString)
+}
+
+func isReplicationRunningVariableError(err error) bool {
+	return strings.Contains(err.Error(), replicaApplierRunningErrorString) ||
+		strings.Contains(err.Error(), sqlThreadRunningErrorString)
+}
+
+func isRestartNeeded(err error) bool {
+	return isReadOnlyVariableError(err) ||
+		isGRRunningVariableError(err) ||
+		isReplicationRunningVariableError(err)
 }
 
 func setGlobalVariables(
@@ -225,7 +238,7 @@ func setGlobalVariables(
 		for k, v := range kv {
 			err := mgr.SetGlobalVariable(ctx, k, v)
 			if err != nil {
-				if isReadOnlyVariableError(err) || isGRRunningVariableError(err) {
+				if isRestartNeeded(err) {
 					if current, getErr := mgr.GetGlobalVariable(ctx, k); getErr == nil &&
 						mysql.MatchesConfigValue(current, v) {
 						log.V(1).Info("Variable already holds the configured value", "variable", k, "pod", pod.Name)
