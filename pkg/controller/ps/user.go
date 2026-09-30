@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -381,6 +382,10 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	}
 
 	if cr.Status.State != apiv1.StateReady {
+		if err := r.backfillInternalSecret(ctx, internalSecret, secret); err != nil {
+			return err
+		}
+
 		log.Info("Waiting cluster to be ready")
 		return nil
 	}
@@ -390,6 +395,40 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	}
 
 	return r.discardOldPasswordsAfterNewPropagated(ctx, cr, internalSecret, updatedUsers, operatorPass)
+}
+
+func (r *PerconaServerMySQLReconciler) backfillInternalSecret(
+	ctx context.Context,
+	internalSecret *corev1.Secret,
+	secret *corev1.Secret,
+) error {
+	log := logf.FromContext(ctx).WithName("reconcileUsers")
+
+	added := make([]string, 0, len(secret.Data))
+	for user, pass := range secret.Data {
+		if _, ok := internalSecret.Data[user]; ok {
+			continue
+		}
+
+		if internalSecret.Data == nil {
+			internalSecret.Data = make(map[string][]byte, len(secret.Data))
+		}
+		internalSecret.Data[user] = bytes.Clone(pass)
+		added = append(added, user)
+	}
+
+	if len(added) == 0 {
+		return nil
+	}
+
+	if err := r.Update(ctx, internalSecret); err != nil {
+		return errors.Wrapf(err, "update Secret/%s", internalSecret.Name)
+	}
+
+	sort.Strings(added)
+	log.Info("Added missing users to the internal secret", "users", added)
+
+	return nil
 }
 
 func (r *PerconaServerMySQLReconciler) finalizeInternalSecretAndRestartRouter(

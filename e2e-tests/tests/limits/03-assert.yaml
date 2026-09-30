@@ -119,7 +119,8 @@ spec:
           timeoutSeconds: 3
         resources:
           limits:
-            memory: 4Gi
+            cpu: "1"
+            memory: 8Gi
         startupProbe:
           exec:
             command:
@@ -269,7 +270,7 @@ spec:
       - ReadWriteOnce
       resources:
         requests:
-          storage: 2Gi
+          storage: 30Gi
       volumeMode: Filesystem
     status:
       phase: Pending
@@ -451,6 +452,4 @@ spec:
           name: limits-no-requests-orc
         name: custom
   updateStrategy:
-    rollingUpdate:
-      partition: 0
-    type: RollingUpdate
+    type: OnDelete

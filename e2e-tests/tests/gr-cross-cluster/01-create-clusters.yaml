@@ -14,6 +14,10 @@ commands:
           | yq eval '.spec.proxy.haproxy.enabled=true' - \
           | yq eval '.spec.proxy.haproxy.size=1' - \
           | yq eval '.spec.secretsName="test-secrets"' - \
+          | yq eval '.spec.mysql.resources.limits.memory="4Gi"' - \
+          | yq eval '.spec.mysql.resources.requests.memory="2Gi"' - \
+          | yq eval '.spec.mysql.resources.requests.cpu="500m"' - \
+          | yq eval '.spec.mysql.volumeSpec.persistentVolumeClaim.resources.requests.storage="12Gi"' - \
           | kubectl -n "${NAMESPACE}" apply -f -
 
       get_cr "dc2" \
@@ -24,4 +28,8 @@ commands:
           | yq eval '.spec.unsafeFlags.proxySize=true' - \
           | yq eval '.spec.proxy.haproxy.size=1' - \
           | yq eval '.spec.secretsName="test-secrets"' - \
+          | yq eval '.spec.mysql.resources.limits.memory="4Gi"' - \
+          | yq eval '.spec.mysql.resources.requests.memory="2Gi"' - \
+          | yq eval '.spec.mysql.resources.requests.cpu="500m"' - \
+          | yq eval '.spec.mysql.volumeSpec.persistentVolumeClaim.resources.requests.storage="12Gi"' - \
           | kubectl -n "${NAMESPACE}" apply -f -

@@ -19,7 +19,6 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -35,12 +34,9 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-	metricsServer "sigs.k8s.io/controller-runtime/pkg/metrics/server"
-	ctrlWebhook "sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
@@ -48,7 +44,6 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/controller/psbackup"
 	"github.com/percona/percona-server-mysql-operator/pkg/controller/psclusterset"
 	"github.com/percona/percona-server-mysql-operator/pkg/controller/psrestore"
-	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup/storage"
@@ -69,12 +64,12 @@ func init() {
 }
 
 func main() {
-	var metricsAddr string
-	var enableLeaderElection bool
-	var probeAddr string
-	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
-	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
-	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
+	var metricsAddrFlag string
+	var enableLeaderElectionFlag bool
+	var probeAddrFlag string
+	flag.StringVar(&metricsAddrFlag, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
+	flag.StringVar(&probeAddrFlag, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
+	flag.BoolVar(&enableLeaderElectionFlag, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 
@@ -95,44 +90,10 @@ func main() {
 
 	ctx := ctrl.SetupSignalHandler()
 
-	namespace, err := k8s.GetWatchNamespace()
+	options, err := configureOptions(metricsAddrFlag, probeAddrFlag, enableLeaderElectionFlag)
 	if err != nil {
-		setupLog.Error(err, "unable to get watch namespace")
+		setupLog.Error(err, "failed to configure manager options")
 		os.Exit(1)
-	}
-
-	operatorNamespace, err := k8s.GetOperatorNamespace()
-	if err != nil {
-		setupLog.Error(err, "failed to get operators' namespace")
-		os.Exit(1)
-	}
-	options := ctrl.Options{
-		Scheme: scheme,
-		Metrics: metricsServer.Options{
-			BindAddress: metricsAddr,
-		},
-		HealthProbeBindAddress: probeAddr,
-		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "08db2feb.percona.com",
-
-		WebhookServer: ctrlWebhook.NewServer(ctrlWebhook.Options{
-			Port: 9443,
-		}),
-	}
-
-	err = configureGroupKindConcurrency(&options)
-	if err != nil {
-		setupLog.Error(err, "failed to configure group kind concurrency")
-		os.Exit(1)
-	}
-
-	// Add support for MultiNamespace set in WATCH_NAMESPACE
-	if len(namespace) > 0 {
-		namespaces := make(map[string]cache.Config)
-		for _, ns := range append(strings.Split(namespace, ","), operatorNamespace) {
-			namespaces[ns] = cache.Config{}
-		}
-		options.Cache.DefaultNamespaces = namespaces
 	}
 
 	// Get a config to talk to the apiserver
@@ -274,35 +235,6 @@ func getLogLevel(log logr.Logger) zapcore.LevelEnabler {
 		log.Info("Unsupported log level, using INFO", "level", l)
 		return zapcore.InfoLevel
 	}
-}
-
-func configureGroupKindConcurrency(options *ctrl.Options) error {
-	groupKinds := []string{
-		"PerconaServerMySQL." + apiv1.GroupVersion.Group,
-		"PerconaServerMySQLBackup." + apiv1.GroupVersion.Group,
-		"PerconaServerMySQLRestore." + apiv1.GroupVersion.Group,
-		"PerconaServerMySQLClusterSet." + apiv1.GroupVersion.Group,
-	}
-
-	const defaultConcurrency = 1
-	options.Controller.GroupKindConcurrency = make(map[string]int, len(groupKinds))
-	for _, gk := range groupKinds {
-		options.Controller.GroupKindConcurrency[gk] = defaultConcurrency
-	}
-
-	if s := os.Getenv("MAX_CONCURRENT_RECONCILES"); s != "" {
-		i, err := strconv.Atoi(s)
-		if err != nil {
-			return fmt.Errorf("MAX_CONCURRENT_RECONCILES must be a valid integer: %q", s)
-		}
-		if i <= 0 {
-			return fmt.Errorf("MAX_CONCURRENT_RECONCILES must be a positive number: %d", i)
-		}
-		for _, gk := range groupKinds {
-			options.Controller.GroupKindConcurrency[gk] = i
-		}
-	}
-	return nil
 }
 
 func setupFieldIndexers(ctx context.Context, mgr ctrl.Manager) error {
