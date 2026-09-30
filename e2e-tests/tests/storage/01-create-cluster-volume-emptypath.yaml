@@ -7,6 +7,12 @@ commands:
 
       source ../../functions
 
+      # The data dir is an emptyDir here, so the calculated redo log is
+      # preallocated on the node's own disk and checkRedoLogFits has no volume
+      # size to guard against. Keep mysqld small enough that three pods sharing
+      # a node don't fill it.
       get_cr \
           | yq eval '.spec.mysql.volumeSpec = {"emptyDir": {} }' - \
+          | yq eval '.spec.mysql.resources.limits.memory="2Gi"' - \
+          | yq eval '.spec.mysql.resources.requests.memory="1Gi"' - \
           | kubectl -n "${NAMESPACE}" apply -f -

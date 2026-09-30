@@ -9,14 +9,14 @@ commands:
 
       cluster=$(get_cluster_name)
       generation_before=$(kubectl -n "${NAMESPACE}" get sts "${cluster}-mysql" -o jsonpath='{.metadata.generation}')
-      uids_before=$(get_mysql_pod_uids "${cluster}")
+      uids_before=$(get_pod_uids "${cluster}" database)
 
       kubectl -n "${NAMESPACE}" patch ps "${cluster}" \
           --type merge \
           -p '{"spec": {"mysql": {"configuration": "max_connections=400\ninnodb_buffer_pool_instances=2\n"}}}'
 
       restarted="true"
-      wait_for_mysql_pods_restart "${cluster}" "${uids_before}" 600 || restarted="false"
+      wait_for_pods_restart "${cluster}" database "${uids_before}" 600 || restarted="false"
       wait_cluster_consistency_async "${cluster}" 3 3
 
       generation_after=$(kubectl -n "${NAMESPACE}" get sts "${cluster}-mysql" -o jsonpath='{.metadata.generation}')

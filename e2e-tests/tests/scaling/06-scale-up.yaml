@@ -7,9 +7,11 @@ commands:
 
       source ../../functions
 
+      # four mysql pods only fit the e2e pool with a reduced cpu request
       get_cr \
           | yq eval '.spec.mysql.affinity.antiAffinityTopologyKey="none"' - \
           | yq eval '.spec.mysql.size=4' - \
+          | yq eval '.spec.mysql.resources.requests.cpu="500m"' - \
           | yq eval '.spec.orchestrator.affinity.antiAffinityTopologyKey="none"' - \
           | yq eval '.spec.orchestrator.enabled=true' - \
           | yq eval '.spec.orchestrator.size=5' - \

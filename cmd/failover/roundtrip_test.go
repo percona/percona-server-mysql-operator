@@ -24,16 +24,17 @@ func newSourceLayout(t *testing.T) sourceLayout {
 	t.Helper()
 
 	dir := t.TempDir()
-	binlogFile(t, dir, "binlog.000004", "four-head"+"four-tail")
-	binlogFile(t, dir, "binlog.000005", "whole-five")
-	binlogFile(t, dir, "binlog.000006", "whole-six")
+	// run walks these for event boundaries, so they have to be real event streams.
+	writeFile(t, dir, "binlog.000004", []byte(magic+binlogEvent("four-head")+binlogEvent("four-tail")))
+	writeFile(t, dir, "binlog.000005", []byte(magic+binlogEvent("whole-five")))
+	writeFile(t, dir, "binlog.000006", []byte(magic+binlogEvent("whole-six")))
 	writeIndex(t, filepath.Join(dir, "binlog.index"),
 		"./binlog.000004", "./binlog.000005", "./binlog.000006")
 
 	srv := httptest.NewServer(&handler.FailoverHandler{DataDir: dir})
 	t.Cleanup(srv.Close)
 
-	return sourceLayout{dir: dir, url: srv.URL, position: uint64(len(magic + "four-head"))}
+	return sourceLayout{dir: dir, url: srv.URL, position: uint64(len(magic + binlogEvent("four-head")))}
 }
 
 func newStagingDir(t *testing.T) string {
@@ -73,7 +74,7 @@ func TestFailoverRoundTrip(t *testing.T) {
 
 		after, err := os.ReadFile(target)
 		require.NoError(t, err)
-		assert.Equal(t, string(before)+"four-tail"+"whole-five"+"whole-six", string(after))
+		assert.Equal(t, string(before)+binlogEvent("four-tail")+binlogEvent("whole-five")+binlogEvent("whole-six"), string(after))
 		assert.Equal(t, 1, bytes.Count(after, binlogMagic))
 		relay.assertUntouched(t)
 	})
@@ -85,7 +86,7 @@ func TestFailoverRoundTrip(t *testing.T) {
 		before, err := os.ReadFile(relay.target)
 		require.NoError(t, err)
 
-		whole := uint64(len(magic + "four-head" + "four-tail"))
+		whole := uint64(len(magic + binlogEvent("four-head") + binlogEvent("four-tail")))
 		logs, err := fetchLogsFromSource(t.Context(), newStagingDir(t), src.url, "binlog.000004", whole, testFetchTimeout)
 		require.NoError(t, err)
 		require.Len(t, logs, 3)
@@ -99,7 +100,7 @@ func TestFailoverRoundTrip(t *testing.T) {
 
 		after, err := os.ReadFile(target)
 		require.NoError(t, err)
-		assert.Equal(t, string(before)+"whole-five"+"whole-six", string(after))
+		assert.Equal(t, string(before)+binlogEvent("whole-five")+binlogEvent("whole-six"), string(after))
 		assert.Equal(t, 1, bytes.Count(after, binlogMagic))
 	})
 
@@ -120,7 +121,7 @@ func TestFailoverRoundTrip(t *testing.T) {
 
 		after, err := os.ReadFile(target)
 		require.NoError(t, err)
-		assert.Equal(t, string(before)+"whole-six", string(after))
+		assert.Equal(t, string(before)+binlogEvent("whole-six"), string(after))
 		assert.Equal(t, 1, bytes.Count(after, binlogMagic))
 	})
 
@@ -131,7 +132,7 @@ func TestFailoverRoundTrip(t *testing.T) {
 		before, err := os.ReadFile(relay.target)
 		require.NoError(t, err)
 
-		end := uint64(len(magic + "whole-six"))
+		end := uint64(len(magic + binlogEvent("whole-six")))
 		logs, err := fetchLogsFromSource(t.Context(), newStagingDir(t), src.url, "binlog.000006", end, testFetchTimeout)
 		require.NoError(t, err)
 		require.Len(t, logs, 1)
@@ -153,7 +154,7 @@ func TestFailoverRoundTrip(t *testing.T) {
 		relay := newRelayLayout(t)
 		writeIndex(t, relay.index, "./relay-bin.000003")
 
-		end := uint64(len(magic + "whole-six"))
+		end := uint64(len(magic + binlogEvent("whole-six")))
 		logs, err := fetchLogsFromSource(t.Context(), newStagingDir(t), src.url, "binlog.000006", end, testFetchTimeout)
 		require.NoError(t, err)
 

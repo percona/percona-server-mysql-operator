@@ -1,7 +1,7 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
-  - timeout: 120
+  - timeout: 300
     script: |-
       set -o errexit
       set -o xtrace
@@ -11,9 +11,9 @@ commands:
       cluster=$(get_cluster_name)
       pod="${cluster}-mysql-0"
 
-      # Fill the disk to ~65% of the 2Gi volume to cross the 55% autoscaling threshold
+      # Fill the disk to ~65% of the 10Gi volume to cross the 55% autoscaling threshold
       kubectl -n "${NAMESPACE}" exec "${pod}" -c mysql -- \
-          bash -c "dd if=/dev/zero of=/var/lib/mysql/fillfile bs=1M count=1300 2>/dev/null || true"
+          bash -c "dd if=/dev/zero of=/var/lib/mysql/fillfile bs=1M count=6650 2>/dev/null || true"
 
       usage=$(kubectl -n "${NAMESPACE}" exec "${pod}" -c mysql -- \
           bash -c "df /var/lib/mysql | tail -1 | awk '{print \$5}' | sed 's/%//'")
