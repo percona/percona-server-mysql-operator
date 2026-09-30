@@ -1200,6 +1200,12 @@ get_pod_uids() {
 		--sort-by=.metadata.name -o jsonpath='{.items[*].metadata.uid}'
 }
 
+get_mysql_pod_names() {
+	local cluster_name=$1
+
+	get_pod_names "${cluster_name}" database
+}
+
 get_mysql_pod_uids() {
 	local cluster_name=$1
 
