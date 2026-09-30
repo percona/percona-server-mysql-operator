@@ -7,8 +7,10 @@ commands:
 
       source ../../functions
 
+      # keep autoConfig disabled: the cluster was created without it
       get_cr \
           | yq eval "$(printf '.spec.initImage="%s"' "${IMAGE}")" - \
           | yq eval "$(printf '.spec.crVersion="%s"' "${OPERATOR_VERSION}")" - \
+          | yq eval 'del(.spec.mysql.autoConfig)' - \
           | yq eval '.spec.mysql.clusterType="async"' - \
           | kubectl -n "${NAMESPACE}" apply -f -

@@ -34,7 +34,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -780,9 +779,9 @@ func (r *PerconaServerMySQLReconciler) reconcileClusterTypeChange(
 	switchInProgress := meta.IsStatusConditionTrue(cr.Status.Conditions, apiv1.ConditionClusterTypeSwitchInProgress)
 
 	if desiredType == observedType {
-		// Nothing left to switch. Drop a marker left behind by a switch that was
-		// reverted mid-flight so it can't bypass the readiness gate later on.
-		if switchInProgress {
+		// If a switch is in progress, clear the condition only when the cluster is ready.
+		// This way the switch may be reverted if the cluster fails to become ready under the new type.
+		if switchInProgress && cr.Status.State == apiv1.StateReady {
 			if err := r.clearClusterTypeSwitchInProgress(ctx, cr); err != nil {
 				return errors.Wrap(err, "clear cluster type switch marker")
 			}
@@ -811,10 +810,8 @@ func (r *PerconaServerMySQLReconciler) reconcileClusterTypeChange(
 
 	// Mark before the first destructive step so a teardown that fails partway is
 	// retried regardless of the state the half-torn-down cluster reports.
-	if !switchInProgress {
-		if err := r.markClusterTypeSwitchInProgress(ctx, cr, observedType, desiredType); err != nil {
-			return errors.Wrap(err, "mark cluster type switch in progress")
-		}
+	if err := r.markClusterTypeSwitchInProgress(ctx, cr, observedType, desiredType); err != nil {
+		return errors.Wrap(err, "mark cluster type switch in progress")
 	}
 
 	switch observedType {
@@ -878,8 +875,7 @@ func (r *PerconaServerMySQLReconciler) reconcileClusterTypeChange(
 }
 
 // updateClusterTypeStatus records the cluster type the operator has applied. The
-// type only ever advances when a switch finishes, so this also ends any
-// in-progress switch, in the same status update.
+// type only ever advances when a switch finishes.
 func (r *PerconaServerMySQLReconciler) updateClusterTypeStatus(
 	ctx context.Context,
 	cr *apiv1.PerconaServerMySQL,
@@ -887,7 +883,6 @@ func (r *PerconaServerMySQLReconciler) updateClusterTypeStatus(
 ) error {
 	mutate := func(status *apiv1.PerconaServerMySQLStatus) error {
 		status.ClusterType = clusterType
-		meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionClusterTypeSwitchInProgress)
 		return nil
 	}
 	if err := writeStatus(ctx, r.Client, client.ObjectKeyFromObject(cr), mutate); err != nil {
@@ -943,41 +938,53 @@ func (r *PerconaServerMySQLReconciler) teardownGR(
 	ctx context.Context,
 	cr *apiv1.PerconaServerMySQL,
 ) error {
+	observed := cr
 	cr = cr.DeepCopy()
 	cr.Spec.MySQL.ClusterType = apiv1.ClusterTypeGR
-
-	primary, err := r.getPrimaryPod(ctx, cr)
-	if err != nil {
-		return errors.Wrap(err, "get primary pod")
-	}
 
 	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1.UserOperator)
 	if err != nil {
 		return errors.Wrap(err, "get operator password")
 	}
 
-	podFQDN := mysql.PodFQDN(cr, primary)
-	podUri := mysqlsh.URI(string(apiv1.UserOperator), operatorPass, podFQDN)
+	// Only a bootstrapped cluster has InnoDB cluster metadata to dissolve. The
+	// condition is dropped as soon as the dissolve succeeds, so a teardown that
+	// fails further down is not retried against a cluster that is already gone:
+	// after the dissolve there is no ONLINE primary left to connect to.
+	if meta.IsStatusConditionTrue(cr.Status.Conditions, apiv1.ConditionInnoDBClusterBootstrapped) {
+		primary, err := r.getPrimaryPod(ctx, cr)
+		if err != nil {
+			return errors.Wrap(err, "get primary pod")
+		}
 
-	opts := &mysqlsh.ExecOptions{
-		Pod:           primary,
-		ContainerName: mysql.AppName,
-		Client:        r.ClientCmd,
-		Stdout:        &bytes.Buffer{},
-	}
-	mysh, err := mysqlsh.NewWithExec(podUri, opts)
-	if err != nil {
-		return err
+		podFQDN := mysql.PodFQDN(cr, primary)
+		podUri := mysqlsh.URI(string(apiv1.UserOperator), operatorPass, podFQDN)
+
+		opts := &mysqlsh.ExecOptions{
+			Pod:           primary,
+			ContainerName: mysql.AppName,
+			Client:        r.ClientCmd,
+			Stdout:        &bytes.Buffer{},
+		}
+		mysh, err := mysqlsh.NewWithExec(podUri, opts)
+		if err != nil {
+			return err
+		}
+
+		if err := mysh.DissolveWithExec(ctx); err != nil {
+			return errors.Wrap(err, "dissolve GR")
+		}
+
+		mutate := func(status *apiv1.PerconaServerMySQLStatus) error {
+			meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionInnoDBClusterBootstrapped)
+			return nil
+		}
+		if err := writeStatus(ctx, r.Client, client.ObjectKeyFromObject(cr), mutate); err != nil {
+			return errors.Wrap(err, "clear innodb cluster bootstrapped condition")
+		}
+		mutate(&observed.Status) //nolint:errcheck
 	}
 
-	if err := mysh.DissolveWithExec(ctx); err != nil {
-		return errors.Wrap(err, "dissolve GR")
-	}
-
-	// Dissolving the cluster removes the GR metadata but leaves the
-	// group_replication_* system variables persisted in mysqld-auto.cnf on
-	// every node. Reset them so the nodes don't attempt to rejoin the group
-	// after the switch to async replication.
 	pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr), cr.Namespace)
 	if err != nil {
 		return errors.Wrap(err, "get pods")
@@ -985,6 +992,7 @@ func (r *PerconaServerMySQLReconciler) teardownGR(
 
 	for i := range pods {
 		pod := &pods[i]
+
 		db := database.NewReplicationManager(pod, r.ClientCmd, apiv1.UserOperator, operatorPass, mysql.PodFQDN(cr, pod))
 		if err := db.ResetGroupReplicationPersistedVars(ctx); err != nil {
 			return errors.Wrapf(err, "reset persisted group replication variables on pod %s", pod.Name)
@@ -1067,17 +1075,19 @@ func (r *PerconaServerMySQLReconciler) teardownAsync(
 func (r *PerconaServerMySQLReconciler) reconcileDatabase(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("reconcileDatabase")
 
-	if err := r.reconcileMySQLAutoConfig(ctx, cr); err != nil {
-		return errors.Wrap(err, "reconcile MySQL auto-config")
-	}
-
 	if cr.PVCResizeInProgress() {
 		log.V(1).Info("PVC resize in progress, skipping MySQL reconciliation")
 		return nil
 	}
 
+	autoConf, err := r.reconcileMySQLAutoConfig(ctx, cr)
+	if err != nil {
+		return errors.Wrap(err, "reconcile MySQL auto-config")
+	}
+
 	component := mysql.Component(*cr)
-	if err := k8s.EnsureComponent(ctx, r.Client, &component); err != nil {
+	ensured, err := k8s.EnsureComponent(ctx, r.Client, &component)
+	if err != nil {
 		return errors.Wrap(err, "ensure component")
 	}
 
@@ -1106,7 +1116,7 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(ctx context.Context, cr
 			return errors.Wrap(err, "smart update")
 		}
 	}
-	if err := r.reconcileMySQLConfig(ctx, cr, sts); err != nil {
+	if err := r.reconcileMySQLConfig(ctx, cr, sts, autoConf, ensured.PodsRestarting); err != nil {
 		return errors.Wrap(err, "reconcile MySQL config")
 	}
 
@@ -1178,20 +1188,15 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLServices(ctx context.Contex
 }
 
 // reconcileMySQLAutoConfig reconciles the ConfigMap for MySQL auto-tuning parameters and
-// sets read_only=0 for single-node clusters without Orchestrator
-func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
+// sets read_only=0 for single-node clusters without Orchestrator. It returns the
+// configuration it put in the ConfigMap.
+func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Context, cr *apiv1.PerconaServerMySQL) (string, error) {
 	log := logf.FromContext(ctx).WithName("reconcileMySQLAutoConfig")
-	var memory *resource.Quantity
 	var err error
 
-	if res := cr.Spec.MySQL.Resources; res.Size() > 0 {
-		if _, ok := res.Requests[corev1.ResourceMemory]; ok {
-			memory = res.Requests.Memory()
-		}
-		if _, ok := res.Limits[corev1.ResourceMemory]; ok {
-			memory = res.Limits.Memory()
-		}
-	}
+	res := cr.Spec.MySQL.Resources
+	memory := mysql.EffectiveResource(res, corev1.ResourceMemory)
+	cpu := mysql.EffectiveResource(res, corev1.ResourceCPU)
 
 	nn := types.NamespacedName{
 		Name:      mysql.AutoConfigMapName(cr),
@@ -1200,7 +1205,12 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 
 	currentConfigMap := new(corev1.ConfigMap)
 	if err = r.Client.Get(ctx, nn, currentConfigMap); client.IgnoreNotFound(err) != nil {
-		return errors.Wrapf(err, "get ConfigMap/%s", nn.Name)
+		return "", errors.Wrapf(err, "get ConfigMap/%s", nn.Name)
+	}
+
+	// pausing zeroes the sizes the configuration is derived from
+	if cr.Spec.Pause {
+		return currentConfigMap.Data[mysql.CustomConfigKey], nil
 	}
 
 	setWriteMode := cr.MySQLSpec().Size == 1 && !cr.Spec.Orchestrator.Enabled
@@ -1211,17 +1221,21 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 			exists = false
 		}
 
-		if !exists || !metav1.IsControlledBy(currentConfigMap, cr) {
-			return nil
+		if !exists {
+			return "", nil
+		}
+
+		if !metav1.IsControlledBy(currentConfigMap, cr) {
+			return currentConfigMap.Data[mysql.CustomConfigKey], nil
 		}
 
 		if err := r.Client.Delete(ctx, currentConfigMap); err != nil {
-			return errors.Wrapf(err, "delete ConfigMaps/%s", currentConfigMap.Name)
+			return "", errors.Wrapf(err, "delete ConfigMaps/%s", currentConfigMap.Name)
 		}
 
 		log.Info("ConfigMap deleted", "name", currentConfigMap.Name)
 
-		return nil
+		return "", nil
 	}
 
 	config := ""
@@ -1232,21 +1246,73 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 	}
 
 	if memory != nil {
-		autotuneParams, err := mysql.GetAutoTuneParams(cr, memory)
-		if err != nil {
-			return err
+		var params string
+
+		// the calculator needs a CPU allocation and a version; without them we
+		// keep the legacy autotune, recomputed on every pass
+		autotune := func(reason string) (string, error) {
+			log.Info("falling back to autotune", "reason", reason)
+			r.Recorder.Event(cr, corev1.EventTypeWarning, "AutoConfigFallback",
+				fmt.Sprintf("falling back to autotune: %s", reason))
+			return mysql.GetAutoTuneParams(cr, memory)
 		}
-		config += autotuneParams
+
+		version := strings.TrimSpace(cr.Spec.MySQL.AutoConfig.Version)
+
+		var userConfig bool
+		userConfig, err = mysql.HasUserConfig(ctx, r.Client, cr)
+		if err != nil {
+			return "", errors.Wrap(err, "check for a user configuration")
+		}
+
+		switch {
+		case !cr.Spec.MySQL.AutoConfig.IsEnabled():
+			params, err = mysql.GetAutoTuneParams(cr, memory)
+		case userConfig:
+			log.Info("a user configuration is set, skipping autoconfig")
+			params, err = mysql.GetAutoTuneParams(cr, memory)
+		case cpu == nil:
+			params, err = autotune("autoconfig is enabled but no CPU request/limit is set")
+		case version == "":
+			// only reachable against an outdated CRD
+			params, err = autotune("autoconfig is enabled but mysql.autoConfig.version is not set")
+		default:
+			var storage int64
+			storage, err = dataVolumeCapacity(ctx, r.Client, cr)
+			if err != nil {
+				return "", errors.Wrap(err, "get data volume capacity")
+			}
+			if storage == 0 {
+				storage = mysql.DataVolumeSize(cr)
+			}
+
+			params, err = mysql.GetAutoConfigParams(cr, version, cpu, memory, storage)
+			if errors.Is(err, mysql.ErrInsufficientStorage) {
+				r.Recorder.Event(cr, corev1.EventTypeWarning, "AutoConfigInsufficientStorage", err.Error())
+				return "", errors.Wrap(err, "calculate autoconfig parameters")
+			}
+			if err != nil {
+				log.Error(err, "failed to calculate autoconfig parameters, falling back to autotune")
+				params, err = autotune(err.Error())
+			}
+		}
+		if err != nil {
+			log.Error(err, "failed to calculate MySQL tuning parameters, starting without them")
+			r.Recorder.Event(cr, corev1.EventTypeWarning, "AutoConfigFailed",
+				fmt.Sprintf("failed to calculate MySQL tuning parameters, starting without them: %v", err))
+			params = ""
+		}
+		config += params
 	}
 
 	configMap := k8s.ConfigMap(cr, mysql.AutoConfigMapName(cr), mysql.CustomConfigKey, config, naming.ComponentDatabase)
 	if !k8s.EqualConfigMaps(currentConfigMap, configMap) {
 		if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, configMap, r.Scheme); err != nil {
-			return errors.Wrapf(err, "ensure ConfigMap/%s", configMap.Name)
+			return "", errors.Wrapf(err, "ensure ConfigMap/%s", configMap.Name)
 		}
 		log.Info("ConfigMap updated", "name", configMap.Name, "data", configMap.Data)
 	}
-	return nil
+	return config, nil
 }
 
 func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
@@ -1293,8 +1359,17 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 	}
 
 	component := orchestrator.Component(*cr)
-	if err := k8s.EnsureComponent(ctx, r.Client, &component); err != nil {
+	if _, err := k8s.EnsureComponent(ctx, r.Client, &component); err != nil {
 		return errors.Wrap(err, "ensure component")
+	}
+	if cr.CompareVersion("1.3.0") >= 0 && cr.Spec.UpdateStrategy == apiv1.SmartUpdateStatefulSetStrategyType {
+		sts := new(appsv1.StatefulSet)
+		if err := r.Get(ctx, types.NamespacedName{Name: component.Name(), Namespace: cr.Namespace}, sts); err != nil {
+			return errors.Wrap(err, "get statefulset")
+		}
+		if err := r.smartUpdate(ctx, sts, cr); err != nil {
+			return errors.Wrap(err, "smart update")
+		}
 	}
 
 	raftNodes := orchestrator.RaftNodes(cr)
@@ -1410,7 +1485,7 @@ func (r *PerconaServerMySQLReconciler) reconcileHAProxy(ctx context.Context, cr 
 	}
 
 	component := haproxy.Component(*cr)
-	if err := k8s.EnsureComponent(ctx, r.Client, &component); err != nil {
+	if _, err := k8s.EnsureComponent(ctx, r.Client, &component); err != nil {
 		return errors.Wrap(err, "ensure component")
 	}
 
@@ -1873,7 +1948,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 	}
 
 	component := router.Component(*cr)
-	if err := k8s.EnsureComponent(ctx, r.Client, &component); err != nil {
+	if _, err := k8s.EnsureComponent(ctx, r.Client, &component); err != nil {
 		return errors.Wrap(err, "ensure component")
 	}
 

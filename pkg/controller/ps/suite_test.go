@@ -25,6 +25,8 @@ import (
 	cmscheme "github.com/cert-manager/cert-manager/pkg/client/clientset/versioned/scheme"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -127,4 +129,13 @@ func readDefaultCR(name, namespace string) (*psv1.PerconaServerMySQL, error) {
 	cr.Namespace = namespace
 	cr.Spec.InitContainer.Image = "perconalab/percona-server-mysql-operator:main"
 	return cr, nil
+}
+
+// shrinkMemory lowers the MySQL memory allocation of the default CR so that a
+// test can run the cluster on a volume smaller than the default one: autoconfig
+// sizes the redo log from memory and rejects a configuration whose redo log
+// claims too large a share of the data volume.
+func shrinkMemory(cr *psv1.PerconaServerMySQL) {
+	cr.Spec.MySQL.Resources.Limits[corev1.ResourceMemory] = resource.MustParse("2Gi")
+	cr.Spec.MySQL.Resources.Requests[corev1.ResourceMemory] = resource.MustParse("1Gi")
 }

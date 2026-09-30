@@ -14,6 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/percona/percona-server-mysql-operator/cmd/internal/db"
+	"github.com/percona/percona-server-mysql-operator/cmd/internal/failover"
+	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 )
 
 type fakeDatabase struct {
@@ -108,6 +110,7 @@ func newJobFixture(t *testing.T) *jobFixture {
 			source:       "mysql-1.mysql",
 			wait:         true,
 			stagingDir:   filepath.Join(t.TempDir(), "source-logs"),
+			logDir:       t.TempDir(),
 			lockPath:     filepath.Join(t.TempDir(), "failover.lock"),
 			applyPoll:    time.Millisecond,
 			applyTimeout: time.Second,
@@ -139,7 +142,7 @@ func TestRun(t *testing.T) {
 
 		after, err := os.ReadFile(j.relay.target)
 		require.NoError(t, err)
-		assert.Equal(t, string(before)+"four-tail"+"whole-five"+"whole-six", string(after))
+		assert.Equal(t, string(before)+binlogEvent("four-tail")+binlogEvent("whole-five")+binlogEvent("whole-six"), string(after))
 		j.relay.assertUntouched(t)
 	})
 
@@ -158,7 +161,7 @@ func TestRun(t *testing.T) {
 		assert.Equal(t, before, after)
 		j.relay.assertUntouched(t)
 
-		released, err := lockSplice(j.cfg.lockPath)
+		released, err := failover.Lock(j.cfg.lockPath)
 		require.NoError(t, err, "the early exit must release the splice lock")
 		t.Cleanup(func() { released.Close() }) //nolint:errcheck
 	})
@@ -187,7 +190,7 @@ func TestRun(t *testing.T) {
 
 		after, err := os.ReadFile(j.relay.target)
 		require.NoError(t, err)
-		assert.Equal(t, string(before)+"four-tail"+"whole-five"+"whole-six", string(after),
+		assert.Equal(t, string(before)+binlogEvent("four-tail")+binlogEvent("whole-five")+binlogEvent("whole-six"), string(after),
 			"the splice must land even when the job does not wait for it")
 	})
 
@@ -202,7 +205,7 @@ func TestRun(t *testing.T) {
 	t.Run("a caught-up replica succeeds without touching the relay logs", func(t *testing.T) {
 		j := newJobFixture(t)
 		j.fake.positions.SourceLog = "binlog.000006"
-		j.fake.positions.SourcePos = uint64(len(magic + "whole-six"))
+		j.fake.positions.SourcePos = uint64(len(magic + binlogEvent("whole-six")))
 		before, err := os.ReadFile(j.relay.target)
 		require.NoError(t, err)
 
@@ -352,6 +355,42 @@ func TestRun(t *testing.T) {
 		})
 	}
 
+	t.Run("a partial event at the end of the newest log is dropped", func(t *testing.T) {
+		j := newJobFixture(t)
+		require.NoError(t, os.WriteFile(filepath.Join(j.src.dir, "binlog.000006"),
+			[]byte(magic+binlogEvent("whole-six")+tornEvent("half-six")), 0o644))
+		before, err := os.ReadFile(j.relay.target)
+		require.NoError(t, err)
+
+		require.NoError(t, run(t.Context(), j.cfg))
+
+		assert.Equal(t, wantOps, j.fake.ops)
+
+		after, err := os.ReadFile(j.relay.target)
+		require.NoError(t, err)
+		assert.Equal(t, string(before)+binlogEvent("four-tail")+binlogEvent("whole-five")+binlogEvent("whole-six"),
+			string(after), "everything up to the last whole event must still be spliced")
+		j.relay.assertUntouched(t)
+	})
+
+	t.Run("a partial event in an earlier log stops the splice", func(t *testing.T) {
+		j := newJobFixture(t)
+		require.NoError(t, os.WriteFile(filepath.Join(j.src.dir, "binlog.000005"),
+			[]byte(magic+binlogEvent("whole-five")+tornEvent("half-five")), 0o644))
+		before, err := os.ReadFile(j.relay.target)
+		require.NoError(t, err)
+
+		err = run(t.Context(), j.cfg)
+
+		require.ErrorIs(t, err, errTornBinlog)
+		assert.NotContains(t, j.fake.ops, "StartSQLThread")
+
+		after, err := os.ReadFile(j.relay.target)
+		require.NoError(t, err)
+		assert.Equal(t, before, after, "a gap in the middle of the stream may not reach the relay log")
+		j.relay.assertUntouched(t)
+	})
+
 	t.Run("START REPLICA SQL_THREAD fails", func(t *testing.T) {
 		j := newJobFixture(t)
 		j.fake.startErr = errors.New("access denied")
@@ -364,27 +403,53 @@ func TestRun(t *testing.T) {
 		assert.Equal(t, 1, j.fake.calls, "only the pre-check; no point polling an applier that never started")
 	})
 
-	t.Run("the applier never drains the splice", func(t *testing.T) {
+	t.Run("an applier that never drains the splice is left to it", func(t *testing.T) {
 		j := newJobFixture(t)
 		j.fake.statuses = []map[string]string{applying("relay-bin.000002", 4, drainedState)}
 		j.cfg.applyTimeout = 50 * time.Millisecond
+		before, err := os.ReadFile(j.relay.target)
+		require.NoError(t, err)
 
-		err := run(t.Context(), j.cfg)
+		require.NoError(t, run(t.Context(), j.cfg),
+			"the splice landed and the applier keeps working, so the job is done")
 
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "apply relay logs")
 		assert.Equal(t, wantOps, j.fake.ops)
+
+		after, err := os.ReadFile(j.relay.target)
+		require.NoError(t, err)
+		assert.NotEqual(t, before, after, "giving up on the wait must not undo the splice")
+	})
+
+	t.Run("a job torn down mid-wait does not report success", func(t *testing.T) {
+		j := newJobFixture(t)
+		j.fake.statuses = []map[string]string{applying("relay-bin.000002", 4, busyState)}
+		j.cfg.applyTimeout = time.Hour
+
+		ctx, cancel := context.WithCancel(t.Context())
+		t.Cleanup(cancel)
+		// Call 1 is run's own pre-check, so cancel once the wait loop is polling.
+		j.fake.onCall = func(calls int) {
+			if calls >= 3 {
+				cancel()
+			}
+		}
+
+		err := run(ctx, j.cfg)
+
+		require.Error(t, err, "a cancelled job must not exit 0")
+		assert.Contains(t, err.Error(), "apply relay logs")
+		assert.ErrorIs(t, err, context.Canceled)
 	})
 
 	t.Run("a splice already in progress stops this one", func(t *testing.T) {
 		j := newJobFixture(t)
-		held, err := lockSplice(j.cfg.lockPath)
+		held, err := failover.Lock(j.cfg.lockPath)
 		require.NoError(t, err)
 		t.Cleanup(func() { held.Close() }) //nolint:errcheck
 
 		err = run(t.Context(), j.cfg)
 
-		require.ErrorIs(t, err, errLocked)
+		require.ErrorIs(t, err, failover.ErrLocked)
 		assert.Empty(t, j.fake.ops, "replication must not be touched by a losing run")
 		j.relay.assertUntouched(t)
 	})
@@ -429,6 +494,7 @@ func TestProductionConfig(t *testing.T) {
 	assert.Equal(t, sourceStreamURL("mysql-1.mysql"), cfg.sourceURL("mysql-1.mysql"))
 	assert.Equal(t, "mysql-1.mysql", cfg.source)
 	assert.Equal(t, "/tmp/source-logs", cfg.stagingDir)
+	assert.Equal(t, mysql.DataMountPath, cfg.logDir)
 	assert.Equal(t, lockPath, cfg.lockPath)
 	assert.True(t, cfg.wait)
 	assert.Equal(t, relayLogApplyPoll, cfg.applyPoll)
