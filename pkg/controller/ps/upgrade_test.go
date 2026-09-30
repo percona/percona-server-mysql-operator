@@ -734,7 +734,7 @@ func TestSwitchOverAndWait(t *testing.T) {
 		clusterHint := cr.ClusterHint()
 
 		oldPrimaryResp, _ := json.Marshal(orchestrator.Instance{
-			Key:   orchestrator.InstanceKey{Hostname: primary.Name},
+			Key:   orchestrator.InstanceKey{Hostname: primary.Name, Port: mysql.DefaultPort},
 			Alias: primary.Name,
 		})
 		takeoverResp, _ := json.Marshal(orchestrator.Instance{
@@ -754,8 +754,17 @@ func TestSwitchOverAndWait(t *testing.T) {
 					stdout: oldPrimaryResp,
 				},
 				{
+					cmd: orcURL(fmt.Sprintf("api/begin-downtime/%s/%d/%s/%s/600s",
+						primary.Name, mysql.DefaultPort, orchestrator.DowntimeOwner, orchestrator.DowntimeReasonSwitchover)),
+					stdout: downtimeResp,
+				},
+				{
 					cmd:    []string{"sh", "-c", fmt.Sprintf(`curl -s -u "%s:$(cat %s/%s)" "localhost:3000/api/graceful-master-takeover-auto/%s/%s/%d"`, apiv1.UserOrchestrator, orchestrator.CredsMountPath, apiv1.UserOrchestrator, clusterHint, target.GetName(), mysql.DefaultPort)},
 					stdout: takeoverResp,
+				},
+				{
+					cmd:    orcURL(fmt.Sprintf("api/end-downtime/%s/%d", primary.Name, mysql.DefaultPort)),
+					stdout: downtimeResp,
 				},
 				{
 					cmd:    []string{"sh", "-c", fmt.Sprintf(`curl -s -u "%s:$(cat %s/%s)" "localhost:3000/api/master/%s"`, apiv1.UserOrchestrator, orchestrator.CredsMountPath, apiv1.UserOrchestrator, clusterHint)},
@@ -775,8 +784,8 @@ func TestSwitchOverAndWait(t *testing.T) {
 
 		err := r.switchOverAndWait(t.Context(), cr, primary, target)
 		require.NoError(t, err)
-		// 2 calls for switchOverAsync + 1 call for getPrimaryHost in the wait loop.
-		assert.Equal(t, 3, fc.execCount)
+		// 4 calls for switchOverAsync + 1 call for getPrimaryHost in the wait loop.
+		assert.Equal(t, 5, fc.execCount)
 	})
 
 	t.Run("GR assigns primary label to target", func(t *testing.T) {
@@ -1260,7 +1269,7 @@ func TestSmartUpdateMySQL(t *testing.T) {
 
 	primaryFromOrchestrator := func(idx int) []byte {
 		b, _ := json.Marshal(orchestrator.Instance{
-			Key:   orchestrator.InstanceKey{Hostname: mysql.PodName(cr, idx)},
+			Key:   orchestrator.InstanceKey{Hostname: mysql.PodName(cr, idx), Port: mysql.DefaultPort},
 			Alias: mysql.PodName(cr, idx),
 		})
 		return b
@@ -1295,7 +1304,9 @@ func TestSmartUpdateMySQL(t *testing.T) {
 			scripts: []fakeClientScript{
 				{stdout: primaryFromOrchestrator(0)},
 				{stdout: primaryFromOrchestrator(0)},
+				{stdout: downtimeResp},
 				{stdout: primaryFromOrchestrator(1)},
+				{stdout: downtimeResp},
 				{stdout: primaryFromOrchestrator(1)},
 			},
 			wantDeleted: []string{mysql.PodName(cr, 0)},

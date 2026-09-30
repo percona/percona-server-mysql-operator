@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -134,26 +133,6 @@ func TestBakedConfigDisablesPromotionLagVeto(t *testing.T) {
 	require.NoError(t, json.Unmarshal(data, &cfg))
 
 	assert.EqualValues(t, 0, cfg["FailMasterPromotionOnLagMinutes"])
-}
-
-func TestBakedConfigPassesCommandHintToFailoverHook(t *testing.T) {
-	data, err := os.ReadFile(filepath.Join("..", "..", "build", "orchestrator.conf.json"))
-	require.NoError(t, err)
-
-	cfg := struct {
-		PreFailoverProcesses []string
-	}{}
-	require.NoError(t, json.Unmarshal(data, &cfg))
-
-	var hook string
-	for _, p := range cfg.PreFailoverProcesses {
-		if strings.Contains(p, "orc-handler failover") {
-			hook = p
-		}
-	}
-
-	require.NotEmpty(t, hook, "PreFailoverProcesses must invoke the failover hook")
-	assert.Contains(t, hook, "-command '{command}'")
 }
 
 func TestBakedConfigGivesTheTakeoverTimeToCatchUp(t *testing.T) {

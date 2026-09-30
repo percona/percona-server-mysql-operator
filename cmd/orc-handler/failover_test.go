@@ -196,7 +196,7 @@ func TestRunFailoverSkipsPlannedTakeovers(t *testing.T) {
 
 	for _, command := range tests {
 		t.Run(command, func(t *testing.T) {
-			err := runFailover(context.Background(), []string{
+			err := runFailover(t.Context(), []string{
 				"-source", "cluster1-mysql-0.cluster1-mysql.ps",
 				"-failure-type", "DeadMaster",
 				"-command", command,
