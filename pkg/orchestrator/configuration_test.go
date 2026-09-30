@@ -2,6 +2,8 @@ package orchestrator
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -121,4 +123,24 @@ func TestConfigMapDataUserConfiguration(t *testing.T) {
 		assert.EqualValues(t, "evil", cfg["HostnameResolveMethod"])
 		assert.EqualValues(t, false, cfg["UseSuperReadOnly"])
 	})
+}
+
+func TestBakedConfigDisablesPromotionLagVeto(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "build", "orchestrator.conf.json"))
+	require.NoError(t, err)
+
+	cfg := map[string]any{}
+	require.NoError(t, json.Unmarshal(data, &cfg))
+
+	assert.EqualValues(t, 0, cfg["FailMasterPromotionOnLagMinutes"])
+}
+
+func TestBakedConfigGivesTheTakeoverTimeToCatchUp(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "build", "orchestrator.conf.json"))
+	require.NoError(t, err)
+
+	cfg := map[string]any{}
+	require.NoError(t, json.Unmarshal(data, &cfg))
+
+	assert.EqualValues(t, 300, cfg["ReasonableMaintenanceReplicationLagSeconds"])
 }
