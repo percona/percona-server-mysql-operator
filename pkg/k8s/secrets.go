@@ -11,6 +11,8 @@ import (
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 )
 
+var ErrPasswordNotFound = errors.New("password not found in secret")
+
 // SecretKeySelector is a k8s helper to create SecretKeySelector object
 func SecretKeySelector(name, key string) *corev1.SecretKeySelector {
 	return &corev1.SecretKeySelector{
@@ -32,7 +34,7 @@ func UserPassword(ctx context.Context, cl client.Reader, cr *apiv1.PerconaServer
 
 	pass, ok := secret.Data[string(username)]
 	if !ok {
-		return "", errors.Errorf("no password for %s in secret %s", username, nn.Name)
+		return "", errors.Wrapf(ErrPasswordNotFound, "no password for %s in secret %s", username, nn.Name)
 	}
 
 	return string(pass), nil

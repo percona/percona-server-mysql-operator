@@ -16,6 +16,10 @@ import (
 
 const dataDir = "/var/lib/mysql"
 
+// binlogStartPos is where the first event of a binary log begins, right after
+// its magic number.
+const binlogStartPos = 4
+
 type FailoverHandler struct {
 	DataDir string
 }
@@ -128,8 +132,8 @@ func (h *FailoverHandler) copyFirstBinlogToTar(logName string, position int64, w
 	if err != nil {
 		return fmt.Errorf("stat %s: %w", logName, err)
 	}
-	if position < 0 || position > fi.Size() {
-		return fmt.Errorf("%w: position %d is outside %s (%d bytes)", errInvalidRequest, position, logName, fi.Size())
+	if position < binlogStartPos || position > fi.Size() {
+		return fmt.Errorf("%w: position %d is outside the events of %s (%d bytes)", errInvalidRequest, position, logName, fi.Size())
 	}
 	size := fi.Size() - position
 

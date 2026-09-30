@@ -22,7 +22,7 @@ metadata:
   name: smart-update-orc
 spec:
   updateStrategy:
-    type: RollingUpdate
+    type: OnDelete
 status:
   observedGeneration: 1
   replicas: 3
