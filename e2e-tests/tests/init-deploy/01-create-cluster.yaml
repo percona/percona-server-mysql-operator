@@ -39,6 +39,10 @@ commands:
           | yq eval '.spec.toolkit.resources.limits.memory="256Mi"' - \
           | yq eval '.spec.toolkit.resources.requests.cpu="100m"' - \
           | yq eval '.spec.toolkit.resources.requests.memory="128Mi"' - \
+          | yq eval '.spec.logcollector.resources.limits.cpu="200m"' - \
+          | yq eval '.spec.logcollector.resources.limits.memory="256Mi"' - \
+          | yq eval '.spec.logcollector.resources.requests.cpu="100m"' - \
+          | yq eval '.spec.logcollector.resources.requests.memory="128Mi"' - \
           | yq eval '.spec.proxy.haproxy.resources.limits.cpu="600m"' - \
           | yq eval '.spec.proxy.haproxy.resources.limits.memory="512Mi"' - \
           | yq eval '.spec.proxy.haproxy.resources.requests.cpu="500m"' - \

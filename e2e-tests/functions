@@ -2125,21 +2125,22 @@ get_cr_with_latest_versions_in_vs() {
 	local image_toolkit=$(echo ${versions} | jq -r '.versions[].matrix.toolkit[].imagePath' | head -n 1)
 	local image_haproxy=$(echo ${versions} | jq -r '.versions[].matrix.haproxy[].imagePath' | head -n 1)
 	local image_pmm_client=$(echo ${versions} | jq -r '.versions[].matrix.pmm[].imagePath' | head -n 1)
+	local image_binlog_server=$(echo ${versions} | jq -r '.versions[].matrix.binlogServer[].imagePath' | head -n 1)
 
 	curl "https://raw.githubusercontent.com/percona/percona-server-mysql-operator/${git_tag}/deploy/cr.yaml" \
 		-o ${TEMP_DIR}/cr.yaml
 
 	get_cr "" \
-		${image_mysql} \
-		${image_backup} \
-		${image_orchestrator} \
-		${image_router} \
-		${image_toolkit} \
-		${image_haproxy} \
-		${image_pmm_client} \
-		${image_binlog_server} \
-		${IMAGE_LOG_COLLECTOR} \
-		${TEMP_DIR}/cr.yaml
+		"${image_mysql}" \
+		"${image_backup}" \
+		"${image_orchestrator}" \
+		"${image_router}" \
+		"${image_toolkit}" \
+		"${image_haproxy}" \
+		"${image_pmm_client}" \
+		"${image_binlog_server:-${IMAGE_BINLOG_SERVER}}" \
+		"${IMAGE_LOG_COLLECTOR}" \
+		"${TEMP_DIR}/cr.yaml"
 }
 
 get_telemetry_report_by_id() {
