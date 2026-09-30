@@ -17,7 +17,7 @@ sort_yaml() {
 	PMM_ORDER='"enabled","image","imagePullPolicy","serverHost","customClusterName","mysqlParams","haproxyParams","containerSecurityContext", "resources", "readinessProbes", "livenessProbes"'
 	BINLOG_SERVER_ORDER='"enabled","binlogServer"'
 	BINLOG_SERVER_SPEC_ORDER='"size","image","imagePullPolicy","imagePullSecrets","serverId","storage","keyringSecret","connectTimeout","readTimeout","writeTimeout","idleTime"'
-	BACKUP_ORDER='"enabled","pitr","sourcePod","image","imagePullPolicy","imagePullSecrets","schedule","backoffLimit", "serviceAccountName", "initContainer", "containerSecurityContext", "resources","storages", "allowParallel", "encryptionKeySecret", "startingDeadlineSeconds", "suspendedDeadlineSeconds"'
+	BACKUP_ORDER='"enabled","pitr","sourcePod","image","imagePullPolicy","imagePullSecrets","schedule","backoffLimit", "serviceAccountName", "initContainer", "containerSecurityContext", "resources","storages", "encryptionKeySecret", "startingDeadlineSeconds", "suspendedDeadlineSeconds"'
 	LOGCOLLECTOR_ORDER='"enabled","image","imagePullPolicy","configuration","env","envFrom","containerSecurityContext","resources","readinessProbe","livenessProbe","volumeMounts","volumes","logRotate"'
 	LOGROTATE_ORDER='"schedule","configuration","extraConfig","readinessProbe","livenessProbe"'
 
@@ -223,17 +223,6 @@ del_fields_to_comment() {
 		| yq "del(.spec.pmm.livenessProbes)" \
 		| yq "del(.spec.pmm.containerSecurityContext)" \
 		| yq "del(.spec.pmm.resources.limits)" \
-		| yq "del(.spec.logcollector.imagePullPolicy)" \
-		| yq "del(.spec.logcollector.configuration)" \
-		| yq "del(.spec.logcollector.env)" \
-		| yq "del(.spec.logcollector.envFrom)" \
-		| yq "del(.spec.logcollector.containerSecurityContext)" \
-		| yq "del(.spec.logcollector.resources)" \
-		| yq "del(.spec.logcollector.readinessProbe)" \
-		| yq "del(.spec.logcollector.livenessProbe)" \
-		| yq "del(.spec.logcollector.volumeMounts)" \
-		| yq "del(.spec.logcollector.volumes)" \
-		| yq "del(.spec.logcollector.logRotate)" \
 		| yq "del(.spec.backup.allowParallel)" \
 		| yq "del(.spec.backup.startingDeadlineSeconds)" \
 		| yq "del(.spec.backup.suspendedDeadlineSeconds)" \

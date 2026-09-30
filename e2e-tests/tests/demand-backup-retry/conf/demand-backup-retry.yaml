@@ -22,7 +22,6 @@ spec:
     size: 3
 
   backup:
-    allowParallel: false
     backoffLimit: 5
     startingDeadlineSeconds: 900
     suspendedDeadlineSeconds: 900

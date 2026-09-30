@@ -7,9 +7,9 @@ commands:
 
       source ../../functions
 
-      # the operator writes the binlogs picked for the restore into this configmap,
-      # including the encryption envelope the binlog server recorded at upload time
-      binlogs=$(kubectl -n "${NAMESPACE}" get configmap pitr-binlogs-gr-pitr-encrypted-s3-restore -o jsonpath='{.data.binlogs\.json}')
+      # binlog-search passes the binlog list to the restore container through a file,
+      # not a Kubernetes object. Its log has the same JSON
+      binlogs=$(kubectl logs -n "${NAMESPACE}" job/pitr-restore-gr-pitr-encrypted-s3-restore -c binlog-search | jq '.result')
 
       echo "${binlogs}" | jq .
 

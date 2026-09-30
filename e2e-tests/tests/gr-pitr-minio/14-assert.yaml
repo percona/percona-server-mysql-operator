@@ -1,0 +1,65 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 120
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster_name=$(get_cluster_name)
+
+      desc=$(kubectl -n "${NAMESPACE}" get ps-restore gr-pitr-minio-restore-too-old -o jsonpath='{.status.stateDescription}')
+      echo "${desc}" | grep -F 'timestamp is too old'
+
+      desc=$(kubectl -n "${NAMESPACE}" get ps-restore gr-pitr-minio-restore-bad-date -o jsonpath='{.status.stateDescription}')
+      echo "${desc}" | grep -F 'invalid pitr date'
+
+      for restore_name in gr-pitr-minio-restore-too-old gr-pitr-minio-restore-bad-date; do
+          if kubectl -n "${NAMESPACE}" get job "xb-restore-${restore_name}" >/dev/null 2>&1; then
+              echo "restore job for ${restore_name} exists, expected the restore to fail before it is created"
+              exit 1
+          fi
+          if kubectl -n "${NAMESPACE}" get job "pitr-restore-${restore_name}" >/dev/null 2>&1; then
+              echo "pitr job for ${restore_name} exists, expected the restore to fail before it is created"
+              exit 1
+          fi
+      done
+
+      paused=$(kubectl -n "${NAMESPACE}" get ps "${cluster_name}" -o jsonpath='{.spec.pause}')
+      if [[ ${paused} == "true" ]]; then
+          echo "cluster ${cluster_name} is paused, expected an invalid PITR target to fail before the cluster is paused"
+          exit 1
+      fi
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-pitr-minio
+  finalizers:
+    - percona.com/delete-mysql-pods-in-order
+status:
+  router:
+    ready: 3
+    size: 3
+    state: ready
+  mysql:
+    ready: 3
+    size: 3
+    state: ready
+  state: ready
+---
+kind: PerconaServerMySQLRestore
+apiVersion: ps.percona.com/v1
+metadata:
+  name: gr-pitr-minio-restore-too-old
+status:
+  state: Error
+---
+kind: PerconaServerMySQLRestore
+apiVersion: ps.percona.com/v1
+metadata:
+  name: gr-pitr-minio-restore-bad-date
+status:
+  state: Error

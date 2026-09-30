@@ -669,7 +669,7 @@ spec:
 #    podSecurityContext:
 #      supplementalGroups:
 #        - 1001
-#    configuration: '{"FailMasterPromotionOnLagMinutes": 10}'
+#    configuration: '{"ReasonableReplicationLagSeconds": 30}'
   pmm:
     enabled: false
     image: perconalab/pmm-client:3-dev-latest
@@ -1075,7 +1075,6 @@ spec:
 #              requests:
 #                storage: 30Gi
 #            storageClassName: standard
-#    allowParallel: false
 #    encryptionKeySecret:
 #      key: encryptionKey
 #      name: my-encryption-key-secret
