@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -83,13 +84,8 @@ func IsMasterFailover(analysis string) bool {
 	return masterFailoverAnalyses[analysis]
 }
 
-var plannedTakeoverCommands = map[string]bool{
-	"graceful-master-takeover": true,
-	"force-master-takeover":    true,
-}
-
 func IsPlannedTakeover(command string) bool {
-	return plannedTakeoverCommands[command]
+	return slices.Contains([]string{"graceful-master-takeover", "force-master-takeover"}, command)
 }
 
 var (
@@ -269,6 +265,10 @@ func EnsureNodeIsPrimary(ctx context.Context, cliCmd clientcmd.Client, pod *core
 		return nil
 	}
 
+	// Graceful takeover sets the primary read-only while the candidate catches
+	// up. With RecoverNonWriteableMaster enabled, orchestrator treats that as a
+	// problem and makes it writable again, so downtime the primary to keep
+	// orchestrator from running any recovery on it during the switchover.
 	if err := BeginDowntime(ctx, cliCmd, pod, primary.Key.Hostname, int(primary.Key.Port),
 		DowntimeOwner, DowntimeReasonSwitchover, switchoverDowntimeSeconds); err != nil {
 		return errors.Wrapf(err, "begin downtime on %s", primary.Key.Hostname)
