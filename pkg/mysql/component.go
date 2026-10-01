@@ -12,6 +12,7 @@ import (
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
+	"github.com/percona/percona-server-mysql-operator/pkg/logcollector"
 )
 
 type Component apiv1.PerconaServerMySQL
@@ -74,5 +75,10 @@ func (c *Component) Object(ctx context.Context, cl client.Client) (client.Object
 		return nil, errors.Wrapf(err, "get tls hash")
 	}
 
-	return StatefulSet(cr, initImage, configHash, tlsHash, internalSecret), nil
+	logCollectorHash, err := logcollector.ConfigHash(ctx, cl, cr)
+	if err != nil {
+		return nil, errors.Wrap(err, "get log collector config hash")
+	}
+
+	return StatefulSet(cr, initImage, configHash, tlsHash, logCollectorHash, internalSecret), nil
 }

@@ -816,7 +816,8 @@ get_cr() {
 	local image_haproxy=${7:-${IMAGE_HAPROXY}}
 	local image_pmm_client=${8:-${IMAGE_PMM_CLIENT}}
 	local image_binlog_server=${9:-${IMAGE_BINLOG_SERVER}}
-	local cr_file=${10:-${DEPLOY_DIR}/cr.yaml}
+	local image_log_collector=${10:-${IMAGE_LOG_COLLECTOR}}
+	local cr_file=${11:-${DEPLOY_DIR}/cr.yaml}
 
 	local platform="$(detect_k8s_platform)"
 	local cr_name="${test_name}${name_suffix:+-$name_suffix}"
@@ -849,6 +850,7 @@ get_cr() {
 		.spec.proxy.haproxy.image = "'"$image_haproxy"'" |
 		.spec.pmm.image = "'"$image_pmm_client"'" |
 		.spec.backup.pitr.binlogServer.image="'"${image_binlog_server}"'" |
+		with(select(.spec.logcollector != null); .spec.logcollector.image = "'"$image_log_collector"'") |
 		(.. | select(tag == "!!str")) |= sub("<namespace>"; "'"${NAMESPACE}"'")
 	' "${crs[@]}" \
 		| if [[ $platform == "minikube" ]]; then
@@ -1196,6 +1198,12 @@ get_pod_uids() {
 
 	kubectl get pod -n "${NAMESPACE}" --selector="$(pod_selector "${cluster_name}" "${component}")" \
 		--sort-by=.metadata.name -o jsonpath='{.items[*].metadata.uid}'
+}
+
+get_mysql_pod_names() {
+	local cluster_name=$1
+
+	get_pod_names "${cluster_name}" database
 }
 
 get_mysql_pod_uids() {
@@ -2123,20 +2131,22 @@ get_cr_with_latest_versions_in_vs() {
 	local image_toolkit=$(echo ${versions} | jq -r '.versions[].matrix.toolkit[].imagePath' | head -n 1)
 	local image_haproxy=$(echo ${versions} | jq -r '.versions[].matrix.haproxy[].imagePath' | head -n 1)
 	local image_pmm_client=$(echo ${versions} | jq -r '.versions[].matrix.pmm[].imagePath' | head -n 1)
+	local image_binlog_server=$(echo ${versions} | jq -r '.versions[].matrix.binlogServer[].imagePath' | head -n 1)
 
 	curl "https://raw.githubusercontent.com/percona/percona-server-mysql-operator/${git_tag}/deploy/cr.yaml" \
 		-o ${TEMP_DIR}/cr.yaml
 
 	get_cr "" \
-		${image_mysql} \
-		${image_backup} \
-		${image_orchestrator} \
-		${image_router} \
-		${image_toolkit} \
-		${image_haproxy} \
-		${image_pmm_client} \
-		${image_binlog_server} \
-		${TEMP_DIR}/cr.yaml
+		"${image_mysql}" \
+		"${image_backup}" \
+		"${image_orchestrator}" \
+		"${image_router}" \
+		"${image_toolkit}" \
+		"${image_haproxy}" \
+		"${image_pmm_client}" \
+		"${image_binlog_server:-${IMAGE_BINLOG_SERVER}}" \
+		"${IMAGE_LOG_COLLECTOR}" \
+		"${TEMP_DIR}/cr.yaml"
 }
 
 get_telemetry_report_by_id() {

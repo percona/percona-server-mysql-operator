@@ -196,6 +196,14 @@ create_default_cnf() {
 	sed -i "/\[mysqld\]/a gtid-mode=ON" $CFG
 	sed -i "/\[mysqld\]/a enforce-gtid-consistency=ON" $CFG
 	sed -i "/\[mysqld\]/a log_error_verbosity=3" $CFG
+	# When the log collector is enabled, mysqld writes its error log to a file on
+	# the data volume so the collector sidecars can tail and rotate it. The
+	# collector re-emits every line to its own stdout, so the log is still
+	# reachable with "kubectl logs <pod> -c logs".
+	if [[ ${LOG_COLLECTOR_ENABLED:-} == "true" && -n ${LOG_DIR:-} ]]; then
+		mkdir -p "${LOG_DIR}"
+		sed -i "/\[mysqld\]/a log_error=${LOG_DIR}/mysqld-error.log" $CFG
+	fi
 	sed -i "/\[mysqld\]/a plugin-load-add=clone=mysql_clone.so" $CFG
 
 	if [[ -d ${TLS_DIR} ]]; then
@@ -234,7 +242,7 @@ load_group_replication_plugin() {
 	sed -i "/\[mysqld\]/a group_replication_exit_state_action=ABORT_SERVER" $CFG
 	sed -i "/\[mysqld\]/a group_replication_unreachable_majority_timeout=5" $CFG
 
-	if [[ "${BOOTSTRAP_MODE}" == "manual" ]]; then
+	if [[ ${BOOTSTRAP_MODE} == "manual" ]]; then
 		sed -i "/\[mysqld\]/a group_replication_start_on_boot=OFF" $CFG
 	fi
 }
