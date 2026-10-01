@@ -495,6 +495,27 @@ func TestStartSQLThread(t *testing.T) {
 	})
 }
 
+func TestStartReplicaThreads(t *testing.T) {
+	t.Run("executes START REPLICA", func(t *testing.T) {
+		d, mock := newMockDB(t)
+		mock.ExpectExec(regexp.QuoteMeta("START REPLICA")).
+			WillReturnResult(sqlmock.NewResult(0, 0))
+
+		require.NoError(t, d.StartReplicaThreads(t.Context()))
+	})
+
+	t.Run("exec fails", func(t *testing.T) {
+		d, mock := newMockDB(t)
+		mock.ExpectExec(regexp.QuoteMeta("START REPLICA")).
+			WillReturnError(errors.New("server has gone away"))
+
+		err := d.StartReplicaThreads(t.Context())
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "start replica threads")
+	})
+}
+
 func TestFlushRelayLogs(t *testing.T) {
 	t.Run("executes FLUSH RELAY LOGS", func(t *testing.T) {
 		d, mock := newMockDB(t)

@@ -1,0 +1,65 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - timeout: 180
+    script: |-
+      set -o errexit
+      set -o pipefail
+      set -o xtrace
+
+      source ../../functions
+
+      cluster_name=$(get_cluster_name)
+      BINLOG_SERVER_SPEC=$(kubectl -n "${NAMESPACE}" get ps "${cluster_name}" -o json \
+          | jq -c '.spec.backup.pitr.binlogServer')
+
+      bucket=$(echo "${BINLOG_SERVER_SPEC}" | jq -r '.storage.s3.bucket')
+      credentials_secret=$(echo "${BINLOG_SERVER_SPEC}" | jq -r '.storage.s3.credentialsSecret')
+      region=$(echo "${BINLOG_SERVER_SPEC}" | jq -r '.storage.s3.region')
+      endpoint=$(echo "${BINLOG_SERVER_SPEC}" | jq -r '.storage.s3.endpointUrl')
+      prefix=binlogs-gtid-validation
+      metadata='{"previous_gtids":"3e11fa47-71ca-11e1-9e33-c80aa9429562:1-10","added_gtids":"3e11fa47-71ca-11e1-9e33-c80aa9429562:11-20"}'
+
+      # Use a separate archive whose oldest binlog starts after GTIDs 1-10.
+      # This makes target 5-15 too old (missing 5-10), regardless
+      # of the live archive. Validation needs only the index and metadata.
+      set +x
+      access_key=$(get_secret_value "${credentials_secret}" ACCESS_KEY_ID AWS_ACCESS_KEY_ID)
+      secret_key=$(get_secret_value "${credentials_secret}" SECRET_ACCESS_KEY AWS_SECRET_ACCESS_KEY)
+      kubectl -n "${NAMESPACE}" run -i --rm "aws-cli-$(date +%s%N)" \
+          --image=perconalab/awscli \
+          --restart=Never \
+          --env="AWS_ACCESS_KEY_ID=${access_key}" \
+          --env="AWS_SECRET_ACCESS_KEY=${secret_key}" \
+          --env="AWS_DEFAULT_REGION=${region}" \
+          --env="S3_ENDPOINT=${endpoint}" \
+          --env="S3_BUCKET=${bucket}" \
+          --env="S3_PREFIX=${prefix}" \
+          --env="BINLOG_METADATA=${metadata}" \
+          --command -- bash -ec '
+              printf "./binlog.000001\n" > /tmp/binlog.index
+              printf "%s\n" "$BINLOG_METADATA" > /tmp/binlog.000001.json
+              /usr/bin/aws --no-verify-ssl --endpoint-url "$S3_ENDPOINT" s3api put-object --bucket "$S3_BUCKET" --key "$S3_PREFIX/binlog.index" --body /tmp/binlog.index
+              /usr/bin/aws --no-verify-ssl --endpoint-url "$S3_ENDPOINT" s3api put-object --bucket "$S3_BUCKET" --key "$S3_PREFIX/binlog.000001.json" --body /tmp/binlog.000001.json
+          '
+      set -x
+
+      for restore_name in gr-pitr-s3-restore-too-old-gtid gr-pitr-s3-restore-bad-gtid; do
+          if [[ "${restore_name}" == gr-pitr-s3-restore-too-old-gtid ]]; then
+              target='3e11fa47-71ca-11e1-9e33-c80aa9429562:5-15'
+          else
+              target='not-a-uuid:1-5'
+          fi
+
+          echo '{}' \
+              | yq eval '.apiVersion = "ps.percona.com/v1"' - \
+              | yq eval '.kind = "PerconaServerMySQLRestore"' - \
+              | yq eval ".metadata.name = \"${restore_name}\"" - \
+              | yq eval ".spec.clusterName = \"${cluster_name}\"" - \
+              | yq eval '.spec.backupName = "gr-pitr-s3-backup"' - \
+              | yq eval '.spec.pitr.type = "gtid"' - \
+              | yq eval ".spec.pitr.gtid = \"${target}\"" - \
+              | BINLOG_SERVER_SPEC="${BINLOG_SERVER_SPEC}" yq eval '.spec.pitr.backupSource.binlogServer = env(BINLOG_SERVER_SPEC)' - \
+              | yq eval ".spec.pitr.backupSource.binlogServer.storage.s3.prefix = \"${prefix}\"" - \
+              | kubectl apply -n "${NAMESPACE}" -f -
+      done

@@ -58,7 +58,6 @@ func printCluster(ctx context.Context) error {
 		},
 		Spec: apiv1.PerconaServerMySQLSpec{
 			Backup: &apiv1.BackupSpec{
-				AllowParallel:            new(false),
 				Image:                    defaults.ImageBackup,
 				StartingDeadlineSeconds:  new(int64(0)),
 				SuspendedDeadlineSeconds: new(int64(0)),
