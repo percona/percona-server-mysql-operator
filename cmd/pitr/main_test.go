@@ -59,18 +59,6 @@ func (f *fakeDB) GetGTIDExecuted(_ context.Context) (string, error) {
 
 func (f *fakeDB) Close() error { return nil }
 
-func writeBinlogsFile(t *testing.T, entries []binlogserver.BinlogEntry) string {
-	t.Helper()
-	data, err := json.Marshal(entries)
-	require.NoError(t, err)
-	f, err := os.CreateTemp(t.TempDir(), "binlogs-*.json")
-	require.NoError(t, err)
-	_, err = f.Write(data)
-	require.NoError(t, err)
-	require.NoError(t, f.Close())
-	return f.Name()
-}
-
 type applyCall struct {
 	objectKeys      []string
 	mysqlbinlogArgs []string
@@ -96,25 +84,27 @@ func TestRun(t *testing.T) {
 	}
 
 	tests := map[string]struct {
-		entries        []binlogserver.BinlogEntry
-		rawContent     string
-		keyringContent string
-		pitrType       string
-		pitrGTID       string
-		pitrDate       string
-		pitrForce      string
-		caBundle       string
-		missingCAFile  bool
-		db             *fakeDB
-		newDB          func(ctx context.Context, params db.DBParams) (Database, error)
-		newS3          func(*fakeStorage) newStorageFn
-		getSecret      func(apiv1.SystemUser) (string, error)
-		applyErr       error
-		expectedError  string
-		checkApply     func(t *testing.T, call applyCall)
-		checkObjects   func(t *testing.T, objects []binlogSource)
-		checkS3        func(t *testing.T, opts *storage.S3Options)
-		keyringPath    func(t *testing.T) string
+		entries            []binlogserver.BinlogEntry
+		searchStatus       string
+		rawContent         string
+		binlogsFileMissing bool
+		keyringContent     string
+		pitrType           string
+		pitrGTID           string
+		pitrDate           string
+		pitrForce          string
+		caBundle           string
+		missingCAFile      bool
+		db                 *fakeDB
+		newDB              func(ctx context.Context, params db.DBParams) (Database, error)
+		newS3              func(*fakeStorage) newStorageFn
+		getSecret          func(apiv1.SystemUser) (string, error)
+		applyErr           error
+		expectedError      string
+		checkApply         func(t *testing.T, call applyCall)
+		checkObjects       func(t *testing.T, objects []binlogSource)
+		checkS3            func(t *testing.T, opts *storage.S3Options)
+		keyringPath        func(t *testing.T) string
 	}{
 		"missing BINLOGS_PATH": {
 			expectedError: "BINLOGS_PATH",
@@ -122,6 +112,19 @@ func TestRun(t *testing.T) {
 		"invalid JSON in binlogs file": {
 			rawContent:    "not-json",
 			expectedError: "parse binlogs json",
+		},
+		"binlogs file is missing": {
+			binlogsFileMissing: true,
+			expectedError:      "read binlogs file",
+		},
+		"failed search reports the binlog server message": {
+			rawContent:    `{"version":1,"status":"failure","message":"Timestamp is too old"}`,
+			expectedError: "binlog search failed: Timestamp is too old",
+		},
+		"failed search status": {
+			entries:       defaultEntries,
+			searchStatus:  "failure",
+			expectedError: "binlog search failed with status: failure",
 		},
 		"empty binlog entries": {
 			entries:       []binlogserver.BinlogEntry{},
@@ -365,22 +368,30 @@ func TestRun(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			// Set up binlogs file.
-			var binlogsPath string
-			if tc.rawContent != "" {
-				f, err := os.CreateTemp(t.TempDir(), "binlogs-*.json")
+			// The search init container leaves the binlog list in a file
+			// shared with the restore container, so the test writes one.
+			binlogsContent := ""
+			switch {
+			case tc.rawContent != "":
+				binlogsContent = tc.rawContent
+			case tc.entries != nil:
+				status := tc.searchStatus
+				if status == "" {
+					status = "success"
+				}
+				data, err := json.Marshal(binlogserver.SearchResponse{Status: status, Result: tc.entries})
 				require.NoError(t, err)
-				_, err = f.WriteString(tc.rawContent)
-				require.NoError(t, err)
-				require.NoError(t, f.Close())
-				binlogsPath = f.Name()
-			} else if tc.entries != nil {
-				binlogsPath = writeBinlogsFile(t, tc.entries)
+				binlogsContent = string(data)
 			}
 
-			if binlogsPath != "" {
+			switch {
+			case tc.binlogsFileMissing:
+				t.Setenv("BINLOGS_PATH", filepath.Join(t.TempDir(), "binlogs.json"))
+			case binlogsContent != "":
+				binlogsPath := filepath.Join(t.TempDir(), "binlogs.json")
+				require.NoError(t, os.WriteFile(binlogsPath, []byte(binlogsContent), 0o600))
 				t.Setenv("BINLOGS_PATH", binlogsPath)
-			} else {
+			default:
 				t.Setenv("BINLOGS_PATH", "")
 			}
 			t.Setenv("PITR_TYPE", tc.pitrType)
