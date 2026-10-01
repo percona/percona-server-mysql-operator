@@ -1641,7 +1641,12 @@ wait_for_haproxy_primary() {
 
 	local primary data i
 	while true; do
-		primary=$(get_primary_from_label)
+		primary=$(get_primary_from_label 2>/dev/null || true)
+
+		if [[ -z ${primary} ]]; then
+			echo "waiting for primary pod to be labelled" >&2
+			sleep 5
+		fi
 
 		data=()
 		for i in $(seq 0 $((haproxy_size - 1))); do
