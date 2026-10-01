@@ -44,7 +44,7 @@ const (
 	// deleted pod's IP drops the connection rather than refusing it, and the
 	// system's own timeout would spend most of the stall bound on one attempt.
 	sidecarDialTimeout = 5 * time.Second
-	jobTimeout        = 6 * time.Hour
+	jobTimeout         = 6 * time.Hour
 
 	// sourceStallTimeout is how long the source may go without sending
 	// anything. It is a bound on silence, not on the transfer: the job's
