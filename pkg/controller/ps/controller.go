@@ -56,6 +56,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
+	"github.com/percona/percona-server-mysql-operator/pkg/mysql/autoconfig"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysqlsh"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
@@ -1287,11 +1288,13 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 			}
 
 			params, err = mysql.GetAutoConfigParams(cr, version, cpu, memory, storage)
-			if errors.Is(err, mysql.ErrInsufficientStorage) {
+			switch {
+			case errors.Is(err, mysql.ErrInsufficientStorage):
 				r.Recorder.Event(cr, corev1.EventTypeWarning, "AutoConfigInsufficientStorage", err.Error())
 				return "", errors.Wrap(err, "calculate autoconfig parameters")
-			}
-			if err != nil {
+			case errors.Is(err, autoconfig.ErrVersionUnsupported):
+				params, err = autotune(err.Error())
+			case err != nil:
 				log.Error(err, "failed to calculate autoconfig parameters, falling back to autotune")
 				params, err = autotune(err.Error())
 			}
