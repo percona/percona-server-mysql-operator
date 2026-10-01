@@ -323,6 +323,39 @@ func TestCloneStallWatchdogGate(t *testing.T) {
 		assert.False(t, ok, "BOOTSTRAP_CLONE_STALL_TIMEOUT must not be set for crVersion < 1.3.0")
 	})
 
+	// every occurrence of name in the mysql container env
+	mysqldEnvAll := func(t *testing.T, cr *apiv1.PerconaServerMySQL, name string) []string {
+		t.Helper()
+		sts := StatefulSet(cr, "init-image", "cfg", "tls", "", secret)
+		var vals []string
+		for _, c := range sts.Spec.Template.Spec.Containers {
+			if c.Name != AppName {
+				continue
+			}
+			for _, e := range c.Env {
+				if e.Name == name {
+					vals = append(vals, e.Value)
+				}
+			}
+		}
+		return vals
+	}
+
+	t.Run("clone stall env set exactly once by default", func(t *testing.T) {
+		vals := mysqldEnvAll(t, defaulted(t, "1.3.0"), naming.EnvBootstrapCloneStallTimeout)
+		assert.Equal(t, []string{"900"}, vals, "BOOTSTRAP_CLONE_STALL_TIMEOUT must be set exactly once")
+	})
+
+	t.Run("user override wins without duplication", func(t *testing.T) {
+		cr := defaulted(t, "1.3.0")
+		cr.Spec.MySQL.Env = append(cr.Spec.MySQL.Env, corev1.EnvVar{
+			Name:  naming.EnvBootstrapCloneStallTimeout,
+			Value: "300",
+		})
+		vals := mysqldEnvAll(t, cr, naming.EnvBootstrapCloneStallTimeout)
+		assert.Equal(t, []string{"300"}, vals, "user value must be applied and not duplicated")
+	})
+
 	t.Run("startup probe backstop raised from 1.3.0", func(t *testing.T) {
 		assert.Equal(t, int32(7*24*60*60), defaulted(t, "1.3.0").Spec.MySQL.StartupProbe.TimeoutSeconds)
 	})
