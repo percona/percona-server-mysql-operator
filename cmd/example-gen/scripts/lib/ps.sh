@@ -223,6 +223,17 @@ del_fields_to_comment() {
 		| yq "del(.spec.pmm.livenessProbes)" \
 		| yq "del(.spec.pmm.containerSecurityContext)" \
 		| yq "del(.spec.pmm.resources.limits)" \
+		| yq "del(.spec.logcollector.imagePullPolicy)" \
+		| yq "del(.spec.logcollector.configuration)" \
+		| yq "del(.spec.logcollector.env)" \
+		| yq "del(.spec.logcollector.envFrom)" \
+		| yq "del(.spec.logcollector.containerSecurityContext)" \
+		| yq "del(.spec.logcollector.resources)" \
+		| yq "del(.spec.logcollector.readinessProbe)" \
+		| yq "del(.spec.logcollector.livenessProbe)" \
+		| yq "del(.spec.logcollector.volumeMounts)" \
+		| yq "del(.spec.logcollector.volumes)" \
+		| yq "del(.spec.logcollector.logRotate)" \
 		| yq "del(.spec.backup.allowParallel)" \
 		| yq "del(.spec.backup.startingDeadlineSeconds)" \
 		| yq "del(.spec.backup.suspendedDeadlineSeconds)" \
