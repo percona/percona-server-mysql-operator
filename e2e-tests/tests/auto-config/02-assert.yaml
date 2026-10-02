@@ -22,6 +22,8 @@ spec:
           protocol: TCP
       - name: pt-heartbeat
         resources: {}
+      - name: logs
+      - name: logrotate
 status:
   observedGeneration: 2
   readyReplicas: 3

@@ -85,6 +85,8 @@ spec:
             value: --query-source=perfschema
           - name: PMM_ADMIN_CUSTOM_PARAMS
             value: --disable-tablestats-limit=2000
+      - name: logs
+      - name: logrotate
 status:
   observedGeneration: 2
   replicas: 3

@@ -3,6 +3,7 @@ package handler
 import (
 	"archive/tar"
 	"bufio"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +13,9 @@ import (
 	"os"
 	"path"
 	"strings"
+
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/cmd/bootstrap/utils"
 )
 
 const dataDir = "/var/lib/mysql"
@@ -22,10 +26,16 @@ const binlogStartPos = 4
 
 type FailoverHandler struct {
 	DataDir string
+	// Password is the operator user's password, read on every request so a
+	// rotated secret is picked up. Callers authenticate as that user.
+	Password func() (string, error)
 }
 
 func FailoverStream() http.Handler {
-	return &FailoverHandler{DataDir: dataDir}
+	return &FailoverHandler{
+		DataDir:  dataDir,
+		Password: func() (string, error) { return utils.GetSecret(apiv1.UserOperator) },
+	}
 }
 
 type StreamConfig struct {
@@ -154,9 +164,38 @@ func (h *FailoverHandler) copyFirstBinlogToTar(logName string, position int64, w
 	return nil
 }
 
+func (h *FailoverHandler) authorized(req *http.Request) (bool, error) {
+	want, err := h.Password()
+	if err != nil {
+		return false, err
+	}
+	if want == "" {
+		return false, errors.New("the operator password is empty")
+	}
+
+	user, pass, ok := req.BasicAuth()
+	if !ok || user != string(apiv1.UserOperator) {
+		return false, nil
+	}
+
+	return subtle.ConstantTimeCompare([]byte(pass), []byte(want)) == 1, nil
+}
+
 func (h *FailoverHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodPost {
 		http.Error(w, "method not supported", http.StatusMethodNotAllowed)
+		return
+	}
+
+	ok, err := h.authorized(req)
+	if err != nil {
+		log.Printf("ERROR: failed to check credentials: %v", err)
+		http.Error(w, "streaming failed", http.StatusInternalServerError)
+		return
+	}
+	if !ok {
+		log.Printf("ERROR: rejected an unauthorized stream request from %s", req.RemoteAddr)
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 

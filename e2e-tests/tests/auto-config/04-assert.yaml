@@ -17,6 +17,8 @@ spec:
             memory: 5Gi
       - name: xtrabackup
       - name: pt-heartbeat
+      - name: logs
+      - name: logrotate
 status:
   observedGeneration: 3
   replicas: 3

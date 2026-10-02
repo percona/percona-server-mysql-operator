@@ -22,6 +22,8 @@ spec:
         name: xtrabackup
         securityContext:
           privileged: false
+      - name: logs
+      - name: logrotate
       initContainers:
       - command:
         - /opt/percona-server-mysql-operator/ps-init-entrypoint.sh

@@ -1135,7 +1135,6 @@ func TestRunningBackupDoesNotAcquireLease(t *testing.T) {
 	cluster.Status.MySQL.State = apiv1.StateReady
 	cluster.Spec.MySQL.ClusterType = apiv1.ClusterTypeGR
 	cluster.Spec.Backup.Enabled = true
-	cluster.Spec.Backup.AllowParallel = new(false)
 
 	jobName := xtrabackup.JobNamespacedName(backup)
 	job := &batchv1.Job{
