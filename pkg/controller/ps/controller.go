@@ -56,7 +56,6 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
-	"github.com/percona/percona-server-mysql-operator/pkg/mysql/autoconfig"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysqlsh"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
@@ -1246,15 +1245,15 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 		config = "\nsuper_read_only=0\nread_only=0"
 	}
 
+	fallbackReason := ""
+
 	if memory != nil {
 		var params string
 
 		// the calculator needs a CPU allocation and a version; without them we
 		// keep the legacy autotune, recomputed on every pass
 		autotune := func(reason string) (string, error) {
-			log.Info("falling back to autotune", "reason", reason)
-			r.Recorder.Event(cr, corev1.EventTypeWarning, "AutoConfigFallback",
-				fmt.Sprintf("falling back to autotune: %s", reason))
+			fallbackReason = reason
 			return mysql.GetAutoTuneParams(cr, memory)
 		}
 
@@ -1292,10 +1291,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 			case errors.Is(err, mysql.ErrInsufficientStorage):
 				r.Recorder.Event(cr, corev1.EventTypeWarning, "AutoConfigInsufficientStorage", err.Error())
 				return "", errors.Wrap(err, "calculate autoconfig parameters")
-			case errors.Is(err, autoconfig.ErrVersionUnsupported):
-				params, err = autotune(err.Error())
 			case err != nil:
-				log.Error(err, "failed to calculate autoconfig parameters, falling back to autotune")
 				params, err = autotune(err.Error())
 			}
 		}
@@ -1312,6 +1308,11 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 	if !k8s.EqualConfigMaps(currentConfigMap, configMap) {
 		if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, configMap, r.Scheme); err != nil {
 			return "", errors.Wrapf(err, "ensure ConfigMap/%s", configMap.Name)
+		}
+		if fallbackReason != "" {
+			log.Info("falling back to autotune", "reason", fallbackReason)
+			r.Recorder.Event(cr, corev1.EventTypeWarning, "AutoConfigFallback",
+				fmt.Sprintf("falling back to autotune: %s", fallbackReason))
 		}
 		log.Info("ConfigMap updated", "name", configMap.Name, "data", configMap.Data)
 	}
