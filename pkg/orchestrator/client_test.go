@@ -81,3 +81,9 @@ func TestIsPlannedTakeover(t *testing.T) {
 		})
 	}
 }
+
+func TestAckRecoveryEndpoint(t *testing.T) {
+	endpoint := ackRecoveryEndpoint("1790096871059981569:ad6d704a", "orc-handler: recovery finished")
+
+	assert.Equal(t, "api/ack-recovery/uid/1790096871059981569:ad6d704a?comment=orc-handler%3A+recovery+finished", endpoint)
+}

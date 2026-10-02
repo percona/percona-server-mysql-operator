@@ -1310,6 +1310,38 @@ wait_for_pods_restart() {
 	done
 }
 
+# Waits, pod by pod, until every pod of the StatefulSet runs its update revision
+# and is ready. Unlike rollout status, this works with the OnDelete strategy.
+wait_for_sts_pods_updated() {
+	local sts=$1
+	local timeout=${2:-300}
+	local generation replicas revision pod elapsed
+
+	generation=$(kubectl -n "${NAMESPACE}" get sts "${sts}" -o jsonpath='{.metadata.generation}')
+	kubectl -n "${NAMESPACE}" wait sts "${sts}" \
+		--for=jsonpath='{.status.observedGeneration}'="${generation}" --timeout="${timeout}s"
+
+	replicas=$(kubectl -n "${NAMESPACE}" get sts "${sts}" -o jsonpath='{.spec.replicas}')
+	revision=$(kubectl -n "${NAMESPACE}" get sts "${sts}" -o jsonpath='{.status.updateRevision}')
+
+	for ((i = 0; i < replicas; i++)); do
+		pod="${sts}-${i}"
+		elapsed=0
+		until [[ $(kubectl -n "${NAMESPACE}" get pod "${pod}" \
+			-o jsonpath='{.metadata.labels.controller-revision-hash} {.status.conditions[?(@.type=="Ready")].status}' \
+			2>/dev/null) == "${revision} True" ]]; do
+			if ((elapsed >= timeout)); then
+				echo "Timeout (${timeout}s) exceeded while waiting for ${pod} to run revision ${revision}"
+				kubectl -n "${NAMESPACE}" get pod "${pod}" -o wide || true
+				return 1
+			fi
+			echo "waiting for ${pod} to run revision ${revision}"
+			sleep 5
+			elapsed=$((elapsed + 5))
+		done
+	done
+}
+
 # Prints the notBefore date of the certificate mysqld currently serves from every
 # database pod, in pod name order. Spaces inside a date become underscores so
 # that every pod stays one word; unreachable pods print "unavailable".
@@ -1553,6 +1585,45 @@ get_primary_from_label() {
 	kubectl -n "${NAMESPACE}" get pods -l mysql.percona.com/primary=true -ojsonpath="{.items[0].metadata.name}"
 }
 
+# wait_for_primary waits until the primary label sits on the expected pod, or on
+# any pod other than the one named when the expectation is "changed".
+wait_for_primary() {
+	local expected=$1
+	local timeout=${2:-300}
+	local waited=0
+	local primary
+
+	while [[ ${waited} -lt ${timeout} ]]; do
+		primary=$(get_primary_from_label 2>/dev/null || true)
+
+		if [[ ${expected} == "changed:"* ]]; then
+			if [[ -n ${primary} && ${primary} != "${expected#changed:}" ]]; then
+				echo "${primary}"
+				return 0
+			fi
+		elif [[ ${primary} == "${expected}" ]]; then
+			echo "${primary}"
+			return 0
+		fi
+
+		sleep 5
+		waited=$((waited + 5))
+	done
+
+	echo "timed out after ${timeout}s waiting for primary ${expected}, it is ${primary}" >&2
+	kubectl -n "${NAMESPACE}" get pods -l mysql.percona.com/primary=true >&2
+
+	return 1
+}
+
+get_cluster_condition() {
+	local cluster=$1
+	local type=$2
+
+	kubectl -n "${NAMESPACE}" get ps "${cluster}" \
+		-o jsonpath="{.status.conditions[?(@.type==\"${type}\")].status}"
+}
+
 get_primary_from_haproxy() {
 	local haproxy_pod=$1
 	local haproxy_pod_ip=$(kubectl -n "${NAMESPACE}" get pods ${haproxy_pod} -o jsonpath="{.status.podIP}")
@@ -1570,7 +1641,12 @@ wait_for_haproxy_primary() {
 
 	local primary data i
 	while true; do
-		primary=$(get_primary_from_label)
+		primary=$(get_primary_from_label 2>/dev/null || true)
+
+		if [[ -z ${primary} ]]; then
+			echo "waiting for primary pod to be labelled" >&2
+			sleep 5
+		fi
 
 		data=()
 		for i in $(seq 0 $((haproxy_size - 1))); do

@@ -30,8 +30,12 @@ func getDBTopology(ctx context.Context, cli client.Client, cliCmd clientcmd.Clie
 			return topology.Topology{}, err
 		}
 
-		primary, err := orchestrator.ClusterPrimary(ctx, cliCmd, pod, cluster.ClusterHint())
+		orcCluster, err := orchestrator.ResolveCluster(ctx, cliCmd, pod, cluster.ClusterHint())
+		if err != nil {
+			return topology.Topology{}, errors.Wrap(err, "resolve cluster")
+		}
 
+		primary, err := orchestrator.ClusterPrimary(ctx, cliCmd, pod, orcCluster)
 		if err != nil {
 			return topology.Topology{}, errors.Wrap(err, "get primary")
 		}
