@@ -15,26 +15,31 @@ commands:
       for pod in $(kubectl -n "${NAMESPACE}" get pods -l "app.kubernetes.io/component=orchestrator,app.kubernetes.io/instance=${cluster}" -o jsonpath='{.items[*].metadata.name}'); do
           kubectl -n "${NAMESPACE}" wait --for=condition=ready pod "${pod}" --timeout=120s
 
-          lag_minutes=""
+          poll_seconds=""
           recovery_period=""
-          until [[ ${lag_minutes} == "30" && ${recovery_period} == "300" ]]; do
+          lag_minutes=""
+          until [[ ${poll_seconds} == "7" && ${recovery_period} == "25200" && ${lag_minutes} == "0" ]]; do
               if (( SECONDS >= deadline )); then
                   echo "Timed out waiting for ${pod} to use the updated orchestrator configuration" >&2
                   exit 1
               fi
-              lag_minutes=$(kubectl -n "${NAMESPACE}" exec "${pod}" -c orchestrator -- \
-                  jq -r '.FailMasterPromotionOnLagMinutes' /etc/orchestrator/config/orchestrator.conf.json || true)
+              poll_seconds=$(kubectl -n "${NAMESPACE}" exec "${pod}" -c orchestrator -- \
+                  jq -r '.InstancePollSeconds' /etc/orchestrator/config/orchestrator.conf.json || true)
               recovery_period=$(kubectl -n "${NAMESPACE}" exec "${pod}" -c orchestrator -- \
                   jq -r '.RecoveryPeriodBlockSeconds' /etc/orchestrator/config/orchestrator.conf.json || true)
-              if [[ ${lag_minutes} != "30" || ${recovery_period} != "300" ]]; then
+              # Reserved: the override above must never reach the merged config.
+              lag_minutes=$(kubectl -n "${NAMESPACE}" exec "${pod}" -c orchestrator -- \
+                  jq -r '.FailMasterPromotionOnLagMinutes' /etc/orchestrator/config/orchestrator.conf.json || true)
+              if [[ ${poll_seconds} != "7" || ${recovery_period} != "25200" || ${lag_minutes} != "0" ]]; then
                   sleep 5
               fi
           done
 
-          echo "${pod}: FailMasterPromotionOnLagMinutes=${lag_minutes} RecoveryPeriodBlockSeconds=${recovery_period}"
+          echo "${pod}: InstancePollSeconds=${poll_seconds} RecoveryPeriodBlockSeconds=${recovery_period} FailMasterPromotionOnLagMinutes=${lag_minutes}"
           kubectl -n "${NAMESPACE}" create configmap "15-check-orchestrator-config-${idx}" \
-              --from-literal=fail_master_promotion_on_lag_minutes="${lag_minutes}" \
-              --from-literal=recovery_period_block_seconds="${recovery_period}"
+              --from-literal=instance_poll_seconds="${poll_seconds}" \
+              --from-literal=recovery_period_block_seconds="${recovery_period}" \
+              --from-literal=fail_master_promotion_on_lag_minutes="${lag_minutes}"
           idx=$((idx + 1))
       done
     timeout: 600
