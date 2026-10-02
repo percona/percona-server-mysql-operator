@@ -20,6 +20,7 @@ TIMEOUT=${HA_CONNECTION_TIMEOUT:-10}
 MYSQL_CMDLINE="/usr/bin/timeout $TIMEOUT /usr/bin/mysql -BnN -u${MONITOR_USER} -h ${MYSQL_SERVER_IP} -P ${MYSQL_SERVER_PORT}"
 
 CLUSTER_TYPE=${CLUSTER_TYPE:-$(/bin/cat /tmp/cluster_type)}
+IS_CLUSTERSET_REPLICA="$(/bin/cat /etc/haproxy/internal-config/is_clusterset_replica 2>/dev/null || echo 0)"
 
 check_async() {
 	local VALUES=$(MYSQL_PWD="${MONITOR_PASSWORD}" ${MYSQL_CMDLINE} -e "select concat(concat(@@global.read_only,',', @@global.super_read_only));select service_state from performance_schema.replication_connection_status where channel_name='';select service_state from performance_schema.replication_applier_status where channel_name='';")
@@ -42,16 +43,22 @@ check_async() {
 }
 
 check_gr() {
-	local VALUES=$(MYSQL_PWD="${MONITOR_PASSWORD}" ${MYSQL_CMDLINE} -e "select concat(concat(@@global.read_only,',', @@global.super_read_only),',',(select MEMBER_STATE from performance_schema.replication_group_members where MEMBER_ID = @@global.server_uuid ));")
+	local VALUES=$(MYSQL_PWD="${MONITOR_PASSWORD}" ${MYSQL_CMDLINE} -e "select concat(@@global.read_only,',',@@global.super_read_only,',',m.MEMBER_STATE,',',m.MEMBER_ROLE,',',ifnull(s.COUNT_TRANSACTIONS_REMOTE_IN_APPLIER_QUEUE,0)) from performance_schema.replication_group_members m left join performance_schema.replication_group_member_stats s using (MEMBER_ID) where m.MEMBER_ID = @@global.server_uuid;")
 
 	local REPLICATION_STATUS=($(echo $VALUES | /bin/tr "," "\n"))
 	local READ_ONLY=${REPLICATION_STATUS[0]}
 	local SUPER_RO=${REPLICATION_STATUS[1]}
 	local NODE_STATUS=${REPLICATION_STATUS[2]}
+	local MEMBER_ROLE=${REPLICATION_STATUS[3]}
+	local APPLIER_QUEUE=${REPLICATION_STATUS[4]}
 
-	log INFO "${MYSQL_SERVER_IP}:${MYSQL_SERVER_PORT} Super_Read_Only: ${SUPER_RO} Read_Only: ${READ_ONLY} Node_Status: ${NODE_STATUS}"
+	log INFO "${MYSQL_SERVER_IP}:${MYSQL_SERVER_PORT} Super_Read_Only: ${SUPER_RO} Read_Only: ${READ_ONLY} Node_Status: ${NODE_STATUS} Member_Role: ${MEMBER_ROLE} Applier_Queue: ${APPLIER_QUEUE} Is_Clusterset_Replica: ${IS_CLUSTERSET_REPLICA}"
 
-	if [[ ${SUPER_RO} == '1' ]] && [[ ${READ_ONLY} == '1' ]] && [[ ${NODE_STATUS} == "ONLINE" ]]; then
+	if [[ ${IS_CLUSTERSET_REPLICA} != '1' ]] && [[ ${MEMBER_ROLE} == 'PRIMARY' ]] && [[ ${NODE_STATUS} == "ONLINE" ]] && [[ ${READ_ONLY} == '1' ]]; then
+		log WARNING "${MYSQL_SERVER_IP}:${MYSQL_SERVER_PORT} is PRIMARY but not writable yet: ${APPLIER_QUEUE} transactions in applier queue"
+		log INFO "${MYSQL_SERVER_IP}:${MYSQL_SERVER_PORT} for backend ${HAPROXY_PROXY_NAME} is NOT OK"
+		exit 1
+	elif [[ ${SUPER_RO} == '1' ]] && [[ ${READ_ONLY} == '1' ]] && [[ ${NODE_STATUS} == "ONLINE" ]] && { [[ ${MEMBER_ROLE} != 'PRIMARY' ]] || [[ ${IS_CLUSTERSET_REPLICA} == '1' ]]; }; then
 		log INFO "${MYSQL_SERVER_IP}:${MYSQL_SERVER_PORT} for backend ${HAPROXY_PROXY_NAME} is OK"
 		exit 0
 	else
