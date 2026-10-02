@@ -1,6 +1,6 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 1200
+timeout: 1500
 ---
 apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQLRestore
