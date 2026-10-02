@@ -16,12 +16,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const magic = "\xfebin"
+const (
+	magic        = "\xfebin"
+	testPassword = "operator-pass"
+)
 
 func newHandler(t *testing.T) *FailoverHandler {
 	t.Helper()
 
-	return &FailoverHandler{DataDir: t.TempDir()}
+	return &FailoverHandler{
+		DataDir:  t.TempDir(),
+		Password: func() (string, error) { return testPassword, nil },
+	}
 }
 
 func binlogFile(t *testing.T, h *FailoverHandler, name, payload string) {
@@ -440,10 +446,21 @@ func streamRequest(t *testing.T, binlog string, position int64) []byte {
 func postStream(t *testing.T, h http.Handler, body []byte) (*http.Response, []byte, error) {
 	t.Helper()
 
+	return postStreamAs(t, h, body, func(req *http.Request) { req.SetBasicAuth("operator", testPassword) })
+}
+
+func postStreamAs(t *testing.T, h http.Handler, body []byte, auth func(*http.Request)) (*http.Response, []byte, error) {
+	t.Helper()
+
 	srv := httptest.NewServer(h)
 	t.Cleanup(srv.Close)
 
-	resp, err := srv.Client().Post(srv.URL, "application/json", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL, bytes.NewReader(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	auth(req)
+
+	resp, err := srv.Client().Do(req)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -572,5 +589,47 @@ func TestServeHTTP(t *testing.T) {
 		_, _, err := postStream(t, h, streamRequest(t, "binlog.000002", 4))
 
 		require.Error(t, err)
+	})
+
+	credentials := []struct {
+		name string
+		auth func(*http.Request)
+	}{
+		{name: "no credentials", auth: func(*http.Request) {}},
+		{name: "wrong password", auth: func(req *http.Request) { req.SetBasicAuth("operator", "nope") }},
+		{name: "wrong user", auth: func(req *http.Request) { req.SetBasicAuth("root", testPassword) }},
+		{name: "empty password", auth: func(req *http.Request) { req.SetBasicAuth("operator", "") }},
+	}
+
+	for _, tt := range credentials {
+		t.Run(tt.name, func(t *testing.T) {
+			resp, body, err := postStreamAs(t, threeBinlogs(t), streamRequest(t, "binlog.000002", 4), tt.auth)
+
+			require.NoError(t, err)
+			assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+			assert.Equal(t, "unauthorized\n", string(body))
+		})
+	}
+
+	t.Run("the password cannot be read", func(t *testing.T) {
+		h := threeBinlogs(t)
+		h.Password = func() (string, error) { return "", os.ErrNotExist }
+
+		resp, body, err := postStream(t, h, streamRequest(t, "binlog.000002", 4))
+
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+		assert.Equal(t, "streaming failed\n", string(body))
+	})
+
+	t.Run("an empty password in the secret lets nobody in", func(t *testing.T) {
+		h := threeBinlogs(t)
+		h.Password = func() (string, error) { return "", nil }
+
+		resp, _, err := postStreamAs(t, h, streamRequest(t, "binlog.000002", 4),
+			func(req *http.Request) { req.SetBasicAuth("operator", "") })
+
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 	})
 }

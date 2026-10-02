@@ -46,3 +46,5 @@ spec:
   containers:
     - image: percona/percona-server:8.0.46-37.1
     - name: pt-heartbeat
+    - name: logs
+    - name: logrotate

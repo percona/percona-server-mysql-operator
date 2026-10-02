@@ -1,0 +1,31 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 120
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      applied=0
+      for pod in $(get_mysql_pod_names logcollection); do
+          kubectl -n "${NAMESPACE}" exec "${pod}" -c logrotate -- \
+              test -f /opt/percona/logcollector/logrotate/conf.d/extra.conf
+
+          # The rule only covers extra-*.log, and notifempty skips empty files, so
+          # the log has to exist with content before the rotation can do anything.
+          kubectl -n "${NAMESPACE}" exec "${pod}" -c logrotate -- \
+              sh -c "echo 'kuttl extra log' >/var/lib/mysql/log/extra-kuttl.log"
+
+          kubectl -n "${NAMESPACE}" exec "${pod}" -c logrotate -- \
+              logrotate -f -s /var/lib/mysql/log/logrotate-extra.status \
+              /opt/percona/logcollector/logrotate/conf.d/extra.conf
+
+          kubectl -n "${NAMESPACE}" exec "${pod}" -c logrotate -- \
+              test -f /var/lib/mysql/log/extra-kuttl.log.1
+
+          applied=$((applied + 1))
+      done
+
+      kubectl create configmap -n "${NAMESPACE}" 06-check-extra-config --from-literal=applied="${applied}"

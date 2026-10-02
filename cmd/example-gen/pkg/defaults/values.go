@@ -12,6 +12,7 @@ const (
 	ImageRouter        = "perconalab/percona-server-mysql-operator:main-router8.4"
 	ImageOrchestrator  = "perconalab/percona-server-mysql-operator:main-orchestrator"
 	ImagePMM           = "perconalab/pmm-client:3-dev-latest"
+	ImageLogCollector  = "perconalab/fluentbit:main-logcollector"
 	ImageBackup        = "perconalab/percona-server-mysql-operator:main-backup8.4"
 	ImageBinlogServer  = "perconalab/percona-binlog-server:0.3.1"
 	ImageToolkit       = "perconalab/percona-server-mysql-operator:main-toolkit"

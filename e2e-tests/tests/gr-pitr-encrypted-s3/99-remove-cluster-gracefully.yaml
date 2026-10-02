@@ -14,4 +14,5 @@ commands:
 
       remove_resource_finalizers ps-backup
       destroy_operator
-    timeout: 180
+      destroy_vault
+    timeout: 300
