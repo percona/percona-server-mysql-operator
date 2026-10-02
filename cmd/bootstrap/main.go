@@ -7,6 +7,9 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/go-logr/logr/funcr"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
 	"github.com/percona/percona-server-mysql-operator/cmd/bootstrap/async"
 	"github.com/percona/percona-server-mysql-operator/cmd/bootstrap/gr"
 	"github.com/percona/percona-server-mysql-operator/cmd/bootstrap/utils"
@@ -20,7 +23,9 @@ func main() {
 	}
 	defer f.Close()
 
-	log.SetOutput(io.MultiWriter(os.Stderr, f))
+	mw := io.MultiWriter(os.Stderr, f)
+	log.SetOutput(mw)
+	logf.SetLogger(funcr.New(func(_, args string) { log.Print(args) }, funcr.Options{}))
 
 	if err := utils.CheckClustersetRecovery(); err != nil {
 		log.Fatalf("failed to check clusterset recovery: %v", err)
