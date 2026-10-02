@@ -439,7 +439,15 @@ func (r *PerconaServerMySQLReconciler) isAsyncReady(ctx context.Context, cr *api
 		return false, "", err
 	}
 
-	instances, err := orchestrator.Cluster(ctx, r.ClientCmd, pod, cr.ClusterHint())
+	cluster, err := orchestrator.ResolveCluster(ctx, r.ClientCmd, pod, cr.ClusterHint())
+	if err != nil {
+		if errors.Is(err, orchestrator.ErrSplitTopology) || errors.Is(err, orchestrator.ErrEmptyResponse) {
+			return false, errors.Wrap(err, "orchestrator").Error(), nil
+		}
+		return false, "", err
+	}
+
+	instances, err := orchestrator.Cluster(ctx, r.ClientCmd, pod, cluster)
 	if err != nil {
 		if errors.Is(err, orchestrator.ErrEmptyResponse) || errors.Is(err, orchestrator.ErrUnableToGetClusterName) {
 			return false, errors.Wrap(err, "orchestrator").Error(), nil

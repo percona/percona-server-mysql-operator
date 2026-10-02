@@ -31,7 +31,10 @@ func newSourceLayout(t *testing.T) sourceLayout {
 	writeIndex(t, filepath.Join(dir, "binlog.index"),
 		"./binlog.000004", "./binlog.000005", "./binlog.000006")
 
-	srv := httptest.NewServer(&handler.FailoverHandler{DataDir: dir})
+	srv := httptest.NewServer(&handler.FailoverHandler{
+		DataDir:  dir,
+		Password: func() (string, error) { return testSourcePassword, nil },
+	})
 	t.Cleanup(srv.Close)
 
 	return sourceLayout{dir: dir, url: srv.URL, position: uint64(len(magic + binlogEvent("four-head")))}
@@ -56,7 +59,7 @@ func TestFailoverRoundTrip(t *testing.T) {
 		before, err := os.ReadFile(relay.target)
 		require.NoError(t, err)
 
-		logs, err := fetchLogsFromSource(t.Context(), staging, src.url, "binlog.000004", src.position, testFetchTimeout)
+		logs, err := fetchLogsFromSource(t.Context(), staging, src.url, testSourcePassword, "binlog.000004", src.position, testFetchTimeout)
 		require.NoError(t, err)
 		assert.Equal(t, []string{
 			filepath.Join(staging, "binlog.000004"),
@@ -79,6 +82,16 @@ func TestFailoverRoundTrip(t *testing.T) {
 		relay.assertUntouched(t)
 	})
 
+	t.Run("a wrong password gets nothing", func(t *testing.T) {
+		src := newSourceLayout(t)
+		staging := newStagingDir(t)
+
+		_, err := fetchLogsFromSource(t.Context(), staging, src.url, "wrong", "binlog.000004", src.position, testFetchTimeout)
+		require.ErrorContains(t, err, "401")
+
+		assert.Equal(t, []string{"binlog.999999"}, stagedNames(t, staging), "a refused fetch must not wipe the staging dir")
+	})
+
 	t.Run("the replica had read the whole first log", func(t *testing.T) {
 		src := newSourceLayout(t)
 		relay := newRelayLayout(t)
@@ -87,7 +100,7 @@ func TestFailoverRoundTrip(t *testing.T) {
 		require.NoError(t, err)
 
 		whole := uint64(len(magic + binlogEvent("four-head") + binlogEvent("four-tail")))
-		logs, err := fetchLogsFromSource(t.Context(), newStagingDir(t), src.url, "binlog.000004", whole, testFetchTimeout)
+		logs, err := fetchLogsFromSource(t.Context(), newStagingDir(t), src.url, testSourcePassword, "binlog.000004", whole, testFetchTimeout)
 		require.NoError(t, err)
 		require.Len(t, logs, 3)
 
@@ -111,7 +124,7 @@ func TestFailoverRoundTrip(t *testing.T) {
 		before, err := os.ReadFile(relay.target)
 		require.NoError(t, err)
 
-		logs, err := fetchLogsFromSource(t.Context(), newStagingDir(t), src.url,
+		logs, err := fetchLogsFromSource(t.Context(), newStagingDir(t), src.url, testSourcePassword,
 			"binlog.000006", uint64(len(magic)), testFetchTimeout)
 		require.NoError(t, err)
 		require.Len(t, logs, 1)
@@ -133,7 +146,7 @@ func TestFailoverRoundTrip(t *testing.T) {
 		require.NoError(t, err)
 
 		end := uint64(len(magic + binlogEvent("whole-six")))
-		logs, err := fetchLogsFromSource(t.Context(), newStagingDir(t), src.url, "binlog.000006", end, testFetchTimeout)
+		logs, err := fetchLogsFromSource(t.Context(), newStagingDir(t), src.url, testSourcePassword, "binlog.000006", end, testFetchTimeout)
 		require.NoError(t, err)
 		require.Len(t, logs, 1)
 
@@ -155,7 +168,7 @@ func TestFailoverRoundTrip(t *testing.T) {
 		writeIndex(t, relay.index, "./relay-bin.000003")
 
 		end := uint64(len(magic + binlogEvent("whole-six")))
-		logs, err := fetchLogsFromSource(t.Context(), newStagingDir(t), src.url, "binlog.000006", end, testFetchTimeout)
+		logs, err := fetchLogsFromSource(t.Context(), newStagingDir(t), src.url, testSourcePassword, "binlog.000006", end, testFetchTimeout)
 		require.NoError(t, err)
 
 		target, startPos, err := updateRelayLogs(logs, "relay-bin.000003", relay.logs(t))
@@ -170,7 +183,7 @@ func TestFailoverRoundTrip(t *testing.T) {
 		relay := newRelayLayout(t)
 		writeIndex(t, relay.index, "./relay-bin.000003")
 
-		logs, err := fetchLogsFromSource(t.Context(), newStagingDir(t), src.url, "binlog.000004", src.position, testFetchTimeout)
+		logs, err := fetchLogsFromSource(t.Context(), newStagingDir(t), src.url, testSourcePassword, "binlog.000004", src.position, testFetchTimeout)
 		require.NoError(t, err)
 
 		_, _, err = updateRelayLogs(logs, "relay-bin.000003", relay.logs(t))
@@ -187,7 +200,7 @@ func TestFailoverRoundTrip(t *testing.T) {
 		before, err := os.ReadFile(relay.target)
 		require.NoError(t, err)
 
-		_, err = fetchLogsFromSource(t.Context(), newStagingDir(t), src.url, "binlog.000004", src.position, testFetchTimeout)
+		_, err = fetchLogsFromSource(t.Context(), newStagingDir(t), src.url, testSourcePassword, "binlog.000004", src.position, testFetchTimeout)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, io.EOF)
 
@@ -224,7 +237,7 @@ func TestFailoverRoundTrip(t *testing.T) {
 			relay := newRelayLayout(t)
 			staging := newStagingDir(t)
 
-			_, err := fetchLogsFromSource(t.Context(), staging, src.url, tt.binlog, tt.position, testFetchTimeout)
+			_, err := fetchLogsFromSource(t.Context(), staging, src.url, testSourcePassword, tt.binlog, tt.position, testFetchTimeout)
 
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tt.wantErr)

@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: extra-logrotate-config
+data:
+  extra.conf: |
+    /var/lib/mysql/log/extra-*.log {
+        daily
+        rotate 3
+        missingok
+        nocompress
+        notifempty
+        copytruncate
+    }
