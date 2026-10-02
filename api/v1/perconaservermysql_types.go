@@ -39,6 +39,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/validation"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
@@ -81,6 +82,7 @@ type PerconaServerMySQLSpec struct {
 	MySQL                   MySQLSpec                            `json:"mysql,omitempty"`
 	Orchestrator            OrchestratorSpec                     `json:"orchestrator,omitempty"`
 	PMM                     *PMMSpec                             `json:"pmm,omitempty"`
+	LogCollector            *LogCollectorSpec                    `json:"logcollector,omitempty"`
 	Backup                  *BackupSpec                          `json:"backup,omitempty"`
 	Proxy                   ProxySpec                            `json:"proxy,omitempty"`
 	TLS                     *TLSSpec                             `json:"tls,omitempty"`
@@ -466,7 +468,6 @@ type CABundleSecretSelector struct {
 }
 
 type BackupSpec struct {
-	AllowParallel            *bool                         `json:"allowParallel,omitempty"`
 	Enabled                  bool                          `json:"enabled,omitempty"`
 	SourcePod                string                        `json:"sourcePod,omitempty"`
 	Image                    string                        `json:"image,omitempty"`
@@ -491,13 +492,6 @@ type BackupSpec struct {
 
 	// EncryptionKeySecret is the secret key selector for the backup encryption key.
 	EncryptionKeySecret *EncryptionKeySecretSelector `json:"encryptionKeySecret,omitempty"`
-}
-
-func (s *BackupSpec) GetAllowParallel() bool {
-	if s.AllowParallel == nil {
-		return false
-	}
-	return *s.AllowParallel
 }
 
 func (s *BackupSpec) GetEncryptionEnabled(storage *BackupStorageSpec) bool {
@@ -1242,6 +1236,10 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 	if err := cr.validateStorageAutoscaling(); err != nil {
 		return errors.Wrap(err, "validate storage autoscaling")
 	}
+
+	if err := cr.validateLogCollector(); err != nil {
+		return errors.Wrap(err, "validate log collector")
+	}
 	cr.setStorageAutoscalingDefaults()
 
 	if cr.Spec.Backup == nil {
@@ -1727,6 +1725,169 @@ func (cr *PerconaServerMySQL) PMMEnabled(secret *corev1.Secret) bool {
 		return cr.Spec.PMM.HasSecret(secret)
 	}
 	return false
+}
+
+const (
+	// LogCollectorContainerName is the name of the Fluent Bit sidecar.
+	LogCollectorContainerName = "logs"
+
+	// LogRotateContainerName is the name of the logrotate sidecar.
+	LogRotateContainerName = "logrotate"
+)
+
+// LogCollectorSpec configures the log collector sidecars that tail, rotate and
+// ship the on-disk logs of the cluster components.
+type LogCollectorSpec struct {
+	// Enabled turns the log collector on or off. When unset, it is off.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// +kubebuilder:validation:Required
+	Image string `json:"image"`
+
+	// +kubebuilder:validation:Enum={Always,Never,IfNotPresent}
+	// +optional
+	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
+
+	// Custom Fluent Bit configuration, merged into the log collector pipeline.
+	// Must be in Fluent Bit's YAML configuration format (the classic ".conf"
+	// format is not supported); this is what enables YAML-only features such as
+	// pipeline processors (e.g. opentelemetry_envelope). Invalid configuration
+	// is ignored by the collector at startup.
+	// +optional
+	Configuration string `json:"configuration,omitempty"`
+
+	// +optional
+	Env []corev1.EnvVar `json:"env,omitempty"`
+
+	// +optional
+	EnvFrom []corev1.EnvFromSource `json:"envFrom,omitempty"`
+
+	// +optional
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// +optional
+	ContainerSecurityContext *corev1.SecurityContext `json:"containerSecurityContext,omitempty"`
+
+	// LivenessProbe sets the liveness probe for the fluent-bit log collector
+	// container. When not set, the container has no liveness probe.
+	// +optional
+	LivenessProbe *corev1.Probe `json:"livenessProbe,omitempty"`
+
+	// ReadinessProbe sets the readiness probe for the fluent-bit log collector
+	// container. When not set, the container has no readiness probe.
+	// +optional
+	ReadinessProbe *corev1.Probe `json:"readinessProbe,omitempty"`
+
+	// +optional
+	VolumeMounts []corev1.VolumeMount `json:"volumeMounts,omitempty"`
+
+	// +optional
+	Volumes []corev1.Volume `json:"volumes,omitempty"`
+
+	// +optional
+	LogRotate *LogRotateSpec `json:"logRotate,omitempty"`
+}
+
+// LogRotateSpec configures the logrotate sidecar that rotates the on-disk logs.
+type LogRotateSpec struct {
+	// Configuration allows overriding the default logrotate configuration.
+	// +optional
+	Configuration string `json:"configuration,omitempty"`
+
+	// ExtraConfig allows specifying logrotate configuration files in addition to
+	// the main configuration file. This should be a reference to a ConfigMap in
+	// the same namespace. Keys must contain the .conf extension to be processed
+	// correctly.
+	// +optional
+	ExtraConfig corev1.LocalObjectReference `json:"extraConfig,omitempty"`
+
+	// Schedule is the cron schedule on which logrotate runs.
+	// +kubebuilder:default="0 0 * * *"
+	// +optional
+	Schedule string `json:"schedule,omitempty"`
+
+	// LivenessProbe sets the liveness probe for the logrotate container.
+	// When not set, the container has no liveness probe.
+	// +optional
+	LivenessProbe *corev1.Probe `json:"livenessProbe,omitempty"`
+
+	// ReadinessProbe sets the readiness probe for the logrotate container.
+	// When not set, the container has no readiness probe.
+	// +optional
+	ReadinessProbe *corev1.Probe `json:"readinessProbe,omitempty"`
+}
+
+// LogCollectorEnabled reports whether the log collector sidecars should be
+// wired into the cluster's pods.
+func (cr *PerconaServerMySQL) LogCollectorEnabled() bool {
+	return cr.CompareVersion("1.3.0") >= 0 &&
+		cr.Spec.LogCollector != nil &&
+		cr.Spec.LogCollector.Enabled != nil &&
+		*cr.Spec.LogCollector.Enabled
+}
+
+// LogRotateExtraConfigMaps returns the names of the ConfigMaps the log collector
+// references through logRotate.extraConfig.
+func (cr *PerconaServerMySQL) LogRotateExtraConfigMaps() []string {
+	if cr.Spec.LogCollector == nil || cr.Spec.LogCollector.LogRotate == nil ||
+		cr.Spec.LogCollector.LogRotate.ExtraConfig.Name == "" {
+		return nil
+	}
+	return []string{cr.Spec.LogCollector.LogRotate.ExtraConfig.Name}
+}
+
+// logCollectorConfigured reports whether the log collector sidecars end up in
+// the pods. Unlike LogCollectorEnabled it tolerates an empty crVersion, since
+// validation runs before the defaults are applied.
+func (cr *PerconaServerMySQL) logCollectorConfigured() bool {
+	// An empty crVersion is defaulted to the current version, so it reads as
+	// new enough here (and CompareVersion panics on it).
+	return (cr.Spec.CRVersion == "" || cr.CompareVersion("1.3.0") >= 0) &&
+		cr.Spec.LogCollector != nil &&
+		cr.Spec.LogCollector.Enabled != nil &&
+		*cr.Spec.LogCollector.Enabled
+}
+
+// validateLogCollector rejects a log collector configuration the operator cannot
+// turn into a valid pod: an unparsable logrotate schedule, or a user sidecar
+// claiming one of the container names the log collector reserves.
+func (cr *PerconaServerMySQL) validateLogCollector() error {
+	if cr.Spec.LogCollector == nil {
+		return nil
+	}
+
+	if lr := cr.Spec.LogCollector.LogRotate; lr != nil && lr.Schedule != "" {
+		if strings.ContainsAny(lr.Schedule, "\n\r") {
+			return errors.New("logcollector.logRotate.schedule can't contain newlines")
+		}
+		if _, err := cron.ParseStandard(lr.Schedule); err != nil {
+			return errors.Wrap(err, "invalid logcollector.logRotate.schedule")
+		}
+	}
+
+	if !cr.logCollectorConfigured() {
+		return nil
+	}
+
+	for _, sidecar := range cr.Spec.MySQL.Sidecars {
+		switch sidecar.Name {
+		case LogCollectorContainerName, LogRotateContainerName:
+			return errors.Errorf("mysql.sidecars can't use the container name %s, it's reserved by the log collector", sidecar.Name)
+		}
+	}
+
+	return nil
+}
+
+const IndexFieldLogRotateExtraConfig = "psCluster.logRotateExtraConfig"
+
+var LogRotateExtraConfigIndexerFunc client.IndexerFunc = func(obj client.Object) []string {
+	cr, ok := obj.(*PerconaServerMySQL)
+	if !ok {
+		return nil
+	}
+	return cr.LogRotateExtraConfigMaps()
 }
 
 // HasSecret determines if the provided secret contains the necessary PMM server key.

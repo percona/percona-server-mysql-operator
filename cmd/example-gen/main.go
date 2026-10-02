@@ -58,7 +58,6 @@ func printCluster(ctx context.Context) error {
 		},
 		Spec: apiv1.PerconaServerMySQLSpec{
 			Backup: &apiv1.BackupSpec{
-				AllowParallel:            new(false),
 				Image:                    defaults.ImageBackup,
 				StartingDeadlineSeconds:  new(int64(0)),
 				SuspendedDeadlineSeconds: new(int64(0)),
@@ -67,6 +66,9 @@ func printCluster(ctx context.Context) error {
 				VolumeSpec: &apiv1.VolumeSpec{
 					EmptyDir: &corev1.EmptyDirVolumeSource{},
 				},
+			},
+			LogCollector: &apiv1.LogCollectorSpec{
+				LogRotate: &apiv1.LogRotateSpec{},
 			},
 		},
 		Status: apiv1.PerconaServerMySQLStatus{},

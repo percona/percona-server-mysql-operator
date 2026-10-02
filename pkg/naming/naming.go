@@ -57,6 +57,11 @@ const (
 	TLSCAKey   = "ca.crt"
 	TLSCertKey = "tls.crt"
 	TLSKeyKey  = "tls.key"
+
+	// AnnotationLogCollectorConfigHash rolls MySQL pods when the log collector
+	// configuration changes. That config is mounted from ConfigMaps by a stable
+	// name, so content changes do not alter the pod template on their own.
+	AnnotationLogCollectorConfigHash AnnotationKey = perconaPrefix + "logcollector-config-hash"
 )
 
 const ClusterSetRecoveryFile = "/var/lib/mysql/clusterset-recovery"

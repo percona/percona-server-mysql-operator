@@ -55,6 +55,7 @@ import (
 	database "github.com/percona/percona-server-mysql-operator/pkg/db"
 	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
+	"github.com/percona/percona-server-mysql-operator/pkg/logcollector"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysqlsh"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
@@ -95,6 +96,7 @@ func (r *PerconaServerMySQLReconciler) SetupWithManager(mgr ctrl.Manager) error 
 		For(&apiv1.PerconaServerMySQL{}).
 		Watches(&corev1.Secret{}, enqueueClusterFromSecretsName(r.Client)).
 		Watches(&corev1.Secret{}, enqueueClusterFromEncryptionKeySecret(r.Client)).
+		Watches(&corev1.ConfigMap{}, enqueueClusterFromLogRotateExtraConfig(r.Client)).
 		Named("ps-controller").
 		Complete(r)
 }
@@ -147,7 +149,45 @@ func setupFieldIndexers(mgr ctrl.Manager) error {
 	); err != nil {
 		return errors.Wrapf(err, "unable to index field %s", fieldEncryptionKeySecretName)
 	}
+
+	if err := mgr.GetFieldIndexer().IndexField(
+		context.Background(),
+		&apiv1.PerconaServerMySQL{},
+		apiv1.IndexFieldLogRotateExtraConfig,
+		apiv1.LogRotateExtraConfigIndexerFunc,
+	); err != nil {
+		return errors.Wrapf(err, "unable to index field %s", apiv1.IndexFieldLogRotateExtraConfig)
+	}
+
 	return nil
+}
+
+func enqueueClusterFromLogRotateExtraConfig(c client.Client) handler.EventHandler {
+	return handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []reconcile.Request {
+		log := logf.FromContext(ctx).WithName("enqueueClusterFromLogRotateExtraConfig")
+
+		cm, ok := o.(*corev1.ConfigMap)
+		if !ok {
+			return nil
+		}
+
+		clusters := new(apiv1.PerconaServerMySQLList)
+		if err := c.List(ctx, clusters,
+			client.InNamespace(cm.Namespace),
+			client.MatchingFields{apiv1.IndexFieldLogRotateExtraConfig: cm.Name},
+		); err != nil {
+			log.Error(err, "failed to list clusters by logRotate extra config index", "configMap", client.ObjectKeyFromObject(cm).String())
+			return nil
+		}
+
+		reqs := make([]reconcile.Request, 0, len(clusters.Items))
+		for i := range clusters.Items {
+			reqs = append(reqs, reconcile.Request{
+				NamespacedName: client.ObjectKeyFromObject(&clusters.Items[i]),
+			})
+		}
+		return reqs
+	})
 }
 
 func enqueueClusterFromSecretsName(c client.Client) handler.EventHandler {
@@ -630,6 +670,9 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	}
 	if err := r.reconcilePersistentVolumes(ctx, cr); err != nil {
 		return errors.Wrap(err, "persistent volumes")
+	}
+	if err := logcollector.Reconcile(ctx, r.Client, cr); err != nil {
+		return errors.Wrap(err, "log collector")
 	}
 	if err := r.reconcileDatabase(ctx, cr); err != nil {
 		return errors.Wrap(err, "database")
@@ -1361,6 +1404,15 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 	component := orchestrator.Component(*cr)
 	if _, err := k8s.EnsureComponent(ctx, r.Client, &component); err != nil {
 		return errors.Wrap(err, "ensure component")
+	}
+	if cr.CompareVersion("1.3.0") >= 0 && cr.Spec.UpdateStrategy == apiv1.SmartUpdateStatefulSetStrategyType {
+		sts := new(appsv1.StatefulSet)
+		if err := r.Get(ctx, types.NamespacedName{Name: component.Name(), Namespace: cr.Namespace}, sts); err != nil {
+			return errors.Wrap(err, "get statefulset")
+		}
+		if err := r.smartUpdate(ctx, sts, cr); err != nil {
+			return errors.Wrap(err, "smart update")
+		}
 	}
 
 	raftNodes := orchestrator.RaftNodes(cr)

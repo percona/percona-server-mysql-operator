@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -74,6 +75,18 @@ func notReadyPod(name, namespace string) corev1.Pod {
 			Phase: corev1.PodPending,
 		},
 	}
+}
+
+const (
+	oldRev = "rev-1"
+	newRev = "rev-2"
+)
+
+func newRevisionPod(name, namespace, revision string, selector map[string]string) *corev1.Pod {
+	pod := readyPod(name, namespace)
+	pod.Labels = map[string]string{controllerRevisionHash: revision}
+	maps.Copy(pod.Labels, selector)
+	return &pod
 }
 
 func TestIsBackupRunning(t *testing.T) {
@@ -404,7 +417,7 @@ func TestSwitchOverGR(t *testing.T) {
 		}
 		r := &PerconaServerMySQLReconciler{Client: cli, Scheme: s, ClientCmd: fc}
 
-		err := r.switchOverGR(context.Background(), cr, primary, target)
+		err := r.switchOverGR(t.Context(), cr, primary, target)
 		require.NoError(t, err)
 		assert.Equal(t, 1, fc.execCount)
 	})
@@ -419,11 +432,18 @@ func TestSwitchOverGR(t *testing.T) {
 		}
 		r := &PerconaServerMySQLReconciler{Client: cli, Scheme: s, ClientCmd: fc}
 
-		err := r.switchOverGR(context.Background(), cr, primary, target)
+		err := r.switchOverGR(t.Context(), cr, primary, target)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "set primary instance")
 	})
 }
+
+func orcURL(path string) []string {
+	return []string{"sh", "-c", fmt.Sprintf(`curl -s -u "%s:$(cat %s/%s)" "localhost:3000/%s"`,
+		apiv1.UserOrchestrator, orchestrator.CredsMountPath, apiv1.UserOrchestrator, path)}
+}
+
+var downtimeResp, _ = json.Marshal(map[string]string{"Code": "OK", "Message": "Downtime begun"})
 
 func TestSwitchOverAsync(t *testing.T) {
 	cr := readDefaultCRForUpgrade("test-cluster", "test-ns")
@@ -462,7 +482,7 @@ func TestSwitchOverAsync(t *testing.T) {
 
 	// ClusterPrimary response: return an Instance where Alias != target (so switchover is triggered)
 	clusterPrimaryResp, _ := json.Marshal(orchestrator.Instance{
-		Key:   orchestrator.InstanceKey{Hostname: primary.Name},
+		Key:   orchestrator.InstanceKey{Hostname: primary.Name, Port: mysql.DefaultPort},
 		Alias: primary.Name,
 	})
 
@@ -479,12 +499,21 @@ func TestSwitchOverAsync(t *testing.T) {
 			disableCheck: false,
 			scripts: []fakeClientScript{
 				{
-					cmd:    []string{"sh", "-c", fmt.Sprintf(`curl -s -u "%s:$(cat %s/%s)" "localhost:3000/api/master/%s"`, apiv1.UserOrchestrator, orchestrator.CredsMountPath, apiv1.UserOrchestrator, clusterHint)},
+					cmd:    orcURL(fmt.Sprintf("api/master/%s", clusterHint)),
 					stdout: clusterPrimaryResp,
 				},
 				{
-					cmd:    []string{"sh", "-c", fmt.Sprintf(`curl -s -u "%s:$(cat %s/%s)" "localhost:3000/api/graceful-master-takeover-auto/%s/%s/%d"`, apiv1.UserOrchestrator, orchestrator.CredsMountPath, apiv1.UserOrchestrator, clusterHint, target.GetName(), mysql.DefaultPort)},
+					cmd: orcURL(fmt.Sprintf("api/begin-downtime/%s/%d/%s/%s/%s",
+						primary.Name, mysql.DefaultPort, orchestrator.DowntimeOwner, orchestrator.DowntimeReasonSwitchover, "600s")),
+					stdout: downtimeResp,
+				},
+				{
+					cmd:    orcURL(fmt.Sprintf("api/graceful-master-takeover-auto/%s/%s/%d", clusterHint, target.GetName(), mysql.DefaultPort)),
 					stdout: takeoverResp,
+				},
+				{
+					cmd:    orcURL(fmt.Sprintf("api/end-downtime/%s/%d", primary.Name, mysql.DefaultPort)),
+					stdout: downtimeResp,
 				},
 			},
 		}
@@ -498,9 +527,9 @@ func TestSwitchOverAsync(t *testing.T) {
 			Recorder: new(record.FakeRecorder),
 		}
 
-		err := r.switchOverAsync(context.Background(), cr, primary, target)
+		err := r.switchOverAsync(t.Context(), cr, target)
 		require.NoError(t, err)
-		assert.Equal(t, 2, fc.execCount)
+		assert.Equal(t, 4, fc.execCount)
 	})
 
 	t.Run("no ready orc pods", func(t *testing.T) {
@@ -514,7 +543,7 @@ func TestSwitchOverAsync(t *testing.T) {
 			Recorder: new(record.FakeRecorder),
 		}
 
-		err := r.switchOverAsync(context.Background(), cr, primary, target)
+		err := r.switchOverAsync(t.Context(), cr, target)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "get ready orchestrator pod")
 	})
@@ -547,7 +576,7 @@ func TestSwitchOverAsync(t *testing.T) {
 			Recorder: new(record.FakeRecorder),
 		}
 
-		err := r.switchOverAsync(context.Background(), cr, primary, target)
+		err := r.switchOverAsync(t.Context(), cr, target)
 		require.NoError(t, err)
 		assert.Equal(t, 1, fc.execCount) // only ClusterPrimary was called
 	})
@@ -571,14 +600,13 @@ func TestSwitchOverAsync(t *testing.T) {
 			Recorder: new(record.FakeRecorder),
 		}
 
-		err := r.switchOverAsync(context.Background(), cr, primary, target)
+		err := r.switchOverAsync(t.Context(), cr, target)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "ensure node is primary")
 	})
 }
 
 func TestSwitchOverAndWait(t *testing.T) {
-	ctx := context.Background()
 	s := newScheme(t)
 
 	makeSecret := func(cr *apiv1.PerconaServerMySQL) *corev1.Secret {
@@ -621,7 +649,7 @@ func TestSwitchOverAndWait(t *testing.T) {
 		}
 		r := &PerconaServerMySQLReconciler{Client: cli, Scheme: s, ClientCmd: fc}
 
-		err := r.switchOverAndWait(ctx, cr, primary, target)
+		err := r.switchOverAndWait(t.Context(), cr, primary, target)
 		require.NoError(t, err)
 		// Only the switchOverGR call should run; the wait loop and label
 		// reconcile must be skipped on the failover fallback path.
@@ -638,7 +666,7 @@ func TestSwitchOverAndWait(t *testing.T) {
 		clusterHint := cr.ClusterHint()
 
 		oldPrimaryResp, _ := json.Marshal(orchestrator.Instance{
-			Key:   orchestrator.InstanceKey{Hostname: primary.Name},
+			Key:   orchestrator.InstanceKey{Hostname: primary.Name, Port: mysql.DefaultPort},
 			Alias: primary.Name,
 		})
 		takeoverResp, _ := json.Marshal(orchestrator.Instance{
@@ -658,8 +686,17 @@ func TestSwitchOverAndWait(t *testing.T) {
 					stdout: oldPrimaryResp,
 				},
 				{
+					cmd: orcURL(fmt.Sprintf("api/begin-downtime/%s/%d/%s/%s/600s",
+						primary.Name, mysql.DefaultPort, orchestrator.DowntimeOwner, orchestrator.DowntimeReasonSwitchover)),
+					stdout: downtimeResp,
+				},
+				{
 					cmd:    []string{"sh", "-c", fmt.Sprintf(`curl -s -u "%s:$(cat %s/%s)" "localhost:3000/api/graceful-master-takeover-auto/%s/%s/%d"`, apiv1.UserOrchestrator, orchestrator.CredsMountPath, apiv1.UserOrchestrator, clusterHint, target.GetName(), mysql.DefaultPort)},
 					stdout: takeoverResp,
+				},
+				{
+					cmd:    orcURL(fmt.Sprintf("api/end-downtime/%s/%d", primary.Name, mysql.DefaultPort)),
+					stdout: downtimeResp,
 				},
 				{
 					cmd:    []string{"sh", "-c", fmt.Sprintf(`curl -s -u "%s:$(cat %s/%s)" "localhost:3000/api/master/%s"`, apiv1.UserOrchestrator, orchestrator.CredsMountPath, apiv1.UserOrchestrator, clusterHint)},
@@ -677,10 +714,10 @@ func TestSwitchOverAndWait(t *testing.T) {
 			Recorder: new(record.FakeRecorder),
 		}
 
-		err := r.switchOverAndWait(ctx, cr, primary, target)
+		err := r.switchOverAndWait(t.Context(), cr, primary, target)
 		require.NoError(t, err)
-		// 2 calls for switchOverAsync + 1 call for getPrimaryHost in the wait loop.
-		assert.Equal(t, 3, fc.execCount)
+		// 4 calls for switchOverAsync + 1 call for getPrimaryHost in the wait loop.
+		assert.Equal(t, 5, fc.execCount)
 	})
 
 	t.Run("pending switch to GR still uses the async path", func(t *testing.T) {
@@ -697,7 +734,7 @@ func TestSwitchOverAndWait(t *testing.T) {
 		clusterHint := cr.ClusterHint()
 
 		oldPrimaryResp, _ := json.Marshal(orchestrator.Instance{
-			Key:   orchestrator.InstanceKey{Hostname: primary.Name},
+			Key:   orchestrator.InstanceKey{Hostname: primary.Name, Port: mysql.DefaultPort},
 			Alias: primary.Name,
 		})
 		takeoverResp, _ := json.Marshal(orchestrator.Instance{
@@ -717,8 +754,17 @@ func TestSwitchOverAndWait(t *testing.T) {
 					stdout: oldPrimaryResp,
 				},
 				{
+					cmd: orcURL(fmt.Sprintf("api/begin-downtime/%s/%d/%s/%s/600s",
+						primary.Name, mysql.DefaultPort, orchestrator.DowntimeOwner, orchestrator.DowntimeReasonSwitchover)),
+					stdout: downtimeResp,
+				},
+				{
 					cmd:    []string{"sh", "-c", fmt.Sprintf(`curl -s -u "%s:$(cat %s/%s)" "localhost:3000/api/graceful-master-takeover-auto/%s/%s/%d"`, apiv1.UserOrchestrator, orchestrator.CredsMountPath, apiv1.UserOrchestrator, clusterHint, target.GetName(), mysql.DefaultPort)},
 					stdout: takeoverResp,
+				},
+				{
+					cmd:    orcURL(fmt.Sprintf("api/end-downtime/%s/%d", primary.Name, mysql.DefaultPort)),
+					stdout: downtimeResp,
 				},
 				{
 					cmd:    []string{"sh", "-c", fmt.Sprintf(`curl -s -u "%s:$(cat %s/%s)" "localhost:3000/api/master/%s"`, apiv1.UserOrchestrator, orchestrator.CredsMountPath, apiv1.UserOrchestrator, clusterHint)},
@@ -736,10 +782,10 @@ func TestSwitchOverAndWait(t *testing.T) {
 			Recorder: new(record.FakeRecorder),
 		}
 
-		err := r.switchOverAndWait(ctx, cr, primary, target)
+		err := r.switchOverAndWait(t.Context(), cr, primary, target)
 		require.NoError(t, err)
-		// 2 calls for switchOverAsync + 1 call for getPrimaryHost in the wait loop.
-		assert.Equal(t, 3, fc.execCount)
+		// 4 calls for switchOverAsync + 1 call for getPrimaryHost in the wait loop.
+		assert.Equal(t, 5, fc.execCount)
 	})
 
 	t.Run("GR assigns primary label to target", func(t *testing.T) {
@@ -788,7 +834,7 @@ func TestSwitchOverAndWait(t *testing.T) {
 		}
 		r := &PerconaServerMySQLReconciler{Client: cli, Scheme: s, ClientCmd: fc}
 
-		err := r.switchOverAndWait(ctx, cr, primary, target)
+		err := r.switchOverAndWait(t.Context(), cr, primary, target)
 		require.NoError(t, err)
 		// 1 mysqlsh switchover + 1 wait-loop primary query
 		// + 2 topology queries (replicas, primary) for label reconcile.
@@ -796,12 +842,12 @@ func TestSwitchOverAndWait(t *testing.T) {
 
 		// reconcileGRMySQLPrimaryLabel should have stamped the target pod with the primary label.
 		updated := &corev1.Pod{}
-		require.NoError(t, cli.Get(ctx, types.NamespacedName{Name: target.Name, Namespace: target.Namespace}, updated))
+		require.NoError(t, cli.Get(t.Context(), types.NamespacedName{Name: target.Name, Namespace: target.Namespace}, updated))
 		assert.Equal(t, "true", updated.Labels[naming.LabelMySQLPrimary])
 
 		// reconcileGRMySQLPrimaryLabel should have removed the primary label from the old primary.
 		oldPrimary := &corev1.Pod{}
-		require.NoError(t, cli.Get(ctx, types.NamespacedName{Name: primary.Name, Namespace: primary.Namespace}, oldPrimary))
+		require.NoError(t, cli.Get(t.Context(), types.NamespacedName{Name: primary.Name, Namespace: primary.Namespace}, oldPrimary))
 		assert.NotContains(t, oldPrimary.Labels, naming.LabelMySQLPrimary)
 	})
 
@@ -813,7 +859,7 @@ func TestSwitchOverAndWait(t *testing.T) {
 		target := &corev1.Pod{Name: mysql.PodName(cr, 1), Namespace: cr.Namespace}
 
 		oldPrimaryResp, _ := json.Marshal(orchestrator.Instance{
-			Key:   orchestrator.InstanceKey{Hostname: primary.Name},
+			Key:   orchestrator.InstanceKey{Hostname: primary.Name, Port: mysql.DefaultPort},
 			Alias: primary.Name,
 		})
 		takeoverResp, _ := json.Marshal(orchestrator.Instance{
@@ -826,7 +872,9 @@ func TestSwitchOverAndWait(t *testing.T) {
 			disableCheck: true,
 			scripts: []fakeClientScript{
 				{stdout: oldPrimaryResp},
+				{stdout: downtimeResp},
 				{stdout: takeoverResp},
+				{stdout: downtimeResp},
 				// Wait-loop ClusterPrimary call fails with a non-retriable
 				// error so the loop exits immediately instead of polling.
 				{err: fmt.Errorf("connection refused")},
@@ -842,9 +890,476 @@ func TestSwitchOverAndWait(t *testing.T) {
 			Recorder: new(record.FakeRecorder),
 		}
 
-		err := r.switchOverAndWait(ctx, cr, primary, target)
+		err := r.switchOverAndWait(t.Context(), cr, primary, target)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "wait for new primary")
-		assert.Equal(t, 3, fc.execCount)
+		assert.Equal(t, 5, fc.execCount)
 	})
+}
+
+func TestOrchestratorRaftLeader(t *testing.T) {
+	cr := readDefaultCRForUpgrade("test-cluster", "test-ns")
+
+	raftStateCmd := []string{"sh", "-c", fmt.Sprintf(`curl -s -u "%s:$(cat %s/%s)" "localhost:3000/api/raft-state"`, apiv1.UserOrchestrator, orchestrator.CredsMountPath, apiv1.UserOrchestrator)}
+	leaderResp, _ := json.Marshal(orchestrator.RaftStateLeader)
+	followerResp, _ := json.Marshal("Follower")
+
+	pods := []corev1.Pod{
+		{Name: orchestrator.PodName(cr, 0), Namespace: cr.Namespace},
+		{Name: orchestrator.PodName(cr, 1), Namespace: cr.Namespace},
+		{Name: orchestrator.PodName(cr, 2), Namespace: cr.Namespace},
+	}
+
+	tests := []struct {
+		name        string
+		scripts     []fakeClientScript
+		expected    string
+		expectedErr string
+	}{
+		{
+			name: "single leader",
+			scripts: []fakeClientScript{
+				{cmd: raftStateCmd, stdout: followerResp},
+				{cmd: raftStateCmd, stdout: leaderResp},
+				{cmd: raftStateCmd, stdout: followerResp},
+			},
+			expected: orchestrator.PodName(cr, 1),
+		},
+		{
+			name: "no leader",
+			scripts: []fakeClientScript{
+				{cmd: raftStateCmd, stdout: followerResp},
+				{cmd: raftStateCmd, stdout: followerResp},
+				{cmd: raftStateCmd, stdout: followerResp},
+			},
+		},
+		{
+			name: "unreachable pods are skipped",
+			scripts: []fakeClientScript{
+				{cmd: raftStateCmd, err: fmt.Errorf("connection refused")},
+				{cmd: raftStateCmd, err: fmt.Errorf("connection refused")},
+				{cmd: raftStateCmd, stdout: leaderResp},
+			},
+			expected: orchestrator.PodName(cr, 2),
+		},
+		{
+			name: "multiple leaders",
+			scripts: []fakeClientScript{
+				{cmd: raftStateCmd, stdout: leaderResp},
+				{cmd: raftStateCmd, stdout: leaderResp},
+				{cmd: raftStateCmd, stdout: followerResp},
+			},
+			expectedErr: "multiple pods report being the Raft leader",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fc := &fakeClient{scripts: tt.scripts}
+
+			leader, err := orchestratorRaftLeader(t.Context(), fc, pods)
+			if tt.expectedErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.expectedErr)
+				return
+			}
+			require.NoError(t, err)
+			if tt.expected == "" {
+				assert.Nil(t, leader)
+				return
+			}
+			require.NotNil(t, leader)
+			assert.Equal(t, tt.expected, leader.Name)
+		})
+	}
+}
+
+func TestPodToUpdate(t *testing.T) {
+	pod := func(name, revision string) corev1.Pod {
+		return corev1.Pod{
+			Name:   name,
+			Labels: map[string]string{controllerRevisionHash: revision},
+		}
+	}
+
+	tests := []struct {
+		name     string
+		pods     []corev1.Pod
+		lastName string
+		expected string
+	}{
+		{
+			name:     "all pods updated",
+			pods:     []corev1.Pod{pod("p-0", "rev-2"), pod("p-1", "rev-2")},
+			lastName: "p-0",
+		},
+		{
+			name:     "first outdated pod is picked",
+			pods:     []corev1.Pod{pod("p-0", "rev-1"), pod("p-1", "rev-1")},
+			lastName: "p-1",
+			expected: "p-0",
+		},
+		{
+			name:     "last pod is skipped while others are outdated",
+			pods:     []corev1.Pod{pod("p-0", "rev-1"), pod("p-1", "rev-1")},
+			lastName: "p-0",
+			expected: "p-1",
+		},
+		{
+			name:     "last pod is picked when it's the only outdated one",
+			pods:     []corev1.Pod{pod("p-0", "rev-1"), pod("p-1", "rev-2")},
+			lastName: "p-0",
+			expected: "p-0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := podToUpdate(tt.pods, tt.lastName, "rev-2")
+			if tt.expected == "" {
+				assert.Nil(t, p)
+				return
+			}
+			require.NotNil(t, p)
+			assert.Equal(t, tt.expected, p.Name)
+		})
+	}
+}
+
+// recreatingClient records deleted pods and recreates them at revision
+type recreatingClient struct {
+	client.WithWatch
+
+	revision string
+	deleted  []string
+}
+
+func (c *recreatingClient) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
+	if err := c.WithWatch.Delete(ctx, obj, opts...); err != nil {
+		return err
+	}
+
+	pod, ok := obj.(*corev1.Pod)
+	if !ok {
+		return nil
+	}
+
+	recreated := pod.DeepCopy()
+	recreated.ResourceVersion = ""
+	recreated.UID = ""
+	recreated.Labels[controllerRevisionHash] = c.revision
+	recreated.Status.Phase = corev1.PodRunning
+	recreated.Status.Conditions = []corev1.PodCondition{
+		{Type: corev1.ContainersReady, Status: corev1.ConditionTrue},
+	}
+	if err := c.Create(ctx, recreated); err != nil {
+		return fmt.Errorf("recreate pod %s: %w", pod.Name, err)
+	}
+
+	c.deleted = append(c.deleted, pod.Name)
+
+	return nil
+}
+
+func TestSmartUpdateOrchestrator(t *testing.T) {
+	cr := readDefaultCRForUpgrade("test-cluster", "test-ns")
+	s := newScheme(t)
+
+	raftState := func(state string) []byte {
+		b, _ := json.Marshal(state)
+		return b
+	}
+
+	newSts := func(component string) *appsv1.StatefulSet {
+		stsName := component
+		selector := map[string]string{"app": component}
+		if component == "" {
+			component = naming.ComponentOrchestrator
+			stsName = orchestrator.Name(cr)
+			selector = orchestrator.MatchLabels(cr)
+		}
+
+		return &appsv1.StatefulSet{
+			Name:      stsName,
+			Namespace: cr.Namespace,
+			Labels:    map[string]string{naming.LabelComponent: component},
+			Spec: appsv1.StatefulSetSpec{
+				Selector: &metav1.LabelSelector{MatchLabels: selector},
+			},
+			Status: appsv1.StatefulSetStatus{
+				UpdateRevision: newRev,
+			},
+		}
+	}
+
+	newPod := func(sts *appsv1.StatefulSet, idx int, revision string) *corev1.Pod {
+		return newRevisionPod(orchestrator.PodName(cr, idx), sts.Namespace, revision, sts.Spec.Selector.MatchLabels)
+	}
+
+	tests := []struct {
+		name        string
+		pause       bool
+		sts         *appsv1.StatefulSet
+		revisions   []string
+		raftStates  []string
+		wantErr     string
+		wantDeleted []string
+	}{
+		{
+			name:      "paused cluster is not updated",
+			pause:     true,
+			sts:       newSts(""),
+			revisions: []string{oldRev},
+		},
+		{
+			name:      "missing statefulset is ignored",
+			revisions: []string{oldRev},
+		},
+		{
+			name:      "up to date statefulset is not updated",
+			sts:       newSts(""),
+			revisions: []string{newRev},
+		},
+		{
+			name:      "unsupported component",
+			sts:       newSts("haproxy"),
+			revisions: []string{oldRev},
+			wantErr:   `smart update is not supported for component "haproxy"`,
+		},
+		{
+			name:       "nothing is updated when the Raft leader is unknown",
+			sts:        newSts(""),
+			revisions:  []string{oldRev, oldRev, oldRev},
+			raftStates: []string{"Follower", "Follower", "Follower"},
+		},
+		{
+			name:        "the first outdated follower is updated before the Raft leader",
+			sts:         newSts(""),
+			revisions:   []string{oldRev, oldRev, oldRev},
+			raftStates:  []string{orchestrator.RaftStateLeader, "Follower", "Follower"},
+			wantDeleted: []string{orchestrator.PodName(cr, 1)},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cr := cr.DeepCopy()
+			cr.Spec.Pause = tt.pause
+
+			var objs []client.Object
+
+			sts := newSts("")
+			if tt.sts != nil {
+				sts = tt.sts.DeepCopy()
+				sts.Status.Replicas = int32(len(tt.revisions))
+				sts.Status.ReadyReplicas = int32(len(tt.revisions))
+
+				objs = append(objs, sts)
+				for i, revision := range tt.revisions {
+					objs = append(objs, newPod(sts, i, revision))
+				}
+			}
+
+			fc := &fakeClient{disableCheck: true}
+			for _, state := range tt.raftStates {
+				fc.scripts = append(fc.scripts, fakeClientScript{stdout: raftState(state)})
+			}
+
+			cli := &recreatingClient{
+				WithWatch: fake.NewClientBuilder().WithScheme(s).WithObjects(objs...).Build(),
+				revision:  newRev,
+			}
+
+			r := &PerconaServerMySQLReconciler{Client: cli, Scheme: s, ClientCmd: fc}
+
+			err := r.smartUpdate(t.Context(), sts, cr)
+			if tt.wantErr != "" {
+				assert.ErrorContains(t, err, tt.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+			assert.Equal(t, tt.wantDeleted, cli.deleted)
+		})
+	}
+
+	t.Run("the Raft leader is updated last", func(t *testing.T) {
+		sts := newSts("")
+		sts.Status.Replicas = 3
+		sts.Status.ReadyReplicas = 3
+
+		objs := []client.Object{
+			sts,
+			newPod(sts, 0, oldRev),
+			newPod(sts, 1, oldRev),
+			newPod(sts, 2, oldRev),
+		}
+		cli := &recreatingClient{
+			WithWatch: fake.NewClientBuilder().WithScheme(s).WithObjects(objs...).Build(),
+			revision:  newRev,
+		}
+
+		fc := &fakeClient{
+			disableCheck: true,
+			scripts: []fakeClientScript{
+				{stdout: raftState(orchestrator.RaftStateLeader)},
+				{stdout: raftState("Follower")},
+				{stdout: raftState("Follower")},
+			},
+		}
+		r := &PerconaServerMySQLReconciler{Client: cli, Scheme: s, ClientCmd: fc}
+
+		require.NoError(t, r.smartUpdate(t.Context(), sts, cr))
+
+		pod := &corev1.Pod{}
+		key := types.NamespacedName{Name: orchestrator.PodName(cr, 2), Namespace: cr.Namespace}
+		require.NoError(t, cli.Get(t.Context(), key, pod))
+		pod.Labels[controllerRevisionHash] = newRev
+		require.NoError(t, cli.Update(t.Context(), pod))
+		fc.execCount = 0
+
+		require.NoError(t, r.smartUpdate(t.Context(), sts, cr))
+
+		assert.Equal(t,
+			[]string{orchestrator.PodName(cr, 1), orchestrator.PodName(cr, 0)},
+			cli.deleted)
+	})
+}
+
+func TestSmartUpdateMySQL(t *testing.T) {
+	cr := readDefaultCRForUpgrade("test-cluster", "test-ns")
+	s := newScheme(t)
+
+	selector := mysql.MatchLabels(cr)
+
+	newPod := func(idx int, revision string) *corev1.Pod {
+		return newRevisionPod(mysql.PodName(cr, idx), cr.Namespace, revision, selector)
+	}
+
+	readyOrcPod := newRevisionPod(orchestrator.PodName(cr, 0), cr.Namespace, newRev, orchestrator.MatchLabels(cr))
+
+	newSts := func(replicas int32) *appsv1.StatefulSet {
+		return &appsv1.StatefulSet{
+			Name:      mysql.Name(cr),
+			Namespace: cr.Namespace,
+			Labels:    map[string]string{naming.LabelComponent: naming.ComponentDatabase},
+			Spec: appsv1.StatefulSetSpec{
+				Selector: &metav1.LabelSelector{MatchLabels: selector},
+			},
+			Status: appsv1.StatefulSetStatus{
+				Replicas:       replicas,
+				ReadyReplicas:  replicas,
+				UpdateRevision: newRev,
+			},
+		}
+	}
+
+	operatorSecret := &corev1.Secret{
+		Name:      cr.InternalSecretName(),
+		Namespace: cr.Namespace,
+		Data: map[string][]byte{
+			string(apiv1.UserOperator): []byte("test-pass"),
+		},
+	}
+
+	runningBackup := &apiv1.PerconaServerMySQLBackup{
+		Name: "backup1", Namespace: cr.Namespace,
+		Spec:   apiv1.PerconaServerMySQLBackupSpec{ClusterName: cr.Name},
+		Status: apiv1.PerconaServerMySQLBackupStatus{State: apiv1.BackupRunning},
+	}
+
+	primaryFromOrchestrator := func(idx int) []byte {
+		b, _ := json.Marshal(orchestrator.Instance{
+			Key:   orchestrator.InstanceKey{Hostname: mysql.PodName(cr, idx), Port: mysql.DefaultPort},
+			Alias: mysql.PodName(cr, idx),
+		})
+		return b
+	}
+
+	primaryFromGR := func(idx int) []byte {
+		pod := &corev1.Pod{Name: mysql.PodName(cr, idx)}
+		return []byte("host\n" + mysql.PodFQDN(cr, pod) + "\n")
+	}
+
+	tests := []struct {
+		name          string
+		clusterType   apiv1.ClusterType
+		backupRunning bool
+		revisions     []string
+		scripts       []fakeClientScript
+		wantDeleted   []string
+	}{
+		{
+			name:        "async: a secondary is updated without switchover",
+			clusterType: apiv1.ClusterTypeAsync,
+			revisions:   []string{oldRev, oldRev, oldRev},
+			scripts: []fakeClientScript{
+				{stdout: primaryFromOrchestrator(0)},
+			},
+			wantDeleted: []string{mysql.PodName(cr, 1)},
+		},
+		{
+			name:        "async: primary is switched over before it's updated",
+			clusterType: apiv1.ClusterTypeAsync,
+			revisions:   []string{oldRev, newRev, newRev},
+			scripts: []fakeClientScript{
+				{stdout: primaryFromOrchestrator(0)},
+				{stdout: primaryFromOrchestrator(0)},
+				{stdout: downtimeResp},
+				{stdout: primaryFromOrchestrator(1)},
+				{stdout: downtimeResp},
+				{stdout: primaryFromOrchestrator(1)},
+			},
+			wantDeleted: []string{mysql.PodName(cr, 0)},
+		},
+		{
+			name:          "async: running backup blocks the update",
+			clusterType:   apiv1.ClusterTypeAsync,
+			backupRunning: true,
+			revisions:     []string{oldRev, oldRev, oldRev},
+		},
+		{
+			name:        "group replication: a secondary is updated without switchover",
+			clusterType: apiv1.ClusterTypeGR,
+			revisions:   []string{oldRev, oldRev, oldRev},
+			scripts: []fakeClientScript{
+				{stdout: primaryFromGR(0)},
+			},
+			wantDeleted: []string{mysql.PodName(cr, 1)},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cr := cr.DeepCopy()
+			cr.Spec.MySQL.ClusterType = tt.clusterType
+
+			sts := newSts(int32(len(tt.revisions)))
+
+			objs := []client.Object{sts, readyOrcPod, operatorSecret}
+			if tt.backupRunning {
+				objs = append(objs, runningBackup)
+			}
+			for i, revision := range tt.revisions {
+				objs = append(objs, newPod(i, revision))
+			}
+
+			cli := &recreatingClient{
+				WithWatch: fake.NewClientBuilder().WithScheme(s).WithObjects(objs...).Build(),
+				revision:  newRev,
+			}
+			fc := &fakeClient{disableCheck: true, scripts: tt.scripts}
+			r := &PerconaServerMySQLReconciler{
+				Client:        cli,
+				Scheme:        s,
+				ClientCmd:     fc,
+				ServerVersion: &platform.ServerVersion{Platform: platform.Kubernetes},
+				Recorder:      new(record.FakeRecorder),
+			}
+
+			require.NoError(t, r.smartUpdate(t.Context(), sts, cr))
+
+			assert.Equal(t, tt.wantDeleted, cli.deleted)
+			assert.Equal(t, len(tt.scripts), fc.execCount)
+		})
+	}
 }

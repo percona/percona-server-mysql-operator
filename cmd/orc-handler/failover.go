@@ -27,12 +27,18 @@ func runFailover(ctx context.Context, args []string) error {
 	target := fs.String("target", "", "Hostname of the server to apply the missing binary logs on. Defaults to the most up to date replica of the source")
 	timeout := fs.Duration("timeout", defaultTimeout, "How long fetching and applying the missing binary logs may take")
 	failureType := fs.String("failure-type", "", "Analysis code orchestrator reported the problem as. The command only runs for the ones whose recovery promotes a replica")
+	command := fs.String("command", "", "Orchestrator command that started the recovery. Empty for the failures orchestrator detects on its own")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 
 	if !orchestrator.IsMasterFailover(*failureType) {
 		log.Info("Recovery does not promote a replica, nothing to apply", "failureType", *failureType)
+		return nil
+	}
+
+	if orchestrator.IsPlannedTakeover(*command) {
+		log.Info("Recovery is a planned takeover, nothing to apply", "command", *command)
 		return nil
 	}
 
@@ -47,7 +53,38 @@ func runFailover(ctx context.Context, args []string) error {
 	ctx, cancel := context.WithTimeout(ctx, *timeout+execSlack)
 	defer cancel()
 
-	return failover(ctx, *source, *target, *timeout)
+	return guardedFailover(ctx, newGate(), *source, func(ctx context.Context) error {
+		return failover(ctx, *source, *target, *timeout)
+	})
+}
+
+// guardedFailover runs one failover at a time and skips the ones another attempt
+// has already handled. Orchestrator keeps starting recoveries while this hook
+// runs, and each of those picks its own promotion candidate.
+//
+// The source is marked only once the failover succeeds, so a failed attempt
+// leaves the next one free to retry straight away.
+func guardedFailover(ctx context.Context, g *gate, source string, do func(context.Context) error) error {
+	release, err := g.enter(ctx)
+	if err != nil {
+		return errors.Wrap(err, "wait for the failover in flight")
+	}
+	defer release()
+
+	handled, err := g.handled(source)
+	if err != nil {
+		return err
+	}
+	if handled {
+		log.Info("A failover for this source already completed, nothing to apply", "source", source)
+		return nil
+	}
+
+	if err := do(ctx); err != nil {
+		return err
+	}
+
+	return g.markHandled(source)
 }
 
 func failover(ctx context.Context, source, target string, timeout time.Duration) error {

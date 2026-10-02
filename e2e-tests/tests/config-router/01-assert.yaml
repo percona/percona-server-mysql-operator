@@ -45,6 +45,8 @@ spec:
           name: config
         - mountPath: /etc/mysql/encryption-keys
           name: backup-encryption-keys
+      - name: logs
+      - name: logrotate
       volumes:
       - emptyDir: {}
         name: bin

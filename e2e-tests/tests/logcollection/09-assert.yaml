@@ -1,0 +1,22 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 420
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      containers=$(kubectl -n "${NAMESPACE}" get sts logcollection-mysql \
+          -o jsonpath='{.spec.template.spec.containers[*].name}')
+
+      for container in logs logrotate; do
+          if echo "${containers}" | grep -qw "${container}"; then
+              echo "${container} container is still in the pod template: ${containers}"
+              exit 1
+          fi
+      done
+
+      kubectl -n "${NAMESPACE}" get configmap logcollection-log-collector-logrotate-config \
+          2>&1 | grep -q NotFound

@@ -1,0 +1,29 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 300
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      collecting=0
+      for pod in $(get_mysql_pod_names logcollection); do
+          marker="kuttl-post-rotate-marker-${pod}"
+
+          # mysql.conf rotates with copytruncate, so fluent-bit keeps the same inode
+          # and has to pick up writes past the truncation point. Appending a marker
+          # after 04-rotate-logs is what proves it did.
+          kubectl -n "${NAMESPACE}" exec "${pod}" -c logrotate -- \
+              sh -c "echo '${marker}' >>/var/lib/mysql/log/mysqld-error.log"
+
+          retry 18 10 bash -c "
+              kubectl -n '${NAMESPACE}' logs '${pod}' -c logs --tail=-1 \
+                  | grep -q '${marker}'
+          "
+
+          collecting=$((collecting + 1))
+      done
+
+      kubectl create configmap -n "${NAMESPACE}" 05-check-collection-after-rotate --from-literal=collecting="${collecting}"
