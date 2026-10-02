@@ -1007,10 +1007,6 @@ run_curl_orc() {
 	run_curl -u readonly:readonly "$@"
 }
 
-get_innodb_cluster_name() {
-	echo $(get_cluster_name) | tr -cd '[^a-zA-Z0-9_]+'
-}
-
 get_mysqlsh_uri_for_pod() {
 	local pod=$1
 	local root_password=$(get_user_pass root)
@@ -2065,10 +2061,6 @@ get_user_pass() {
 	kubectl -n "${NAMESPACE}" get secret ${secret} -o jsonpath="{.data.${user}}" | base64 --decode
 }
 
-get_operator_version() {
-	kubectl get crd -n "$NAMESPACE" perconaservermysqls.ps.percona.com -o jsonpath='{.metadata.labels.app\.kubernetes\.io/version}'
-}
-
 check_backup_job_labels() {
 	local psbackup
 	psbackup=$1
@@ -2180,12 +2172,6 @@ latest_operator_version_in_vs() {
 	fi
 
 	echo ${latest}
-}
-
-latest_operator_image_in_vs() {
-	local version=$(latest_operator_version_in_vs)
-
-	curl -s https://check.percona.com/versions/v1/ps-operator/${version}/latest | jq -r '.versions[].matrix.operator[].imagePath'
 }
 
 get_cr_with_latest_versions_in_vs() {
