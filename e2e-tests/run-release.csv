@@ -1,5 +1,7 @@
+async-big-data
 async-data-at-rest-encryption
 async-global-metadata
+async-failover
 async-ignore-annotations
 async-pitr-s3
 async-upgrade
@@ -11,6 +13,7 @@ demand-backup
 demand-backup-cloud
 demand-backup-incremental
 demand-backup-retry
+gr-big-data
 gr-cross-cluster
 gr-cross-cluster-backup
 gr-data-at-rest-encryption

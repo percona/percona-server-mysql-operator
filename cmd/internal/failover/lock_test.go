@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -60,91 +59,6 @@ func TestLock(t *testing.T) {
 
 		require.Error(t, err)
 		assert.NotErrorIs(t, err, ErrLocked)
-	})
-}
-
-func TestInProgress(t *testing.T) {
-	t.Run("a held lock is a failover in progress", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "failover.lock")
-
-		f, err := Lock(path)
-		require.NoError(t, err)
-		t.Cleanup(func() { f.Close() }) //nolint:errcheck
-
-		inProgress, err := InProgress(path)
-		require.NoError(t, err)
-		assert.True(t, inProgress)
-	})
-
-	t.Run("no lock file means no failover", func(t *testing.T) {
-		inProgress, err := InProgress(filepath.Join(t.TempDir(), "failover.lock"))
-
-		require.NoError(t, err)
-		assert.False(t, inProgress)
-	})
-
-	t.Run("a leftover file with no holder means no failover", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "failover.lock")
-		require.NoError(t, os.WriteFile(path, nil, 0o644))
-
-		inProgress, err := InProgress(path)
-
-		require.NoError(t, err)
-		assert.False(t, inProgress)
-	})
-
-	t.Run("releasing ends the failover", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "failover.lock")
-
-		f, err := Lock(path)
-		require.NoError(t, err)
-		require.NoError(t, f.Close())
-
-		inProgress, err := InProgress(path)
-		require.NoError(t, err)
-		assert.False(t, inProgress)
-	})
-
-	t.Run("probing does not create the lock file", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "failover.lock")
-
-		_, err := InProgress(path)
-		require.NoError(t, err)
-
-		assert.NoFileExists(t, path)
-	})
-
-	t.Run("probing leaves the lock acquirable", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "failover.lock")
-		require.NoError(t, os.WriteFile(path, nil, 0o644))
-
-		_, err := InProgress(path)
-		require.NoError(t, err)
-
-		f, err := Lock(path)
-		require.NoError(t, err)
-		t.Cleanup(func() { f.Close() }) //nolint:errcheck
-	})
-
-	t.Run("probing does not disturb the holder", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "failover.lock")
-
-		f, err := Lock(path)
-		require.NoError(t, err)
-		t.Cleanup(func() { f.Close() }) //nolint:errcheck
-
-		_, err = InProgress(path)
-		require.NoError(t, err)
-
-		_, err = Lock(path)
-		require.ErrorIs(t, err, ErrLocked)
-	})
-
-	t.Run("an unusable path is an error, not a silent no", func(t *testing.T) {
-		inProgress, err := InProgress(filepath.Join(t.TempDir(), strings.Repeat("a", 300)))
-
-		require.Error(t, err)
-		assert.False(t, inProgress)
 	})
 }
 

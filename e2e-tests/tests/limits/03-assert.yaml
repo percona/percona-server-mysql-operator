@@ -369,7 +369,7 @@ spec:
           timeoutSeconds: 3
         resources:
           limits:
-            memory: 256M
+            memory: 512M
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         volumeMounts:

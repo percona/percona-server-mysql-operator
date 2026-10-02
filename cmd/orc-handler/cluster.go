@@ -17,6 +17,7 @@ import (
 	perconaClientCmd "github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
+	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 )
 
@@ -66,6 +67,24 @@ func connect(ctx context.Context) (*cluster, error) {
 
 func podName(cr *apiv1.PerconaServerMySQL, host string) string {
 	return strings.TrimSuffix(strings.TrimSuffix(host, "."+cr.Namespace), "."+mysql.ServiceName(cr))
+}
+
+// orchestratorPod is the pod to send orchestrator API calls to
+func (c *cluster) orchestratorPod(ctx context.Context) (*corev1.Pod, error) {
+	if hostname, err := os.Hostname(); err == nil {
+		pod := new(corev1.Pod)
+		nn := types.NamespacedName{Name: hostname, Namespace: c.cr.Namespace}
+		if err := c.client.Get(ctx, nn, pod); err == nil {
+			return pod, nil
+		}
+	}
+
+	pod, err := orchestrator.GetReadyPod(ctx, c.client, c.cr)
+	if err != nil {
+		return nil, errors.Wrap(err, "get ready orchestrator pod")
+	}
+
+	return pod, nil
 }
 
 func (c *cluster) pod(ctx context.Context, host string) (*corev1.Pod, error) {

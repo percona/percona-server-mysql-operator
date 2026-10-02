@@ -44,7 +44,7 @@ check_async() {
 }
 
 check_gr() {
-	local VALUES=$(MYSQL_PWD="${MONITOR_PASSWORD}" ${MYSQL_CMDLINE} -e "select concat(@@global.read_only,',',@@global.super_read_only,',',MEMBER_STATE,',',MEMBER_ROLE) from performance_schema.replication_group_members where MEMBER_ID = @@global.server_uuid;")
+	local VALUES=$(MYSQL_PWD="${MONITOR_PASSWORD}" ${MYSQL_CMDLINE} -e "select concat(@@global.read_only,',',@@global.super_read_only,',',m.MEMBER_STATE,',',m.MEMBER_ROLE,',',ifnull(s.COUNT_TRANSACTIONS_REMOTE_IN_APPLIER_QUEUE,0)) from performance_schema.replication_group_members m left join performance_schema.replication_group_member_stats s using (MEMBER_ID) where m.MEMBER_ID = @@global.server_uuid;")
 
 	# shellcheck disable=SC2207
 	local REPLICATION_STATUS=($(echo "$VALUES" | /bin/tr "," "\n"))
@@ -52,15 +52,20 @@ check_gr() {
 	local SUPER_RO=${REPLICATION_STATUS[1]}
 	local NODE_STATUS=${REPLICATION_STATUS[2]}
 	local MEMBER_ROLE=${REPLICATION_STATUS[3]}
+	local APPLIER_QUEUE=${REPLICATION_STATUS[4]}
 
-	log INFO "${MYSQL_SERVER_IP}:${MYSQL_SERVER_PORT} Super_Read_Only: ${SUPER_RO} Read_Only: ${READ_ONLY} Node_Status: ${NODE_STATUS} Member_Role: ${MEMBER_ROLE} Is_Clusterset_Replica: ${IS_CLUSTERSET_REPLICA}"
+	log INFO "${MYSQL_SERVER_IP}:${MYSQL_SERVER_PORT} Super_Read_Only: ${SUPER_RO} Read_Only: ${READ_ONLY} Node_Status: ${NODE_STATUS} Member_Role: ${MEMBER_ROLE} Applier_Queue: ${APPLIER_QUEUE} Is_Clusterset_Replica: ${IS_CLUSTERSET_REPLICA}"
 
 	if [[ ${IS_CLUSTERSET_REPLICA} == '1' ]] && [[ ${MEMBER_ROLE} == 'PRIMARY' ]] && [[ ${NODE_STATUS} == "ONLINE" ]] && [[ ${SUPER_RO} == '1' ]] && [[ ${READ_ONLY} == '1' ]]; then
 		log INFO "${MYSQL_SERVER_IP}:${MYSQL_SERVER_PORT} for backend ${HAPROXY_PROXY_NAME} is OK"
 		exit 0
-	elif [[ ${SUPER_RO} == '0' ]] && [[ ${READ_ONLY} == '0' ]] && [[ ${NODE_STATUS} == "ONLINE" ]]; then
+	elif [[ ${MEMBER_ROLE} == 'PRIMARY' ]] && [[ ${SUPER_RO} == '0' ]] && [[ ${READ_ONLY} == '0' ]] && [[ ${NODE_STATUS} == "ONLINE" ]]; then
 		log INFO "${MYSQL_SERVER_IP}:${MYSQL_SERVER_PORT} for backend ${HAPROXY_PROXY_NAME} is OK"
 		exit 0
+	elif [[ ${IS_CLUSTERSET_REPLICA} != '1' ]] && [[ ${MEMBER_ROLE} == 'PRIMARY' ]] && [[ ${NODE_STATUS} == "ONLINE" ]] && [[ ${READ_ONLY} == '1' ]]; then
+		log WARNING "${MYSQL_SERVER_IP}:${MYSQL_SERVER_PORT} is PRIMARY but not writable yet: ${APPLIER_QUEUE} transactions in applier queue"
+		log INFO "${MYSQL_SERVER_IP}:${MYSQL_SERVER_PORT} for backend ${HAPROXY_PROXY_NAME} is NOT OK"
+		exit 1
 	else
 		log INFO "${MYSQL_SERVER_IP}:${MYSQL_SERVER_PORT} for backend ${HAPROXY_PROXY_NAME} is NOT OK"
 		exit 1
