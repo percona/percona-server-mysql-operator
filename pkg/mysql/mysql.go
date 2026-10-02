@@ -731,11 +731,6 @@ func mysqldContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 		},
 	}
 
-	// Enable the bootstrap clone progress watchdog for crVersion >= 1.3.0 with a
-	// default stall window the user can override (or disable with 0) via
-	// spec.mysql.env. Merge the default with spec.Env so it is set exactly once and
-	// a user value wins; gated on 1.3.0 so upgrading only the operator does not
-	// change the pod template of existing clusters.
 	userEnv := spec.Env
 	if cr.CompareVersion("1.3.0") >= 0 {
 		stallDefault := []corev1.EnvVar{{
