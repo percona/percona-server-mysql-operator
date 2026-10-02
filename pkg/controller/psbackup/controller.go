@@ -197,11 +197,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		return ctrl.Result{}, nil
 	}
 
-	if cluster.Spec.Backup.GetAllowParallel() {
-		if err := r.releaseLeaseIfAcquired(ctx, cr, &status); err != nil {
-			return rr, errors.Wrap(err, "release lease")
-		}
-	} else if status.State == apiv1.BackupNew {
+	if status.State == apiv1.BackupNew {
 		if ok, err := r.tryAcquireLease(ctx, cr, &status); err != nil {
 			return rr, errors.Wrap(err, "try to acquire lease")
 		} else if !ok {

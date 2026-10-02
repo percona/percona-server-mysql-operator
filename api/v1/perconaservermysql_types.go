@@ -25,6 +25,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	v "github.com/hashicorp/go-version"
@@ -39,6 +40,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/validation"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
@@ -47,6 +49,9 @@ import (
 
 const (
 	defaultGracePeriodSec int64 = 600
+
+	defaultFailoverTimeout                  = 6 * time.Hour
+	defaultFailoverSwitchoverCatchUpTimeout = 5 * time.Minute
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -66,6 +71,7 @@ const (
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async' && self.updateStrategy == 'SmartUpdate') || (has(self.orchestrator) && self.orchestrator.enabled)",message="Invalid configuration: For 'async' replication, SmartUpdate requires Orchestrator to be enabled"
 // +kubebuilder:validation:XValidation:rule="!has(self.proxy) || !(has(self.proxy.router) && has(self.proxy.router.enabled) && self.proxy.router.enabled && has(self.proxy.haproxy) && has(self.proxy.haproxy.enabled) && self.proxy.haproxy.enabled)",message="Invalid configuration: MySQL Router and HAProxy can't be enabled at the same time"
 // +kubebuilder:validation:XValidation:rule="(oldSelf.mysql.clusterType == self.mysql.clusterType) || self.mysql.clusterType == 'async' || !self.?orchestrator.?enabled.orValue(false)",message="spec.orchestrator.enabled should be false when switching from async cluster type"
+// +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'group-replication') || !has(self.orchestrator) || !has(self.orchestrator.failover)",message="Invalid configuration: 'orchestrator.failover' only applies when 'mysql.clusterType' is set to 'async'"
 type PerconaServerMySQLSpec struct {
 	Metadata  *Metadata `json:"metadata,omitempty"`
 	CRVersion string    `json:"crVersion,omitempty"`
@@ -81,6 +87,7 @@ type PerconaServerMySQLSpec struct {
 	MySQL                   MySQLSpec                            `json:"mysql,omitempty"`
 	Orchestrator            OrchestratorSpec                     `json:"orchestrator,omitempty"`
 	PMM                     *PMMSpec                             `json:"pmm,omitempty"`
+	LogCollector            *LogCollectorSpec                    `json:"logcollector,omitempty"`
 	Backup                  *BackupSpec                          `json:"backup,omitempty"`
 	Proxy                   ProxySpec                            `json:"proxy,omitempty"`
 	TLS                     *TLSSpec                             `json:"tls,omitempty"`
@@ -325,7 +332,121 @@ type OrchestratorSpec struct {
 	Enabled bool          `json:"enabled,omitempty"`
 	Expose  ServiceExpose `json:"expose,omitempty"`
 
+	// Failover configures how the cluster recovers from a primary that is gone.
+	// +kubebuilder:validation:Optional
+	Failover *FailoverSpec `json:"failover,omitempty"`
+
 	PodSpec `json:",inline"`
+}
+
+// FailoverPolicy decides what happens once a failover has spent its whole
+// timeout without recovering the transactions stranded on the dead primary.
+type FailoverPolicy string
+
+const (
+	// FailoverPolicyAbort leaves the cluster without a writable primary. Nothing
+	// is lost, but nothing is promoted either, until someone intervenes.
+	FailoverPolicyAbort FailoverPolicy = "Abort"
+
+	// FailoverPolicyForce promotes the best candidate anyway, giving up whatever
+	// the dead primary committed and never delivered. It does not apply when the
+	// old primary is reachable again and holds transactions the candidate does
+	// not have: promoting then would leave two writable primaries.
+	FailoverPolicyForce FailoverPolicy = "ForceWithPossibleDataLoss"
+)
+
+func (p FailoverPolicy) Valid() bool {
+	return p == FailoverPolicyAbort || p == FailoverPolicyForce
+}
+
+type FailoverSpec struct {
+	// Timeout bounds how long the cluster tries to recover the transactions
+	// stranded on the dead primary. It is measured from the moment the failure is
+	// first seen and covers every retry, not a single attempt. The clock restarts
+	// if the Orchestrator raft leader changes mid-failover, which delays the
+	// OnTimeout decision rather than bringing it forward.
+	// +kubebuilder:validation:Pattern=`^([0-9]+(\.[0-9]+)?(ns|us|ms|s|m|h))+$`
+	// +kubebuilder:default="6h"
+	Timeout string `json:"timeout,omitempty"`
+
+	// OnTimeout decides what happens when Timeout expires.
+	// +kubebuilder:validation:Enum=Abort;ForceWithPossibleDataLoss
+	// +kubebuilder:default=Abort
+	OnTimeout FailoverPolicy `json:"onTimeout,omitempty"`
+
+	// SwitchoverCatchUpTimeout bounds how long a planned switchover waits for the
+	// candidate to apply everything the current primary wrote before promoting it.
+	// +kubebuilder:validation:Pattern=`^([0-9]+(\.[0-9]+)?(ns|us|ms|s|m|h))+$`
+	// +kubebuilder:default="5m"
+	SwitchoverCatchUpTimeout string `json:"switchoverCatchUpTimeout,omitempty"`
+}
+
+func (s *FailoverSpec) SetDefaults() {
+	if s.Timeout == "" {
+		s.Timeout = defaultFailoverTimeout.String()
+	}
+	if s.OnTimeout == "" {
+		s.OnTimeout = FailoverPolicyAbort
+	}
+	if s.SwitchoverCatchUpTimeout == "" {
+		s.SwitchoverCatchUpTimeout = defaultFailoverSwitchoverCatchUpTimeout.String()
+	}
+}
+
+func (s *FailoverSpec) validate() error {
+	for _, f := range []struct {
+		name  string
+		value string
+	}{
+		{"orchestrator.failover.timeout", s.Timeout},
+		{"orchestrator.failover.switchoverCatchUpTimeout", s.SwitchoverCatchUpTimeout},
+	} {
+		d, err := time.ParseDuration(f.value)
+		if err != nil {
+			return errors.Wrapf(err, "failed to parse %s", f.name)
+		}
+		// Both end up as whole seconds in orchestrator's configuration.
+		if d < time.Second {
+			return errors.Errorf("%s should be at least 1s", f.name)
+		}
+	}
+
+	if !s.OnTimeout.Valid() {
+		return errors.Errorf("orchestrator.failover.onTimeout should be one of %s, %s", FailoverPolicyAbort, FailoverPolicyForce)
+	}
+
+	return nil
+}
+
+// TimeoutDuration returns Timeout, falling back to the default when it is unset
+// or unparsable. CheckNSetDefaults rejects both, so the fallback only covers
+// objects that never went through it.
+func (s *FailoverSpec) TimeoutDuration() time.Duration {
+	return parseDurationOr(s.Timeout, defaultFailoverTimeout)
+}
+
+func (s *FailoverSpec) SwitchoverCatchUp() time.Duration {
+	return parseDurationOr(s.SwitchoverCatchUpTimeout, defaultFailoverSwitchoverCatchUpTimeout)
+}
+
+func parseDurationOr(value string, fallback time.Duration) time.Duration {
+	d, err := time.ParseDuration(value)
+	if err != nil || d < time.Second {
+		return fallback
+	}
+
+	return d
+}
+
+// FailoverSpec returns the failover configuration with every default filled in
+func (cr *PerconaServerMySQL) FailoverSpec() *FailoverSpec {
+	spec := new(FailoverSpec)
+	if cr.Spec.Orchestrator.Failover != nil {
+		spec = cr.Spec.Orchestrator.Failover.DeepCopy()
+	}
+	spec.SetDefaults()
+
+	return spec
 }
 
 type ContainerSpec struct {
@@ -466,7 +587,6 @@ type CABundleSecretSelector struct {
 }
 
 type BackupSpec struct {
-	AllowParallel            *bool                         `json:"allowParallel,omitempty"`
 	Enabled                  bool                          `json:"enabled,omitempty"`
 	SourcePod                string                        `json:"sourcePod,omitempty"`
 	Image                    string                        `json:"image,omitempty"`
@@ -491,13 +611,6 @@ type BackupSpec struct {
 
 	// EncryptionKeySecret is the secret key selector for the backup encryption key.
 	EncryptionKeySecret *EncryptionKeySecretSelector `json:"encryptionKeySecret,omitempty"`
-}
-
-func (s *BackupSpec) GetAllowParallel() bool {
-	if s.AllowParallel == nil {
-		return false
-	}
-	return *s.AllowParallel
 }
 
 func (s *BackupSpec) GetEncryptionEnabled(storage *BackupStorageSpec) bool {
@@ -1059,6 +1172,7 @@ const (
 	ConditionAwaitingExternalBootstrap   string = "AwaitingExternalBootstrap"
 	ConditionMySQLConfigSynced                  = "MySQLConfigSynced"
 	ConditionClusterTypeSwitchInProgress string = "ClusterTypeSwitchInProgress"
+	ConditionAsyncFailoverBlocked        string = "AsyncFailoverBlocked"
 
 	// Deprecated, preserved only for backward compatibility
 	ConditionClusterSetReplicationRunning string = "ClusterSetReplicationRunning"
@@ -1239,8 +1353,24 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 		cr.Spec.MySQL.AutoConfig.LoadType = AutoConfigLoadTypeSomeWrites
 	}
 
+	if cr.Spec.Orchestrator.Failover != nil {
+		if cr.Spec.MySQL.ClusterType != ClusterTypeAsync {
+			return errors.Errorf("orchestrator.failover only applies to %s clusters", ClusterTypeAsync)
+		}
+
+		cr.Spec.Orchestrator.Failover.SetDefaults()
+
+		if err := cr.Spec.Orchestrator.Failover.validate(); err != nil {
+			return err
+		}
+	}
+
 	if err := cr.validateStorageAutoscaling(); err != nil {
 		return errors.Wrap(err, "validate storage autoscaling")
+	}
+
+	if err := cr.validateLogCollector(); err != nil {
+		return errors.Wrap(err, "validate log collector")
 	}
 	cr.setStorageAutoscalingDefaults()
 
@@ -1727,6 +1857,169 @@ func (cr *PerconaServerMySQL) PMMEnabled(secret *corev1.Secret) bool {
 		return cr.Spec.PMM.HasSecret(secret)
 	}
 	return false
+}
+
+const (
+	// LogCollectorContainerName is the name of the Fluent Bit sidecar.
+	LogCollectorContainerName = "logs"
+
+	// LogRotateContainerName is the name of the logrotate sidecar.
+	LogRotateContainerName = "logrotate"
+)
+
+// LogCollectorSpec configures the log collector sidecars that tail, rotate and
+// ship the on-disk logs of the cluster components.
+type LogCollectorSpec struct {
+	// Enabled turns the log collector on or off. When unset, it is off.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// +kubebuilder:validation:Required
+	Image string `json:"image"`
+
+	// +kubebuilder:validation:Enum={Always,Never,IfNotPresent}
+	// +optional
+	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
+
+	// Custom Fluent Bit configuration, merged into the log collector pipeline.
+	// Must be in Fluent Bit's YAML configuration format (the classic ".conf"
+	// format is not supported); this is what enables YAML-only features such as
+	// pipeline processors (e.g. opentelemetry_envelope). Invalid configuration
+	// is ignored by the collector at startup.
+	// +optional
+	Configuration string `json:"configuration,omitempty"`
+
+	// +optional
+	Env []corev1.EnvVar `json:"env,omitempty"`
+
+	// +optional
+	EnvFrom []corev1.EnvFromSource `json:"envFrom,omitempty"`
+
+	// +optional
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// +optional
+	ContainerSecurityContext *corev1.SecurityContext `json:"containerSecurityContext,omitempty"`
+
+	// LivenessProbe sets the liveness probe for the fluent-bit log collector
+	// container. When not set, the container has no liveness probe.
+	// +optional
+	LivenessProbe *corev1.Probe `json:"livenessProbe,omitempty"`
+
+	// ReadinessProbe sets the readiness probe for the fluent-bit log collector
+	// container. When not set, the container has no readiness probe.
+	// +optional
+	ReadinessProbe *corev1.Probe `json:"readinessProbe,omitempty"`
+
+	// +optional
+	VolumeMounts []corev1.VolumeMount `json:"volumeMounts,omitempty"`
+
+	// +optional
+	Volumes []corev1.Volume `json:"volumes,omitempty"`
+
+	// +optional
+	LogRotate *LogRotateSpec `json:"logRotate,omitempty"`
+}
+
+// LogRotateSpec configures the logrotate sidecar that rotates the on-disk logs.
+type LogRotateSpec struct {
+	// Configuration allows overriding the default logrotate configuration.
+	// +optional
+	Configuration string `json:"configuration,omitempty"`
+
+	// ExtraConfig allows specifying logrotate configuration files in addition to
+	// the main configuration file. This should be a reference to a ConfigMap in
+	// the same namespace. Keys must contain the .conf extension to be processed
+	// correctly.
+	// +optional
+	ExtraConfig corev1.LocalObjectReference `json:"extraConfig,omitempty"`
+
+	// Schedule is the cron schedule on which logrotate runs.
+	// +kubebuilder:default="0 0 * * *"
+	// +optional
+	Schedule string `json:"schedule,omitempty"`
+
+	// LivenessProbe sets the liveness probe for the logrotate container.
+	// When not set, the container has no liveness probe.
+	// +optional
+	LivenessProbe *corev1.Probe `json:"livenessProbe,omitempty"`
+
+	// ReadinessProbe sets the readiness probe for the logrotate container.
+	// When not set, the container has no readiness probe.
+	// +optional
+	ReadinessProbe *corev1.Probe `json:"readinessProbe,omitempty"`
+}
+
+// LogCollectorEnabled reports whether the log collector sidecars should be
+// wired into the cluster's pods.
+func (cr *PerconaServerMySQL) LogCollectorEnabled() bool {
+	return cr.CompareVersion("1.3.0") >= 0 &&
+		cr.Spec.LogCollector != nil &&
+		cr.Spec.LogCollector.Enabled != nil &&
+		*cr.Spec.LogCollector.Enabled
+}
+
+// LogRotateExtraConfigMaps returns the names of the ConfigMaps the log collector
+// references through logRotate.extraConfig.
+func (cr *PerconaServerMySQL) LogRotateExtraConfigMaps() []string {
+	if cr.Spec.LogCollector == nil || cr.Spec.LogCollector.LogRotate == nil ||
+		cr.Spec.LogCollector.LogRotate.ExtraConfig.Name == "" {
+		return nil
+	}
+	return []string{cr.Spec.LogCollector.LogRotate.ExtraConfig.Name}
+}
+
+// logCollectorConfigured reports whether the log collector sidecars end up in
+// the pods. Unlike LogCollectorEnabled it tolerates an empty crVersion, since
+// validation runs before the defaults are applied.
+func (cr *PerconaServerMySQL) logCollectorConfigured() bool {
+	// An empty crVersion is defaulted to the current version, so it reads as
+	// new enough here (and CompareVersion panics on it).
+	return (cr.Spec.CRVersion == "" || cr.CompareVersion("1.3.0") >= 0) &&
+		cr.Spec.LogCollector != nil &&
+		cr.Spec.LogCollector.Enabled != nil &&
+		*cr.Spec.LogCollector.Enabled
+}
+
+// validateLogCollector rejects a log collector configuration the operator cannot
+// turn into a valid pod: an unparsable logrotate schedule, or a user sidecar
+// claiming one of the container names the log collector reserves.
+func (cr *PerconaServerMySQL) validateLogCollector() error {
+	if cr.Spec.LogCollector == nil {
+		return nil
+	}
+
+	if lr := cr.Spec.LogCollector.LogRotate; lr != nil && lr.Schedule != "" {
+		if strings.ContainsAny(lr.Schedule, "\n\r") {
+			return errors.New("logcollector.logRotate.schedule can't contain newlines")
+		}
+		if _, err := cron.ParseStandard(lr.Schedule); err != nil {
+			return errors.Wrap(err, "invalid logcollector.logRotate.schedule")
+		}
+	}
+
+	if !cr.logCollectorConfigured() {
+		return nil
+	}
+
+	for _, sidecar := range cr.Spec.MySQL.Sidecars {
+		switch sidecar.Name {
+		case LogCollectorContainerName, LogRotateContainerName:
+			return errors.Errorf("mysql.sidecars can't use the container name %s, it's reserved by the log collector", sidecar.Name)
+		}
+	}
+
+	return nil
+}
+
+const IndexFieldLogRotateExtraConfig = "psCluster.logRotateExtraConfig"
+
+var LogRotateExtraConfigIndexerFunc client.IndexerFunc = func(obj client.Object) []string {
+	cr, ok := obj.(*PerconaServerMySQL)
+	if !ok {
+		return nil
+	}
+	return cr.LogRotateExtraConfigMaps()
 }
 
 // HasSecret determines if the provided secret contains the necessary PMM server key.

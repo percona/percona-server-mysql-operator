@@ -438,6 +438,21 @@ func TestSwitchOverGR(t *testing.T) {
 	})
 }
 
+func orcURL(path string) []string {
+	return []string{"sh", "-c", fmt.Sprintf(`curl -s -u "%s:$(cat %s/%s)" "localhost:3000/%s"`,
+		apiv1.UserOrchestrator, orchestrator.CredsMountPath, apiv1.UserOrchestrator, path)}
+}
+
+var downtimeResp, _ = json.Marshal(map[string]string{"Code": "OK", "Message": "Downtime begun"})
+
+// allInstancesScript answers ResolveCluster with nothing discovered, which
+// leaves the lookups to the cluster hint.
+var allInstancesScript = allInstancesScriptWith([]byte("[]"))
+
+func allInstancesScriptWith(instances []byte) fakeClientScript {
+	return fakeClientScript{cmd: orcURL("api/all-instances"), stdout: instances}
+}
+
 func TestSwitchOverAsync(t *testing.T) {
 	cr := readDefaultCRForUpgrade("test-cluster", "test-ns")
 	cr.Spec.MySQL.ClusterType = apiv1.ClusterTypeAsync
@@ -475,7 +490,7 @@ func TestSwitchOverAsync(t *testing.T) {
 
 	// ClusterPrimary response: return an Instance where Alias != target (so switchover is triggered)
 	clusterPrimaryResp, _ := json.Marshal(orchestrator.Instance{
-		Key:   orchestrator.InstanceKey{Hostname: primary.Name},
+		Key:   orchestrator.InstanceKey{Hostname: primary.Name, Port: mysql.DefaultPort},
 		Alias: primary.Name,
 	})
 
@@ -491,13 +506,23 @@ func TestSwitchOverAsync(t *testing.T) {
 		fc := &fakeClient{
 			disableCheck: false,
 			scripts: []fakeClientScript{
+				allInstancesScript,
 				{
-					cmd:    []string{"sh", "-c", fmt.Sprintf(`curl -s -u "%s:$(cat %s/%s)" "localhost:3000/api/master/%s"`, apiv1.UserOrchestrator, orchestrator.CredsMountPath, apiv1.UserOrchestrator, clusterHint)},
+					cmd:    orcURL(fmt.Sprintf("api/master/%s", clusterHint)),
 					stdout: clusterPrimaryResp,
 				},
 				{
-					cmd:    []string{"sh", "-c", fmt.Sprintf(`curl -s -u "%s:$(cat %s/%s)" "localhost:3000/api/graceful-master-takeover-auto/%s/%s/%d"`, apiv1.UserOrchestrator, orchestrator.CredsMountPath, apiv1.UserOrchestrator, clusterHint, target.GetName(), mysql.DefaultPort)},
+					cmd: orcURL(fmt.Sprintf("api/begin-downtime/%s/%d/%s/%s/%s",
+						primary.Name, mysql.DefaultPort, orchestrator.DowntimeOwner, orchestrator.DowntimeReasonSwitchover, "600s")),
+					stdout: downtimeResp,
+				},
+				{
+					cmd:    orcURL(fmt.Sprintf("api/graceful-master-takeover-auto/%s/%s/%d", clusterHint, target.GetName(), mysql.DefaultPort)),
 					stdout: takeoverResp,
+				},
+				{
+					cmd:    orcURL(fmt.Sprintf("api/end-downtime/%s/%d", primary.Name, mysql.DefaultPort)),
+					stdout: downtimeResp,
 				},
 			},
 		}
@@ -513,7 +538,7 @@ func TestSwitchOverAsync(t *testing.T) {
 
 		err := r.switchOverAsync(t.Context(), cr, target)
 		require.NoError(t, err)
-		assert.Equal(t, 2, fc.execCount)
+		assert.Equal(t, 5, fc.execCount)
 	})
 
 	t.Run("no ready orc pods", func(t *testing.T) {
@@ -544,6 +569,7 @@ func TestSwitchOverAsync(t *testing.T) {
 		fc := &fakeClient{
 			disableCheck: false,
 			scripts: []fakeClientScript{
+				allInstancesScript,
 				{
 					cmd:    []string{"sh", "-c", fmt.Sprintf(`curl -s -u "%s:$(cat %s/%s)" "localhost:3000/api/master/%s"`, apiv1.UserOrchestrator, orchestrator.CredsMountPath, apiv1.UserOrchestrator, clusterHint)},
 					stdout: alreadyPrimaryResp,
@@ -562,7 +588,7 @@ func TestSwitchOverAsync(t *testing.T) {
 
 		err := r.switchOverAsync(t.Context(), cr, target)
 		require.NoError(t, err)
-		assert.Equal(t, 1, fc.execCount) // only ClusterPrimary was called
+		assert.Equal(t, 2, fc.execCount) // only ResolveCluster and ClusterPrimary were called
 	})
 
 	t.Run("exec fails", func(t *testing.T) {
@@ -586,7 +612,7 @@ func TestSwitchOverAsync(t *testing.T) {
 
 		err := r.switchOverAsync(t.Context(), cr, target)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "ensure node is primary")
+		assert.Contains(t, err.Error(), "resolve cluster")
 	})
 }
 
@@ -650,7 +676,7 @@ func TestSwitchOverAndWait(t *testing.T) {
 		clusterHint := cr.ClusterHint()
 
 		oldPrimaryResp, _ := json.Marshal(orchestrator.Instance{
-			Key:   orchestrator.InstanceKey{Hostname: primary.Name},
+			Key:   orchestrator.InstanceKey{Hostname: primary.Name, Port: mysql.DefaultPort},
 			Alias: primary.Name,
 		})
 		takeoverResp, _ := json.Marshal(orchestrator.Instance{
@@ -665,14 +691,25 @@ func TestSwitchOverAndWait(t *testing.T) {
 		cli := fake.NewClientBuilder().WithScheme(s).WithObjects(makeReadyOrcPod(cr)).Build()
 		fc := &fakeClient{
 			scripts: []fakeClientScript{
+				allInstancesScript,
 				{
 					cmd:    []string{"sh", "-c", fmt.Sprintf(`curl -s -u "%s:$(cat %s/%s)" "localhost:3000/api/master/%s"`, apiv1.UserOrchestrator, orchestrator.CredsMountPath, apiv1.UserOrchestrator, clusterHint)},
 					stdout: oldPrimaryResp,
 				},
 				{
+					cmd: orcURL(fmt.Sprintf("api/begin-downtime/%s/%d/%s/%s/600s",
+						primary.Name, mysql.DefaultPort, orchestrator.DowntimeOwner, orchestrator.DowntimeReasonSwitchover)),
+					stdout: downtimeResp,
+				},
+				{
 					cmd:    []string{"sh", "-c", fmt.Sprintf(`curl -s -u "%s:$(cat %s/%s)" "localhost:3000/api/graceful-master-takeover-auto/%s/%s/%d"`, apiv1.UserOrchestrator, orchestrator.CredsMountPath, apiv1.UserOrchestrator, clusterHint, target.GetName(), mysql.DefaultPort)},
 					stdout: takeoverResp,
 				},
+				{
+					cmd:    orcURL(fmt.Sprintf("api/end-downtime/%s/%d", primary.Name, mysql.DefaultPort)),
+					stdout: downtimeResp,
+				},
+				allInstancesScript,
 				{
 					cmd:    []string{"sh", "-c", fmt.Sprintf(`curl -s -u "%s:$(cat %s/%s)" "localhost:3000/api/master/%s"`, apiv1.UserOrchestrator, orchestrator.CredsMountPath, apiv1.UserOrchestrator, clusterHint)},
 					stdout: newPrimaryResp,
@@ -691,8 +728,8 @@ func TestSwitchOverAndWait(t *testing.T) {
 
 		err := r.switchOverAndWait(t.Context(), cr, primary, target)
 		require.NoError(t, err)
-		// 2 calls for switchOverAsync + 1 call for getPrimaryHost in the wait loop.
-		assert.Equal(t, 3, fc.execCount)
+		// 5 calls for switchOverAsync + 2 calls for getPrimaryHost in the wait loop.
+		assert.Equal(t, 7, fc.execCount)
 	})
 
 	t.Run("pending switch to GR still uses the async path", func(t *testing.T) {
@@ -709,7 +746,7 @@ func TestSwitchOverAndWait(t *testing.T) {
 		clusterHint := cr.ClusterHint()
 
 		oldPrimaryResp, _ := json.Marshal(orchestrator.Instance{
-			Key:   orchestrator.InstanceKey{Hostname: primary.Name},
+			Key:   orchestrator.InstanceKey{Hostname: primary.Name, Port: mysql.DefaultPort},
 			Alias: primary.Name,
 		})
 		takeoverResp, _ := json.Marshal(orchestrator.Instance{
@@ -724,14 +761,25 @@ func TestSwitchOverAndWait(t *testing.T) {
 		cli := fake.NewClientBuilder().WithScheme(s).WithObjects(makeReadyOrcPod(cr)).Build()
 		fc := &fakeClient{
 			scripts: []fakeClientScript{
+				allInstancesScript,
 				{
 					cmd:    []string{"sh", "-c", fmt.Sprintf(`curl -s -u "%s:$(cat %s/%s)" "localhost:3000/api/master/%s"`, apiv1.UserOrchestrator, orchestrator.CredsMountPath, apiv1.UserOrchestrator, clusterHint)},
 					stdout: oldPrimaryResp,
 				},
 				{
+					cmd: orcURL(fmt.Sprintf("api/begin-downtime/%s/%d/%s/%s/600s",
+						primary.Name, mysql.DefaultPort, orchestrator.DowntimeOwner, orchestrator.DowntimeReasonSwitchover)),
+					stdout: downtimeResp,
+				},
+				{
 					cmd:    []string{"sh", "-c", fmt.Sprintf(`curl -s -u "%s:$(cat %s/%s)" "localhost:3000/api/graceful-master-takeover-auto/%s/%s/%d"`, apiv1.UserOrchestrator, orchestrator.CredsMountPath, apiv1.UserOrchestrator, clusterHint, target.GetName(), mysql.DefaultPort)},
 					stdout: takeoverResp,
 				},
+				{
+					cmd:    orcURL(fmt.Sprintf("api/end-downtime/%s/%d", primary.Name, mysql.DefaultPort)),
+					stdout: downtimeResp,
+				},
+				allInstancesScript,
 				{
 					cmd:    []string{"sh", "-c", fmt.Sprintf(`curl -s -u "%s:$(cat %s/%s)" "localhost:3000/api/master/%s"`, apiv1.UserOrchestrator, orchestrator.CredsMountPath, apiv1.UserOrchestrator, clusterHint)},
 					stdout: newPrimaryResp,
@@ -750,8 +798,8 @@ func TestSwitchOverAndWait(t *testing.T) {
 
 		err := r.switchOverAndWait(t.Context(), cr, primary, target)
 		require.NoError(t, err)
-		// 2 calls for switchOverAsync + 1 call for getPrimaryHost in the wait loop.
-		assert.Equal(t, 3, fc.execCount)
+		// 5 calls for switchOverAsync + 2 calls for getPrimaryHost in the wait loop.
+		assert.Equal(t, 7, fc.execCount)
 	})
 
 	t.Run("GR assigns primary label to target", func(t *testing.T) {
@@ -825,7 +873,7 @@ func TestSwitchOverAndWait(t *testing.T) {
 		target := &corev1.Pod{Name: mysql.PodName(cr, 1), Namespace: cr.Namespace}
 
 		oldPrimaryResp, _ := json.Marshal(orchestrator.Instance{
-			Key:   orchestrator.InstanceKey{Hostname: primary.Name},
+			Key:   orchestrator.InstanceKey{Hostname: primary.Name, Port: mysql.DefaultPort},
 			Alias: primary.Name,
 		})
 		takeoverResp, _ := json.Marshal(orchestrator.Instance{
@@ -837,10 +885,14 @@ func TestSwitchOverAndWait(t *testing.T) {
 		fc := &fakeClient{
 			disableCheck: true,
 			scripts: []fakeClientScript{
+				{stdout: []byte("[]")},
 				{stdout: oldPrimaryResp},
+				{stdout: downtimeResp},
 				{stdout: takeoverResp},
-				// Wait-loop ClusterPrimary call fails with a non-retriable
-				// error so the loop exits immediately instead of polling.
+				{stdout: downtimeResp},
+				// The wait loop's first call to orchestrator fails with a
+				// non-retriable error so the loop exits immediately instead
+				// of polling.
 				{err: fmt.Errorf("connection refused")},
 			},
 		}
@@ -857,7 +909,7 @@ func TestSwitchOverAndWait(t *testing.T) {
 		err := r.switchOverAndWait(t.Context(), cr, primary, target)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "wait for new primary")
-		assert.Equal(t, 3, fc.execCount)
+		assert.Equal(t, 6, fc.execCount)
 	})
 }
 
@@ -1233,7 +1285,7 @@ func TestSmartUpdateMySQL(t *testing.T) {
 
 	primaryFromOrchestrator := func(idx int) []byte {
 		b, _ := json.Marshal(orchestrator.Instance{
-			Key:   orchestrator.InstanceKey{Hostname: mysql.PodName(cr, idx)},
+			Key:   orchestrator.InstanceKey{Hostname: mysql.PodName(cr, idx), Port: mysql.DefaultPort},
 			Alias: mysql.PodName(cr, idx),
 		})
 		return b
@@ -1257,6 +1309,7 @@ func TestSmartUpdateMySQL(t *testing.T) {
 			clusterType: apiv1.ClusterTypeAsync,
 			revisions:   []string{oldRev, oldRev, oldRev},
 			scripts: []fakeClientScript{
+				allInstancesScript,
 				{stdout: primaryFromOrchestrator(0)},
 			},
 			wantDeleted: []string{mysql.PodName(cr, 1)},
@@ -1266,9 +1319,14 @@ func TestSmartUpdateMySQL(t *testing.T) {
 			clusterType: apiv1.ClusterTypeAsync,
 			revisions:   []string{oldRev, newRev, newRev},
 			scripts: []fakeClientScript{
+				allInstancesScript,
 				{stdout: primaryFromOrchestrator(0)},
+				allInstancesScript,
 				{stdout: primaryFromOrchestrator(0)},
+				{stdout: downtimeResp},
 				{stdout: primaryFromOrchestrator(1)},
+				{stdout: downtimeResp},
+				allInstancesScript,
 				{stdout: primaryFromOrchestrator(1)},
 			},
 			wantDeleted: []string{mysql.PodName(cr, 0)},

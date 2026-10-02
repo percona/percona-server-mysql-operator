@@ -816,7 +816,8 @@ get_cr() {
 	local image_haproxy=${7:-${IMAGE_HAPROXY}}
 	local image_pmm_client=${8:-${IMAGE_PMM_CLIENT}}
 	local image_binlog_server=${9:-${IMAGE_BINLOG_SERVER}}
-	local cr_file=${10:-${DEPLOY_DIR}/cr.yaml}
+	local image_log_collector=${10:-${IMAGE_LOG_COLLECTOR}}
+	local cr_file=${11:-${DEPLOY_DIR}/cr.yaml}
 
 	local platform="$(detect_k8s_platform)"
 	local cr_name="${test_name}${name_suffix:+-$name_suffix}"
@@ -849,6 +850,7 @@ get_cr() {
 		.spec.proxy.haproxy.image = "'"$image_haproxy"'" |
 		.spec.pmm.image = "'"$image_pmm_client"'" |
 		.spec.backup.pitr.binlogServer.image="'"${image_binlog_server}"'" |
+		with(select(.spec.logcollector != null); .spec.logcollector.image = "'"$image_log_collector"'") |
 		(.. | select(tag == "!!str")) |= sub("<namespace>"; "'"${NAMESPACE}"'")
 	' "${crs[@]}" \
 		| if [[ $platform == "minikube" ]]; then
@@ -1194,6 +1196,12 @@ get_pod_uids() {
 		--sort-by=.metadata.name -o jsonpath='{.items[*].metadata.uid}'
 }
 
+get_mysql_pod_names() {
+	local cluster_name=$1
+
+	get_pod_names "${cluster_name}" database
+}
+
 get_mysql_pod_uids() {
 	local cluster_name=$1
 
@@ -1295,6 +1303,38 @@ wait_for_pods_restart() {
 		echo "waiting for ${cluster_name} ${component} pods to be replaced"
 		sleep 10
 		elapsed=$((elapsed + 10))
+	done
+}
+
+# Waits, pod by pod, until every pod of the StatefulSet runs its update revision
+# and is ready. Unlike rollout status, this works with the OnDelete strategy.
+wait_for_sts_pods_updated() {
+	local sts=$1
+	local timeout=${2:-300}
+	local generation replicas revision pod elapsed
+
+	generation=$(kubectl -n "${NAMESPACE}" get sts "${sts}" -o jsonpath='{.metadata.generation}')
+	kubectl -n "${NAMESPACE}" wait sts "${sts}" \
+		--for=jsonpath='{.status.observedGeneration}'="${generation}" --timeout="${timeout}s"
+
+	replicas=$(kubectl -n "${NAMESPACE}" get sts "${sts}" -o jsonpath='{.spec.replicas}')
+	revision=$(kubectl -n "${NAMESPACE}" get sts "${sts}" -o jsonpath='{.status.updateRevision}')
+
+	for ((i = 0; i < replicas; i++)); do
+		pod="${sts}-${i}"
+		elapsed=0
+		until [[ $(kubectl -n "${NAMESPACE}" get pod "${pod}" \
+			-o jsonpath='{.metadata.labels.controller-revision-hash} {.status.conditions[?(@.type=="Ready")].status}' \
+			2>/dev/null) == "${revision} True" ]]; do
+			if ((elapsed >= timeout)); then
+				echo "Timeout (${timeout}s) exceeded while waiting for ${pod} to run revision ${revision}"
+				kubectl -n "${NAMESPACE}" get pod "${pod}" -o wide || true
+				return 1
+			fi
+			echo "waiting for ${pod} to run revision ${revision}"
+			sleep 5
+			elapsed=$((elapsed + 5))
+		done
 	done
 }
 
@@ -1541,6 +1581,45 @@ get_primary_from_label() {
 	kubectl -n "${NAMESPACE}" get pods -l mysql.percona.com/primary=true -ojsonpath="{.items[0].metadata.name}"
 }
 
+# wait_for_primary waits until the primary label sits on the expected pod, or on
+# any pod other than the one named when the expectation is "changed".
+wait_for_primary() {
+	local expected=$1
+	local timeout=${2:-300}
+	local waited=0
+	local primary
+
+	while [[ ${waited} -lt ${timeout} ]]; do
+		primary=$(get_primary_from_label 2>/dev/null || true)
+
+		if [[ ${expected} == "changed:"* ]]; then
+			if [[ -n ${primary} && ${primary} != "${expected#changed:}" ]]; then
+				echo "${primary}"
+				return 0
+			fi
+		elif [[ ${primary} == "${expected}" ]]; then
+			echo "${primary}"
+			return 0
+		fi
+
+		sleep 5
+		waited=$((waited + 5))
+	done
+
+	echo "timed out after ${timeout}s waiting for primary ${expected}, it is ${primary}" >&2
+	kubectl -n "${NAMESPACE}" get pods -l mysql.percona.com/primary=true >&2
+
+	return 1
+}
+
+get_cluster_condition() {
+	local cluster=$1
+	local type=$2
+
+	kubectl -n "${NAMESPACE}" get ps "${cluster}" \
+		-o jsonpath="{.status.conditions[?(@.type==\"${type}\")].status}"
+}
+
 get_primary_from_haproxy() {
 	local haproxy_pod=$1
 	local haproxy_pod_ip=$(kubectl -n "${NAMESPACE}" get pods ${haproxy_pod} -o jsonpath="{.status.podIP}")
@@ -1558,7 +1637,12 @@ wait_for_haproxy_primary() {
 
 	local primary data i
 	while true; do
-		primary=$(get_primary_from_label)
+		primary=$(get_primary_from_label 2>/dev/null || true)
+
+		if [[ -z ${primary} ]]; then
+			echo "waiting for primary pod to be labelled" >&2
+			sleep 5
+		fi
 
 		data=()
 		for i in $(seq 0 $((haproxy_size - 1))); do
@@ -2109,20 +2193,22 @@ get_cr_with_latest_versions_in_vs() {
 	local image_toolkit=$(echo ${versions} | jq -r '.versions[].matrix.toolkit[].imagePath' | head -n 1)
 	local image_haproxy=$(echo ${versions} | jq -r '.versions[].matrix.haproxy[].imagePath' | head -n 1)
 	local image_pmm_client=$(echo ${versions} | jq -r '.versions[].matrix.pmm[].imagePath' | head -n 1)
+	local image_binlog_server=$(echo ${versions} | jq -r '.versions[].matrix.binlogServer[].imagePath' | head -n 1)
 
 	curl "https://raw.githubusercontent.com/percona/percona-server-mysql-operator/${git_tag}/deploy/cr.yaml" \
 		-o ${TEMP_DIR}/cr.yaml
 
 	get_cr "" \
-		${image_mysql} \
-		${image_backup} \
-		${image_orchestrator} \
-		${image_router} \
-		${image_toolkit} \
-		${image_haproxy} \
-		${image_pmm_client} \
-		${image_binlog_server} \
-		${TEMP_DIR}/cr.yaml
+		"${image_mysql}" \
+		"${image_backup}" \
+		"${image_orchestrator}" \
+		"${image_router}" \
+		"${image_toolkit}" \
+		"${image_haproxy}" \
+		"${image_pmm_client}" \
+		"${image_binlog_server:-${IMAGE_BINLOG_SERVER}}" \
+		"${IMAGE_LOG_COLLECTOR}" \
+		"${TEMP_DIR}/cr.yaml"
 }
 
 get_telemetry_report_by_id() {

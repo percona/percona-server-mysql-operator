@@ -81,6 +81,10 @@ spec:
         - name: BACKUPS_ENABLED
           value: "true"
         - name: CR_VERSION
+        - name: LOG_COLLECTOR_ENABLED
+          value: "true"
+        - name: LOG_DIR
+          value: /var/lib/mysql/log
         imagePullPolicy: Always
         livenessProbe:
           exec:
@@ -182,6 +186,8 @@ spec:
           name: datadir
         - mountPath: /etc/mysql/mysql-users-secret
           name: users
+      - name: logs
+      - name: logrotate
       dnsPolicy: ClusterFirst
       initContainers:
       - command:

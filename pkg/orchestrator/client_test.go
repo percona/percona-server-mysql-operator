@@ -51,3 +51,39 @@ func TestIsMasterFailover(t *testing.T) {
 		})
 	}
 }
+
+func TestIsPlannedTakeover(t *testing.T) {
+	tests := map[string]struct {
+		command string
+		want    bool
+	}{
+		"a switchover demotes a live primary": {
+			command: "graceful-master-takeover",
+			want:    true,
+		},
+		"a forced takeover also demotes a live primary": {
+			command: "force-master-takeover",
+			want:    true,
+		},
+		"a forced failover still means the primary is gone": {
+			command: "force-master-failover",
+			want:    false,
+		},
+		"a failure orchestrator detected on its own": {
+			command: "",
+			want:    false,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, tt.want, IsPlannedTakeover(tt.command))
+		})
+	}
+}
+
+func TestAckRecoveryEndpoint(t *testing.T) {
+	endpoint := ackRecoveryEndpoint("1790096871059981569:ad6d704a", "orc-handler: recovery finished")
+
+	assert.Equal(t, "api/ack-recovery/uid/1790096871059981569:ad6d704a?comment=orc-handler%3A+recovery+finished", endpoint)
+}
