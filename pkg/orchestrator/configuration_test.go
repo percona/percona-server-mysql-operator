@@ -35,7 +35,7 @@ func TestConfigMapDataUserConfiguration(t *testing.T) {
 
 	t.Run("reserved keys cannot be overridden", func(t *testing.T) {
 		cr := &apiv1.PerconaServerMySQL{}
-		cr.Spec.CRVersion = "1.2.0"
+		cr.Spec.CRVersion = "1.3.0"
 		cr.Spec.SSLSecretName = "ssl"
 		cr.Spec.Orchestrator.Size = 3
 		// every reserved key a user might try to set

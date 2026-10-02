@@ -641,7 +641,9 @@ func ConfigMapData(cr *apiv1.PerconaServerMySQL) (string, error) {
 		config["RaftEnabledSingleNode"] = false
 		if cr.Spec.Orchestrator.Size == 1 {
 			config["RaftEnabledSingleNode"] = true
-			config["RaftNodes"] = []string{}
+			if cr.CompareVersion("1.3.0") >= 0 {
+				config["RaftNodes"] = []string{}
+			}
 		}
 	}
 
