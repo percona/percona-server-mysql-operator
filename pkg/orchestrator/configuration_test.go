@@ -69,6 +69,12 @@ func TestConfigMapDataUserConfiguration(t *testing.T) {
 
 		// a non-reserved key still gets through
 		assert.EqualValues(t, 7, cfg["InstancePollSeconds"])
+
+		cr.Spec.Unsafe.OrchestratorSize = true
+		cr.Spec.Orchestrator.Size = 1
+		cfg = parse(t, cr)
+		assert.Equal(t, []any{}, cfg["RaftNodes"])
+		assert.EqualValues(t, true, cfg["RaftEnabledSingleNode"])
 	})
 
 	t.Run("operator-critical baked defaults cannot be overridden", func(t *testing.T) {
