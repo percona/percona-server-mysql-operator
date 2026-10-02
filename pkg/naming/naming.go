@@ -51,12 +51,23 @@ const (
 	AnnotationLastAppliedConfig        AnnotationKey = perconaPrefix + "last-applied-config"
 	AnnotationLastReloadedTLS          AnnotationKey = perconaPrefix + "last-reloaded-tls"
 	AnnotationLastPodTemplateHash      AnnotationKey = perconaPrefix + "last-pod-template-hash"
+
+	// AnnotationForcePromote asks the operator to promote a replica even though
+	// the transactions stranded on the dead primary could not be recovered. Its
+	// value is a MySQL pod name, or "true" to let the operator pick one. It is
+	// refused while the cluster has a writable primary.
+	AnnotationForcePromote AnnotationKey = perconaPrefix + "force-promote-with-possible-data-loss"
 )
 
 const (
 	TLSCAKey   = "ca.crt"
 	TLSCertKey = "tls.crt"
 	TLSKeyKey  = "tls.key"
+
+	// AnnotationLogCollectorConfigHash rolls MySQL pods when the log collector
+	// configuration changes. That config is mounted from ConfigMaps by a stable
+	// name, so content changes do not alter the pod template on their own.
+	AnnotationLogCollectorConfigHash AnnotationKey = perconaPrefix + "logcollector-config-hash"
 )
 
 const ClusterSetRecoveryFile = "/var/lib/mysql/clusterset-recovery"

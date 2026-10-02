@@ -461,7 +461,7 @@ prepare_vault_tls() {
 	local name=$1
 	local namespace=$2
 	local platform=$3
-	local csr_name=vault-csr-${RANDOM}
+	local csr_name=vault-csr-${name}-${namespace}
 	local csr_api_ver="v1"
 	local csr_signer
 
@@ -512,6 +512,7 @@ ${csr_signer}
   - server auth
 EOF
 
+	kubectl delete csr ${csr_name} --ignore-not-found
 	kubectl create -n ${namespace} -f ${tmp_dir}/csr.yaml
 	sleep 10
 	kubectl certificate approve ${csr_name}
@@ -549,9 +550,13 @@ _deploy_vault() {
 	local namespace=$4
 	local tmp_dir=$5
 
-	if kubectl get ns | grep ${namespace}; then
-		echo "${namespace} is already exist, assuming Vault is running there."
-		return
+	if kubectl get namespace ${namespace} >/dev/null 2>&1; then
+		if [[ -s ${tmp_dir}/${name} ]]; then
+			echo "${namespace} already exists, assuming Vault is running there."
+			return
+		fi
+		echo "${namespace} exists but ${tmp_dir}/${name} doesn't, recreating Vault"
+		destroy_vault ${name} ${namespace}
 	fi
 
 	rm -rf ${tmp_dir}
@@ -561,7 +566,6 @@ _deploy_vault() {
 	helm repo update
 
 	kubectl create namespace "${namespace}"
-	helm uninstall "$name" || :
 
 	echo "install Vault $name"
 
@@ -678,6 +682,35 @@ deploy_vault() {
 	fi
 
 	kubectl apply -n "${NAMESPACE}" -f ${tmp_dir}/vault-secret.yaml
+}
+
+destroy_vault() {
+	local name=${1:-vault-service}
+	local namespace=${2:-${name}}
+
+	local tmp_dir=/tmp/vault
+	local selector="app.kubernetes.io/instance=${name}"
+	local vault_ns
+	vault_ns="$(helm list --all-namespaces --filter "^${name}\$" -o json | jq -r '.[0].namespace // empty')"
+	: "${vault_ns:=${namespace}}"
+
+	kubectl -n "${NAMESPACE}" delete secret vault-keyring-secret --ignore-not-found
+
+	if [[ -n ${OPENSHIFT} ]]; then
+		oc adm policy remove-scc-from-user privileged ${name}-agent-injector || :
+	fi
+
+	helm uninstall "${name}" --namespace "${vault_ns}" || :
+
+	timeout 30 kubectl delete mutatingwebhookconfiguration -l "${selector}" || :
+	timeout 30 kubectl delete clusterrolebinding -l "${selector}" || :
+	timeout 30 kubectl delete clusterrole -l "${selector}" || :
+
+	kubectl delete csr vault-csr-${name}-${vault_ns} --ignore-not-found
+	timeout 120 kubectl delete namespace "${vault_ns}" --ignore-not-found || :
+	kubectl wait --for=delete "namespace/${vault_ns}" --timeout=120s || :
+
+	rm -rf ${tmp_dir}
 }
 
 retry() {
@@ -816,7 +849,8 @@ get_cr() {
 	local image_haproxy=${7:-${IMAGE_HAPROXY}}
 	local image_pmm_client=${8:-${IMAGE_PMM_CLIENT}}
 	local image_binlog_server=${9:-${IMAGE_BINLOG_SERVER}}
-	local cr_file=${10:-${DEPLOY_DIR}/cr.yaml}
+	local image_log_collector=${10:-${IMAGE_LOG_COLLECTOR}}
+	local cr_file=${11:-${DEPLOY_DIR}/cr.yaml}
 
 	local platform="$(detect_k8s_platform)"
 	local cr_name="${test_name}${name_suffix:+-$name_suffix}"
@@ -849,6 +883,7 @@ get_cr() {
 		.spec.proxy.haproxy.image = "'"$image_haproxy"'" |
 		.spec.pmm.image = "'"$image_pmm_client"'" |
 		.spec.backup.pitr.binlogServer.image="'"${image_binlog_server}"'" |
+		with(select(.spec.logcollector != null); .spec.logcollector.image = "'"$image_log_collector"'") |
 		(.. | select(tag == "!!str")) |= sub("<namespace>"; "'"${NAMESPACE}"'")
 	' "${crs[@]}" \
 		| if [[ $platform == "minikube" ]]; then
@@ -1003,10 +1038,6 @@ run_curl() {
 # method accepts any password for it) — no secret lookup needed.
 run_curl_orc() {
 	run_curl -u readonly:readonly "$@"
-}
-
-get_innodb_cluster_name() {
-	echo $(get_cluster_name) | tr -cd '[^a-zA-Z0-9_]+'
 }
 
 get_mysqlsh_uri_for_pod() {
@@ -1175,32 +1206,39 @@ get_router_pods() {
 	kubectl get pod -n "${NAMESPACE}" --no-headers --selector=app.kubernetes.io/name=router | awk '{print $1}'
 }
 
-mysql_pod_selector() {
+pod_selector() {
 	local cluster_name=$1
+	local component=$2
 
-	echo "app.kubernetes.io/instance=${cluster_name},app.kubernetes.io/name=mysql"
+	echo "app.kubernetes.io/instance=${cluster_name},app.kubernetes.io/component=${component}"
+}
+
+get_pod_names() {
+	local cluster_name=$1
+	local component=$2
+
+	kubectl get pod -n "${NAMESPACE}" --selector="$(pod_selector "${cluster_name}" "${component}")" \
+		--sort-by=.metadata.name -o jsonpath='{.items[*].metadata.name}'
+}
+
+get_pod_uids() {
+	local cluster_name=$1
+	local component=$2
+
+	kubectl get pod -n "${NAMESPACE}" --selector="$(pod_selector "${cluster_name}" "${component}")" \
+		--sort-by=.metadata.name -o jsonpath='{.items[*].metadata.uid}'
 }
 
 get_mysql_pod_names() {
 	local cluster_name=$1
 
-	kubectl get pod -n "${NAMESPACE}" --selector="$(mysql_pod_selector "${cluster_name}")" \
-		--sort-by=.metadata.name -o jsonpath='{.items[*].metadata.name}'
-}
-
-get_component_pod_uids() {
-	local cluster_name=$1
-	local component=$2
-
-	kubectl get pod -n "${NAMESPACE}" \
-		--selector="app.kubernetes.io/instance=${cluster_name},app.kubernetes.io/name=${component}" \
-		--sort-by=.metadata.name -o jsonpath='{.items[*].metadata.uid}'
+	get_pod_names "${cluster_name}" database
 }
 
 get_mysql_pod_uids() {
 	local cluster_name=$1
 
-	get_component_pod_uids "${cluster_name}" mysql
+	get_pod_uids "${cluster_name}" database
 }
 
 # Prints the global value of a MySQL variable from every database pod of the
@@ -1211,7 +1249,7 @@ get_mysql_variable_on_pods() {
 	local variable=$2
 	local values=()
 
-	for pod in $(get_mysql_pod_names "${cluster_name}"); do
+	for pod in $(get_pod_names "${cluster_name}" database); do
 		values+=("$(kubectl -n "${NAMESPACE}" exec "${pod}" -c mysql -- bash -c \
 			'mysql -uroot -p"$(cat /etc/mysql/mysql-users-secret/root)" -NB -e "SELECT @@global.'"${variable}"'"' \
 			2>/dev/null || echo 'unavailable')")
@@ -1257,13 +1295,13 @@ wait_for_mysql_pods_restart() {
 	local uids_before=$2
 	local timeout=${3:-600}
 
-	wait_for_component_pods_restart "${cluster_name}" mysql "${uids_before}" "${timeout}"
+	wait_for_pods_restart "${cluster_name}" database "${uids_before}" "${timeout}"
 }
 
-# Waits until every pod of the given component has been replaced, comparing
-# against a UID list captured with get_component_pod_uids before the change that
-# should restart them.
-wait_for_component_pods_restart() {
+# Waits until every pod of the given cluster app has been replaced, comparing
+# against a UID list captured with get_pod_uids before the change that should
+# restart them.
+wait_for_pods_restart() {
 	local cluster_name=$1
 	local component=$2
 	local uids_before=$3
@@ -1272,7 +1310,7 @@ wait_for_component_pods_restart() {
 	local expected_count=$(echo "${uids_before}" | wc -w)
 
 	while :; do
-		local uids_now=$(get_component_pod_uids "${cluster_name}" "${component}")
+		local uids_now=$(get_pod_uids "${cluster_name}" "${component}")
 		local replaced=true
 		local uid
 
@@ -1301,6 +1339,38 @@ wait_for_component_pods_restart() {
 	done
 }
 
+# Waits, pod by pod, until every pod of the StatefulSet runs its update revision
+# and is ready. Unlike rollout status, this works with the OnDelete strategy.
+wait_for_sts_pods_updated() {
+	local sts=$1
+	local timeout=${2:-300}
+	local generation replicas revision pod elapsed
+
+	generation=$(kubectl -n "${NAMESPACE}" get sts "${sts}" -o jsonpath='{.metadata.generation}')
+	kubectl -n "${NAMESPACE}" wait sts "${sts}" \
+		--for=jsonpath='{.status.observedGeneration}'="${generation}" --timeout="${timeout}s"
+
+	replicas=$(kubectl -n "${NAMESPACE}" get sts "${sts}" -o jsonpath='{.spec.replicas}')
+	revision=$(kubectl -n "${NAMESPACE}" get sts "${sts}" -o jsonpath='{.status.updateRevision}')
+
+	for ((i = 0; i < replicas; i++)); do
+		pod="${sts}-${i}"
+		elapsed=0
+		until [[ $(kubectl -n "${NAMESPACE}" get pod "${pod}" \
+			-o jsonpath='{.metadata.labels.controller-revision-hash} {.status.conditions[?(@.type=="Ready")].status}' \
+			2>/dev/null) == "${revision} True" ]]; do
+			if ((elapsed >= timeout)); then
+				echo "Timeout (${timeout}s) exceeded while waiting for ${pod} to run revision ${revision}"
+				kubectl -n "${NAMESPACE}" get pod "${pod}" -o wide || true
+				return 1
+			fi
+			echo "waiting for ${pod} to run revision ${revision}"
+			sleep 5
+			elapsed=$((elapsed + 5))
+		done
+	done
+}
+
 # Prints the notBefore date of the certificate mysqld currently serves from every
 # database pod, in pod name order. Spaces inside a date become underscores so
 # that every pod stays one word; unreachable pods print "unavailable".
@@ -1308,7 +1378,7 @@ get_mysql_cert_not_before_on_pods() {
 	local cluster_name=$1
 	local values=()
 
-	for pod in $(get_mysql_pod_names "${cluster_name}"); do
+	for pod in $(get_pod_names "${cluster_name}" database); do
 		values+=("$(kubectl -n "${NAMESPACE}" exec "${pod}" -c mysql -- bash -c \
 			'mysql -uroot -p"$(cat /etc/mysql/mysql-users-secret/root)" -NB -e "SHOW GLOBAL STATUS LIKE \"Ssl_server_not_before\"" | cut -f2 | tr " " "_"' \
 			2>/dev/null || echo 'unavailable')")
@@ -1544,6 +1614,45 @@ get_primary_from_label() {
 	kubectl -n "${NAMESPACE}" get pods -l mysql.percona.com/primary=true -ojsonpath="{.items[0].metadata.name}"
 }
 
+# wait_for_primary waits until the primary label sits on the expected pod, or on
+# any pod other than the one named when the expectation is "changed".
+wait_for_primary() {
+	local expected=$1
+	local timeout=${2:-300}
+	local waited=0
+	local primary
+
+	while [[ ${waited} -lt ${timeout} ]]; do
+		primary=$(get_primary_from_label 2>/dev/null || true)
+
+		if [[ ${expected} == "changed:"* ]]; then
+			if [[ -n ${primary} && ${primary} != "${expected#changed:}" ]]; then
+				echo "${primary}"
+				return 0
+			fi
+		elif [[ ${primary} == "${expected}" ]]; then
+			echo "${primary}"
+			return 0
+		fi
+
+		sleep 5
+		waited=$((waited + 5))
+	done
+
+	echo "timed out after ${timeout}s waiting for primary ${expected}, it is ${primary}" >&2
+	kubectl -n "${NAMESPACE}" get pods -l mysql.percona.com/primary=true >&2
+
+	return 1
+}
+
+get_cluster_condition() {
+	local cluster=$1
+	local type=$2
+
+	kubectl -n "${NAMESPACE}" get ps "${cluster}" \
+		-o jsonpath="{.status.conditions[?(@.type==\"${type}\")].status}"
+}
+
 get_primary_from_haproxy() {
 	local haproxy_pod=$1
 	local haproxy_pod_ip=$(kubectl -n "${NAMESPACE}" get pods ${haproxy_pod} -o jsonpath="{.status.podIP}")
@@ -1561,7 +1670,12 @@ wait_for_haproxy_primary() {
 
 	local primary data i
 	while true; do
-		primary=$(get_primary_from_label)
+		primary=$(get_primary_from_label 2>/dev/null || true)
+
+		if [[ -z ${primary} ]]; then
+			echo "waiting for primary pod to be labelled" >&2
+			sleep 5
+		fi
 
 		data=()
 		for i in $(seq 0 $((haproxy_size - 1))); do
@@ -1980,10 +2094,6 @@ get_user_pass() {
 	kubectl -n "${NAMESPACE}" get secret ${secret} -o jsonpath="{.data.${user}}" | base64 --decode
 }
 
-get_operator_version() {
-	kubectl get crd -n "$NAMESPACE" perconaservermysqls.ps.percona.com -o jsonpath='{.metadata.labels.app\.kubernetes\.io/version}'
-}
-
 check_backup_job_labels() {
 	local psbackup
 	psbackup=$1
@@ -2097,12 +2207,6 @@ latest_operator_version_in_vs() {
 	echo ${latest}
 }
 
-latest_operator_image_in_vs() {
-	local version=$(latest_operator_version_in_vs)
-
-	curl -s https://check.percona.com/versions/v1/ps-operator/${version}/latest | jq -r '.versions[].matrix.operator[].imagePath'
-}
-
 get_cr_with_latest_versions_in_vs() {
 	local operator_version=$(latest_operator_version_in_vs)
 	local git_tag="v${operator_version}"
@@ -2122,20 +2226,22 @@ get_cr_with_latest_versions_in_vs() {
 	local image_toolkit=$(echo ${versions} | jq -r '.versions[].matrix.toolkit[].imagePath' | head -n 1)
 	local image_haproxy=$(echo ${versions} | jq -r '.versions[].matrix.haproxy[].imagePath' | head -n 1)
 	local image_pmm_client=$(echo ${versions} | jq -r '.versions[].matrix.pmm[].imagePath' | head -n 1)
+	local image_binlog_server=$(echo ${versions} | jq -r '.versions[].matrix.binlogServer[].imagePath' | head -n 1)
 
 	curl "https://raw.githubusercontent.com/percona/percona-server-mysql-operator/${git_tag}/deploy/cr.yaml" \
 		-o ${TEMP_DIR}/cr.yaml
 
 	get_cr "" \
-		${image_mysql} \
-		${image_backup} \
-		${image_orchestrator} \
-		${image_router} \
-		${image_toolkit} \
-		${image_haproxy} \
-		${image_pmm_client} \
-		${image_binlog_server} \
-		${TEMP_DIR}/cr.yaml
+		"${image_mysql}" \
+		"${image_backup}" \
+		"${image_orchestrator}" \
+		"${image_router}" \
+		"${image_toolkit}" \
+		"${image_haproxy}" \
+		"${image_pmm_client}" \
+		"${image_binlog_server:-${IMAGE_BINLOG_SERVER}}" \
+		"${IMAGE_LOG_COLLECTOR}" \
+		"${TEMP_DIR}/cr.yaml"
 }
 
 get_telemetry_report_by_id() {
@@ -2573,11 +2679,11 @@ read_mysql_data_to_configmap() {
 # pass: MySQL password
 # host: MySQL host (service or pod)
 check_connect_user() {
-  local user="$1"
-  local pass="$2"
-  local host="$3"
-  kubectl -n "${NAMESPACE}" exec mysql-client -- \
-      env MYSQL_PWD="${pass}" mysql -sN -h "${host}" -u"${user}" -e "SELECT 1" >/dev/null 2>&1
+	local user="$1"
+	local pass="$2"
+	local host="$3"
+	kubectl -n "${NAMESPACE}" exec mysql-client -- \
+		env MYSQL_PWD="${pass}" mysql -sN -h "${host}" -u"${user}" -e "SELECT 1" >/dev/null 2>&1
 }
 
 # create_service_accounts creates ServiceAccounts for the given components
