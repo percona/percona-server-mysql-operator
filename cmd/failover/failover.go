@@ -34,14 +34,28 @@ const (
 	// create and must not touch.
 	stagingMarker = ".failover-staging"
 	sourceLogsDir = "/var/lib/mysql/source-logs"
-	lockPath      = failover.LockPath
 )
 
 const (
-	relayLogApplyTimeout = 1 * time.Hour
-	relayLogApplyPoll    = time.Second
-	sourceFetchTimeout   = 2 * time.Minute
-	jobTimeout           = 6 * time.Hour
+	relayLogApplyPoll = time.Second
+	sidecarPoll       = 500 * time.Millisecond
+
+	// sidecarDialTimeout bounds one attempt to reach the source's sidecar. A
+	// deleted pod's IP drops the connection rather than refusing it, and the
+	// system's own timeout would spend most of the stall bound on one attempt.
+	sidecarDialTimeout = 5 * time.Second
+	jobTimeout         = 6 * time.Hour
+
+	// sourceStallTimeout is how long the source may go without sending
+	// anything. It is a bound on silence, not on the transfer: the job's
+	// deadline covers the transfer, and a bound on it would be a cap on how
+	// much can be stranded.
+	sourceStallTimeout = 2 * time.Minute
+
+	// drainHeartbeat is how often the drain logs while nothing changes. The
+	// hook runs this job over an exec stream, which the kubelet closes once
+	// it is idle for long enough.
+	drainHeartbeat = time.Minute
 )
 
 var errRelayApplyTimeout = fmt.Errorf("timeout while waiting for relay log apply")
@@ -52,6 +66,7 @@ type database interface {
 	replicaStatuser
 
 	StopReplication(ctx context.Context) error
+	ResetReplication(ctx context.Context) error
 	FlushRelayLogs(ctx context.Context) error
 	GetSourceLogPos(ctx context.Context) (db.ReplicaPosition, error)
 	RelayLogPaths(ctx context.Context) (string, string, error)
@@ -65,28 +80,31 @@ type database interface {
 var _ database = (*db.DB)(nil)
 
 type failoverConfig struct {
-	newDatabase   func(ctx context.Context) (database, error)
-	newSourceDB   func(ctx context.Context, host string) (sourceDatabase, error)
-	sourceURL     func(host string) string
-	source        string
-	stagingDir    string
-	logDir        string
-	lockPath      string
-	wait          bool
-	applyPoll     time.Duration
-	applyTimeout  time.Duration
-	fetchTimeout  time.Duration
-	sourcePoll    time.Duration
-	sourceTimeout time.Duration
-	receiverWait  time.Duration
+	newDatabase    func(ctx context.Context) (database, error)
+	newSourceDB    func(ctx context.Context, host string) (sourceDatabase, error)
+	sourceURL      func(host string) string
+	sourcePassword func() (string, error)
+	source         string
+	stagingDir     string
+	logDir         string
+	lockPath       string
+	wait           bool
+	probe          bool
+	clear          bool
+	applyPoll      time.Duration
+	stallTimeout   time.Duration
+	sourcePoll     time.Duration
+	sourceTimeout  time.Duration
+	receiverWait   time.Duration
 }
 
 type flags struct {
 	source       string
 	stagingDir   string
 	wait         bool
-	waitTimeout  time.Duration
-	fetchTimeout time.Duration
+	probe        bool
+	clear        bool
+	stallTimeout time.Duration
 	timeout      time.Duration
 }
 
@@ -95,9 +113,10 @@ func parseFlags() flags {
 	flag.StringVar(&f.source, "source", "", "Server to fetch the missing binary logs from.")
 	flag.StringVar(&f.stagingDir, "staging-dir", sourceLogsDir, "Directory the fetched binary logs are staged in. Its contents are wiped first, so it must be empty or a directory an earlier run created.")
 	flag.BoolVar(&f.wait, "wait", true, "Wait for the applier to work through the fetched logs. With -wait=false the job returns as soon as the SQL thread is started.")
-	flag.DurationVar(&f.waitTimeout, "wait-timeout", relayLogApplyTimeout, "How long to wait for the applier to work through the fetched logs. Ignored with -wait=false.")
-	flag.DurationVar(&f.fetchTimeout, "fetch-timeout", sourceFetchTimeout, "How long the source has to stream the binary logs, headers and body included.")
-	flag.DurationVar(&f.timeout, "timeout", jobTimeout, "How long the whole job may take, fetching the logs from the source included. Zero or less means no limit.")
+	flag.BoolVar(&f.clear, "clear-source", false, "Only drop the replication channel a promotion left behind on this server. Nothing is fetched and -source is not read.")
+	flag.BoolVar(&f.probe, "probe", false, "Only check whether the source is back and holds everything this replica does, standing down if so. Nothing is fetched.")
+	flag.DurationVar(&f.stallTimeout, "stall-timeout", sourceStallTimeout, "How long the source may go without sending anything: its sidecar not listening yet, the headers, or the next bytes of the body. The fetch as a whole is bounded by -timeout.")
+	flag.DurationVar(&f.timeout, "timeout", jobTimeout, "How long the whole job may take, fetching the logs from the source and waiting for the applier included. Zero or less means no limit.")
 	flag.Parse()
 
 	return f
@@ -105,20 +124,22 @@ func parseFlags() flags {
 
 func config(f flags) failoverConfig {
 	return failoverConfig{
-		newDatabase:   func(ctx context.Context) (database, error) { return connectToDB(ctx) },
-		newSourceDB:   connectToSource,
-		sourceURL:     sourceStreamURL,
-		source:        f.source,
-		stagingDir:    f.stagingDir,
-		logDir:        mysql.DataMountPath,
-		lockPath:      lockPath,
-		wait:          f.wait,
-		applyPoll:     relayLogApplyPoll,
-		applyTimeout:  f.waitTimeout,
-		fetchTimeout:  f.fetchTimeout,
-		sourcePoll:    sourceProbePoll,
-		sourceTimeout: sourceProbeTimeout,
-		receiverWait:  receiverWait,
+		newDatabase:    func(ctx context.Context) (database, error) { return connectToDB(ctx) },
+		newSourceDB:    func(ctx context.Context, host string) (sourceDatabase, error) { return connectTo(ctx, host) },
+		sourceURL:      sourceStreamURL,
+		sourcePassword: func() (string, error) { return utils.GetSecret(apiv1.UserOperator) },
+		source:         f.source,
+		stagingDir:     f.stagingDir,
+		logDir:         mysql.DataMountPath,
+		lockPath:       failover.LockPath,
+		wait:           f.wait,
+		probe:          f.probe,
+		clear:          f.clear,
+		applyPoll:      relayLogApplyPoll,
+		stallTimeout:   f.stallTimeout,
+		sourcePoll:     sourceProbePoll,
+		sourceTimeout:  sourceProbeTimeout,
+		receiverWait:   receiverWait,
 	}
 }
 
@@ -135,22 +156,37 @@ func main() {
 	}
 
 	if err := run(ctx, config(flags)); err != nil {
-		log.Fatalf("ERROR: %v", err)
+		if errors.Is(err, errSourceRecovered) {
+			fmt.Println(failover.ResultSourceRecovered)
+		}
+
+		// run has logged the error already.
+		os.Exit(1)
 	}
 }
 
-func run(ctx context.Context, cfg failoverConfig) error {
+func run(ctx context.Context, cfg failoverConfig) (err error) {
+	// The error is logged here rather so that it lands in the log file too
+	closeLog := func() {}
+	defer func() {
+		if err != nil {
+			log.Printf("ERROR: %v", err)
+		}
+		closeLog()
+	}()
+
+	if cfg.clear {
+		return clearSource(ctx, cfg)
+	}
+
 	// Read the input before touching replication: failing after STOP REPLICA
 	// would leave the replica stopped for nothing.
 	host, err := sourceHost(cfg.source)
 	if err != nil {
 		return err
 	}
-	if cfg.wait && cfg.applyTimeout <= 0 {
-		return fmt.Errorf("-wait-timeout must be positive, got %s", cfg.applyTimeout)
-	}
-	if cfg.fetchTimeout <= 0 {
-		return fmt.Errorf("-fetch-timeout must be positive, got %s", cfg.fetchTimeout)
+	if cfg.stallTimeout <= 0 {
+		return fmt.Errorf("-stall-timeout must be positive, got %s", cfg.stallTimeout)
 	}
 
 	stagingDir, err := stagingPath(cfg.stagingDir)
@@ -159,6 +195,10 @@ func run(ctx context.Context, cfg failoverConfig) error {
 	}
 	if err := checkStagingDir(stagingDir); err != nil {
 		return err
+	}
+	password, err := cfg.sourcePassword()
+	if err != nil {
+		return fmt.Errorf("get %s password: %w", apiv1.UserOperator, err)
 	}
 
 	lock, err := failover.Lock(cfg.lockPath)
@@ -172,10 +212,11 @@ func run(ctx context.Context, cfg failoverConfig) error {
 	if f, err := os.OpenFile(logFile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666); err != nil {
 		log.Printf("WARNING: keeping the log on stderr only: %v", err)
 	} else {
-		defer f.Close() //nolint:errcheck
-		defer log.SetOutput(os.Stderr)
-
 		log.SetOutput(io.MultiWriter(os.Stderr, f))
+		closeLog = func() {
+			log.SetOutput(os.Stderr)
+			f.Close() //nolint:errcheck
+		}
 	}
 
 	log.Printf("Fetching binary logs from %s", host)
@@ -214,6 +255,11 @@ func run(ctx context.Context, cfg failoverConfig) error {
 		return watch.standDown(ctx)
 	}
 
+	if cfg.probe {
+		log.Printf("Source %s is not back, nothing to stand down for", host)
+		return nil
+	}
+
 	if err := d.StopReplication(ctx); err != nil {
 		return fmt.Errorf("stop replica: %w", err)
 	}
@@ -243,7 +289,7 @@ func run(ctx context.Context, cfg failoverConfig) error {
 	}
 	log.Printf("Relay index lists %d relay log(s)", len(relayLogs))
 
-	sourceLogs, err := fetchLogsFromSource(ctx, stagingDir, cfg.sourceURL(host), positions.SourceLog, positions.SourcePos, cfg.fetchTimeout)
+	sourceLogs, err := fetchLogsFromSource(ctx, stagingDir, cfg.sourceURL(host), password, positions.SourceLog, positions.SourcePos, cfg.stallTimeout)
 	if err != nil {
 		return fmt.Errorf("fetch logs from source: %w", err)
 	}
@@ -271,7 +317,7 @@ func run(ctx context.Context, cfg failoverConfig) error {
 	watchCtx, stopWatch := context.WithCancel(ctx)
 	defer stopWatch()
 
-	if err := waitForRelayLogsApplied(ctx, d, relayLogs, watchSource(watchCtx, watch), relayLog, startPos, cfg.applyPoll, cfg.applyTimeout); err != nil {
+	if err := waitForRelayLogsApplied(ctx, d, relayLogs, watchSource(watchCtx, watch), relayLog, startPos, cfg.applyPoll); err != nil {
 		if errors.Is(err, errSourceRecovered) {
 			return watch.standDown(ctx)
 		}
@@ -364,11 +410,6 @@ func sourceStreamURL(host string) string {
 }
 
 func connectToDB(ctx context.Context) (*db.DB, error) {
-	operatorPass, err := utils.GetSecret(apiv1.UserOperator)
-	if err != nil {
-		return nil, fmt.Errorf("get %s password: %w", apiv1.UserOperator, err)
-	}
-
 	podHostname, err := os.Hostname()
 	if err != nil {
 		return nil, fmt.Errorf("get hostname: %w", err)
@@ -379,37 +420,43 @@ func connectToDB(ctx context.Context) (*db.DB, error) {
 		return nil, fmt.Errorf("get pod IP: %w", err)
 	}
 
-	params := db.DBParams{
-		User: apiv1.UserOperator,
-		Pass: operatorPass,
-		Host: podIP,
+	return connectTo(ctx, podIP)
+}
+
+func connectTo(ctx context.Context, host string) (*db.DB, error) {
+	operatorPass, err := utils.GetSecret(apiv1.UserOperator)
+	if err != nil {
+		return nil, fmt.Errorf("get %s password: %w", apiv1.UserOperator, err)
 	}
 
-	return db.NewDatabase(ctx, params)
+	return db.NewDatabase(ctx, db.DBParams{
+		User: apiv1.UserOperator,
+		Pass: operatorPass,
+		Host: host,
+	})
 }
+
+var errFetchStalled = errors.New("the source stopped sending")
 
 // fetchLogsFromSource stages the binary logs the source streams into stagingDir
 // and returns their paths in the order they arrived, which is rotation order.
-func fetchLogsFromSource(ctx context.Context, stagingDir, sourceURL, binlog string, position uint64, timeout time.Duration) ([]string, error) {
+// The fetch ends when the source goes silent for stall, whether it is the
+// sidecar not listening yet, the headers or the body.
+func fetchLogsFromSource(ctx context.Context, stagingDir, sourceURL, password, binlog string, position uint64, stall time.Duration) ([]string, error) {
 	body, err := json.Marshal(handler.StreamConfig{BinaryLog: binlog, Position: int64(position)})
 	if err != nil {
 		return nil, err
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
 
-	client := &http.Client{}
+	watchdog := time.AfterFunc(stall, func() { cancel(errFetchStalled) })
+	defer watchdog.Stop()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, sourceURL, bytes.NewReader(body))
+	resp, err := postStream(ctx, sourceURL, password, body)
 	if err != nil {
-		return nil, err
-	}
-	req.Header.Add("Content-Type", "application/json")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("stream logs from source: %w", stalled(err, timeout))
+		return nil, fmt.Errorf("stream logs from source: %w", stalled(ctx, err, stall))
 	}
 	defer resp.Body.Close() //nolint:errcheck
 
@@ -423,7 +470,7 @@ func fetchLogsFromSource(ctx context.Context, stagingDir, sourceURL, binlog stri
 
 	logs := make([]string, 0)
 
-	tr := tar.NewReader(resp.Body)
+	tr := tar.NewReader(&progressReader{r: resp.Body, progress: func() { watchdog.Reset(stall) }})
 
 	copyBinlog := func(path string, hdr *tar.Header) error {
 		out, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(hdr.Mode))
@@ -448,7 +495,7 @@ func fetchLogsFromSource(ctx context.Context, stagingDir, sourceURL, binlog stri
 			break
 		}
 		if err != nil {
-			return nil, stalled(err, timeout)
+			return nil, stalled(ctx, err, stall)
 		}
 
 		if hdr.Typeflag != tar.TypeReg {
@@ -459,7 +506,7 @@ func fetchLogsFromSource(ctx context.Context, stagingDir, sourceURL, binlog stri
 		target := filepath.Join(stagingDir, name)
 
 		if err := copyBinlog(target, hdr); err != nil {
-			return nil, stalled(err, timeout)
+			return nil, stalled(ctx, err, stall)
 		}
 
 		logs = append(logs, target)
@@ -472,12 +519,70 @@ func fetchLogsFromSource(ctx context.Context, stagingDir, sourceURL, binlog stri
 	return logs, nil
 }
 
-func stalled(err error, timeout time.Duration) error {
-	if errors.Is(err, context.DeadlineExceeded) {
-		return fmt.Errorf("source did not finish streaming within %s: %w", timeout, err)
+// postStream asks the source's sidecar for the stream, waiting for it to listen.
+// Every attempt resolves the source again: a source whose pod was recreated
+// comes back at another address.
+func postStream(ctx context.Context, sourceURL, password string, body []byte) (*http.Response, error) {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.DialContext = (&net.Dialer{Timeout: sidecarDialTimeout}).DialContext
+	client := &http.Client{Transport: transport}
+	waiting := false
+
+	for {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, sourceURL, bytes.NewReader(body))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Add("Content-Type", "application/json")
+		req.SetBasicAuth(string(apiv1.UserOperator), password)
+
+		resp, err := client.Do(req)
+		if !isDialError(err) {
+			return resp, err
+		}
+		if !waiting {
+			log.Printf("Waiting for the source sidecar to listen: %v", err)
+			waiting = true
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("%w, last attempt: %w", ctx.Err(), err)
+		case <-time.After(sidecarPoll):
+		}
+	}
+}
+
+// isDialError reports whether the request never reached the sidecar: its pod
+// is not resolvable yet, not listening yet, or gone from the address it had.
+func isDialError(err error) bool {
+	var opErr *net.OpError
+	return errors.As(err, &opErr) && opErr.Op == "dial"
+}
+
+// stalled names the watchdog as the reason when it is. The transport only
+// reports that its request was cancelled; the context carries why.
+func stalled(ctx context.Context, err error, stall time.Duration) error {
+	if errors.Is(context.Cause(ctx), errFetchStalled) {
+		return fmt.Errorf("source sent nothing for %s: %w: %w", stall, errFetchStalled, err)
 	}
 
 	return err
+}
+
+// progressReader reports every read that returned something.
+type progressReader struct {
+	r        io.Reader
+	progress func()
+}
+
+func (p *progressReader) Read(b []byte) (int, error) {
+	n, err := p.r.Read(b)
+	if n > 0 {
+		p.progress()
+	}
+
+	return n, err
 }
 
 // relayIndex holds the relay logs the index file lists, in the order mysqld rotated them.
@@ -535,9 +640,9 @@ func (r relayIndex) lastClosed() (string, error) {
 	return r[len(r)-2], nil
 }
 
-// readMagic consumes the binary log magic number a relay log may only carry at
-// offset 0.
-func readMagic(src io.Reader) error {
+// consumeBinlogMagic consumes the binary log magic number a relay log may only
+// carry at offset 0.
+func consumeBinlogMagic(src io.Reader) error {
 	magic := make([]byte, len(binlogMagic))
 	if _, err := io.ReadFull(src, magic); err != nil {
 		return fmt.Errorf("read magic number: %w", err)
@@ -559,7 +664,7 @@ func appendLog(dst io.Writer, srcPath string, stripMagic bool) (int64, error) {
 	defer src.Close() //nolint:errcheck
 
 	if stripMagic {
-		if err := readMagic(src); err != nil {
+		if err := consumeBinlogMagic(src); err != nil {
 			return 0, err
 		}
 	}
@@ -584,7 +689,7 @@ func validateSourceLogs(sourceLogs []string) error {
 			return err
 		}
 
-		err = readMagic(src)
+		err = consumeBinlogMagic(src)
 		src.Close() //nolint:errcheck
 
 		if err != nil {
@@ -721,21 +826,21 @@ func waitForRelayLogsApplied(
 	recovered <-chan struct{},
 	relayLog string,
 	startPos uint64,
-	poll, timeout time.Duration,
+	poll time.Duration,
 ) error {
 	targetPlace := relayLogs.place(relayLog)
 	if targetPlace < 0 {
 		return fmt.Errorf("the index does not list the relay log %q the applier must work through", relayLog)
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
+	started := time.Now()
 
 	ticker := time.NewTicker(poll)
 	defer ticker.Stop()
 
 	var prevLog string
 	var prevPos uint64
+	lastReport := started
 
 	for {
 		// Promoting while the source is serving again would leave the cluster
@@ -780,6 +885,7 @@ func waitForRelayLogsApplied(
 			if currentLog != prevLog || currentPos != prevPos {
 				log.Printf("Applying %s:%d (source %s:%s)", currentLog, currentPos,
 					status["Relay_Source_Log_File"], status["Exec_Source_Log_Pos"])
+				lastReport = time.Now()
 			}
 
 			drained := strings.Contains(status["Replica_SQL_Running_State"], "read all relay log")
@@ -798,11 +904,17 @@ func waitForRelayLogsApplied(
 			prevLog, prevPos = currentLog, currentPos
 		}
 
+		if time.Since(lastReport) >= drainHeartbeat {
+			log.Printf("Still applying %s:%d after %s (state %q)", prevLog, prevPos,
+				time.Since(started).Truncate(time.Second), status["Replica_SQL_Running_State"])
+			lastReport = time.Now()
+		}
+
 		select {
 		case <-recovered:
 			return errSourceRecovered
 		case <-ctx.Done():
-			return fmt.Errorf("gave up after %s at %s:%d: %w: %w", timeout, prevLog, prevPos, errRelayApplyTimeout, ctx.Err())
+			return fmt.Errorf("gave up after %s at %s:%d: %w: %w", time.Since(started).Truncate(time.Millisecond), prevLog, prevPos, errRelayApplyTimeout, ctx.Err())
 		case <-ticker.C:
 		}
 	}

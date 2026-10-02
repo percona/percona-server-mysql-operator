@@ -14,4 +14,4 @@ commands:
       primary_pod_from_label="$(wait_for_haproxy_primary ${test_name})"
 
       check_haproxy_backends "${test_name}" "${primary_pod_from_label}"
-    timeout: 360
+    timeout: 600

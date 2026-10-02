@@ -12,4 +12,13 @@ commands:
       for i in 0 1 2; do
           max_id=$(run_mysql "SELECT MAX(id) FROM myDB.myTable" "-h ${cluster_name}-mysql-${i}.${cluster_name}-mysql")
           kubectl create configmap -n "${NAMESPACE}" 09-read-data-${i} --from-literal=max_id="${max_id}"
+
+          # Every data directory here was restored or rebuilt, so it must have a
+          # random id of its own. An ordinal-derived id (below 2^31) is shared by
+          # every incarnation of the pod.
+          server_id=$(run_mysql "SELECT @@server_id" "-h ${cluster_name}-mysql-${i}.${cluster_name}-mysql")
+          if ((server_id < 2147483648)); then
+              echo "${cluster_name}-mysql-${i} has the ordinal-derived server_id ${server_id}"
+              exit 1
+          fi
       done

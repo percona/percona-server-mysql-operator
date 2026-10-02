@@ -108,6 +108,8 @@ spec:
           periodSeconds: 30
           successThreshold: 1
           failureThreshold: 5
+      - name: logs
+      - name: logrotate
 status:
   observedGeneration: 1
   replicas: 3

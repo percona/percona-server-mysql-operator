@@ -1,0 +1,35 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 300
+commands:
+  - script: |-
+      set -o errexit
+
+      source ../../functions
+
+      cluster=$(get_cluster_name)
+      dead=$(cat "${TEMP_DIR}/timed-out-primary")
+      candidate=$(cat "${TEMP_DIR}/timed-out-candidate")
+
+      annotation=$(kubectl -n "${NAMESPACE}" get ps "${cluster}" \
+          -o jsonpath='{.metadata.annotations.percona\.com/force-promote-with-possible-data-loss}')
+      if [[ -n ${annotation} ]]; then
+          echo "the cluster carries a force-promote annotation nobody set: ${annotation}"
+          exit 1
+      fi
+
+      # Step 06 made sure no such event came before this failover, so this one
+      # is the hook's.
+      forced=$(kubectl -n "${NAMESPACE}" get events \
+          --field-selector "reason=FailoverForced,involvedObject.name=${cluster}" \
+          -o jsonpath='{.items[*].message}')
+      if ! echo "${forced}" | grep -q "stranded on ${dead}\..* promoting ${candidate}\..* anyway"; then
+          echo "no event says the hook promoted ${candidate} once the budget ran out: ${forced}"
+          exit 1
+      fi
+
+      blocked=$(get_cluster_condition "${cluster}" AsyncFailoverBlocked)
+      if [[ ${blocked} != "False" ]]; then
+          echo "AsyncFailoverBlocked is '${blocked}' after the timed out failover, expected False"
+          exit 1
+      fi
