@@ -1,0 +1,76 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - timeout: 1200
+    script: |-
+      set -o errexit
+      set -o pipefail
+      set -o xtrace
+      source ../../functions
+      mysql_user="-uroot -p'$(get_user_pass root test-secrets)'"
+
+      cluster_name=$(get_cluster_name)
+      writer_host=$(get_mysql_router_service "${cluster_name}")
+      expected_backup_data=$'80\n1000000\ntestdb.sbtest1\t3064150972'
+
+      for i in 0 1 2; do
+          member_host=$(get_mysql_headless_fqdn "${cluster_name}" "${i}")
+          actual=$(run_mysql \
+              "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='testdb'; SELECT COUNT(*) FROM testdb.sbtest1; CHECKSUM TABLE testdb.sbtest1" \
+              "-h ${member_host}" "${mysql_user}")
+          test "${actual}" = "${expected_backup_data}"
+      done
+
+      run_mysql \
+          "CREATE TABLE testdb.pvc_recovery (id INT PRIMARY KEY, payload VARCHAR(64) NOT NULL)" \
+          "-h ${writer_host}" "${mysql_user}"
+
+      pvc="datadir-${cluster_name}-mysql-1"
+      pod="${cluster_name}-mysql-1"
+      old_pv=$(kubectl -n "${NAMESPACE}" get pvc "${pvc}" -o jsonpath='{.spec.volumeName}')
+      kubectl -n "${NAMESPACE}" delete pvc "${pvc}" --wait=false
+
+      until test -n "$(kubectl -n "${NAMESPACE}" get pvc "${pvc}" -o jsonpath='{.metadata.deletionTimestamp}' 2>/dev/null || true)"; do
+          sleep 1
+      done
+      kubectl -n "${NAMESPACE}" delete pod "${pod}" --force --grace-period=0 --wait=true
+
+      for i in $(seq 1 10); do
+          run_mysql \
+              "INSERT INTO testdb.pvc_recovery (id, payload) VALUES (${i}, SHA2('${cluster_name}-${i}', 256))" \
+              "-h ${writer_host}" "${mysql_user}"
+      done
+
+      pvc_rebound=false
+      phase=""
+      new_pv=""
+
+      for i in $(seq 1 600); do
+          new_pv=$(kubectl -n "${NAMESPACE}" get pvc "${pvc}" \
+              -o jsonpath='{.spec.volumeName}' 2>/dev/null || true)
+
+          phase=$(kubectl -n "${NAMESPACE}" get pvc "${pvc}" \
+              -o jsonpath='{.status.phase}' 2>/dev/null || true)
+
+          if test "${phase}" = "Bound" &&
+              test -n "${new_pv}" &&
+              test "${new_pv}" != "${old_pv}"; then
+              pvc_rebound=true
+              break
+          fi
+
+          sleep 1
+      done
+
+      if ! ${pvc_rebound}; then
+          echo "ERROR: PVC ${pvc} was not rebound to a new PV within 600 seconds."
+          echo "  Expected phase: Bound"
+          echo "  Actual phase: ${phase:-not found}"
+          echo "  Old PV: ${old_pv}"
+          echo "  New PV: ${new_pv:-not found}"
+          exit 1
+      fi
+
+      echo "PVC ${pvc} successfully rebound to new PV ${new_pv}"
+      kubectl -n "${NAMESPACE}" wait --for=condition=Ready "pod/${pod}" --timeout=600s
+      wait_cluster_consistency_gr "${cluster_name}" 3 3

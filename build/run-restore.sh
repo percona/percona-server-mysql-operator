@@ -167,6 +167,11 @@ main() {
 	else
 		restore_full
 	fi
+
+	# The restore emptied the volume, taking the data directory's server_id with
+	# it. Without one ps-entrypoint.sh falls back to the ordinal-derived id, which
+	# every restored incarnation of this pod would then share.
+	echo $(($(od -An -N4 -tu4 /dev/urandom) % 2147483647 + 2147483648)) >"${DATADIR}/server-id"
 }
 
 main

@@ -13,4 +13,5 @@ commands:
       source ../../functions
 
       destroy_operator
-    timeout: 120
+      destroy_vault
+    timeout: 300

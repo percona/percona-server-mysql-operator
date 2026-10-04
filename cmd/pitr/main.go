@@ -78,23 +78,14 @@ func run(ctx context.Context, newS3 newStorageFn, newDB newDatabaseFn, getSecret
 		return fmt.Errorf("BINLOGS_PATH is not set")
 	}
 
-	data, err := os.ReadFile(binlogsPath)
-	if err != nil {
-		return fmt.Errorf("read binlogs file: %w", err)
-	}
-
-	var entries []binlogserver.BinlogEntry
-	if err := json.Unmarshal(data, &entries); err != nil {
-		return fmt.Errorf("parse binlogs json: %w", err)
-	}
-
-	if len(entries) == 0 {
-		return fmt.Errorf("no binlog entries found")
-	}
-
 	pitrType := os.Getenv("PITR_TYPE")
 	pitrDate := os.Getenv("PITR_DATE")
 	pitrGTID := os.Getenv("PITR_GTID")
+
+	entries, err := getBinlogEntries(binlogsPath)
+	if err != nil {
+		return err
+	}
 
 	operatorPass, err := getSecret(apiv1.UserOperator)
 	if err != nil {
@@ -237,6 +228,28 @@ func run(ctx context.Context, newS3 newStorageFn, newDB newDatabaseFn, getSecret
 	return nil
 }
 
+func getBinlogEntries(path string) ([]binlogserver.BinlogEntry, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read binlogs file %s: %w", path, err)
+	}
+
+	var resp binlogserver.SearchResponse
+	if err := json.Unmarshal(data, &resp); err != nil {
+		return nil, fmt.Errorf("parse binlogs json: %w", err)
+	}
+
+	if err := resp.Error(); err != nil {
+		return nil, err
+	}
+
+	if len(resp.Result) == 0 {
+		return nil, fmt.Errorf("no binlog entries found")
+	}
+
+	return resp.Result, nil
+}
+
 // applyBinlogs starts a single mysql client and for each object key
 // fetches the binlog from storage and streams it through mysqlbinlog into mysql.
 func applyBinlogs(ctx context.Context, objects []binlogSource, getObject getObjectFn, mysqlbinlogArgs []string, mysqlArgs []string, mysqlPass string) error {
@@ -284,6 +297,7 @@ func applyBinlogs(ctx context.Context, objects []binlogSource, getObject getObje
 
 		args := append(mysqlbinlogArgs, "-")
 		binlogCmd := exec.CommandContext(ctx, "mysqlbinlog", args...)
+		binlogCmd.Env = append(os.Environ(), "TZ=UTC")
 		binlogCmd.Stdin = obj
 
 		var binlogStderr bytes.Buffer

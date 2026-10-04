@@ -1,0 +1,15 @@
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQLRestore
+metadata:
+  name: <restore-name>
+spec:
+  clusterName: async-big-data
+  backupSource:
+    destination: <destination>
+    storage:
+      type: s3
+      s3:
+        bucket: percona-jenkins-artifactory
+        credentialsSecret: aws-s3-secret
+        region: us-east-1
+        prefix: big-data-test
