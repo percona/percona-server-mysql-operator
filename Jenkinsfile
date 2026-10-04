@@ -1,4 +1,4 @@
-region="us-central1-a"
+region="us-central1-b"
 testUrlPrefix="https://percona-jenkins-artifactory-public.s3.amazonaws.com/cloud-ps-operator"
 tests=[]
 
@@ -21,7 +21,7 @@ void createCluster(String CLUSTER_SUFFIX) {
                 gcloud container clusters create $CLUSTER_NAME-${CLUSTER_SUFFIX} \
                     --zone $region \
                     --cluster-version="\${GKE_VERSION}" \
-                    --machine-type=c2d-standard-4 \
+                    --machine-type=e2-standard-4 \
                     --preemptible \
                     --disk-size 30 \
                     --num-nodes=3 \
