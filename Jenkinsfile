@@ -22,7 +22,6 @@ void createCluster(String CLUSTER_SUFFIX) {
                     --zone $region \
                     --cluster-version="\${GKE_VERSION}" \
                     --machine-type=c2d-standard-4 \
-                    --preemptible \
                     --disk-size 30 \
                     --num-nodes=3 \
                     --network=jenkins-vpc \
