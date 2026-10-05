@@ -76,6 +76,8 @@ spec:
         volumeMounts:
         - mountPath: /var/app/pvc
           name: pvc-vol
+      - name: logs
+      - name: logrotate
       volumes:
       - emptyDir: {}
         name: bin

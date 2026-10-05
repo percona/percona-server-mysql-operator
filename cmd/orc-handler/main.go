@@ -30,6 +30,21 @@ var commands = []command{
 		usage: "apply the binary logs the new primary is missing from the old one",
 		run:   runFailover,
 	},
+	{
+		name:  "report-failover",
+		usage: "record an event for a recovery orchestrator gave up on",
+		run:   runReportFailover,
+	},
+	{
+		name:  "finish",
+		usage: "release the source and acknowledge the recovery once orchestrator is done with it",
+		run:   runFinish,
+	},
+	{
+		name:  "claims",
+		usage: "print the recoveries whose hook is still in flight",
+		run:   runClaims,
+	},
 }
 
 func main() {

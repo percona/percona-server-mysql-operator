@@ -55,6 +55,7 @@ import (
 	database "github.com/percona/percona-server-mysql-operator/pkg/db"
 	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
+	"github.com/percona/percona-server-mysql-operator/pkg/logcollector"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysqlsh"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
@@ -95,6 +96,7 @@ func (r *PerconaServerMySQLReconciler) SetupWithManager(mgr ctrl.Manager) error 
 		For(&apiv1.PerconaServerMySQL{}).
 		Watches(&corev1.Secret{}, enqueueClusterFromSecretsName(r.Client)).
 		Watches(&corev1.Secret{}, enqueueClusterFromEncryptionKeySecret(r.Client)).
+		Watches(&corev1.ConfigMap{}, enqueueClusterFromLogRotateExtraConfig(r.Client)).
 		Named("ps-controller").
 		Complete(r)
 }
@@ -147,7 +149,45 @@ func setupFieldIndexers(mgr ctrl.Manager) error {
 	); err != nil {
 		return errors.Wrapf(err, "unable to index field %s", fieldEncryptionKeySecretName)
 	}
+
+	if err := mgr.GetFieldIndexer().IndexField(
+		context.Background(),
+		&apiv1.PerconaServerMySQL{},
+		apiv1.IndexFieldLogRotateExtraConfig,
+		apiv1.LogRotateExtraConfigIndexerFunc,
+	); err != nil {
+		return errors.Wrapf(err, "unable to index field %s", apiv1.IndexFieldLogRotateExtraConfig)
+	}
+
 	return nil
+}
+
+func enqueueClusterFromLogRotateExtraConfig(c client.Client) handler.EventHandler {
+	return handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []reconcile.Request {
+		log := logf.FromContext(ctx).WithName("enqueueClusterFromLogRotateExtraConfig")
+
+		cm, ok := o.(*corev1.ConfigMap)
+		if !ok {
+			return nil
+		}
+
+		clusters := new(apiv1.PerconaServerMySQLList)
+		if err := c.List(ctx, clusters,
+			client.InNamespace(cm.Namespace),
+			client.MatchingFields{apiv1.IndexFieldLogRotateExtraConfig: cm.Name},
+		); err != nil {
+			log.Error(err, "failed to list clusters by logRotate extra config index", "configMap", client.ObjectKeyFromObject(cm).String())
+			return nil
+		}
+
+		reqs := make([]reconcile.Request, 0, len(clusters.Items))
+		for i := range clusters.Items {
+			reqs = append(reqs, reconcile.Request{
+				NamespacedName: client.ObjectKeyFromObject(&clusters.Items[i]),
+			})
+		}
+		return reqs
+	})
 }
 
 func enqueueClusterFromSecretsName(c client.Client) handler.EventHandler {
@@ -322,7 +362,8 @@ func (r *PerconaServerMySQLReconciler) handleClusterSetProtectionFinalizer(ctx c
 func orchestratorTopologyUnavailable(err error) bool {
 	return errors.Is(err, orchestrator.ErrUnableToGetClusterName) ||
 		errors.Is(err, orchestrator.ErrEmptyResponse) ||
-		errors.Is(err, orchestrator.ErrUnauthorized)
+		errors.Is(err, orchestrator.ErrUnauthorized) ||
+		errors.Is(err, orchestrator.ErrSplitTopology)
 }
 
 func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
@@ -356,7 +397,10 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 		}
 
 		log.Info("Ensuring oldest mysql node is the primary")
-		err = orchestrator.EnsureNodeIsPrimary(ctx, r.ClientCmd, orcPod, cr.ClusterHint(), firstPod.GetName(), mysql.DefaultPort)
+		cluster, err := orchestrator.ResolveCluster(ctx, r.ClientCmd, orcPod, cr.ClusterHint())
+		if err == nil {
+			err = orchestrator.EnsureNodeIsPrimary(ctx, r.ClientCmd, orcPod, cluster, firstPod.GetName(), mysql.DefaultPort, cr.FailoverSpec().SwitchoverCatchUp())
+		}
 		if err != nil {
 			if orchestratorTopologyUnavailable(err) {
 				log.Info("Could not ensure primary via Orchestrator, proceeding with deletion", "reason", err.Error())
@@ -631,6 +675,9 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	if err := r.reconcilePersistentVolumes(ctx, cr); err != nil {
 		return errors.Wrap(err, "persistent volumes")
 	}
+	if err := logcollector.Reconcile(ctx, r.Client, cr); err != nil {
+		return errors.Wrap(err, "log collector")
+	}
 	if err := r.reconcileDatabase(ctx, cr); err != nil {
 		return errors.Wrap(err, "database")
 	}
@@ -642,6 +689,9 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	}
 	if err := r.reconcileReplication(ctx, cr); err != nil {
 		return errors.Wrap(err, "replication")
+	}
+	if err := r.reconcileAsyncFailover(ctx, cr); err != nil {
+		return errors.Wrap(err, "async failover")
 	}
 	if err := r.reconcileHAProxy(ctx, cr); err != nil {
 		return errors.Wrap(err, "HAProxy")
@@ -1245,15 +1295,15 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 		config = "\nsuper_read_only=0\nread_only=0"
 	}
 
+	fallbackReason := ""
+
 	if memory != nil {
 		var params string
 
 		// the calculator needs a CPU allocation and a version; without them we
 		// keep the legacy autotune, recomputed on every pass
 		autotune := func(reason string) (string, error) {
-			log.Info("falling back to autotune", "reason", reason)
-			r.Recorder.Event(cr, corev1.EventTypeWarning, "AutoConfigFallback",
-				fmt.Sprintf("falling back to autotune: %s", reason))
+			fallbackReason = reason
 			return mysql.GetAutoTuneParams(cr, memory)
 		}
 
@@ -1287,12 +1337,11 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 			}
 
 			params, err = mysql.GetAutoConfigParams(cr, version, cpu, memory, storage)
-			if errors.Is(err, mysql.ErrInsufficientStorage) {
+			switch {
+			case errors.Is(err, mysql.ErrInsufficientStorage):
 				r.Recorder.Event(cr, corev1.EventTypeWarning, "AutoConfigInsufficientStorage", err.Error())
 				return "", errors.Wrap(err, "calculate autoconfig parameters")
-			}
-			if err != nil {
-				log.Error(err, "failed to calculate autoconfig parameters, falling back to autotune")
+			case err != nil:
 				params, err = autotune(err.Error())
 			}
 		}
@@ -1309,6 +1358,11 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 	if !k8s.EqualConfigMaps(currentConfigMap, configMap) {
 		if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, configMap, r.Scheme); err != nil {
 			return "", errors.Wrapf(err, "ensure ConfigMap/%s", configMap.Name)
+		}
+		if fallbackReason != "" {
+			log.Info("falling back to autotune", "reason", fallbackReason)
+			r.Recorder.Event(cr, corev1.EventTypeWarning, "AutoConfigFallback",
+				fmt.Sprintf("falling back to autotune: %s", fallbackReason))
 		}
 		log.Info("ConfigMap updated", "name", configMap.Name, "data", configMap.Data)
 	}
@@ -1578,7 +1632,16 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 		return errors.Wrap(err, "failed to discover cluster")
 	}
 
-	primary, err := orchestrator.ClusterPrimary(ctx, r.ClientCmd, pod, cr.ClusterHint())
+	cluster, err := orchestrator.ResolveCluster(ctx, r.ClientCmd, pod, cr.ClusterHint())
+	if err != nil {
+		if errors.Is(err, orchestrator.ErrSplitTopology) {
+			log.Info("Orchestrator does not know which cluster is this one. skip", "reason", err.Error())
+			return nil
+		}
+		return errors.Wrap(err, "resolve cluster")
+	}
+
+	primary, err := orchestrator.ClusterPrimary(ctx, r.ClientCmd, pod, cluster)
 	if err != nil {
 		return errors.Wrap(err, "get cluster primary")
 	}
@@ -1594,18 +1657,21 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 		}
 	}
 
-	clusterInstances, err := orchestrator.Cluster(ctx, r.ClientCmd, pod, cr.ClusterHint())
+	clusterInstances, err := orchestrator.Cluster(ctx, r.ClientCmd, pod, cluster)
 	if err != nil {
 		return errors.Wrap(err, "get cluster instances")
 	}
 
+	mysqlPods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr), cr.Namespace)
+	if err != nil {
+		return errors.Wrap(err, "get mysql pods")
+	}
+
+	r.discoverMissingInstances(ctx, cr, pod, clusterInstances, mysqlPods)
+
 	// In the case of a cluster downscale, we need to forget replicas that are not part of the cluster
 	if len(clusterInstances) > int(cr.MySQLSpec().Size) {
 		log.Info("Detected possible downscale, checking for replicas to forget")
-		mysqlPods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr), cr.Namespace)
-		if err != nil {
-			return errors.Wrap(err, "get mysql pods")
-		}
 
 		podSet := make(map[string]struct{}, len(mysqlPods))
 		for _, p := range mysqlPods {
@@ -1625,6 +1691,52 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 	}
 
 	return nil
+}
+
+// discoverMissingInstances registers the pods orchestrator does not know about.
+func (r *PerconaServerMySQLReconciler) discoverMissingInstances(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQL,
+	orcPod *corev1.Pod,
+	instances []*orchestrator.Instance,
+	pods []corev1.Pod,
+) {
+	log := logf.FromContext(ctx).WithName("discoverMissingInstances")
+
+	known := make(map[string]struct{}, len(instances))
+	for _, instance := range instances {
+		known[instance.Alias] = struct{}{}
+	}
+
+	for _, p := range pods {
+		if _, ok := known[p.Name]; ok {
+			continue
+		}
+
+		if !bootstrapped(p) {
+			continue
+		}
+
+		host := fmt.Sprintf("%s.%s.%s", p.Name, mysql.ServiceName(cr), cr.Namespace)
+
+		if err := orchestrator.Discover(ctx, r.ClientCmd, orcPod, host, mysql.DefaultPort); err != nil {
+			log.Info("Failed to discover instance, will retry", "instance", p.Name, "error", err.Error())
+			continue
+		}
+
+		log.Info("Discovered instance orchestrator was missing", "instance", p.Name)
+	}
+}
+
+// bootstrapped reports whether the pod's mysql container passed its startup probe.
+func bootstrapped(pod corev1.Pod) bool {
+	for _, status := range pod.Status.ContainerStatuses {
+		if status.Name == mysql.AppName {
+			return status.Started != nil && *status.Started
+		}
+	}
+
+	return false
 }
 
 func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
@@ -2071,7 +2183,11 @@ func (r *PerconaServerMySQLReconciler) getPrimaryFromOrchestrator(ctx context.Co
 	if err != nil {
 		return nil, err
 	}
-	primary, err := orchestrator.ClusterPrimary(ctx, r.ClientCmd, pod, cr.ClusterHint())
+	cluster, err := orchestrator.ResolveCluster(ctx, r.ClientCmd, pod, cr.ClusterHint())
+	if err != nil {
+		return nil, errors.Wrap(err, "resolve cluster")
+	}
+	primary, err := orchestrator.ClusterPrimary(ctx, r.ClientCmd, pod, cluster)
 	if err != nil {
 		return nil, errors.Wrap(err, "get cluster primary")
 	}

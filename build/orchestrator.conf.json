@@ -29,11 +29,16 @@
     "echo 'PostGracefulTakeoverProcesses:' && /opt/percona/orc-handler set-primary-label -primary {successorHost}"
   ],
   "PostFailoverProcesses": [
-    "echo 'PostFailoverProcesses:' && /opt/percona/orc-handler set-primary-label -primary {successorHost}"
+    "echo 'PostFailoverProcesses:' && /opt/percona/orc-handler set-primary-label -primary {successorHost}",
+    "echo 'PostFailoverProcesses:' && /opt/percona/orc-handler finish -source {failedHost} -uid {recoveryUID}"
   ],
-  "PostUnsuccessfulFailoverProcesses": [],
+  "PostUnsuccessfulFailoverProcesses": [
+    "echo 'PostUnsuccessfulFailoverProcesses:' && /opt/percona/orc-handler report-failover -source {failedHost} -failure-type '{failureType}'",
+    "echo 'PostUnsuccessfulFailoverProcesses:' && /opt/percona/orc-handler finish -source {failedHost} -uid {recoveryUID}"
+  ],
   "PreFailoverProcesses": [
-    "echo 'Will recover from {failureType} on {failureCluster}'"
+    "echo 'Will recover from {failureType} on {failureCluster}'",
+    "echo 'PreFailoverProcesses:' && /opt/percona/orc-handler failover -source {failedHost} -failure-type '{failureType}' -command '{command}' -uid {recoveryUID} -timeout 6h0m0s -on-timeout Abort"
   ],
   "ProcessesShellCommand": "sh",
   "RaftAdvertise": "127.0.0.1",
@@ -52,10 +57,10 @@
   ],
   "RecoverNonWriteableMaster": true,
   "RecoveryIgnoreHostnameFilters": [],
-  "RecoveryPeriodBlockSeconds": 5,
+  "RecoveryPeriodBlockSeconds": 25200,
   "RemoveTextFromHostnameDisplay": ":3306",
   "SQLite3DataFile": "/etc/orchestrator/config/orc.db",
-  "UnseenInstanceForgetHours": 1,
+  "UnseenInstanceForgetHours": 7,
   "StatusEndpoint": "/api/status",
   "UseSuperReadOnly": true,
   "ReplicationLagQuery": "SELECT CAST((UNIX_TIMESTAMP(NOW()) - UNIX_TIMESTAMP(ts)) AS UNSIGNED INTEGER) AS 'delay' FROM sys_operator.heartbeat ORDER BY ts DESC LIMIT 1",
