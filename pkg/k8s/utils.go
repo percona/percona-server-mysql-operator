@@ -210,7 +210,7 @@ func ensureObjectWithHash(
 		}
 
 		log.V(1).Info("Patching object", "name", obj.GetName(), "kind", obj.GetObjectKind())
-		if _, ok := obj.(*corev1.Secret); !ok && util.IsLogLevelVerbose() && !util.IsLogStructured() {
+		if shouldLogObjectDiff(obj) {
 			fmt.Println(cmp.Diff(oldObject, obj))
 		}
 
@@ -687,4 +687,11 @@ func EqualMetadata(m ...metav1.ObjectMeta) bool {
 		}
 	}
 	return true
+}
+
+func shouldLogObjectDiff(obj client.Object) bool {
+	if _, ok := obj.(*corev1.Secret); ok {
+		return false
+	}
+	return util.IsLogLevelVerbose() && !util.IsLogStructured()
 }
