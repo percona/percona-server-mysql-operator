@@ -210,7 +210,7 @@ func ensureObjectWithHash(
 		}
 
 		log.V(1).Info("Patching object", "name", obj.GetName(), "kind", obj.GetObjectKind())
-		if util.IsLogLevelVerbose() && !util.IsLogStructured() {
+		if _, ok := obj.(*corev1.Secret); !ok && util.IsLogLevelVerbose() && !util.IsLogStructured() {
 			fmt.Println(cmp.Diff(oldObject, obj))
 		}
 
