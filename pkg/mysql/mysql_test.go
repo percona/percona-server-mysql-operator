@@ -294,33 +294,42 @@ func TestCloneStallWatchdogGate(t *testing.T) {
 		return cr
 	}
 
-	mysqldEnv := func(t *testing.T, cr *apiv1.PerconaServerMySQL, name string) (string, bool) {
+	// all values set for name in the mysql container env; more than one means a
+	// duplicate env entry was emitted
+	mysqldEnv := func(t *testing.T, cr *apiv1.PerconaServerMySQL, name string) []string {
 		t.Helper()
 		sts := StatefulSet(cr, "init-image", "cfg", "tls", "", secret)
 		for _, c := range sts.Spec.Template.Spec.Containers {
 			if c.Name != AppName {
 				continue
 			}
+			var vals []string
 			for _, e := range c.Env {
 				if e.Name == name {
-					return e.Value, true
+					vals = append(vals, e.Value)
 				}
 			}
-			return "", false
+			return vals
 		}
 		t.Fatal("mysql container not found")
-		return "", false
+		return nil
 	}
 
-	t.Run("clone stall env present from 1.3.0", func(t *testing.T) {
-		v, ok := mysqldEnv(t, defaulted(t, "1.3.0"), naming.EnvBootstrapCloneStallTimeout)
-		assert.True(t, ok, "BOOTSTRAP_CLONE_STALL_TIMEOUT must be set for crVersion >= 1.3.0")
-		assert.Equal(t, "900", v)
+	t.Run("clone stall env set once (=900) from 1.3.0", func(t *testing.T) {
+		assert.Equal(t, []string{"900"}, mysqldEnv(t, defaulted(t, "1.3.0"), naming.EnvBootstrapCloneStallTimeout))
 	})
 
 	t.Run("clone stall env absent before 1.3.0", func(t *testing.T) {
-		_, ok := mysqldEnv(t, defaulted(t, "1.2.0"), naming.EnvBootstrapCloneStallTimeout)
-		assert.False(t, ok, "BOOTSTRAP_CLONE_STALL_TIMEOUT must not be set for crVersion < 1.3.0")
+		assert.Empty(t, mysqldEnv(t, defaulted(t, "1.2.0"), naming.EnvBootstrapCloneStallTimeout))
+	})
+
+	t.Run("user override wins without duplication", func(t *testing.T) {
+		cr := defaulted(t, "1.3.0")
+		cr.Spec.MySQL.Env = append(cr.Spec.MySQL.Env, corev1.EnvVar{
+			Name:  naming.EnvBootstrapCloneStallTimeout,
+			Value: "300",
+		})
+		assert.Equal(t, []string{"300"}, mysqldEnv(t, cr, naming.EnvBootstrapCloneStallTimeout))
 	})
 
 	t.Run("startup probe backstop raised from 1.3.0", func(t *testing.T) {
