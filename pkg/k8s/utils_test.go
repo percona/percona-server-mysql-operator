@@ -2,6 +2,8 @@ package k8s
 
 import (
 	"context"
+	"io"
+	"os"
 	"testing"
 	"time"
 
@@ -948,4 +950,70 @@ func TestRecordPodTemplateHash(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestEnsureObjectWithHashVerboseDiffSkipsSecrets(t *testing.T) {
+	t.Setenv("LOG_LEVEL", "VERBOSE")
+	t.Setenv("LOG_STRUCTURED", "false")
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, corev1.AddToScheme(scheme))
+
+	const password = "super-secret-password"
+	const configValue = "visible-config-change"
+
+	secretOut := captureStdout(t, func() {
+		cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&corev1.Secret{
+			Name:      "users",
+			Namespace: "default",
+			Data:      map[string][]byte{"root": []byte("old-password")},
+		}).Build()
+
+		err := EnsureObjectWithHash(context.Background(), cl, nil, &corev1.Secret{
+			Name:      "users",
+			Namespace: "default",
+			Data:      map[string][]byte{"root": []byte(password)},
+		}, scheme)
+		require.NoError(t, err)
+	})
+	assert.NotContains(t, secretOut, password)
+	assert.NotContains(t, secretOut, "old-password")
+
+	configOut := captureStdout(t, func() {
+		cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&corev1.ConfigMap{
+			Name:      "mysql",
+			Namespace: "default",
+			Data:      map[string]string{"my.cnf": "old-config"},
+		}).Build()
+
+		err := EnsureObjectWithHash(context.Background(), cl, nil, &corev1.ConfigMap{
+			Name:      "mysql",
+			Namespace: "default",
+			Data:      map[string]string{"my.cnf": configValue},
+		}, scheme)
+		require.NoError(t, err)
+	})
+	assert.Contains(t, configOut, configValue)
+}
+
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+
+	orig := os.Stdout
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+
+	os.Stdout = w
+	t.Cleanup(func() {
+		os.Stdout = orig
+	})
+
+	fn()
+
+	require.NoError(t, w.Close())
+	os.Stdout = orig
+
+	out, err := io.ReadAll(r)
+	require.NoError(t, err)
+	return string(out)
 }
