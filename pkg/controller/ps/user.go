@@ -5,8 +5,10 @@ import (
 	"context"
 	stderrors "errors"
 	"fmt"
+	"maps"
 	"net"
 	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -205,23 +207,26 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	}
 
 	allUsers := allSystemUsers(cr)
-	if hash == internalHash {
-		if v, ok := internalSecret.Annotations[naming.AnnotationPasswordsUpdated.String()]; ok && v == "false" {
-			operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1.UserOperator)
-			if err != nil {
-				return errors.Wrap(err, "get operator password")
-			}
 
-			// At this point we don't know exact updated users and we pass all system users.
-			// Discarding old password is idempotent so it is safe to pass not updated user.
-			// We can improve this by maybe storing updated users in a annotation and reading it here.
-			users := make([]mysql.User, 0)
-			for _, u := range allUsers {
-				users = append(users, u)
-			}
-			return r.discardOldPasswordsAfterNewPropagated(ctx, cr, internalSecret, users, operatorPass)
+	// The old passwords of the previous change must be discarded before another
+	// change starts, otherwise the passwords retained for it would be overwritten.
+	if v, ok := internalSecret.Annotations[naming.AnnotationPasswordsUpdated.String()]; ok && v == "false" {
+		operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1.UserOperator)
+		if err != nil {
+			return errors.Wrap(err, "get operator password")
 		}
 
+		// At this point we don't know exact updated users and we pass all system users.
+		// Discarding old password is idempotent so it is safe to pass not updated user.
+		// We can improve this by maybe storing updated users in a annotation and reading it here.
+		users := make([]mysql.User, 0)
+		for _, u := range allUsers {
+			users = append(users, u)
+		}
+		return r.discardOldPasswordsAfterNewPropagated(ctx, cr, internalSecret, users, operatorPass)
+	}
+
+	if hash == internalHash {
 		if !k8s.EqualMetadata(internalMeta, internalSecret.ObjectMeta) {
 			internalSecret.ObjectMeta = internalMeta
 			if err := r.Update(ctx, internalSecret); err != nil {
@@ -249,6 +254,17 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	// Wait for the pods to be re-created so that any new users may be created at container startup.
 	if cr.CompareVersion("1.3.0") >= 0 && (appliedCRVersion == "" || appliedCRVersion != cr.Spec.CRVersion) {
 		log.Info("Waiting for smart update to finish")
+		return nil
+	}
+
+	// Passwords are changed only when the whole cluster is ready, so the
+	// internal secret is updated in the same pass as the passwords.
+	if cr.Status.State != apiv1.StateReady {
+		if err := r.backfillInternalSecret(ctx, internalSecret, secret); err != nil {
+			return err
+		}
+
+		log.Info("Waiting cluster to be ready")
 		return nil
 	}
 
@@ -381,15 +397,6 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		}
 	}
 
-	if cr.Status.State != apiv1.StateReady {
-		if err := r.backfillInternalSecret(ctx, internalSecret, secret); err != nil {
-			return err
-		}
-
-		log.Info("Waiting cluster to be ready")
-		return nil
-	}
-
 	if err := r.finalizeInternalSecretAndRestartRouter(ctx, cr, internalSecret, secret, restartRouter, hash); err != nil {
 		return err
 	}
@@ -442,16 +449,12 @@ func (r *PerconaServerMySQLReconciler) finalizeInternalSecretAndRestartRouter(
 	log := logf.FromContext(ctx).WithName("reconcileUsers")
 
 	internalSecret.Data = secret.DeepCopy().Data
+	k8s.AddAnnotation(internalSecret, naming.AnnotationPasswordsUpdated.String(), "false")
 	if err := r.Client.Update(ctx, internalSecret); err != nil {
 		return errors.Wrapf(err, "update Secret/%s", internalSecret.Name)
 	}
 
 	log.Info("Updated internal secret", "secretName", cr.InternalSecretName())
-
-	k8s.AddAnnotation(internalSecret, naming.AnnotationPasswordsUpdated.String(), "false")
-	if err := r.Update(ctx, internalSecret); err != nil {
-		return errors.Wrap(err, "update internal sys users secret annotation")
-	}
 
 	if restartRouter {
 		log.Info("Operator user password updated. Restarting Router.")
@@ -533,13 +536,12 @@ func (r *PerconaServerMySQLReconciler) discardOldPasswordsAfterNewPropagated(
 ) error {
 	log := logf.FromContext(ctx)
 
-	err := r.passwordsPropagated(ctx, cr, secrets)
-	if err != nil && err == ErrPassNotPropagated {
-		if err == ErrPassNotPropagated {
-			log.Info("Waiting for passwords to be propagated")
+	if err := r.passwordsPropagated(ctx, cr, secrets); err != nil {
+		if errors.Is(err, ErrPassNotPropagated) {
+			log.Info("Waiting for passwords to be propagated", "reason", err.Error())
 			return nil
 		}
-		return err
+		return errors.Wrap(err, "check if passwords are propagated")
 	}
 
 	primaryHost, err := r.getPrimaryHost(ctx, cr)
@@ -578,13 +580,13 @@ func (r *PerconaServerMySQLReconciler) passwordsPropagated(ctx context.Context, 
 
 	type component struct {
 		name      string
-		size      int
+		labels    map[string]string
 		credsPath string
 	}
 	components := []component{
 		{
 			name:      mysql.AppName,
-			size:      int(cr.MySQLSpec().Size),
+			labels:    mysql.MatchLabels(cr),
 			credsPath: naming.CredsMountPath,
 		},
 	}
@@ -592,7 +594,7 @@ func (r *PerconaServerMySQLReconciler) passwordsPropagated(ctx context.Context, 
 	if cr.OrchestratorEnabled() {
 		components = append(components, component{
 			name:      orchestrator.AppName,
-			size:      int(cr.Spec.Orchestrator.Size),
+			labels:    orchestrator.MatchLabels(cr),
 			credsPath: orchestrator.CredsMountPath,
 		})
 	}
@@ -600,7 +602,7 @@ func (r *PerconaServerMySQLReconciler) passwordsPropagated(ctx context.Context, 
 	if cr.HAProxyEnabled() {
 		components = append(components, component{
 			name:      haproxy.AppName,
-			size:      int(cr.Spec.Proxy.HAProxy.Size),
+			labels:    haproxy.MatchLabels(cr),
 			credsPath: haproxy.CredsMountPath,
 		})
 	}
@@ -608,10 +610,12 @@ func (r *PerconaServerMySQLReconciler) passwordsPropagated(ctx context.Context, 
 	if cr.RouterEnabled() {
 		components = append(components, component{
 			name:      router.AppName,
-			size:      int(cr.Spec.Proxy.Router.Size),
+			labels:    router.MatchLabels(cr),
 			credsPath: router.CredsMountPath,
 		})
 	}
+
+	users := slices.Sorted(maps.Keys(secrets.Data))
 
 	eg := new(errgroup.Group)
 
@@ -621,39 +625,38 @@ func (r *PerconaServerMySQLReconciler) passwordsPropagated(ctx context.Context, 
 		log.Info("Checking if password is propagated for component", "component", comp.name)
 
 		eg.Go(func() error {
-			for i := 0; int32(i) < int32(comp.size); i++ {
-				pod := corev1.Pod{}
-				err := r.Get(
-					ctx,
-					types.NamespacedName{
-						Namespace: cr.Namespace,
-						Name:      fmt.Sprintf("%s-%s-%d", cr.Name, comp.name, i),
-					},
-					&pod,
-				)
-				if err != nil && k8serrors.IsNotFound(err) {
-					return err
-				} else if err != nil {
-					return errors.Wrapf(err, "get %s pod", comp.name)
+			// Pods are listed by labels: Router pods belong to a Deployment and
+			// Orchestrator pods are named after "orc", not after the component.
+			pods, err := k8s.PodsByLabels(ctx, r.Client, comp.labels, cr.Namespace)
+			if err != nil {
+				return errors.Wrapf(err, "list %s pods", comp.name)
+			}
+
+			for i := range pods {
+				pod := &pods[i]
+
+				// A pod that is not scheduled has no volumes yet and will mount the current secret.
+				// A pod that is being deleted or has finished does not run with its mounted credentials.
+				if pod.Spec.NodeName == "" || pod.DeletionTimestamp != nil ||
+					pod.Status.Phase == corev1.PodFailed || pod.Status.Phase == corev1.PodSucceeded {
+					continue
 				}
 
 				// TODO: Improve this by sending single cmd request insted for each user separately
-				for user, pass := range secrets.Data {
+				for _, user := range users {
 					cmd := []string{"cat", fmt.Sprintf("%s/%s", comp.credsPath, user)}
 					var errb, outb bytes.Buffer
-					err = r.ClientCmd.Exec(ctx, &pod, comp.name, cmd, nil, &outb, &errb, false)
+					err := r.ClientCmd.Exec(ctx, pod, comp.name, cmd, nil, &outb, &errb, false)
 					if err != nil {
+						// The pod holds no password for this user, e.g. Orchestrator mounts only its own.
 						if strings.Contains(errb.String(), "No such file or directory") {
-							return nil
+							continue
 						}
-						return errors.Errorf("exec cat on %s-%d: %v / %s / %s", comp.name, i, err, outb.String(), errb.String())
-					}
-					if len(errb.Bytes()) > 0 {
-						return errors.Errorf("cat on %s-%s-%d: %s", cr.Name, comp.name, i, errb.String())
+						return errors.Wrapf(ErrPassNotPropagated, "read %s password in pod %s: %v: %s", user, pod.Name, err, strings.TrimSpace(errb.String()))
 					}
 
-					if outb.String() != string(pass) {
-						return ErrPassNotPropagated
+					if outb.String() != string(secrets.Data[user]) {
+						return errors.Wrapf(ErrPassNotPropagated, "%s password in pod %s", user, pod.Name)
 					}
 				}
 			}
