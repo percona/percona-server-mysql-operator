@@ -3,7 +3,11 @@ package ps
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"io"
+	"maps"
 	"strings"
+	"sync"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -12,16 +16,21 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	restclient "k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
+	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
+	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 	"github.com/percona/percona-server-mysql-operator/pkg/router"
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
 	"github.com/percona/percona-server-mysql-operator/pkg/version"
@@ -653,4 +662,380 @@ func TestBackfillInternalSecretUpdateError(t *testing.T) {
 
 	err := r.backfillInternalSecret(t.Context(), internal, user)
 	require.EqualError(t, err, `update Secret/internal-secret: secrets "internal-secret" not found`)
+}
+
+// credsExecClient answers `cat <file>` with the file mounted in the pod and fails any other command,
+// so a test fails if the operator runs SQL it must not run.
+type credsExecClient struct {
+	mu       sync.Mutex
+	files    map[string]map[string]string
+	commands []string
+}
+
+func (c *credsExecClient) Exec(_ context.Context, pod *corev1.Pod, _ string, command []string, _ io.Reader, stdout, stderr io.Writer, _ bool) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.commands = append(c.commands, pod.Name+": "+strings.Join(command, " "))
+	if len(command) != 2 || command[0] != "cat" {
+		return fmt.Errorf("unexpected command in pod %s: %v", pod.Name, command)
+	}
+	files, running := c.files[pod.Name]
+	if !running {
+		_, _ = fmt.Fprintf(stderr, "container not found (%q)", pod.Name)
+		return fmt.Errorf("unable to upgrade connection")
+	}
+	content, ok := files[command[1]]
+	if !ok {
+		_, _ = fmt.Fprintf(stderr, "cat: %s: No such file or directory", command[1])
+		return fmt.Errorf("command terminated with exit code 1")
+	}
+	_, err := io.WriteString(stdout, content)
+	return err
+}
+
+func (c *credsExecClient) REST() restclient.Interface {
+	return nil
+}
+
+func (c *credsExecClient) Config() *restclient.Config {
+	return nil
+}
+
+func mountedCreds(dir string, data map[string][]byte) map[string]string {
+	files := make(map[string]string, len(data))
+	for user, pass := range data {
+		files[dir+"/"+user] = string(pass)
+	}
+	return files
+}
+
+func credsTestPod(name, ns string, labels map[string]string, opts ...func(*corev1.Pod)) *corev1.Pod {
+	pod := &corev1.Pod{
+		Name: name, Namespace: ns, Labels: labels,
+		Spec:   corev1.PodSpec{NodeName: "node-0"},
+		Status: corev1.PodStatus{Phase: corev1.PodRunning},
+	}
+	for _, opt := range opts {
+		opt(pod)
+	}
+	return pod
+}
+
+func TestPasswordsPropagated(t *testing.T) {
+	const ns = "some-namespace"
+
+	oldData := map[string][]byte{
+		string(apiv1.UserMonitor):      []byte("monitor-old"),
+		string(apiv1.UserOperator):     []byte("operator-old"),
+		string(apiv1.UserOrchestrator): []byte("orchestrator-old"),
+	}
+	newData := map[string][]byte{
+		string(apiv1.UserMonitor):      []byte("monitor-new"),
+		string(apiv1.UserOperator):     []byte("operator-new"),
+		string(apiv1.UserOrchestrator): []byte("orchestrator-new"),
+	}
+	orchestratorOnly := func(data map[string][]byte) map[string][]byte {
+		return map[string][]byte{string(apiv1.UserOrchestrator): data[string(apiv1.UserOrchestrator)]}
+	}
+
+	gr := &apiv1.PerconaServerMySQL{
+		Name: "gr", Namespace: ns,
+		Spec: apiv1.PerconaServerMySQLSpec{
+			CRVersion: "1.2.0",
+			MySQL:     apiv1.MySQLSpec{ClusterType: apiv1.ClusterTypeGR, Size: 1},
+			Proxy:     apiv1.ProxySpec{Router: &apiv1.MySQLRouterSpec{Enabled: true, Size: 1}},
+		},
+	}
+	async := &apiv1.PerconaServerMySQL{
+		Name: "async", Namespace: ns,
+		Spec: apiv1.PerconaServerMySQLSpec{
+			CRVersion:    "1.2.0",
+			MySQL:        apiv1.MySQLSpec{ClusterType: apiv1.ClusterTypeAsync, Size: 1},
+			Orchestrator: apiv1.OrchestratorSpec{Enabled: true, Size: 1},
+			Proxy:        apiv1.ProxySpec{HAProxy: &apiv1.HAProxySpec{Enabled: true, Size: 1}},
+		},
+	}
+
+	// Router runs as a Deployment, so its pods carry a generated suffix rather than an ordinal.
+	const routerPod = "gr-router-6d4cf56db6-x2lq7"
+
+	terminating := func(pod *corev1.Pod) {
+		now := metav1.Now()
+		pod.DeletionTimestamp = &now
+		pod.Finalizers = []string{"test"}
+	}
+	unscheduled := func(pod *corev1.Pod) {
+		pod.Spec.NodeName = ""
+		pod.Status.Phase = corev1.PodPending
+	}
+	evicted := func(pod *corev1.Pod) {
+		pod.Status.Phase = corev1.PodFailed
+		pod.Status.Reason = "Evicted"
+	}
+
+	tests := map[string]struct {
+		cr      *apiv1.PerconaServerMySQL
+		pods    []*corev1.Pod
+		files   map[string]map[string]string
+		wantErr bool
+	}{
+		"router pod still mounts the old passwords": {
+			cr: gr,
+			pods: []*corev1.Pod{
+				credsTestPod("gr-mysql-0", ns, mysql.MatchLabels(gr)),
+				credsTestPod(routerPod, ns, router.MatchLabels(gr)),
+			},
+			files: map[string]map[string]string{
+				"gr-mysql-0": mountedCreds(naming.CredsMountPath, newData),
+				routerPod:    mountedCreds(router.CredsMountPath, oldData),
+			},
+			wantErr: true,
+		},
+		"every pod mounts the new passwords": {
+			cr: gr,
+			pods: []*corev1.Pod{
+				credsTestPod("gr-mysql-0", ns, mysql.MatchLabels(gr)),
+				credsTestPod(routerPod, ns, router.MatchLabels(gr)),
+			},
+			files: map[string]map[string]string{
+				"gr-mysql-0": mountedCreds(naming.CredsMountPath, newData),
+				routerPod:    mountedCreds(router.CredsMountPath, newData),
+			},
+		},
+		"orchestrator pod still mounts its old password": {
+			cr: async,
+			pods: []*corev1.Pod{
+				credsTestPod("async-mysql-0", ns, mysql.MatchLabels(async)),
+				credsTestPod("async-haproxy-0", ns, haproxy.MatchLabels(async)),
+				credsTestPod("async-orc-0", ns, orchestrator.MatchLabels(async)),
+			},
+			files: map[string]map[string]string{
+				"async-mysql-0":   mountedCreds(naming.CredsMountPath, newData),
+				"async-haproxy-0": mountedCreds(haproxy.CredsMountPath, newData),
+				"async-orc-0":     mountedCreds(orchestrator.CredsMountPath, orchestratorOnly(oldData)),
+			},
+			wantErr: true,
+		},
+		// Orchestrator mounts only its own password, so the other users have no file there.
+		"orchestrator pod mounts its new password": {
+			cr: async,
+			pods: []*corev1.Pod{
+				credsTestPod("async-mysql-0", ns, mysql.MatchLabels(async)),
+				credsTestPod("async-haproxy-0", ns, haproxy.MatchLabels(async)),
+				credsTestPod("async-orc-0", ns, orchestrator.MatchLabels(async)),
+			},
+			files: map[string]map[string]string{
+				"async-mysql-0":   mountedCreds(naming.CredsMountPath, newData),
+				"async-haproxy-0": mountedCreds(haproxy.CredsMountPath, newData),
+				"async-orc-0":     mountedCreds(orchestrator.CredsMountPath, orchestratorOnly(newData)),
+			},
+		},
+		"a pod whose container cannot be read": {
+			cr: gr,
+			pods: []*corev1.Pod{
+				credsTestPod("gr-mysql-0", ns, mysql.MatchLabels(gr)),
+				credsTestPod(routerPod, ns, router.MatchLabels(gr)),
+			},
+			files: map[string]map[string]string{
+				"gr-mysql-0": mountedCreds(naming.CredsMountPath, newData),
+			},
+			wantErr: true,
+		},
+		"pods that are not scheduled, terminating or evicted are not checked": {
+			cr: gr,
+			pods: []*corev1.Pod{
+				credsTestPod("gr-mysql-0", ns, mysql.MatchLabels(gr)),
+				credsTestPod(routerPod, ns, router.MatchLabels(gr), terminating),
+				credsTestPod("gr-router-6d4cf56db6-pending", ns, router.MatchLabels(gr), unscheduled),
+				credsTestPod("gr-router-6d4cf56db6-evicted", ns, router.MatchLabels(gr), evicted),
+			},
+			files: map[string]map[string]string{
+				"gr-mysql-0": mountedCreds(naming.CredsMountPath, newData),
+			},
+		},
+	}
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(scheme))
+	require.NoError(t, apiv1.AddToScheme(scheme))
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			objs := []client.Object{tt.cr}
+			for _, pod := range tt.pods {
+				objs = append(objs, pod)
+			}
+			r := PerconaServerMySQLReconciler{
+				Client:    fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).Build(),
+				Scheme:    scheme,
+				ClientCmd: &credsExecClient{files: tt.files},
+			}
+
+			err := r.passwordsPropagated(t.Context(), tt.cr, &corev1.Secret{Data: newData})
+			if tt.wantErr {
+				assert.ErrorIs(t, err, ErrPassNotPropagated)
+				return
+			}
+			assert.NoError(t, err)
+		})
+	}
+}
+
+// A changed password must not be discarded while any Router pod still mounts it.
+func TestDiscardOldPasswordsWaitsForEveryRouterPod(t *testing.T) {
+	const ns = "some-namespace"
+	const routerPod = "gr-router-6d4cf56db6-x2lq7"
+
+	cr := &apiv1.PerconaServerMySQL{
+		Name: "gr", Namespace: ns,
+		Spec: apiv1.PerconaServerMySQLSpec{
+			CRVersion: "1.2.0",
+			MySQL:     apiv1.MySQLSpec{ClusterType: apiv1.ClusterTypeGR, Size: 1},
+			Proxy:     apiv1.ProxySpec{Router: &apiv1.MySQLRouterSpec{Enabled: true, Size: 1}},
+		},
+	}
+	newData := map[string][]byte{string(apiv1.UserMonitor): []byte("monitor-new")}
+	oldData := map[string][]byte{string(apiv1.UserMonitor): []byte("monitor-old")}
+	internalSecret := &corev1.Secret{
+		Name: cr.InternalSecretName(), Namespace: ns,
+		Annotations: map[string]string{naming.AnnotationPasswordsUpdated.String(): "false"},
+		Data:        newData,
+	}
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(scheme))
+	require.NoError(t, apiv1.AddToScheme(scheme))
+
+	execCli := &credsExecClient{files: map[string]map[string]string{
+		"gr-mysql-0": mountedCreds(naming.CredsMountPath, newData),
+		routerPod:    mountedCreds(router.CredsMountPath, oldData),
+	}}
+	r := PerconaServerMySQLReconciler{
+		Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(
+			cr,
+			internalSecret,
+			credsTestPod("gr-mysql-0", ns, mysql.MatchLabels(cr)),
+			credsTestPod(routerPod, ns, router.MatchLabels(cr)),
+		).Build(),
+		Scheme:    scheme,
+		ClientCmd: execCli,
+	}
+
+	users := []mysql.User{{Username: apiv1.UserMonitor, Hosts: []string{"%"}, Password: "monitor-new"}}
+	require.NoError(t, r.discardOldPasswordsAfterNewPropagated(t.Context(), cr, internalSecret, users, "operator-pass"))
+
+	for _, cmd := range execCli.commands {
+		assert.Contains(t, cmd, ": cat ", "the old passwords were discarded before every pod mounted the new ones")
+	}
+	updated := new(corev1.Secret)
+	require.NoError(t, r.Get(t.Context(), client.ObjectKeyFromObject(internalSecret), updated))
+	assert.Equal(t, "false", updated.Annotations[naming.AnnotationPasswordsUpdated.String()])
+}
+
+func passwordChangeTestCluster(ns string, state apiv1.StatefulAppState) (*apiv1.PerconaServerMySQL, map[string][]byte) {
+	cr := &apiv1.PerconaServerMySQL{
+		Name: "gr", Namespace: ns,
+		Spec: apiv1.PerconaServerMySQLSpec{
+			CRVersion:   "1.2.0",
+			SecretsName: "gr-secrets",
+			MySQL:       apiv1.MySQLSpec{ClusterType: apiv1.ClusterTypeGR, Size: 1},
+		},
+		Status: apiv1.PerconaServerMySQLStatus{
+			MySQL: apiv1.StatefulAppStatus{State: apiv1.StateReady},
+			State: state,
+		},
+	}
+	data := make(map[string][]byte)
+	for _, user := range secret.SystemUsers(cr) {
+		data[string(user)] = []byte(string(user) + "-password")
+	}
+	return cr, data
+}
+
+// Passwords applied before the cluster is ready would be applied again on every
+// reconcile until it is, and a second RETAIN CURRENT PASSWORD drops the password
+// that pods and the operator itself still use.
+func TestReconcileUsersWaitsForReadyClusterBeforeChangingPasswords(t *testing.T) {
+	const ns = "some-namespace"
+
+	cr, oldData := passwordChangeTestCluster(ns, apiv1.StateInitializing)
+	newData := maps.Clone(oldData)
+	newData[string(apiv1.UserOperator)] = []byte("operator-password-new")
+
+	userSecret := &corev1.Secret{Name: cr.Spec.SecretsName, Namespace: ns, Data: newData}
+	internalSecret := &corev1.Secret{Name: cr.InternalSecretName(), Namespace: ns, Data: oldData}
+
+	// A rolled out StatefulSet, so the pass is not held back by a smart update.
+	replicas := int32(1)
+	sts := &appsv1.StatefulSet{
+		Name: mysql.Name(cr), Namespace: ns,
+		Spec:   appsv1.StatefulSetSpec{Replicas: &replicas},
+		Status: appsv1.StatefulSetStatus{UpdateRevision: "rev-1"},
+	}
+	pod := credsTestPod("gr-mysql-0", ns, mysql.MatchLabels(cr), func(pod *corev1.Pod) {
+		pod.Labels[appsv1.StatefulSetRevisionLabel] = "rev-1"
+		pod.Status.Conditions = []corev1.PodCondition{{Type: corev1.ContainersReady, Status: corev1.ConditionTrue}}
+	})
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(scheme))
+	require.NoError(t, apiv1.AddToScheme(scheme))
+
+	fc := &fakeClient{}
+	r := PerconaServerMySQLReconciler{
+		Client:    fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr, userSecret, internalSecret, sts, pod).Build(),
+		Scheme:    scheme,
+		ClientCmd: fc,
+	}
+
+	require.NoError(t, r.reconcileUsers(t.Context(), cr, userSecret))
+	assert.Equal(t, 0, fc.execCount, "passwords were changed on a cluster that is not ready")
+
+	updated := new(corev1.Secret)
+	require.NoError(t, r.Get(t.Context(), client.ObjectKeyFromObject(internalSecret), updated))
+	assert.Equal(t, oldData, updated.Data)
+}
+
+// A new change waits until the old passwords of the previous one are discarded,
+// so the passwords retained for the previous change are never overwritten.
+func TestReconcileUsersFinishesPreviousChangeFirst(t *testing.T) {
+	const ns = "some-namespace"
+
+	cr, firstData := passwordChangeTestCluster(ns, apiv1.StateReady)
+	secondData := maps.Clone(firstData)
+	secondData[string(apiv1.UserOperator)] = []byte("operator-password-second")
+	staleData := maps.Clone(firstData)
+	staleData[string(apiv1.UserOperator)] = []byte("operator-password-before-first")
+
+	userSecret := &corev1.Secret{Name: cr.Spec.SecretsName, Namespace: ns, Data: secondData}
+	internalSecret := &corev1.Secret{
+		Name: cr.InternalSecretName(), Namespace: ns,
+		Annotations: map[string]string{naming.AnnotationPasswordsUpdated.String(): "false"},
+		Data:        firstData,
+	}
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(scheme))
+	require.NoError(t, apiv1.AddToScheme(scheme))
+
+	execCli := &credsExecClient{files: map[string]map[string]string{
+		"gr-mysql-0": mountedCreds(naming.CredsMountPath, staleData),
+	}}
+	r := PerconaServerMySQLReconciler{
+		Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(
+			cr, userSecret, internalSecret, credsTestPod("gr-mysql-0", ns, mysql.MatchLabels(cr)),
+		).Build(),
+		Scheme:    scheme,
+		ClientCmd: execCli,
+	}
+
+	require.NoError(t, r.reconcileUsers(t.Context(), cr, userSecret))
+	for _, cmd := range execCli.commands {
+		assert.Contains(t, cmd, ": cat ", "a new password change started before the previous one finished")
+	}
+
+	updated := new(corev1.Secret)
+	require.NoError(t, r.Get(t.Context(), client.ObjectKeyFromObject(internalSecret), updated))
+	assert.Equal(t, firstData, updated.Data)
 }
