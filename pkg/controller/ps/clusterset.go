@@ -43,7 +43,7 @@ func (r *PerconaServerMySQLReconciler) getClusterSetMemberCondition(
 	// for the full cluster would delay it (and everything derived from it, like
 	// the HAProxy is_clusterset_replica flag) until the last member finishes cloning.
 	if cr.Spec.Pause || len(pods) == 0 {
-		log.Info("No pods available to query, skip ClusterSet status check")
+		log.V(1).Info("No pods available to query, skip ClusterSet status check")
 		return meta.FindStatusCondition(cr.Status.Conditions, apiv1.ConditionClusterSetMember), nil
 	}
 
