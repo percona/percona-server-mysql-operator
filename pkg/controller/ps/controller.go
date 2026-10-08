@@ -1319,8 +1319,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 		case !cr.Spec.MySQL.AutoConfig.IsEnabled():
 			params, err = mysql.GetAutoTuneParams(cr, memory)
 		case userConfig:
-			log.Info("a user configuration is set, skipping autoconfig")
-			params, err = mysql.GetAutoTuneParams(cr, memory)
+			params, err = autotune("a user configuration is set")
 		case cpu == nil:
 			params, err = autotune("autoconfig is enabled but no CPU request/limit is set")
 		case version == "":
