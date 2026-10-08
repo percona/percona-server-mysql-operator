@@ -1280,7 +1280,8 @@ wait_for_mysql_pods_restart() {
 
 # Waits until every pod of the given cluster app has been replaced, comparing
 # against a UID list captured with get_pod_uids before the change that should
-# restart them.
+# restart them. A pod terminating when the list was captured is missing from it,
+# so more pods than listed may come back.
 wait_for_pods_restart() {
 	local cluster_name=$1
 	local component=$2
@@ -1294,7 +1295,7 @@ wait_for_pods_restart() {
 		local replaced=true
 		local uid
 
-		if [[ $(echo "${uids_now}" | wc -w) -ne ${expected_count} ]]; then
+		if [[ $(echo "${uids_now}" | wc -w) -lt ${expected_count} ]]; then
 			replaced=false
 		else
 			for uid in ${uids_now}; do
