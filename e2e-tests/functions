@@ -1760,19 +1760,40 @@ check_haproxy_backends() {
 
 	# reaching the primary is not enough, x-protocol has to be writable: the DDL and
 	# the hostname go in one round trip, a failed write leaves the hostname unset
-	local host_via_x=$(run_mysqlsh \
-		"CREATE DATABASE IF NOT EXISTS check_haproxy_x; DROP DATABASE check_haproxy_x; SELECT @@hostname" \
-		"--mysqlx -h ${svc} -P 33060" "${creds}")
+	local x_query="CREATE DATABASE IF NOT EXISTS check_haproxy_x; DROP DATABASE check_haproxy_x; SELECT @@hostname"
+	local host_via_x host_via_admin
+	local deadline=$((SECONDS + 60))
+
+	# Right after a failover the cluster can still be settling, so a single
+	# miss is retried for a while before it counts as a failure.
+	while :; do
+		host_via_x=$(run_mysqlsh "${x_query}" "--mysqlx -h ${svc} -P 33060" "${creds}")
+		host_via_admin=$(run_mysql "SELECT @@hostname" "-h ${svc} -P 33062" "${creds}" || true)
+
+		if [ "${host_via_x}" = "${primary_pod}" ] && [ "${host_via_admin}" = "${primary_pod}" ]; then
+			return 0
+		fi
+		if [[ ${SECONDS} -ge ${deadline} ]]; then
+			break
+		fi
+
+		echo "waiting for x-protocol and admin ports to reach primary ${primary_pod}: x='${host_via_x}' admin='${host_via_admin}'"
+		sleep 5
+	done
+
 	if [ "${host_via_x}" != "${primary_pod}" ]; then
 		echo "x-protocol port 33060 did not reach a writable primary: got '${host_via_x}', expected '${primary_pod}'"
-		exit 1
+		# run_mysqlsh drops stderr, run it once more to show why
+		kubectl -n "${NAMESPACE}" exec mysql-client -- \
+			bash -c "printf '%s\n' \"${x_query}\" | mysqlsh --sql --quiet-start=2 --mysqlx -h ${svc} -P 33060 ${creds}" || true
 	fi
-
-	local host_via_admin=$(run_mysql "SELECT @@hostname" "-h ${svc} -P 33062" "${creds}")
 	if [ "${host_via_admin}" != "${primary_pod}" ]; then
 		echo "admin port 33062 landed on '${host_via_admin}', expected primary '${primary_pod}'"
-		exit 1
 	fi
+	if [[ $(kubectl -n "${NAMESPACE}" get ps "${cluster}" -o jsonpath='{.spec.mysql.clusterType}') == "async" ]]; then
+		dump_async_failover_state "${cluster}"
+	fi
+	exit 1
 }
 
 get_primary_from_group_replication() {
