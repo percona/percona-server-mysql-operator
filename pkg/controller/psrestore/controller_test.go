@@ -3,6 +3,8 @@ package psrestore
 import (
 	"context"
 	"fmt"
+	"io"
+	"strings"
 	"testing"
 
 	"github.com/pkg/errors"
@@ -548,6 +550,106 @@ func TestCompletedBaseRestoreReconcilesPITRConfigSecret(t *testing.T) {
 	}, configSecret)
 	require.NoError(t, err)
 	assert.NotEmpty(t, configSecret.Data[binlogserver.ConfigKey])
+}
+
+type pitrArchiveStorage struct {
+	fakestorage.FakeStorageClient
+	objects map[string]string
+}
+
+func (s *pitrArchiveStorage) GetObject(_ context.Context, name string) (io.ReadCloser, error) {
+	value, ok := s.objects[name]
+	if !ok {
+		return nil, errors.Errorf("object %s not found", name)
+	}
+	return io.NopCloser(strings.NewReader(value)), nil
+}
+
+func TestPITRValidationBeforePause(t *testing.T) {
+	const known = "f16872ce-c164-11f1-9049-e2574f2e2c6a"
+	const unknown = "f16872ce-c164-11f1-9049-e2574f2e2c6c"
+	tests := map[string]struct {
+		pitrType   apiv1.PITRType
+		target     string
+		metadata   string
+		storageErr bool
+		wantDesc   string
+	}{
+		"unknown UUID":               {target: unknown + ":1-2008", metadata: `{"previous_gtids":"", "added_gtids":"` + known + `:1-2006"}`, wantDesc: unknown},
+		"future GTID":                {target: known + ":2007-2008", metadata: `{"previous_gtids":"", "added_gtids":"` + known + `:1-2006"}`, wantDesc: "exceeds the binlog archive"},
+		"future timestamp":           {pitrType: apiv1.PITRDate, target: "2026-09-09 13:00:01", metadata: `{"min_timestamp":"2026-09-09T12:00:00", "max_timestamp":"2026-09-09T13:00:00"}`, wantDesc: "timestamp is too new"},
+		"malformed timestamp":        {pitrType: apiv1.PITRDate, target: "yesterday", wantDesc: "invalid pitr target"},
+		"timestamp missing metadata": {pitrType: apiv1.PITRDate, target: "2026-09-09 12:15:00", wantDesc: "not found"},
+		"timestamp corrupt metadata": {pitrType: apiv1.PITRDate, target: "2026-09-09 12:15:00", metadata: "not-json", wantDesc: "parse metadata"},
+		"timestamp missing maximum":  {pitrType: apiv1.PITRDate, target: "2026-09-09 12:15:00", metadata: `{"min_timestamp":"2026-09-09T12:00:00"}`, wantDesc: "has no max_timestamp"},
+		"timestamp storage failure":  {pitrType: apiv1.PITRDate, target: "2026-09-09 12:15:00", storageErr: true, wantDesc: "storage unavailable"},
+		"malformed UUID":             {target: "not-a-uuid:1", wantDesc: "malformed GTID source"},
+		"missing metadata":           {target: known + ":2008", wantDesc: "not found"},
+		"corrupt metadata":           {target: known + ":2008", metadata: "not-json", wantDesc: "parse metadata"},
+		"empty metadata":             {target: known + ":2008", metadata: `{"previous_gtids":"", "added_gtids":""}`, wantDesc: "empty GTID metadata"},
+		"storage failure":            {target: known + ":2008", storageErr: true, wantDesc: "storage unavailable"},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			if tt.pitrType == "" {
+				tt.pitrType = apiv1.PITRGtid
+			}
+			ctx := t.Context()
+			cluster := readDefaultCluster(t, "ps-cluster", "namespace")
+			cluster.Spec.Backup.PiTR = apiv1.PiTRSpec{
+				Enabled: true,
+				BinlogServer: &apiv1.BinlogServerSpec{
+					Image:   "binlog-server:latest",
+					Storage: apiv1.BinlogServerStorageSpec{S3: &apiv1.BackupStorageS3Spec{Bucket: "binlogs", CredentialsSecret: "binlog-s3"}},
+				},
+			}
+			restore := readDefaultRestore(t, "restore", cluster.Namespace)
+			restore.UID = "restore-uid"
+			restore.Spec.ClusterName = cluster.Name
+			restore.Spec.BackupName = ""
+			restore.Spec.BackupSource = &apiv1.RestoreBackupSource{
+				Destination: "s3://backups/backup",
+				Storage:     &apiv1.BackupStorageSpec{Type: apiv1.BackupStorageS3, S3: &apiv1.BackupStorageS3Spec{Bucket: "backups"}},
+			}
+			restore.Spec.PITR = &apiv1.RestorePITRSpec{Type: tt.pitrType, GTID: tt.target, Date: tt.target, Force: true}
+			internalSecret := &corev1.Secret{
+				Name: cluster.InternalSecretName(), Namespace: cluster.Namespace,
+				Data: map[string][]byte{string(apiv1.UserReplication): []byte("replication-password")},
+			}
+			sts := &appsv1.StatefulSet{
+				Name: mysql.Name(cluster), Namespace: cluster.Namespace,
+				Status: appsv1.StatefulSetStatus{Replicas: 3},
+			}
+			cl := buildFakeClient(t, cluster, restore, internalSecret, sts, readDefaultS3Secret(t, "binlog-s3", cluster.Namespace))
+			r := reconciler(cl)
+			archive := &pitrArchiveStorage{objects: map[string]string{"binlog.index": "./binlog.000001\n"}}
+			if tt.metadata != "" {
+				archive.objects["binlog.000001.json"] = tt.metadata
+			}
+			r.NewStorageClient = func(_ context.Context, opts storage.Options) (storage.Storage, error) {
+				_, ok := opts.(*storage.S3Options)
+				require.True(t, ok)
+				if tt.storageErr {
+					return nil, errors.New("storage unavailable")
+				}
+				return archive, nil
+			}
+			req := controllerruntime.Request{NamespacedName: client.ObjectKeyFromObject(restore)}
+			result, err := r.Reconcile(ctx, req)
+			require.NoError(t, err)
+			current := new(apiv1.PerconaServerMySQLRestore)
+			require.NoError(t, cl.Get(ctx, req.NamespacedName, current))
+			assert.Equal(t, apiv1.RestoreError, current.Status.State)
+			assert.Contains(t, current.Status.StateDesc, tt.wantDesc)
+			currentCluster := new(apiv1.PerconaServerMySQL)
+			require.NoError(t, cl.Get(ctx, client.ObjectKeyFromObject(cluster), currentCluster))
+			assert.False(t, currentCluster.Spec.Pause)
+			jobs := new(batchv1.JobList)
+			require.NoError(t, cl.List(ctx, jobs))
+			assert.Empty(t, jobs.Items)
+			assert.Zero(t, result.RequeueAfter)
+		})
+	}
 }
 
 func TestRestoreFinishesWhenClusterIsReady(t *testing.T) {

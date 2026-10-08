@@ -29,6 +29,40 @@ type source struct {
 
 type Set map[source][]interval
 
+// UUIDs returns the sorted, unique source UUIDs, independently of GTID tags.
+func (s Set) UUIDs() []string {
+	seen := make(map[string]struct{})
+	for source, intervals := range s {
+		if len(intervals) > 0 {
+			seen[source.uuid] = struct{}{}
+		}
+	}
+	result := make([]string, 0, len(seen))
+	for uuid := range seen {
+		result = append(result, uuid)
+	}
+	slices.Sort(result)
+	return result
+}
+
+// Beyond returns transactions above the last observed transaction for each UUID and tag.
+// A source absent from observed has no known upper bound, so all its transactions remain.
+func (s Set) Beyond(observed Set) Set {
+	result := make(Set)
+	for source, intervals := range s {
+		var last int64
+		for _, interval := range observed[source] {
+			last = max(last, interval.end)
+		}
+		for _, transaction := range intervals {
+			if transaction.end > last {
+				result[source] = append(result[source], interval{start: max(transaction.start, last+1), end: transaction.end})
+			}
+		}
+	}
+	return result
+}
+
 // Intersect returns the transactions present in both sets.
 func (s Set) Intersect(other Set) Set {
 	result := make(Set)
@@ -51,6 +85,23 @@ func (s Set) Intersect(other Set) Set {
 		}
 	}
 	return result
+}
+
+// IsSubsetOf reports whether every transaction in s is present in other.
+func (s Set) IsSubsetOf(other Set) bool {
+	for source, intervals := range s {
+		observed := other[source]
+		i := 0
+		for _, transaction := range intervals {
+			for i < len(observed) && observed[i].end < transaction.start {
+				i++
+			}
+			if i == len(observed) || observed[i].start > transaction.start || observed[i].end < transaction.end {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func (s Set) IsEmpty() bool {

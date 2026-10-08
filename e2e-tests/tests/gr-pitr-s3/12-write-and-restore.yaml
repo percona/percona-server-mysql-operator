@@ -15,10 +15,16 @@ commands:
           "INSERT myDB.myTable (id) VALUES (200501)" \
           "-h $(get_router_service ${cluster_name})"
 
-      sleep 120
-
+      sleep 2
       PITR_DATE_POST=$(date -u '+%Y-%m-%d %H:%M:%S')
       kubectl create configmap -n "${NAMESPACE}" pitr-date-post --from-literal=date="${PITR_DATE_POST}"
+
+      sleep 2
+      run_mysql \
+          "INSERT myDB.myTable (id) VALUES (200502)" \
+          "-h $(get_router_service ${cluster_name})"
+
+      sleep 120
 
       echo '{}' \
           | yq eval '.apiVersion = "ps.percona.com/v1"' - \

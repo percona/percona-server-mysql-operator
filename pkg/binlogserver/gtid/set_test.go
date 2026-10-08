@@ -119,3 +119,40 @@ func TestSetString(t *testing.T) {
 		set.String(),
 	)
 }
+
+func TestSetUUIDs(t *testing.T) {
+	set := Set{
+		{uuid: testUUIDB}:              {{start: 1, end: 5}},
+		{uuid: testUUIDA}:              {{start: 1, end: 1}},
+		{uuid: testUUIDA, tag: "blue"}: {{start: 2, end: 3}},
+		{uuid: "empty"}:                nil,
+	}
+	assert.Equal(t, []string{testUUIDA, testUUIDB}, set.UUIDs())
+	assert.Empty(t, Set(nil).UUIDs())
+}
+
+func TestSetBeyond(t *testing.T) {
+	sourceA := source{uuid: testUUIDA}
+	taggedA := source{uuid: testUUIDA, tag: "blue"}
+	sourceB := source{uuid: testUUIDB}
+	tests := map[string]struct {
+		target, observed, expected Set
+	}{
+		"at boundary":         {target: Set{sourceA: {{start: 1, end: 10}}}, observed: Set{sourceA: {{start: 1, end: 10}}}, expected: Set{}},
+		"past boundary":       {target: Set{sourceA: {{start: 5, end: 15}}}, observed: Set{sourceA: {{start: 1, end: 10}}}, expected: Set{sourceA: {{start: 11, end: 15}}}},
+		"multiple intervals":  {target: Set{sourceA: {{start: 5, end: 15}, {start: 20, end: 25}}}, observed: Set{sourceA: {{start: 1, end: 10}}}, expected: Set{sourceA: {{start: 11, end: 15}, {start: 20, end: 25}}}},
+		"independent sources": {target: Set{sourceA: {{start: 1, end: 10}}, sourceB: {{start: 1, end: 10}}}, observed: Set{sourceA: {{start: 1, end: 10}}, sourceB: {{start: 1, end: 5}}}, expected: Set{sourceB: {{start: 6, end: 10}}}},
+		"independent tags":    {target: Set{taggedA: {{start: 1, end: 10}}}, observed: Set{sourceA: {{start: 1, end: 20}}, taggedA: {{start: 1, end: 5}}}, expected: Set{taggedA: {{start: 6, end: 10}}}},
+		"unknown source":      {target: Set{sourceB: {{start: 1, end: 10}}}, observed: Set{sourceA: {{start: 1, end: 20}}}, expected: Set{sourceB: {{start: 1, end: 10}}}},
+		"maximum transaction": {target: Set{sourceA: {{start: 1, end: math.MaxInt64}}}, observed: Set{sourceA: {{start: 1, end: math.MaxInt64}}}, expected: Set{}},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			before := tt.target.String()
+			observedBefore := tt.observed.String()
+			assert.Equal(t, tt.expected, tt.target.Beyond(tt.observed))
+			assert.Equal(t, before, tt.target.String())
+			assert.Equal(t, observedBefore, tt.observed.String())
+		})
+	}
+}
