@@ -209,137 +209,114 @@ deploy_pmm_server() {
 		--force
 }
 
-get_pmm_server_token() {
-	local key_name=$1
+wait_pmm_server() {
+	kubectl -n "${NAMESPACE}" rollout status statefulset/monitoring --timeout=300s
 
-	if [[ -z $key_name ]]; then
-		key_name="operator"
-	fi
+	local endpoint
+	endpoint=$(get_service_ip monitoring-service)
+	retry 60 5 curl --insecure -sf --connect-timeout 5 --max-time 10 -o /dev/null "https://${endpoint}/v1/readyz"
+}
 
-	local ADMIN_PASSWORD
-	ADMIN_PASSWORD=$(kubectl -n "${NAMESPACE}" get secret pmm-secret -o jsonpath="{.data.PMM_ADMIN_PASSWORD}" | base64 --decode)
+pmm_api() {
+	local method=$1
+	local path=$2
+	local expected_status=$3
+	local data=$4
 
-	if [[ -z $ADMIN_PASSWORD ]]; then
+	local admin_password
+	admin_password=$(kubectl -n "${NAMESPACE}" get secret pmm-secret -o jsonpath="{.data.PMM_ADMIN_PASSWORD}" | base64 --decode)
+	if [[ -z $admin_password ]]; then
 		echo "Error: ADMIN_PASSWORD is empty or not found!" >&2
 		return 1
 	fi
 
-	local create_response create_status_code create_json_response
-	create_response=$(curl --insecure -s -X POST -H 'Content-Type: application/json' -H 'Accept: application/json' \
-		-d "{\"name\":\"${key_name}\", \"role\":\"Admin\", \"isDisabled\":false}" \
-		--user "admin:${ADMIN_PASSWORD}" \
-		"https://$(get_service_ip monitoring-service)/graph/api/serviceaccounts" \
+	local response status body
+	response=$(curl --insecure -s --connect-timeout 10 --max-time 30 -X "$method" \
+		-H 'Content-Type: application/json' -H 'Accept: application/json' \
+		--user "admin:${admin_password}" \
+		${data:+-d "$data"} \
+		"https://$(get_service_ip monitoring-service)${path}" \
 		-w "\n%{http_code}")
 
-	create_status_code=$(echo "$create_response" | tail -n1)
-	create_json_response=$(echo "$create_response" | $sed '$ d')
+	status=$(echo "$response" | tail -n1)
+	body=$(echo "$response" | $sed '$ d')
 
-	if [[ $create_status_code -ne 201 ]]; then
-		echo "Error: Failed to create PMM service account. HTTP Status: $create_status_code" >&2
-		echo "Response: $create_json_response" >&2
+	if [[ $status -ne $expected_status ]]; then
+		echo "Error: ${method} ${path} failed. HTTP Status: ${status}" >&2
+		echo "Response: ${body}" >&2
 		return 1
 	fi
 
+	echo "$body"
+}
+
+get_pmm_service_account_id() {
+	local name=$1
+
+	local accounts
+	accounts=$(pmm_api GET /graph/api/serviceaccounts/search 200) || return 1
+	echo "$accounts" | jq -r ".serviceAccounts[] | select(.name == \"${name}\").id"
+}
+
+# Looking up the service account before creating it keeps retries idempotent.
+get_or_create_pmm_service_account() {
+	local name=$1
+
+	local id
+	id=$(get_pmm_service_account_id "$name") || return 1
+	if [[ -n $id ]]; then
+		echo "$id"
+		return
+	fi
+
+	local account
+	account=$(pmm_api POST /graph/api/serviceaccounts 201 "{\"name\":\"${name}\", \"role\":\"Admin\", \"isDisabled\":false}") || return 1
+	echo "$account" | jq -r '.id'
+}
+
+get_pmm_server_token() {
+	local key_name=${1:-operator}
+
 	local service_account_id
-	service_account_id=$(echo "$create_json_response" | jq -r '.id')
+	service_account_id=$(retry 10 10 get_or_create_pmm_service_account "$key_name")
 
 	if [[ -z $service_account_id || $service_account_id == "null" ]]; then
 		echo "Error: Failed to extract service account ID!" >&2
 		return 1
 	fi
 
-	local token_response token_status_code token_json_response
-	token_response=$(curl --insecure -s -X POST -H 'Content-Type: application/json' \
-		-d "{\"name\":\"${key_name}\"}" \
-		--user "admin:${ADMIN_PASSWORD}" \
-		"https://$(get_service_ip monitoring-service)/graph/api/serviceaccounts/${service_account_id}/tokens" \
-		-w "\n%{http_code}")
+	local token
+	token=$(retry 10 10 pmm_api POST "/graph/api/serviceaccounts/${service_account_id}/tokens" 200 "{\"name\":\"${key_name}\"}" | jq -r '.key')
 
-	token_status_code=$(echo "$token_response" | tail -n1)
-	token_json_response=$(echo "$token_response" | $sed '$ d')
-
-	if [[ $token_status_code -ne 200 ]]; then
-		echo "Error: Failed to create token. HTTP Status: $token_status_code" >&2
-		echo "Response: $token_json_response" >&2
+	if [[ -z $token || $token == "null" ]]; then
+		echo "Error: Failed to create token!" >&2
 		return 1
 	fi
 
-	echo "$token_json_response" | jq -r '.key'
+	echo "$token"
 }
 
 delete_pmm_server_token() {
-	local key_name=$1
-
-	if [[ -z $key_name ]]; then
-		key_name="operator"
-	fi
-
-	local ADMIN_PASSWORD
-	ADMIN_PASSWORD=$(kubectl -n "${NAMESPACE}" get secret pmm-secret -o jsonpath="{.data.PMM_ADMIN_PASSWORD}" | base64 --decode)
-
-	if [[ -z $ADMIN_PASSWORD ]]; then
-		echo "Error: ADMIN_PASSWORD is empty or not found!" >&2
-		return 1
-	fi
-
-	local user_credentials="admin:${ADMIN_PASSWORD}"
-
-	local service_accounts_response service_accounts_status
-	service_accounts_response=$(curl --insecure -s -X GET --user "${user_credentials}" \
-		"https://$(get_service_ip monitoring-service)/graph/api/serviceaccounts/search" \
-		-w "\n%{http_code}")
-
-	service_accounts_status=$(echo "$service_accounts_response" | tail -n1)
-	service_accounts_json=$(echo "$service_accounts_response" | $sed '$ d')
-
-	if [[ $service_accounts_status -ne 200 ]]; then
-		echo "Error: Failed to fetch service accounts. HTTP Status: $service_accounts_status" >&2
-		echo "Response: $service_accounts_json" >&2
-		return 1
-	fi
+	local key_name=${1:-operator}
 
 	local service_account_id
-	service_account_id=$(echo "$service_accounts_json" | jq -r ".serviceAccounts[] | select(.name == \"${key_name}\").id")
+	service_account_id=$(retry 10 10 get_pmm_service_account_id "$key_name") || return 1
 
-	if [[ -z $service_account_id || $service_account_id == "null" ]]; then
+	if [[ -z $service_account_id ]]; then
 		echo "Service account '${key_name}' not found."
 		return 1
 	fi
 
-	local tokens_response tokens_status tokens_json
-	tokens_response=$(curl --insecure -s -X GET --user "${user_credentials}" \
-		"https://$(get_service_ip monitoring-service)/graph/api/serviceaccounts/${service_account_id}/tokens" \
-		-w "\n%{http_code}")
+	local tokens token_id
+	tokens=$(retry 10 10 pmm_api GET "/graph/api/serviceaccounts/${service_account_id}/tokens" 200) || return 1
+	token_id=$(echo "$tokens" | jq -r ".[] | select(.name == \"${key_name}\").id")
 
-	tokens_status=$(echo "$tokens_response" | tail -n1)
-	tokens_json=$(echo "$tokens_response" | $sed '$ d')
-
-	if [[ $tokens_status -ne 200 ]]; then
-		echo "Error: Failed to fetch tokens. HTTP Status: $tokens_status" >&2
-		echo "Response: $tokens_json" >&2
-		return 1
-	fi
-
-	local token_id
-	token_id=$(echo "$tokens_json" | jq -r ".[] | select(.name == \"${key_name}\").id")
-
-	if [[ -z $token_id || $token_id == "null" ]]; then
+	if [[ -z $token_id ]]; then
 		echo "Token for service account '${key_name}' not found."
 		return 1
 	fi
 
-	local delete_response delete_status
-	delete_response=$(curl --insecure -s -X DELETE --user "${user_credentials}" \
-		"https://$(get_service_ip monitoring-service)/graph/api/serviceaccounts/${service_account_id}/tokens/${token_id}" \
-		-w "\n%{http_code}")
-
-	delete_status=$(echo "$delete_response" | tail -n1)
-
-	if [[ $delete_status -ne 200 ]]; then
-		echo "Error: Failed to delete token. HTTP Status: $delete_status" >&2
-		echo "Response: $delete_response" >&2
-		return 1
-	fi
+	retry 10 10 pmm_api DELETE "/graph/api/serviceaccounts/${service_account_id}/tokens/${token_id}" 200 >/dev/null
 }
 
 has_s3_storage() {
