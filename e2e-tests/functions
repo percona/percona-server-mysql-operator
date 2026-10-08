@@ -1221,12 +1221,15 @@ get_pod_names() {
 		--sort-by=.metadata.name -o jsonpath='{.items[*].metadata.name}'
 }
 
+# Terminating pods are left out: one still shutting down after a previous
+# rollout would inflate the pod count wait_for_pods_restart waits for.
 get_pod_uids() {
 	local cluster_name=$1
 	local component=$2
 
 	kubectl get pod -n "${NAMESPACE}" --selector="$(pod_selector "${cluster_name}" "${component}")" \
-		--sort-by=.metadata.name -o jsonpath='{.items[*].metadata.uid}'
+		--sort-by=.metadata.name -o json \
+		| jq -r '[.items[] | select(.metadata.deletionTimestamp == null) | .metadata.uid] | join(" ")'
 }
 
 get_mysql_pod_names() {
@@ -1663,13 +1666,16 @@ get_primary_from_haproxy() {
 # haproxy pods learn a new primary on their own external-check schedule, and
 # spread-checks deliberately staggers them, so a single sample right after a
 # failover catches some of them mid-flight. Echoes the primary once every pod
-# routes to the one carrying the label.
+# routes to the one carrying the label. Callers run it inside $(...), where a
+# kuttl step timeout cannot kill it, so it has to give up on its own.
 wait_for_haproxy_primary() {
 	local cluster=$1
 	local haproxy_size=${2:-3}
+	local timeout=${3:-420}
+	local deadline=$((SECONDS + timeout))
 
 	local primary data i
-	while true; do
+	while [[ ${SECONDS} -lt ${deadline} ]]; do
 		primary=$(get_primary_from_label 2>/dev/null || true)
 
 		if [[ -z ${primary} ]]; then
@@ -1690,6 +1696,27 @@ wait_for_haproxy_primary() {
 		echo "waiting for haproxy pods to route to primary ${primary}: ${data[*]}" >&2
 		sleep 5
 	done
+
+	echo "timed out after ${timeout}s waiting for haproxy pods to route to primary ${primary}" >&2
+	dump_async_failover_state "${cluster}" >&2
+
+	return 1
+}
+
+dump_async_failover_state() {
+	local cluster=$1
+	local orc_host=$(get_orc_svc "${cluster}")
+	local pod
+
+	kubectl -n "${NAMESPACE}" get pods -L mysql.percona.com/primary -o wide
+	for pod in $(get_mysql_pod_names "${cluster}"); do
+		echo "${pod} read_only super_read_only: $(run_mysql 'SELECT @@read_only, @@super_read_only' "-h ${pod}.${cluster}-mysql" || echo unavailable)"
+	done
+	run_curl_orc "http://${orc_host}:3000/api/cluster/${cluster}.${NAMESPACE}/" \
+		| jq -c '.[] | {host: .Key.Hostname, master: .MasterKey.Hostname, readOnly: .ReadOnly, lastCheckValid: .IsLastCheckValid}' || true
+	run_curl_orc "http://${orc_host}:3000/api/audit-recovery" \
+		| jq -c '.[] | {failed: .AnalysisEntry.AnalyzedInstanceKey.Hostname, successor: .SuccessorKey.Hostname, successful: .IsSuccessful, errors: .AllErrors}' || true
+	kubectl -n "${OPERATOR_NS:-$NAMESPACE}" logs "$(get_operator_pod)" --tail=300 || true
 }
 
 # Verifies the backends HAProxy generated for the given cluster: every server is
