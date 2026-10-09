@@ -444,26 +444,16 @@ func (r *PerconaServerMySQLRestoreReconciler) validatePITRTarget(
 	cr *apiv1.PerconaServerMySQLRestore,
 	cluster *apiv1.PerconaServerMySQL,
 ) error {
-	log := logf.FromContext(ctx)
-
 	if _, _, err := binlogserver.SearchArgs(cr); err != nil {
-		return err
+		return errors.Wrap(binlogserver.ErrInvalidTarget, err.Error())
 	}
 
 	st, err := r.binlogArchiveStorage(ctx, cr, cluster)
 	if err != nil {
-		log.Info("Skipping PITR target validation", "error", err.Error())
-		return nil
+		return err
 	}
 
-	if err := binlogserver.ValidateTarget(ctx, st, cr); err != nil {
-		if errors.Is(err, binlogserver.ErrTargetNotCovered) || errors.Is(err, binlogserver.ErrInvalidTarget) {
-			return err
-		}
-		log.Info("Skipping PITR target validation", "error", err.Error())
-		return nil
-	}
-	return nil
+	return binlogserver.ValidateTarget(ctx, st, cr)
 }
 
 func (r *PerconaServerMySQLRestoreReconciler) binlogArchiveStorage(

@@ -18,7 +18,7 @@ commands:
       region=$(echo "${BINLOG_SERVER_SPEC}" | jq -r '.storage.s3.region')
       endpoint=$(echo "${BINLOG_SERVER_SPEC}" | jq -r '.storage.s3.endpointUrl')
       prefix=binlogs-gtid-validation
-      metadata='{"previous_gtids":"3e11fa47-71ca-11e1-9e33-c80aa9429562:1-10","added_gtids":"3e11fa47-71ca-11e1-9e33-c80aa9429562:11-20"}'
+      metadata='{"previous_gtids":"3e11fa47-71ca-11e1-9e33-c80aa9429562:1-10","added_gtids":"3e11fa47-71ca-11e1-9e33-c80aa9429562:11-20","min_timestamp":"2026-09-09T12:00:00","max_timestamp":"2026-09-09T13:00:00"}'
 
       # Use a separate archive whose oldest binlog starts after GTIDs 1-10.
       # This makes target 5-15 too old (missing 5-10), regardless
@@ -44,9 +44,19 @@ commands:
           '
       set -x
 
-      for restore_name in gr-pitr-s3-restore-too-old-gtid gr-pitr-s3-restore-bad-gtid; do
+      for restore_name in gr-pitr-s3-restore-too-old-gtid gr-pitr-s3-restore-bad-gtid gr-pitr-s3-restore-unknown-uuid gr-pitr-s3-restore-future-gtid gr-pitr-s3-restore-future-date; do
+          target_type=gtid
+          target_field=gtid
           if [[ "${restore_name}" == gr-pitr-s3-restore-too-old-gtid ]]; then
               target='3e11fa47-71ca-11e1-9e33-c80aa9429562:5-15'
+          elif [[ "${restore_name}" == gr-pitr-s3-restore-unknown-uuid ]]; then
+              target='3e11fa47-71ca-11e1-9e33-c80aa9429563:11-20'
+          elif [[ "${restore_name}" == gr-pitr-s3-restore-future-gtid ]]; then
+              target='3e11fa47-71ca-11e1-9e33-c80aa9429562:21-25'
+          elif [[ "${restore_name}" == gr-pitr-s3-restore-future-date ]]; then
+              target_type=date
+              target_field=date
+              target='2026-09-09 13:00:01'
           else
               target='not-a-uuid:1-5'
           fi
@@ -57,8 +67,8 @@ commands:
               | yq eval ".metadata.name = \"${restore_name}\"" - \
               | yq eval ".spec.clusterName = \"${cluster_name}\"" - \
               | yq eval '.spec.backupName = "gr-pitr-s3-backup"' - \
-              | yq eval '.spec.pitr.type = "gtid"' - \
-              | yq eval ".spec.pitr.gtid = \"${target}\"" - \
+              | yq eval ".spec.pitr.type = \"${target_type}\"" - \
+              | yq eval ".spec.pitr.${target_field} = \"${target}\"" - \
               | BINLOG_SERVER_SPEC="${BINLOG_SERVER_SPEC}" yq eval '.spec.pitr.backupSource.binlogServer = env(BINLOG_SERVER_SPEC)' - \
               | yq eval ".spec.pitr.backupSource.binlogServer.storage.s3.prefix = \"${prefix}\"" - \
               | kubectl apply -n "${NAMESPACE}" -f -

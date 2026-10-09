@@ -28,90 +28,145 @@ var (
 type archiveMetadata struct {
 	PreviousGTIDs *string `json:"previous_gtids"`
 	AddedGTIDs    *string `json:"added_gtids"`
-	MinTimestamp  *string `json:"min_timestamp"`
+	MinTimestamp  string  `json:"min_timestamp"`
+	MaxTimestamp  string  `json:"max_timestamp"`
 }
 
-// ValidateTarget rejects a restore target if it is older than the archived binlogs
+// ValidateTarget rejects targets outside the archive's bounds or containing unknown source UUIDs.
 func ValidateTarget(ctx context.Context, st storage.Storage, restore *apiv1.PerconaServerMySQLRestore) error {
 	subcommand, targetArg, err := SearchArgs(restore)
 	if err != nil {
 		return errors.Wrap(ErrInvalidTarget, err.Error())
 	}
-
-	name, err := oldestBinlogName(ctx, st)
+	names, err := binlogNames(ctx, st)
 	if err != nil {
 		return errors.Wrap(err, "read binlog index")
 	}
-	if name == "" {
-		return nil
+	if len(names) == 0 {
+		return errors.New("binlog archive is empty; cannot validate PITR target")
 	}
-	metadata, err := getBinlogMetadata(ctx, st, name)
-	if err != nil {
-		return errors.Wrapf(err, "read metadata of binlog %s", name)
-	}
-
 	switch subcommand {
 	case SearchByTimestampCommand:
-		return validateTimestampTarget(name, metadata, targetArg)
+		return validateTimestampTarget(ctx, st, names, targetArg)
 	case SearchByGTIDCommand:
-		return validateGTIDTarget(name, metadata, targetArg)
+		return validateGTIDTarget(ctx, st, names, targetArg)
 	default:
 		return errors.Wrapf(ErrInvalidTarget, "unknown search command %s", subcommand)
 	}
 }
 
-// validateTimestampTarget rejects times before the oldest binlog starts.
-func validateTimestampTarget(name string, metadata *archiveMetadata, targetArg string) error {
+// validateTimestampTarget checks the oldest and latest archived timestamps.
+func validateTimestampTarget(ctx context.Context, st storage.Storage, names []string, targetArg string) error {
 	target, err := time.Parse(binlogTimestampLayout, targetArg)
 	if err != nil {
 		return errors.Wrapf(ErrInvalidTarget, "parse pitr target %s: %v", targetArg, err)
 	}
 
-	if metadata.MinTimestamp == nil || *metadata.MinTimestamp == "" {
+	name := names[0]
+	metadata, err := getBinlogMetadata(ctx, st, name)
+	if err != nil {
+		return errors.Wrapf(err, "read metadata of binlog %s", name)
+	}
+	if metadata.MinTimestamp == "" {
 		return errors.Errorf("binlog %s has no min_timestamp", name)
 	}
-	oldest, err := time.Parse(binlogTimestampLayout, *metadata.MinTimestamp)
+	oldest, err := time.Parse(binlogTimestampLayout, metadata.MinTimestamp)
 	if err != nil {
-		return errors.Wrapf(err, "parse min_timestamp %s", *metadata.MinTimestamp)
+		return errors.Wrapf(err, "parse min_timestamp %s", metadata.MinTimestamp)
 	}
 	if target.Before(oldest) {
 		return errors.Wrapf(ErrTargetNotCovered,
-			"timestamp is too old, the archive starts at %s", *metadata.MinTimestamp)
+			"timestamp is too old, the archive starts at %s", metadata.MinTimestamp)
+	}
+	latestName := names[len(names)-1]
+	// Read the archive tail only when the oldest binlog cannot prove coverage.
+	if latestName != name {
+		latest, err := time.Parse(binlogTimestampLayout, metadata.MaxTimestamp)
+		if err != nil {
+			return errors.Wrap(err, "parse max_timestamp")
+		}
+		if !latest.Before(oldest) && !target.After(latest) {
+			return nil
+		}
+		metadata, err = getBinlogMetadata(ctx, st, latestName)
+		if err != nil {
+			return errors.Wrapf(err, "read metadata of binlog %s", latestName)
+		}
+	}
+	if metadata.MaxTimestamp == "" {
+		return errors.Errorf("binlog %s has no max_timestamp", latestName)
+	}
+	latest, err := time.Parse(binlogTimestampLayout, metadata.MaxTimestamp)
+	if err != nil {
+		return errors.Wrapf(err, "parse max_timestamp %s", metadata.MaxTimestamp)
+	}
+	if latest.Before(oldest) {
+		return errors.New("binlog archive has inconsistent timestamp bounds")
+	}
+	if target.After(latest) {
+		return errors.Wrapf(ErrTargetNotCovered, "timestamp is too new, the archive ends at %s", metadata.MaxTimestamp)
 	}
 	return nil
 }
 
-// validateGTIDTarget rejects GTIDs that were executed before the oldest binlog started.
-func validateGTIDTarget(name string, metadata *archiveMetadata, targetArg string) error {
+func validateGTIDTarget(ctx context.Context, st storage.Storage, names []string, targetArg string) error {
 	target, err := gtid.Parse(targetArg)
 	if err != nil {
 		return errors.Wrapf(ErrInvalidTarget, "parse pitr target: %v", err)
 	}
-
-	if metadata.PreviousGTIDs == nil || metadata.AddedGTIDs == nil {
-		return errors.Errorf("binlog %s has incomplete GTID metadata", name)
+	readMetadata := func(name string) (gtid.Set, gtid.Set, error) {
+		metadata, err := getBinlogMetadata(ctx, st, name)
+		if err != nil {
+			return nil, nil, errors.Wrapf(err, "read metadata of binlog %s", name)
+		}
+		if metadata.PreviousGTIDs == nil || metadata.AddedGTIDs == nil {
+			return nil, nil, errors.Errorf("binlog %s has incomplete GTID metadata", name)
+		}
+		previous, err := gtid.Parse(*metadata.PreviousGTIDs)
+		if err != nil {
+			return nil, nil, errors.Wrapf(err, "parse previous_gtids of binlog %s", name)
+		}
+		added, err := gtid.Parse(*metadata.AddedGTIDs)
+		if err != nil {
+			return nil, nil, errors.Wrapf(err, "parse added_gtids of binlog %s", name)
+		}
+		if previous.IsEmpty() && added.IsEmpty() {
+			return nil, nil, errors.Errorf("binlog %s has empty GTID metadata", name)
+		}
+		return previous, added, nil
 	}
 
-	previous, err := gtid.Parse(*metadata.PreviousGTIDs)
+	previous, added, err := readMetadata(names[0])
 	if err != nil {
-		return errors.Wrapf(err, "parse previous_gtids of binlog %s", name)
+		return err
 	}
-	if _, err := gtid.Parse(*metadata.AddedGTIDs); err != nil {
-		return errors.Wrapf(err, "parse added_gtids of binlog %s", name)
+	if missing := target.Intersect(previous); !missing.IsEmpty() {
+		return errors.Wrapf(ErrTargetNotCovered, "the specified GTID set predates the binlog archive, which is missing %s", missing)
 	}
-	if missingGTIDs := target.Intersect(previous); !missingGTIDs.IsEmpty() {
-		return errors.Wrapf(ErrTargetNotCovered, "the specified GTID set predates the binlog archive, which is missing %s", missingGTIDs)
+	if target.IsSubsetOf(added) {
+		return nil
+	}
+
+	latestName := names[len(names)-1]
+	if latestName != names[0] {
+		previous, added, err = readMetadata(latestName)
+		if err != nil {
+			return err
+		}
+	}
+	if missing := target.Subtract(previous).Subtract(added); !missing.IsEmpty() {
+		return errors.Wrapf(ErrTargetNotCovered, "the specified GTID set exceeds the binlog archive, which is missing %s", missing)
 	}
 	return nil
 }
 
-func oldestBinlogName(ctx context.Context, st storage.Storage) (string, error) {
+func binlogNames(ctx context.Context, st storage.Storage) ([]string, error) {
 	obj, err := st.GetObject(ctx, binlogIndexName)
 	if err != nil {
-		return "", errors.Wrapf(err, "get %s", binlogIndexName)
+		return nil, errors.Wrapf(err, "get %s", binlogIndexName)
 	}
 	defer obj.Close() //nolint:errcheck
-
+	var names []string
 	scanner := bufio.NewScanner(obj)
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -120,15 +175,11 @@ func oldestBinlogName(ctx context.Context, st storage.Storage) (string, error) {
 		}
 		name, ok := strings.CutPrefix(line, "./")
 		if !ok || name == "" || strings.Contains(name, "/") {
-			return "", errors.Errorf("binlog index entry %q has an invalid path", line)
+			return nil, errors.Errorf("binlog index entry %q has an invalid path", line)
 		}
-		return name, nil
+		names = append(names, name)
 	}
-	if err := scanner.Err(); err != nil {
-		return "", errors.Wrapf(err, "read %s", binlogIndexName)
-	}
-
-	return "", nil
+	return names, errors.Wrap(scanner.Err(), "read binlog index")
 }
 
 func getBinlogMetadata(ctx context.Context, st storage.Storage, name string) (*archiveMetadata, error) {

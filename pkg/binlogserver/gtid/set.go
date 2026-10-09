@@ -29,6 +29,36 @@ type source struct {
 
 type Set map[source][]interval
 
+// Subtract returns the transactions in s that are absent from other.
+func (s Set) Subtract(other Set) Set {
+	result := make(Set)
+	for source, intervals := range s {
+		observed := other[source]
+		i := 0
+		for _, transaction := range intervals {
+			start := transaction.start
+			for i < len(observed) && observed[i].end < start {
+				i++
+			}
+			covered := false
+			for j := i; j < len(observed) && observed[j].start <= transaction.end; j++ {
+				if observed[j].start > start {
+					result[source] = append(result[source], interval{start: start, end: observed[j].start - 1})
+				}
+				if observed[j].end >= transaction.end {
+					covered = true
+					break
+				}
+				start = observed[j].end + 1
+			}
+			if !covered {
+				result[source] = append(result[source], interval{start: start, end: transaction.end})
+			}
+		}
+	}
+	return result
+}
+
 // Intersect returns the transactions present in both sets.
 func (s Set) Intersect(other Set) Set {
 	result := make(Set)
@@ -51,6 +81,23 @@ func (s Set) Intersect(other Set) Set {
 		}
 	}
 	return result
+}
+
+// IsSubsetOf reports whether every transaction in s is present in other.
+func (s Set) IsSubsetOf(other Set) bool {
+	for source, intervals := range s {
+		observed := other[source]
+		i := 0
+		for _, transaction := range intervals {
+			for i < len(observed) && observed[i].end < transaction.start {
+				i++
+			}
+			if i == len(observed) || observed[i].start > transaction.start || observed[i].end < transaction.end {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func (s Set) IsEmpty() bool {

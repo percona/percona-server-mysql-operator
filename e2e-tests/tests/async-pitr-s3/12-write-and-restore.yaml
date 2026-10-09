@@ -14,9 +14,16 @@ commands:
           "INSERT myDB.myTable (id) VALUES (200501)" \
           "-h $(get_haproxy_svc ${cluster_name})"
 
+      PITR_DATE_POST=$(run_mysql "SELECT DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-%d %H:%i:%s')" \
+          "-h $(get_haproxy_svc ${cluster_name})")
+
+      sleep 2
+      run_mysql \
+          "INSERT myDB.myTable (id) VALUES (200502)" \
+          "-h $(get_haproxy_svc ${cluster_name})"
+
       sleep 120
 
-      PITR_DATE_POST=$(date -u '+%Y-%m-%d %H:%M:%S')
       kubectl create configmap -n "${NAMESPACE}" pitr-date-post --from-literal=date="${PITR_DATE_POST}"
 
       echo '{}' \

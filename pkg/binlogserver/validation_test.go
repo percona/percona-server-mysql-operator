@@ -67,7 +67,9 @@ func gtidRestore(value string) *apiv1.PerconaServerMySQLRestore {
 }
 
 func TestValidateTargetTimestamp(t *testing.T) {
-	expectedReads := []string{binlogIndexName, "binlog.000001.json"}
+	expectedReads := []string{binlogIndexName, "binlog.000001.json", "binlog.000002.json"}
+	coveredByOldestReads := []string{binlogIndexName, "binlog.000001.json"}
+	oldestReads := []string{binlogIndexName, "binlog.000001.json"}
 	tests := map[string]struct {
 		target        string
 		notCovered    bool
@@ -77,10 +79,13 @@ func TestValidateTargetTimestamp(t *testing.T) {
 		"inside archive":        {target: "2026-09-09 12:45:00", expectedReads: expectedReads},
 		"UTC date":              {target: "2026-09-09T12:45:00Z", expectedReads: expectedReads},
 		"RFC3339 offset":        {target: "2026-09-09T14:45:00.25+02:00", expectedReads: expectedReads},
-		"offset before archive": {target: "2026-09-09T13:59:59+02:00", notCovered: true, expectedErr: "archive starts at 2026-09-09T12:00:00", expectedReads: expectedReads},
-		"at archive start":      {target: "2026-09-09 12:00:00", expectedReads: expectedReads},
-		"past archive":          {target: "2030-01-01 00:00:00", expectedReads: expectedReads},
-		"before archive":        {target: "2026-09-09 11:00:00", notCovered: true, expectedErr: "archive starts at 2026-09-09T12:00:00", expectedReads: expectedReads},
+		"offset before archive": {target: "2026-09-09T13:59:59+02:00", notCovered: true, expectedErr: "archive starts at 2026-09-09T12:00:00", expectedReads: oldestReads},
+		"at archive start":      {target: "2026-09-09 12:00:00", expectedReads: coveredByOldestReads},
+		"inside oldest binlog":  {target: "2026-09-09 12:15:00", expectedReads: coveredByOldestReads},
+		"at oldest binlog end":  {target: "2026-09-09 12:30:00", expectedReads: coveredByOldestReads},
+		"at archive end":        {target: "2026-09-09 13:00:00", expectedReads: expectedReads},
+		"past archive":          {target: "2030-01-01 00:00:00", notCovered: true, expectedErr: "archive ends at 2026-09-09T13:00:00", expectedReads: expectedReads},
+		"before archive":        {target: "2026-09-09 11:00:00", notCovered: true, expectedErr: "archive starts at 2026-09-09T12:00:00", expectedReads: oldestReads},
 		"malformed timestamp":   {target: "yesterday", expectedErr: "invalid pitr target"},
 	}
 
@@ -99,7 +104,94 @@ func TestValidateTargetTimestamp(t *testing.T) {
 	}
 }
 
-func TestValidateTargetGTIDChecksOnlyStableLowerBound(t *testing.T) {
+func TestValidateTargetCoveredByOldestBinlog(t *testing.T) {
+	tests := map[string]struct {
+		restore *apiv1.PerconaServerMySQLRestore
+		added   string
+	}{
+		"timestamp":          {restore: dateRestore("2026-09-09 12:15:00")},
+		"GTID":               {restore: gtidRestore(testUUID + ":11-20")},
+		"disjoint intervals": {restore: gtidRestore(testUUID + ":11-12:18-20"), added: testUUID + ":11-12:18-20"},
+		"tagged GTID":        {restore: gtidRestore(testUUID + ":blue:11-20"), added: testUUID + ":blue:11-20"},
+		"multiple UUIDs":     {restore: gtidRestore(testUUID + ":11-20,11111111-1111-1111-1111-111111111111:1"), added: testUUID + ":11-20,11111111-1111-1111-1111-111111111111:1"},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			archive := testArchive()
+			delete(archive.objects, "binlog.000002.json")
+			if tt.added != "" {
+				archive.objects["binlog.000001.json"] = `{"previous_gtids":"", "added_gtids":"` + tt.added + `"}`
+			}
+			require.NoError(t, ValidateTarget(t.Context(), archive, tt.restore))
+			assert.Equal(t, []string{binlogIndexName, "binlog.000001.json"}, archive.reads)
+		})
+	}
+}
+
+func TestValidateTargetFallsBackToLatestMetadata(t *testing.T) {
+	tests := map[string]struct {
+		restore  *apiv1.PerconaServerMySQLRestore
+		metadata string
+	}{
+		"GTID gap":             {restore: gtidRestore(testUUID + ":15"), metadata: `{"previous_gtids":"", "added_gtids":"` + testUUID + `:11-12:18-20"}`},
+		"unobserved tag":       {restore: gtidRestore(testUUID + ":blue:15")},
+		"unknown UUID":         {restore: gtidRestore("11111111-1111-1111-1111-111111111111:15")},
+		"partial coverage":     {restore: gtidRestore(testUUID + ":11-25")},
+		"inconsistent maximum": {restore: dateRestore("2026-09-09 12:15:00"), metadata: `{"min_timestamp":"2026-09-09T12:00:00", "max_timestamp":"2026-09-09T11:00:00"}`},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			archive := testArchive()
+			delete(archive.objects, "binlog.000002.json")
+			if tt.metadata != "" {
+				archive.objects["binlog.000001.json"] = tt.metadata
+			}
+			err := ValidateTarget(t.Context(), archive, tt.restore)
+			require.ErrorContains(t, err, "binlog.000002")
+			assert.NotErrorIs(t, err, ErrTargetNotCovered)
+			assert.Equal(t, []string{binlogIndexName, "binlog.000001.json", "binlog.000002.json"}, archive.reads)
+		})
+	}
+}
+
+func TestValidateTimestampRejectsInvalidOldestMaximum(t *testing.T) {
+	for name, metadata := range map[string]string{
+		"missing maximum": `{"min_timestamp":"2026-09-09T12:00:00"}`,
+		"invalid maximum": `{"min_timestamp":"2026-09-09T12:00:00", "max_timestamp":"invalid"}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			archive := testArchive()
+			archive.objects["binlog.000001.json"] = metadata
+			err := ValidateTarget(t.Context(), archive, dateRestore("2026-09-09 12:15:00"))
+			require.ErrorContains(t, err, "parse max_timestamp")
+			assert.NotErrorIs(t, err, ErrTargetNotCovered)
+			assert.NotErrorIs(t, err, ErrInvalidTarget)
+			assert.Equal(t, []string{binlogIndexName, "binlog.000001.json"}, archive.reads)
+		})
+	}
+}
+
+func TestValidateFutureTimestampRequiresReliableArchive(t *testing.T) {
+	tests := map[string]func(*fakeArchive){
+		"missing latest":      func(a *fakeArchive) { delete(a.objects, "binlog.000002.json") },
+		"missing maximum":     func(a *fakeArchive) { a.objects["binlog.000002.json"] = `{}` },
+		"invalid maximum":     func(a *fakeArchive) { a.objects["binlog.000002.json"] = `{"max_timestamp":"invalid"}` },
+		"inconsistent bounds": func(a *fakeArchive) { a.objects["binlog.000002.json"] = `{"max_timestamp":"2000-01-01T00:00:00"}` },
+		"empty archive":       func(a *fakeArchive) { a.objects[binlogIndexName] = "" },
+	}
+	for name, mutate := range tests {
+		t.Run(name, func(t *testing.T) {
+			archive := testArchive()
+			mutate(archive)
+			err := ValidateTarget(t.Context(), archive, dateRestore("2026-09-09 13:00:01"))
+			require.Error(t, err)
+			assert.NotErrorIs(t, err, ErrTargetNotCovered)
+			assert.NotErrorIs(t, err, ErrInvalidTarget)
+		})
+	}
+}
+
+func TestValidateTargetGTID(t *testing.T) {
 	tests := map[string]struct {
 		target      string
 		notCovered  bool
@@ -107,14 +199,14 @@ func TestValidateTargetGTIDChecksOnlyStableLowerBound(t *testing.T) {
 		expectedErr string
 	}{
 		"inside observed archive": {target: testUUID + ":11-25"},
-		"tagged target":           {target: testUUID + ":blue:11-25"},
-		"past observed tail":      {target: testUUID + ":11-40"},
-		"unknown source":          {target: "11111111-1111-1111-1111-111111111111:1-5"},
+		"unobserved tag":          {target: testUUID + ":blue:11-25", notCovered: true, expectedErr: "missing 3e11fa47-71ca-11e1-9e33-c80aa9429562:blue:11-25"},
+		"past observed tail":      {target: testUUID + ":11-40", notCovered: true, expectedErr: "missing 3e11fa47-71ca-11e1-9e33-c80aa9429562:31-40"},
+		"unknown source":          {target: "11111111-1111-1111-1111-111111111111:1-5", notCovered: true, expectedErr: "missing 11111111-1111-1111-1111-111111111111:1-5"},
 		"predates archive":        {target: testUUID + ":5-15", notCovered: true, expectedErr: "missing 3e11fa47-71ca-11e1-9e33-c80aa9429562:5-10"},
 		"empty":                   {target: "", invalid: true, expectedErr: "GTID set is empty"},
 		"invalid UUID":            {target: "not-a-uuid:1-5", invalid: true, expectedErr: "malformed GTID source"},
 		"transaction zero":        {target: testUUID + ":0", invalid: true, expectedErr: "must be positive"},
-		"multiple tags in entry":  {target: testUUID + ":blue:11-15:green:16-20"},
+		"multiple tags in entry":  {target: testUUID + ":blue:11-15:green:16-20", notCovered: true, expectedErr: "exceeds the binlog archive"},
 	}
 
 	for name, tt := range tests {
@@ -144,7 +236,7 @@ func TestValidateTargetRejectsTaggedGTIDBeforeArchive(t *testing.T) {
 	assert.Contains(t, err.Error(), "domain_1:5-10")
 }
 
-func TestValidateTargetDoesNotRejectMovingTail(t *testing.T) {
+func TestValidateTargetRejectsFutureGTIDs(t *testing.T) {
 	archive := testArchive()
 	archive.objects[binlogIndexName] += "./binlog.000003\n"
 	archive.objects["binlog.000003.json"] = `{
@@ -154,14 +246,47 @@ func TestValidateTargetDoesNotRejectMovingTail(t *testing.T) {
 	}`
 
 	err := ValidateTarget(t.Context(), archive, gtidRestore(testUUID+":11-40"))
-	require.NoError(t, err)
-	assert.Equal(t, []string{binlogIndexName, "binlog.000001.json"}, archive.reads)
+	require.ErrorIs(t, err, ErrTargetNotCovered)
+	require.ErrorContains(t, err, ":36-40")
+	assert.Equal(t, []string{binlogIndexName, "binlog.000001.json", "binlog.000003.json"}, archive.reads)
+}
+
+func TestValidateTargetExactTailCoverage(t *testing.T) {
+	tests := map[string]struct {
+		previous, added, target, missing string
+	}{
+		"hole in previous":     {previous: ":1-10:20-30", added: ":31-35", target: ":15", missing: ":15"},
+		"hole in added":        {previous: ":1-10:20-30", added: ":31-32:34-35", target: ":33", missing: ":33"},
+		"range spanning hole":  {previous: ":1-10:20-30", added: ":31-35", target: ":12-35", missing: ":12-19"},
+		"tagged hole":          {previous: ":blue:1-10:20-30", added: ":blue:31-35", target: ":blue:15", missing: ":blue:15"},
+		"covered by union":     {previous: ":1-10:20-30", added: ":31-35", target: ":20-35"},
+		"hole filled by added": {previous: ":1-10:20-30", added: ":11-19:31-35", target: ":15-35"},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			archive := testArchive()
+			archive.objects["binlog.000001.json"] = `{"previous_gtids":"` + testUUID + `:1-10", "added_gtids":"` + testUUID + `:11-12"}`
+			archive.objects["binlog.000002.json"] = `{"previous_gtids":"` + testUUID + tt.previous + `", "added_gtids":"` + testUUID + tt.added + `"}`
+
+			err := ValidateTarget(t.Context(), archive, gtidRestore(testUUID+tt.target))
+			if tt.missing == "" {
+				require.NoError(t, err)
+			} else {
+				require.ErrorIs(t, err, ErrTargetNotCovered)
+				require.ErrorContains(t, err, "missing "+strings.ToLower(testUUID)+tt.missing)
+			}
+			assert.Equal(t, []string{binlogIndexName, "binlog.000001.json", "binlog.000002.json"}, archive.reads)
+		})
+	}
 }
 
 func TestValidateTargetArchiveProblemsDoNotRejectTarget(t *testing.T) {
 	tests := map[string]func(*fakeArchive){
-		"empty archive":    func(a *fakeArchive) { a.objects[binlogIndexName] = "" },
-		"unreadable index": func(a *fakeArchive) { delete(a.objects, binlogIndexName) },
+		"missing later metadata": func(a *fakeArchive) { delete(a.objects, "binlog.000002.json") },
+		"invalid later metadata": func(a *fakeArchive) { a.objects["binlog.000002.json"] = "not-json" },
+		"empty later GTIDs":      func(a *fakeArchive) { a.objects["binlog.000002.json"] = `{"previous_gtids":"", "added_gtids":""}` },
+		"empty archive":          func(a *fakeArchive) { a.objects[binlogIndexName] = "" },
+		"unreadable index":       func(a *fakeArchive) { delete(a.objects, binlogIndexName) },
 		"missing GTID field": func(a *fakeArchive) {
 			a.objects["binlog.000001.json"] = `{"previous_gtids":""}`
 			a.objects[binlogIndexName] = "./binlog.000001\n"
@@ -180,7 +305,7 @@ func TestValidateTargetArchiveProblemsDoNotRejectTarget(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			archive := testArchive()
 			mutate(archive)
-			err := ValidateTarget(t.Context(), archive, gtidRestore(testUUID+":11-20"))
+			err := ValidateTarget(t.Context(), archive, gtidRestore(testUUID+":11-40"))
 			assert.NotErrorIs(t, err, ErrTargetNotCovered)
 			assert.NotErrorIs(t, err, ErrInvalidTarget)
 		})
@@ -233,21 +358,28 @@ func TestValidateTargetIndexValidation(t *testing.T) {
 	}
 }
 
-func TestValidateTargetHandlesArchiveChangingBetweenReads(t *testing.T) {
-	archive := testArchive()
-	archive.onRead = func(name string) {
-		if name == "binlog.000001.json" {
-			archive.objects[binlogIndexName] += "./binlog.000003\n"
-			archive.objects["binlog.000003.json"] = archive.objects["binlog.000002.json"]
-		}
-	}
+func TestValidateTargetUsesInitialIndexWhenArchiveChanges(t *testing.T) {
+	for name, restore := range map[string]*apiv1.PerconaServerMySQLRestore{
+		"GTID":      gtidRestore(testUUID + ":11-40"),
+		"timestamp": dateRestore("2026-09-09 13:00:01"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			archive := testArchive()
+			archive.onRead = func(name string) {
+				if name == "binlog.000001.json" {
+					archive.objects[binlogIndexName] += "./binlog.000003\n"
+					archive.objects["binlog.000003.json"] = `{"previous_gtids":"` + testUUID + `:1-30", "added_gtids":"` + testUUID + `:31-40", "max_timestamp":"2026-09-09T14:00:00"}`
+				}
+			}
 
-	err := ValidateTarget(t.Context(), archive, gtidRestore(testUUID+":11-40"))
-	require.NoError(t, err)
-	assert.Equal(t, []string{binlogIndexName, "binlog.000001.json"}, archive.reads)
+			err := ValidateTarget(t.Context(), archive, restore)
+			require.ErrorIs(t, err, ErrTargetNotCovered)
+			assert.Equal(t, []string{binlogIndexName, "binlog.000001.json", "binlog.000002.json"}, archive.reads)
+		})
+	}
 }
 
-func TestValidateTargetReadsOnlyOldestValidMetadata(t *testing.T) {
+func TestValidateTargetReadsOnlyBoundaryMetadata(t *testing.T) {
 	archive := testArchive()
 	index := make([]string, 0, 1000)
 	for i := range 1000 {
@@ -255,11 +387,60 @@ func TestValidateTargetReadsOnlyOldestValidMetadata(t *testing.T) {
 		index = append(index, "./"+name)
 		archive.objects[name+".json"] = archive.objects["binlog.000002.json"]
 	}
-	index[1] = "not-a-binlog"
+	delete(archive.objects, "binlog.000002.json")
 	archive.objects[binlogIndexName] = strings.Join(index, "\n")
 	archive.objects["binlog.000001.json"] = testArchive().objects["binlog.000001.json"]
 
-	err := ValidateTarget(t.Context(), archive, dateRestore("2026-09-09 12:45:00"))
-	require.NoError(t, err)
-	assert.Equal(t, []string{binlogIndexName, "binlog.000001.json"}, archive.reads)
+	for name, restore := range map[string]*apiv1.PerconaServerMySQLRestore{
+		"timestamp":   dateRestore("2026-09-09 12:45:00"),
+		"GTID":        gtidRestore(testUUID + ":11-30"),
+		"future GTID": gtidRestore(testUUID + ":31"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			archive.reads = nil
+			err := ValidateTarget(t.Context(), archive, restore)
+			expected := []string{binlogIndexName, "binlog.000001.json", "binlog.001000.json"}
+			if name == "future GTID" {
+				require.ErrorIs(t, err, ErrTargetNotCovered)
+			} else {
+				require.NoError(t, err)
+			}
+			assert.Equal(t, expected, archive.reads)
+		})
+	}
+}
+
+func TestValidateGTIDSourceUUIDs(t *testing.T) {
+	const known = "f16872ce-c164-11f1-9049-e2574f2e2c6a"
+	const unknown = "f16872ce-c164-11f1-9049-e2574f2e2c6c"
+	tests := map[string]struct {
+		target  string
+		later   string
+		wantErr string
+	}{
+		"reported typo":           {target: unknown + ":1-2008", wantErr: unknown},
+		"known UUID at tail":      {target: strings.ToUpper(known) + ":2006"},
+		"mixed known and unknown": {target: known + ":2007," + unknown + ":1", wantErr: unknown},
+		"later added source":      {target: unknown + ":1", later: `{"previous_gtids":"", "added_gtids":"` + unknown + `:1"}`},
+		"later previous source":   {target: unknown + ":1", later: `{"previous_gtids":"` + unknown + `:1", "added_gtids":"` + known + `:2007"}`},
+		"unobserved tag":          {target: known + ":blue:2008", wantErr: ":blue:2008"},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			archive := testArchive()
+			archive.objects["binlog.000001.json"] = `{"previous_gtids":"", "added_gtids":"` + known + `:1-2006"}`
+			archive.objects["binlog.000002.json"] = `{"previous_gtids":"` + known + `:1-2006", "added_gtids":"` + known + `:2007"}`
+			if tt.later != "" {
+				archive.objects["binlog.000002.json"] = tt.later
+			}
+			err := ValidateTarget(t.Context(), archive, gtidRestore(tt.target))
+			if tt.wantErr == "" {
+				require.NoError(t, err)
+			} else {
+				require.ErrorIs(t, err, ErrTargetNotCovered)
+				require.ErrorContains(t, err, tt.wantErr)
+				assert.Equal(t, []string{binlogIndexName, "binlog.000001.json", "binlog.000002.json"}, archive.reads)
+			}
+		})
+	}
 }

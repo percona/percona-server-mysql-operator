@@ -17,7 +17,18 @@ commands:
       desc=$(kubectl -n "${NAMESPACE}" get ps-restore gr-pitr-s3-restore-bad-gtid -o jsonpath='{.status.stateDescription}')
       echo "${desc}" | grep -F 'malformed GTID source'
 
-      for restore_name in gr-pitr-s3-restore-too-old-gtid gr-pitr-s3-restore-bad-gtid; do
+      desc=$(kubectl -n "${NAMESPACE}" get ps-restore gr-pitr-s3-restore-unknown-uuid -o jsonpath='{.status.stateDescription}')
+      echo "${desc}" | grep -F 'missing 3e11fa47-71ca-11e1-9e33-c80aa9429563:11-20'
+
+      desc=$(kubectl -n "${NAMESPACE}" get ps-restore gr-pitr-s3-restore-future-gtid -o jsonpath='{.status.stateDescription}')
+      echo "${desc}" | grep -F 'exceeds the binlog archive'
+      echo "${desc}" | grep -F '3e11fa47-71ca-11e1-9e33-c80aa9429562:21-25'
+
+      desc=$(kubectl -n "${NAMESPACE}" get ps-restore gr-pitr-s3-restore-future-date -o jsonpath='{.status.stateDescription}')
+      echo "${desc}" | grep -F 'timestamp is too new'
+      echo "${desc}" | grep -F 'archive ends at 2026-09-09T13:00:00'
+
+      for restore_name in gr-pitr-s3-restore-too-old-gtid gr-pitr-s3-restore-bad-gtid gr-pitr-s3-restore-unknown-uuid gr-pitr-s3-restore-future-gtid gr-pitr-s3-restore-future-date; do
           if kubectl -n "${NAMESPACE}" get job "xb-restore-${restore_name}" >/dev/null 2>&1; then
               echo "restore job for ${restore_name} exists, expected target validation to reject it first"
               exit 1
@@ -62,5 +73,27 @@ apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQLRestore
 metadata:
   name: gr-pitr-s3-restore-bad-gtid
+status:
+  state: Error
+
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQLRestore
+metadata:
+  name: gr-pitr-s3-restore-unknown-uuid
+status:
+  state: Error
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQLRestore
+metadata:
+  name: gr-pitr-s3-restore-future-gtid
+status:
+  state: Error
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQLRestore
+metadata:
+  name: gr-pitr-s3-restore-future-date
 status:
   state: Error
