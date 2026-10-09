@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -205,23 +206,14 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	}
 
 	allUsers := allSystemUsers(cr)
+
+	// The old passwords of the previous change must be discarded before another
+	// change starts, otherwise the passwords retained for it would be overwritten.
+	if v, ok := internalSecret.Annotations[naming.AnnotationPasswordsUpdated.String()]; ok && v == "false" {
+		return r.completePasswordChange(ctx, cr, internalSecret, internalHash)
+	}
+
 	if hash == internalHash {
-		if v, ok := internalSecret.Annotations[naming.AnnotationPasswordsUpdated.String()]; ok && v == "false" {
-			operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1.UserOperator)
-			if err != nil {
-				return errors.Wrap(err, "get operator password")
-			}
-
-			// At this point we don't know exact updated users and we pass all system users.
-			// Discarding old password is idempotent so it is safe to pass not updated user.
-			// We can improve this by maybe storing updated users in a annotation and reading it here.
-			users := make([]mysql.User, 0)
-			for _, u := range allUsers {
-				users = append(users, u)
-			}
-			return r.discardOldPasswordsAfterNewPropagated(ctx, cr, internalSecret, users, operatorPass)
-		}
-
 		if !k8s.EqualMetadata(internalMeta, internalSecret.ObjectMeta) {
 			internalSecret.ObjectMeta = internalMeta
 			if err := r.Update(ctx, internalSecret); err != nil {
@@ -252,13 +244,16 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		return nil
 	}
 
-	var (
-		restartMySQL        bool
-		restartReplication  bool
-		restartOrchestrator bool
-		restartRouter       bool
-		restartPMM          bool
-	)
+	// Passwords are changed only when the whole cluster is ready, so the
+	// internal secret is updated in the same pass as the passwords.
+	if cr.Status.State != apiv1.StateReady {
+		if err := r.backfillInternalSecret(ctx, internalSecret, secret); err != nil {
+			return err
+		}
+
+		log.Info("Waiting cluster to be ready")
+		return nil
+	}
 
 	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1.UserOperator)
 	if err != nil {
@@ -282,7 +277,9 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 
 	um := db.NewUserManager(primPod, r.ClientCmd, apiv1.UserOperator, operatorPass, primaryHost)
 
+	var restartReplication bool
 	updatedUsers := make([]mysql.User, 0)
+	changedUsers := make([]apiv1.SystemUser, 0)
 	for user, pass := range secret.Data {
 		if bytes.Equal(pass, internalSecret.Data[user]) {
 			log.V(1).Info("User password is up to date", "user", user)
@@ -293,22 +290,20 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		mysqlUser.Password = string(pass)
 
 		switch apiv1.SystemUser(user) {
-		case apiv1.UserMonitor:
-			restartMySQL = cr.PMMEnabled(internalSecret)
-		case apiv1.UserOperator:
-			restartRouter = cr.RouterEnabled()
 		case apiv1.UserPMMServerToken:
-			restartPMM = cr.PMMEnabled(internalSecret)
+			// A restart is needed only when PMM already runs with an older token.
+			if cr.PMMEnabled(internalSecret) {
+				changedUsers = append(changedUsers, apiv1.UserPMMServerToken)
+			}
 			continue // PMM server user credentials are not stored in db
 		case apiv1.UserReplication:
 			restartReplication = true
-		case apiv1.UserOrchestrator:
-			restartOrchestrator = cr.AppliedIsAsync()
 		}
 
 		log.V(1).Info("User password changed", "user", user)
 
 		updatedUsers = append(updatedUsers, mysqlUser)
+		changedUsers = append(changedUsers, apiv1.SystemUser(user))
 	}
 
 	var asyncPrimary *orchestrator.Instance
@@ -345,56 +340,159 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		}
 	}
 
-	if cr.OrchestratorEnabled() && restartOrchestrator {
-		log.Info("Orchestrator password updated. Restarting orchestrator.")
-
-		sts := &appsv1.StatefulSet{}
-		if err := r.Client.Get(ctx, orchestrator.NamespacedName(cr), sts); err != nil {
-			return errors.Wrap(err, "get Orchestrator statefulset")
-		}
-		if err := k8s.RolloutRestart(ctx, r.Client, sts, naming.AnnotationSecretHash, hash); err != nil {
-			return errors.Wrap(err, "restart orchestrator")
-		}
-	}
-
-	if restartMySQL || restartPMM {
-		log.Info("Monitor user password or pmmservertoken updated. Restarting MySQL.")
-
-		sts := &appsv1.StatefulSet{}
-		if err := r.Client.Get(ctx, mysql.NamespacedName(cr), sts); err != nil {
-			return errors.Wrap(err, "get MySQL statefulset")
-		}
-		if err := k8s.RolloutRestart(ctx, r.Client, sts, naming.AnnotationSecretHash, hash); err != nil {
-			return errors.Wrap(err, "restart MySQL")
-		}
-	}
-
-	if cr.HAProxyEnabled() && restartPMM {
-		log.Info("pmmservertoken updated. Restarting HAProxy.")
-
-		sts := new(appsv1.StatefulSet)
-		if err := r.Get(ctx, haproxy.NamespacedName(cr), sts); err != nil {
-			return errors.Wrap(err, "get HAProxy statefulset")
-		}
-		if err := k8s.RolloutRestart(ctx, r.Client, sts, naming.AnnotationSecretHash, hash); err != nil {
-			return errors.Wrap(err, "restart MySQL")
-		}
-	}
-
-	if cr.Status.State != apiv1.StateReady {
-		if err := r.backfillInternalSecret(ctx, internalSecret, secret); err != nil {
-			return err
-		}
-
-		log.Info("Waiting cluster to be ready")
-		return nil
-	}
-
-	if err := r.finalizeInternalSecretAndRestartRouter(ctx, cr, internalSecret, secret, restartRouter, hash); err != nil {
+	// Restarted pods must mount the new passwords: Orchestrator's subPath mount never sees a later update.
+	if err := r.recordPasswordChange(ctx, cr, internalSecret, secret, changedUsers); err != nil {
 		return err
 	}
 
-	return r.discardOldPasswordsAfterNewPropagated(ctx, cr, internalSecret, updatedUsers, operatorPass)
+	return r.restartForPasswordChange(ctx, cr, internalSecret, changedUsers, hash)
+}
+
+// completePasswordChange requests the recorded change's restarts again and discards its old passwords once every pod has the new ones.
+func (r *PerconaServerMySQLReconciler) completePasswordChange(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQL,
+	internalSecret *corev1.Secret,
+	hash string,
+) error {
+	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1.UserOperator)
+	if err != nil {
+		return errors.Wrap(err, "get operator password")
+	}
+
+	allUsers := allSystemUsers(cr)
+
+	v, ok := internalSecret.Annotations[naming.AnnotationPasswordsUpdatedUsers.String()]
+	if !ok {
+		// Recorded by an operator version that did not store which users changed.
+		users := make([]mysql.User, 0, len(allUsers))
+		for _, u := range allUsers {
+			users = append(users, u)
+		}
+		return r.discardOldPasswordsAfterNewPropagated(ctx, cr, internalSecret, users, operatorPass)
+	}
+
+	changedUsers := splitUsers(v)
+	if err := r.restartForPasswordChange(ctx, cr, internalSecret, changedUsers, hash); err != nil {
+		return err
+	}
+
+	users := make([]mysql.User, 0, len(changedUsers))
+	for _, user := range changedUsers {
+		if u, ok := allUsers[user]; ok {
+			users = append(users, u)
+		}
+	}
+	return r.discardOldPasswordsAfterNewPropagated(ctx, cr, internalSecret, users, operatorPass)
+}
+
+func (r *PerconaServerMySQLReconciler) recordPasswordChange(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQL,
+	internalSecret *corev1.Secret,
+	secret *corev1.Secret,
+	changedUsers []apiv1.SystemUser,
+) error {
+	log := logf.FromContext(ctx).WithName("reconcileUsers")
+
+	internalSecret.Data = secret.DeepCopy().Data
+	k8s.AddAnnotation(internalSecret, naming.AnnotationPasswordsUpdated.String(), "false")
+	k8s.AddAnnotation(internalSecret, naming.AnnotationPasswordsUpdatedUsers.String(), joinUsers(changedUsers))
+	if err := r.Update(ctx, internalSecret); err != nil {
+		return errors.Wrapf(err, "update Secret/%s", internalSecret.Name)
+	}
+
+	log.Info("Updated internal secret", "secretName", cr.InternalSecretName(), "users", joinUsers(changedUsers))
+
+	return nil
+}
+
+// restartForPasswordChange restarts, once per change, the components that read the changed passwords only at startup.
+func (r *PerconaServerMySQLReconciler) restartForPasswordChange(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQL,
+	internalSecret *corev1.Secret,
+	changedUsers []apiv1.SystemUser,
+	hash string,
+) error {
+	log := logf.FromContext(ctx).WithName("reconcileUsers")
+
+	pmmEnabled := cr.PMMEnabled(internalSecret)
+
+	var restartMySQL, restartHAProxy, restartOrchestrator, restartRouter bool
+	for _, user := range changedUsers {
+		switch user {
+		case apiv1.UserMonitor:
+			restartMySQL = restartMySQL || pmmEnabled
+		case apiv1.UserOperator:
+			restartRouter = cr.RouterEnabled()
+		case apiv1.UserPMMServerToken:
+			restartMySQL = restartMySQL || pmmEnabled
+			restartHAProxy = pmmEnabled && cr.HAProxyEnabled()
+		case apiv1.UserOrchestrator:
+			restartOrchestrator = cr.OrchestratorEnabled() && cr.AppliedIsAsync()
+		}
+	}
+
+	workloads := []struct {
+		restart bool
+		name    string
+		key     types.NamespacedName
+		obj     client.Object
+	}{
+		{restartOrchestrator, "Orchestrator", orchestrator.NamespacedName(cr), new(appsv1.StatefulSet)},
+		{restartMySQL, "MySQL", mysql.NamespacedName(cr), new(appsv1.StatefulSet)},
+		{restartHAProxy, "HAProxy", haproxy.NamespacedName(cr), new(appsv1.StatefulSet)},
+		{restartRouter, "Router", types.NamespacedName{Name: router.Name(cr), Namespace: cr.Namespace}, new(appsv1.Deployment)},
+	}
+	for _, w := range workloads {
+		if !w.restart {
+			continue
+		}
+
+		if err := r.Get(ctx, w.key, w.obj); err != nil {
+			return errors.Wrapf(err, "get %s", w.name)
+		}
+		if podTemplateSecretHash(w.obj) == hash {
+			continue
+		}
+
+		log.Info("Restarting to load the changed passwords", "component", w.name, "users", joinUsers(changedUsers))
+		if err := k8s.RolloutRestart(ctx, r.Client, w.obj, naming.AnnotationSecretHash, hash); err != nil {
+			return errors.Wrapf(err, "restart %s", w.name)
+		}
+	}
+
+	return nil
+}
+
+func podTemplateSecretHash(obj client.Object) string {
+	switch obj := obj.(type) {
+	case *appsv1.StatefulSet:
+		return obj.Spec.Template.Annotations[naming.AnnotationSecretHash.String()]
+	case *appsv1.Deployment:
+		return obj.Spec.Template.Annotations[naming.AnnotationSecretHash.String()]
+	}
+	return ""
+}
+
+func joinUsers(users []apiv1.SystemUser) string {
+	names := make([]string, 0, len(users))
+	for _, u := range users {
+		names = append(names, string(u))
+	}
+	slices.Sort(names)
+	return strings.Join(names, ",")
+}
+
+func splitUsers(v string) []apiv1.SystemUser {
+	users := make([]apiv1.SystemUser, 0)
+	for name := range strings.SplitSeq(v, ",") {
+		if name != "" {
+			users = append(users, apiv1.SystemUser(name))
+		}
+	}
+	return users
 }
 
 func (r *PerconaServerMySQLReconciler) backfillInternalSecret(
@@ -427,44 +525,6 @@ func (r *PerconaServerMySQLReconciler) backfillInternalSecret(
 
 	sort.Strings(added)
 	log.Info("Added missing users to the internal secret", "users", added)
-
-	return nil
-}
-
-func (r *PerconaServerMySQLReconciler) finalizeInternalSecretAndRestartRouter(
-	ctx context.Context,
-	cr *apiv1.PerconaServerMySQL,
-	internalSecret *corev1.Secret,
-	secret *corev1.Secret,
-	restartRouter bool,
-	hash string,
-) error {
-	log := logf.FromContext(ctx).WithName("reconcileUsers")
-
-	internalSecret.Data = secret.DeepCopy().Data
-	if err := r.Client.Update(ctx, internalSecret); err != nil {
-		return errors.Wrapf(err, "update Secret/%s", internalSecret.Name)
-	}
-
-	log.Info("Updated internal secret", "secretName", cr.InternalSecretName())
-
-	k8s.AddAnnotation(internalSecret, naming.AnnotationPasswordsUpdated.String(), "false")
-	if err := r.Update(ctx, internalSecret); err != nil {
-		return errors.Wrap(err, "update internal sys users secret annotation")
-	}
-
-	if restartRouter {
-		log.Info("Operator user password updated. Restarting Router.")
-
-		dp := new(appsv1.Deployment)
-		nn := types.NamespacedName{Name: router.Name(cr), Namespace: cr.Namespace}
-		if err := r.Get(ctx, nn, dp); err != nil {
-			return errors.Wrap(err, "get Router deployment")
-		}
-		if err := k8s.RolloutRestart(ctx, r.Client, dp, naming.AnnotationSecretHash, hash); err != nil {
-			return errors.Wrap(err, "restart Router")
-		}
-	}
 
 	return nil
 }
@@ -533,13 +593,12 @@ func (r *PerconaServerMySQLReconciler) discardOldPasswordsAfterNewPropagated(
 ) error {
 	log := logf.FromContext(ctx)
 
-	err := r.passwordsPropagated(ctx, cr, secrets)
-	if err != nil && err == ErrPassNotPropagated {
-		if err == ErrPassNotPropagated {
-			log.Info("Waiting for passwords to be propagated")
+	if err := r.passwordsPropagated(ctx, cr, secrets, updatedUsers); err != nil {
+		if errors.Is(err, ErrPassNotPropagated) {
+			log.Info("Waiting for passwords to be propagated", "reason", err.Error())
 			return nil
 		}
-		return err
+		return errors.Wrap(err, "check if passwords are propagated")
 	}
 
 	primaryHost, err := r.getPrimaryHost(ctx, cr)
@@ -566,6 +625,7 @@ func (r *PerconaServerMySQLReconciler) discardOldPasswordsAfterNewPropagated(
 	log.Info("Discarded old user passwords")
 
 	k8s.AddAnnotation(secrets, naming.AnnotationPasswordsUpdated.String(), "true")
+	delete(secrets.Annotations, naming.AnnotationPasswordsUpdatedUsers.String())
 	err = r.Client.Update(ctx, secrets)
 	if err != nil {
 		return errors.Wrap(err, "update internal sys users secret annotation")
@@ -573,18 +633,23 @@ func (r *PerconaServerMySQLReconciler) discardOldPasswordsAfterNewPropagated(
 	return nil
 }
 
-func (r *PerconaServerMySQLReconciler) passwordsPropagated(ctx context.Context, cr *apiv1.PerconaServerMySQL, secrets *corev1.Secret) error {
+func (r *PerconaServerMySQLReconciler) passwordsPropagated(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQL,
+	secrets *corev1.Secret,
+	updatedUsers []mysql.User,
+) error {
 	log := logf.FromContext(ctx)
 
 	type component struct {
 		name      string
-		size      int
+		labels    map[string]string
 		credsPath string
 	}
 	components := []component{
 		{
 			name:      mysql.AppName,
-			size:      int(cr.MySQLSpec().Size),
+			labels:    mysql.MatchLabels(cr),
 			credsPath: naming.CredsMountPath,
 		},
 	}
@@ -592,7 +657,7 @@ func (r *PerconaServerMySQLReconciler) passwordsPropagated(ctx context.Context, 
 	if cr.OrchestratorEnabled() {
 		components = append(components, component{
 			name:      orchestrator.AppName,
-			size:      int(cr.Spec.Orchestrator.Size),
+			labels:    orchestrator.MatchLabels(cr),
 			credsPath: orchestrator.CredsMountPath,
 		})
 	}
@@ -600,7 +665,7 @@ func (r *PerconaServerMySQLReconciler) passwordsPropagated(ctx context.Context, 
 	if cr.HAProxyEnabled() {
 		components = append(components, component{
 			name:      haproxy.AppName,
-			size:      int(cr.Spec.Proxy.HAProxy.Size),
+			labels:    haproxy.MatchLabels(cr),
 			credsPath: haproxy.CredsMountPath,
 		})
 	}
@@ -608,10 +673,16 @@ func (r *PerconaServerMySQLReconciler) passwordsPropagated(ctx context.Context, 
 	if cr.RouterEnabled() {
 		components = append(components, component{
 			name:      router.AppName,
-			size:      int(cr.Spec.Proxy.Router.Size),
+			labels:    router.MatchLabels(cr),
 			credsPath: router.CredsMountPath,
 		})
 	}
+
+	users := make([]string, 0, len(updatedUsers))
+	for _, u := range updatedUsers {
+		users = append(users, string(u.Username))
+	}
+	slices.Sort(users)
 
 	eg := new(errgroup.Group)
 
@@ -621,39 +692,43 @@ func (r *PerconaServerMySQLReconciler) passwordsPropagated(ctx context.Context, 
 		log.Info("Checking if password is propagated for component", "component", comp.name)
 
 		eg.Go(func() error {
-			for i := 0; int32(i) < int32(comp.size); i++ {
-				pod := corev1.Pod{}
-				err := r.Get(
-					ctx,
-					types.NamespacedName{
-						Namespace: cr.Namespace,
-						Name:      fmt.Sprintf("%s-%s-%d", cr.Name, comp.name, i),
-					},
-					&pod,
-				)
-				if err != nil && k8serrors.IsNotFound(err) {
-					return err
-				} else if err != nil {
-					return errors.Wrapf(err, "get %s pod", comp.name)
+			// Pods are listed by labels: Router pods belong to a Deployment and
+			// Orchestrator pods are named after "orc", not after the component.
+			pods, err := k8s.PodsByLabels(ctx, r.Client, comp.labels, cr.Namespace)
+			if err != nil {
+				return errors.Wrapf(err, "list %s pods", comp.name)
+			}
+
+			for i := range pods {
+				pod := &pods[i]
+
+				// A pod that is not scheduled has no volumes yet and will mount the current secret.
+				// A pod that is being deleted or has finished does not run with its mounted credentials.
+				if pod.Spec.NodeName == "" || pod.DeletionTimestamp != nil ||
+					pod.Status.Phase == corev1.PodFailed || pod.Status.Phase == corev1.PodSucceeded {
+					continue
+				}
+
+				// A container that is not running, e.g. in CrashLoopBackOff, holds no password and reads the updated secret when it starts.
+				if !containerRunning(pod, comp.name) {
+					continue
 				}
 
 				// TODO: Improve this by sending single cmd request insted for each user separately
-				for user, pass := range secrets.Data {
+				for _, user := range users {
 					cmd := []string{"cat", fmt.Sprintf("%s/%s", comp.credsPath, user)}
 					var errb, outb bytes.Buffer
-					err = r.ClientCmd.Exec(ctx, &pod, comp.name, cmd, nil, &outb, &errb, false)
+					err := r.ClientCmd.Exec(ctx, pod, comp.name, cmd, nil, &outb, &errb, false)
 					if err != nil {
+						// The pod holds no password for this user, e.g. Orchestrator mounts only its own.
 						if strings.Contains(errb.String(), "No such file or directory") {
-							return nil
+							continue
 						}
-						return errors.Errorf("exec cat on %s-%d: %v / %s / %s", comp.name, i, err, outb.String(), errb.String())
-					}
-					if len(errb.Bytes()) > 0 {
-						return errors.Errorf("cat on %s-%s-%d: %s", cr.Name, comp.name, i, errb.String())
+						return errors.Wrapf(ErrPassNotPropagated, "read %s password in pod %s: %v: %s", user, pod.Name, err, strings.TrimSpace(errb.String()))
 					}
 
-					if outb.String() != string(pass) {
-						return ErrPassNotPropagated
+					if outb.String() != string(secrets.Data[user]) {
+						return errors.Wrapf(ErrPassNotPropagated, "%s password in pod %s", user, pod.Name)
 					}
 				}
 			}
@@ -668,6 +743,16 @@ func (r *PerconaServerMySQLReconciler) passwordsPropagated(ctx context.Context, 
 
 	log.Info("Updated password propagated")
 	return nil
+}
+
+func containerRunning(pod *corev1.Pod, name string) bool {
+	for _, status := range pod.Status.ContainerStatuses {
+		if status.Name == name {
+			return status.State.Running != nil
+		}
+	}
+
+	return false
 }
 
 func getMySQLURI(user apiv1.SystemUser, password, host string) string {
