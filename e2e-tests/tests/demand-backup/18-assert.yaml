@@ -18,7 +18,6 @@ metadata:
 status:
   replicas: 3
   readyReplicas: 3
-  currentReplicas: 3
   updatedReplicas: 3
   collisionCount: 0
 ---

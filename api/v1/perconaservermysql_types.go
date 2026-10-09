@@ -1173,6 +1173,7 @@ const (
 	ConditionMySQLConfigSynced                  = "MySQLConfigSynced"
 	ConditionClusterTypeSwitchInProgress string = "ClusterTypeSwitchInProgress"
 	ConditionAsyncFailoverBlocked        string = "AsyncFailoverBlocked"
+	ConditionReplicationLagging          string = "ReplicationLagging"
 
 	// Deprecated, preserved only for backward compatibility
 	ConditionClusterSetReplicationRunning string = "ClusterSetReplicationRunning"

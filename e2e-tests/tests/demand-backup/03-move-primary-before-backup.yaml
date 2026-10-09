@@ -7,13 +7,17 @@ commands:
 
       source ../../functions
 
-      primary_pod_from_label="$(get_primary_from_label)"
-      kubectl delete pod -n ${NAMESPACE} ${primary_pod_from_label}
+      cluster_name=$(get_cluster_name)
+      primary_before="$(get_primary_from_label)"
+      uids_before=$(get_pod_uids "${cluster_name}" database)
+
+      # A smart update restarts the primary last, switching over to a replica first.
+      kubectl -n "${NAMESPACE}" patch ps "${cluster_name}" --type merge \
+          -p '{"spec":{"mysql":{"annotations":{"e2e/move-primary":"'"$(date +%s)"'"}}}}'
+
+      wait_for_pods_restart "${cluster_name}" database "${uids_before}" 600
       wait_cluster_consistency_async "${test_name}" "3" "3"
 
-      new_primary_pod_from_label="$(get_primary_from_label)"
-      if [ "${primary_pod_from_label}" == "${new_primary_pod_from_label}" ]; then
-          echo "Old (${primary_pod_from_label}) and new (${new_primary_pod_from_label}) primary are the same (the failover didn't happen)!"
-          exit 1
-      fi
-    timeout: 180
+      primary_after=$(wait_for_primary "changed:${primary_before}" 60)
+      echo "Primary changed from ${primary_before} to ${primary_after}"
+    timeout: 720

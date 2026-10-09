@@ -75,7 +75,7 @@ commands:
       echo "Promoted ${primary_after} after the budget ran out"
       echo "${primary_after}" > "${TEMP_DIR}/timed-out-candidate"
 
-      kubectl -n "${NAMESPACE}" delete pvc "datadir-${primary_before}" --wait=true
+      delete_pvc "datadir-${primary_before}"
       kubectl -n "${NAMESPACE}" delete resourcequota no-new-pods
       kubectl -n "${NAMESPACE}" annotate sts "${cluster}-mysql" "percona.com/e2e-nudge=$(date +%s)" --overwrite
 

@@ -47,11 +47,27 @@ commands:
       run_mysql "INSERT myDB.myTable (id) VALUES (100501)" "-h $(get_haproxy_svc "${cluster}")"
       run_mysql "FLUSH BINARY LOGS" "-h ${primary_host}"
 
+      # A primary that comes back while the failover runs makes the candidate
+      # stand down, which step 09 covers. Here the restarted pod parks in the
+      # entrypoint without starting mysqld until the promotion lands.
+      kubectl -n "${NAMESPACE}" exec "${primary_before}" -c mysql -- touch /var/lib/mysql/sleep-forever
+      trap 'kubectl -n "${NAMESPACE}" exec "${primary_before}" -c mysql -- rm -f /var/lib/mysql/sleep-forever || true' EXIT
+
       kubectl -n "${NAMESPACE}" delete pod "${primary_before}" --force --grace-period=0
 
       # Promoting the other replica would have thrown row 100600 away.
       primary_after=$(wait_for_primary "${ahead}" 600)
       echo "Primary changed from ${primary_before} to ${primary_after}"
+
+      retry=0
+      until kubectl -n "${NAMESPACE}" exec "${primary_before}" -c mysql -- rm -f /var/lib/mysql/sleep-forever; do
+          if [[ ${retry} -ge 60 ]]; then
+              echo "could not release ${primary_before} from sleep-forever"
+              exit 1
+          fi
+          sleep 5
+          retry=$((retry + 1))
+      done
 
       wait_cluster_consistency_async "${cluster}" 3 3
 

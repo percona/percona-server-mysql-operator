@@ -532,6 +532,17 @@ func TestRun(t *testing.T) {
 		t.Cleanup(func() { released.Close() }) //nolint:errcheck
 	})
 
+	t.Run("a source that bootstrapped as a replica is failed over past", func(t *testing.T) {
+		j := newJobFixture(t)
+		j.source.up = []bool{true}
+		j.source.channel = map[string]string{"Source_Host": "mysql-1.mysql"}
+
+		err := run(t.Context(), j.cfg)
+
+		require.NoError(t, err)
+		assert.Equal(t, wantOps, j.fake.ops, "the salvage must run as if the source were still dead")
+	})
+
 	t.Run("a probe stands down when the source is back", func(t *testing.T) {
 		j := newJobFixture(t)
 		j.cfg.probe = true

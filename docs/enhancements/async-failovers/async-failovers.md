@@ -91,7 +91,7 @@ Then we splice binary logs into `000002` and run `START REPLICA SQL_THREAD`. SQL
 Failover binary starts probing old primary's mysqld (using `Source_Host`) before touching anything on the replica. This probe does the following:
 
 1. Connect to `Source_Host` using operator user and ping
-2. Ensure it's writable by checking `read_only`. A read-only source counts as not back. Every pod starts read-only, nothing in the pod ever clears it, and only an orchestrator promotion makes it writable. So a primary that merely restarted comes back read-only and never causes a stand-down. Handing the replica back to it would leave the cluster with no writable primary. **This is a bug in current implementation and will be fixed in another PR.**
+2. Ensure it's a primary. A writable source is one, whatever channel it carries: a promoted primary can keep the detached `//host` channel orchestrator leaves when `RESET SLAVE ALL` fails, and failing over past it would leave two writers. A restarted pod always comes back read-only, and only orchestrator makes it writable again, so the probe doesn't wait for that. A read-only source is a primary only if it has no replication channel of its own. One that bootstrapped as a replica, for example of the candidate after a GTID tie, is not a primary coming back: handing the candidate to it would make the two replicate from each other.
 3. Ensure replica doesn't hold any transaction that the source lost. If it does, we should continue failover.
 
 The probe polls every 5 seconds, and it takes two consecutive successes to abort the failover. It runs at three points:
@@ -110,6 +110,10 @@ When the probe confirms the source is back, the worker hands the replica back in
 `cmd/orc-handler` finds the marker in the worker's output. The hook still fails, so orchestrator abandons the recovery and doesn't promote anything, but the hook also:
 - clears the source's `seen` mark, so the next failure of this source gets the full budget;
 - mutes the `FailoverFailed` event for this source for the dedup interval, because the cluster has its primary back and there's nothing to warn about.
+
+Nothing in the hook makes the source writable. Once the recovery is abandoned and acknowledged, the source is alive, so there's no `DeadMaster` analysis left to promote anything. With the candidate's receiver reconnected, orchestrator sees a read-only master with healthy replicas (`NoWriteableMasterStructureWarning`), and `RecoverNonWriteableMaster` makes it writable under its own recovery registration. The operator then moves the primary label back and acknowledges that recovery through the [stale recovery backstop](#stale-recovery-backstop). If the source comes back after the last probe, the candidate is promoted instead. The source stays read-only, because our recovery is still active and nothing else may register one.
+
+`RecoverNonWriteableMaster` needs a replica of the source with both its IO and SQL threads running. If none gets there, for example in a two-pod cluster whose candidate's applier stopped on the splice or whose receiver never reconnected, the source stays read-only and the cluster has no writable primary. A force-promote is refused while orchestrator can reach it. The way out is to fix the replica's replication (`SHOW REPLICA STATUS` names the error), after which orchestrator makes the source writable on its own.
 
 ## Orchestrating the failover via Orchestrator's hooks
 
@@ -167,10 +171,20 @@ This is the way out of a blocked failover, for when the old primary's binary log
 
 The operator registers the candidate with `RegisterCandidate` and runs orchestrator's `force-master-takeover`. The hook skips planned takeovers, so nothing is salvaged. Promotions, failures and refusals are reported as `FailoverForced` warning events.
 
-The request is refused while the cluster has a writable primary. A forced takeover neither fences nor re-points the old primary, so if it still takes writes, the promoted replica misses them and the old primary runs on its own. The request is also refused when orchestrator can't resolve the cluster or its primary.
+The request is refused while the cluster has a writable primary. A forced takeover neither fences nor re-points the old primary, so if it still takes writes, the promoted replica misses them and the old primary runs on its own. The request is also refused when orchestrator can't resolve the cluster or its primary, including when it answers that the cluster has no master.
 
-The annotation is removed once the request is handled: promoted, failed, refused, or the candidate is already the primary. It stays, and the next reconcile retries, in two cases:
+A stand-down can make the old primary writable between orchestrator's last poll and the takeover, so the operator checks it again first:
+1. It downtimes the old primary (`force-promote`, 5 minutes), which keeps orchestrator's own recoveries off it. If the old primary is already downtimed for another reason, such as a graceful switchover, the request waits for the next reconcile: a downtime is one row per instance, so ours would replace that one and ending ours would drop it.
+2. It has orchestrator re-read it (`api/refresh`).
+   - If orchestrator can reach it, the request is refused, writable or not. A read-only old primary that answers can't be taken over anyway, because orchestrator's `force-master-takeover` only finds a master it sees writable.
+   - If orchestrator reports it can't read the instance and its last check was already failing, the takeover goes ahead. That old primary comes back read-only, and with its replicas gone, orchestrator never makes it writable again.
+   - Any other error leaves the annotation for the next reconcile: the exec into orchestrator failing, an answer that can't be parsed, or the instance read failing after a refresh that did reach it.
+3. The downtime ends once the request is handled, except after a successful takeover. By then orchestrator has downtimed the old primary itself (`lost-in-recovery`), replacing ours, and ending it would drop that one.
+
+The annotation is removed once the request is handled: promoted, failed, refused, or the candidate is already the primary. It stays, and the next reconcile retries, in four cases:
 - no orchestrator pod is ready;
+- the old primary is downtimed for another reason, or downtiming it fails;
+- the re-read of the old primary fails in any way other than orchestrator reporting it unreachable (above);
 - the takeover fails with `ErrRecoveryNotAttempted` (or registering the candidate fails). After an aborted failover, orchestrator retries the dead primary's recovery every second, and those retries hold the recovery's unique key, so a takeover can lose the race to one of them. Retrying on the next reconcile gets it through.
 
 The annotation is served even for a single-pod cluster, where the condition above isn't set.
@@ -229,7 +243,7 @@ Once the budget is spent, every later attempt goes straight to the `onTimeout` p
 
 **`Abort`** (default): the hook fails, so orchestrator abandons the recovery and every pod stays read-only. The hook records a `FailoverBlocked` warning event that names the source and the timeout and points at the `percona.com/force-promote-with-possible-data-loss` annotation. Orchestrator keeps retrying, and each retry fails the same way at once. The event is deduplicated per source (see [events](#events)). The cluster stays blocked until someone annotates it.
 
-**`ForceWithPossibleDataLoss`**: the hook picks the candidate the same way a normal failover does, but skips the salvage. Before promoting, it still runs `failover -probe` on the candidate (see [probe timing](#what-if-the-old-primary-comes-back-and-becomes-ready-to-serve-while-replica-applies-relay-logs)). If the old primary is back, writable, and holds every transaction the candidate has, the candidate stands down instead, and nothing is promoted: promoting would leave two writable primaries. Otherwise the hook registers the candidate (`RegisterCandidate`), records a `FailoverForced` warning event saying the old primary's undelivered transactions are lost, and exits 0 so orchestrator promotes it. If the source has no replicas, the hook exits 0 with nothing to promote.
+**`ForceWithPossibleDataLoss`**: the hook picks the candidate the same way a normal failover does, but skips the salvage. Before promoting, it still runs `failover -probe` on the candidate (see [probe timing](#what-if-the-old-primary-comes-back-and-becomes-ready-to-serve-while-replica-applies-relay-logs)). If the old primary is back as a primary (see step 2 of the probe) and holds every transaction the candidate has, the candidate stands down instead, and nothing is promoted: promoting would leave two writable primaries. Otherwise the hook registers the candidate (`RegisterCandidate`), records a `FailoverForced` warning event saying the old primary's undelivered transactions are lost, and exits 0 so orchestrator promotes it. If the source has no replicas, the hook exits 0 with nothing to promote.
 
 ### Clock restart on a raft leader change
 
@@ -321,6 +335,9 @@ These changes sit outside the failover path, but without them a failover fails o
 ## Assumptions and limitations
 
 - **Durable commits on the primary.** "Zero data loss" assumes `sync_binlog=1` and `innodb_flush_log_at_trx_commit=1` on every pod. These are MySQL's defaults and the operator doesn't change them, but it doesn't enforce them either. With either relaxed, a primary that crashes can lose transactions it acknowledged to clients before they reached the binary log on disk, and no salvage can bring those back.
+- **Orchestrator behaviour the stand-down relies on.** The design assumes orchestrator runs `NoWriteableMaster` recovery only for a reachable read-only master with at least one replica whose IO and SQL threads both run, skips downtimed instances in periodic recoveries, and finds the master for `force-master-takeover` only through a writable backend row.
+- **Writable but unreachable primary.** A primary that is writable but unreachable from orchestrator (a network partition, a paused process) can still take writes after a promotion. Neither the hook nor the force-promote check can see it.
+- **Read-only old primary that holds less.** A reachable, read-only old primary that holds less than the candidate (only possible with relaxed durability settings) can't be force-promoted past.
 - **Durable relay logs on the candidate.** The claim that a transaction in a replica's relay log is durable depends on the replica's relay log settings. The operator sets none of them, so MySQL's defaults apply. `sync_relay_log=10000` means a host crash can lose recently received relay log events. With `relay_log_recovery=ON`, a restart discards every relay log event not yet applied, the spliced events included, and resets the received position to the applied one. Either way the next failover attempt reads the replica's position again and fetches the missing range from the source's sidecar. This costs a retry rather than data, as long as the old primary's binary logs can still be served.
 - **Purged binary logs.** If the source no longer has the binary log the replica last read, because it expired or was purged, the sidecar answers `404`. Every attempt fails the same way until the timeout expires and `onTimeout` applies. Nothing can salvage those transactions.
 - **Lost PVC on the old primary.** The salvage reads the old primary's binary logs from its data volume. If the volume is gone, the transactions only it held are gone too. Nothing can salvage them, and the failover can only end through `onTimeout` or the force-promote annotation.
