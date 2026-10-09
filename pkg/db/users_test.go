@@ -48,7 +48,6 @@ func TestUserManagerUpdateUserPasswords(t *testing.T) {
 				"ALTER USER 'operator'@'%' IDENTIFIED BY 'operator-new' RETAIN CURRENT PASSWORD",
 				"ALTER USER 'root'@'%' IDENTIFIED BY 'root-new' RETAIN CURRENT PASSWORD",
 				"ALTER USER 'root'@'localhost' IDENTIFIED BY 'root-new' RETAIN CURRENT PASSWORD",
-				"FLUSH PRIVILEGES",
 			},
 		},
 		// a repeated attempt must keep the password the first attempt retained
@@ -58,7 +57,6 @@ func TestUserManagerUpdateUserPasswords(t *testing.T) {
 				"ALTER USER 'operator'@'%' IDENTIFIED BY 'operator-new'",
 				"ALTER USER 'root'@'%' IDENTIFIED BY 'root-new' RETAIN CURRENT PASSWORD",
 				"ALTER USER 'root'@'localhost' IDENTIFIED BY 'root-new'",
-				"FLUSH PRIVILEGES",
 			},
 		},
 	}
@@ -82,4 +80,36 @@ func TestUserManagerUpdateUserPasswords(t *testing.T) {
 			require.NoError(t, m.UpdateUserPasswords(t.Context(), users))
 		})
 	}
+}
+
+func TestUserManagerDiscardOldPasswords(t *testing.T) {
+	const (
+		pass = "operator-new"
+		host = "cluster1-mysql-0.cluster1-mysql.ns"
+	)
+
+	pod := &corev1.Pod{Name: "cluster1-mysql-0", Namespace: "ns"}
+
+	// the mock fails the test on any call not set up here
+	cliCmd := clientcmdmock.NewClient(t)
+	for _, stmt := range []string{
+		"ALTER USER 'operator'@'%' DISCARD OLD PASSWORD",
+		"ALTER USER 'root'@'%' DISCARD OLD PASSWORD",
+		"ALTER USER 'root'@'localhost' DISCARD OLD PASSWORD",
+	} {
+		cliCmd.On("Exec", mock.Anything, pod, "mysql", []string{
+			"mysql",
+			"--database", "performance_schema",
+			"-p" + pass,
+			"-u", string(apiv1.UserOperator),
+			"-h", host,
+			"-e", stmt,
+		}, mock.Anything, mock.Anything, mock.Anything, false).Return(nil).Once()
+	}
+
+	m := NewUserManager(pod, cliCmd, apiv1.UserOperator, pass, host)
+	require.NoError(t, m.DiscardOldPasswords(t.Context(), []mysql.User{
+		{Username: apiv1.UserOperator, Hosts: []string{"%"}},
+		{Username: apiv1.UserRoot, Hosts: []string{"%", "localhost"}},
+	}))
 }
