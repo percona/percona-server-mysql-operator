@@ -59,6 +59,7 @@ const (
 
 // PerconaServerMySQLSpec defines the desired state of PerconaServerMySQL
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async') || self.unsafeFlags.orchestrator || (has(self.orchestrator) && self.orchestrator.enabled)",message="Invalid configuration: When 'mysql.clusterType' is set to 'async', 'orchestrator.enabled' must be true unless 'unsafeFlags.orchestrator' is enabled"
+// +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async') || self.unsafeFlags.asyncFailoverWithPossibleDataLoss || (has(self.backup) && self.backup.enabled)",message="Invalid configuration: When 'mysql.clusterType' is set to 'async', 'backup.enabled' must be true unless 'unsafeFlags.asyncFailoverWithPossibleDataLoss' is enabled. Without backups a failover cannot recover the transactions stranded on the old primary"
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async') || self.unsafeFlags.proxy || (has(self.proxy) && has(self.proxy.haproxy) && self.proxy.haproxy.enabled)",message="Invalid configuration: When 'mysql.clusterType' is set to 'async', 'proxy.haproxy.enabled' must be true unless 'unsafeFlags.proxy' is enabled"
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async') || !has(self.proxy) || !has(self.proxy.router) || !has(self.proxy.router.enabled) || !self.proxy.router.enabled",message="Invalid configuration: When 'mysql.clusterType' is set to 'async', 'proxy.router.enabled' must be disabled"
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async' && has(self.mysql.size) && self.mysql.size < 2) || self.unsafeFlags.mysqlSize",message="Invalid configuration: For 'async' replication, MySQL size must be 2 or greater unless 'unsafeFlags.mysqlSize' is enabled"
@@ -217,6 +218,10 @@ type UnsafeFlags struct {
 	Proxy bool `json:"proxy,omitempty"`
 	// ProxySize allows to set proxy (HAProxy / Router) size to a value less than the minimum safe size.
 	ProxySize bool `json:"proxySize,omitempty"`
+
+	// AsyncFailoverWithPossibleDataLoss allows to disable backups for async clusters.
+	// Failover then cannot recover the transactions stranded on the old primary.
+	AsyncFailoverWithPossibleDataLoss bool `json:"asyncFailoverWithPossibleDataLoss,omitempty"`
 
 	// Orchestrator allows to disable Orchestrator.
 	Orchestrator bool `json:"orchestrator,omitempty"`
@@ -2064,6 +2069,10 @@ func (cr *PerconaServerMySQL) AppliedIsAsync() bool {
 
 func (cr *PerconaServerMySQL) AppliedIsGR() bool {
 	return cr.AppliedClusterType() == ClusterTypeGR
+}
+
+func (cr *PerconaServerMySQL) BackupEnabled() bool {
+	return cr.Spec.Backup != nil && cr.Spec.Backup.Enabled
 }
 
 // OrchestratorEnabled reports whether Orchestrator should be running for this cluster.
