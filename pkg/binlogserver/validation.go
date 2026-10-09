@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"slices"
 	"strings"
 	"time"
 
@@ -155,13 +154,8 @@ func validateGTIDTarget(ctx context.Context, st storage.Storage, names []string,
 			return err
 		}
 	}
-	known := append(previous.UUIDs(), added.UUIDs()...)
-	unresolved := slices.DeleteFunc(target.UUIDs(), func(uuid string) bool { return slices.Contains(known, uuid) })
-	if len(unresolved) > 0 {
-		return errors.Wrapf(ErrTargetNotCovered, "unknown GTID source UUIDs in the binlog archive: %s", strings.Join(unresolved, ", "))
-	}
-	if future := target.Beyond(previous).Beyond(added); !future.IsEmpty() {
-		return errors.Wrapf(ErrTargetNotCovered, "the specified GTID set exceeds the binlog archive, which is missing %s", future)
+	if missing := target.Subtract(previous).Subtract(added); !missing.IsEmpty() {
+		return errors.Wrapf(ErrTargetNotCovered, "the specified GTID set exceeds the binlog archive, which is missing %s", missing)
 	}
 	return nil
 }

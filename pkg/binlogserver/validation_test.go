@@ -201,7 +201,7 @@ func TestValidateTargetGTID(t *testing.T) {
 		"inside observed archive": {target: testUUID + ":11-25"},
 		"unobserved tag":          {target: testUUID + ":blue:11-25", notCovered: true, expectedErr: "missing 3e11fa47-71ca-11e1-9e33-c80aa9429562:blue:11-25"},
 		"past observed tail":      {target: testUUID + ":11-40", notCovered: true, expectedErr: "missing 3e11fa47-71ca-11e1-9e33-c80aa9429562:31-40"},
-		"unknown source":          {target: "11111111-1111-1111-1111-111111111111:1-5", notCovered: true, expectedErr: "unknown GTID source UUIDs"},
+		"unknown source":          {target: "11111111-1111-1111-1111-111111111111:1-5", notCovered: true, expectedErr: "missing 11111111-1111-1111-1111-111111111111:1-5"},
 		"predates archive":        {target: testUUID + ":5-15", notCovered: true, expectedErr: "missing 3e11fa47-71ca-11e1-9e33-c80aa9429562:5-10"},
 		"empty":                   {target: "", invalid: true, expectedErr: "GTID set is empty"},
 		"invalid UUID":            {target: "not-a-uuid:1-5", invalid: true, expectedErr: "malformed GTID source"},
@@ -249,6 +249,35 @@ func TestValidateTargetRejectsFutureGTIDs(t *testing.T) {
 	require.ErrorIs(t, err, ErrTargetNotCovered)
 	require.ErrorContains(t, err, ":36-40")
 	assert.Equal(t, []string{binlogIndexName, "binlog.000001.json", "binlog.000003.json"}, archive.reads)
+}
+
+func TestValidateTargetExactTailCoverage(t *testing.T) {
+	tests := map[string]struct {
+		previous, added, target, missing string
+	}{
+		"hole in previous":     {previous: ":1-10:20-30", added: ":31-35", target: ":15", missing: ":15"},
+		"hole in added":        {previous: ":1-10:20-30", added: ":31-32:34-35", target: ":33", missing: ":33"},
+		"range spanning hole":  {previous: ":1-10:20-30", added: ":31-35", target: ":12-35", missing: ":12-19"},
+		"tagged hole":          {previous: ":blue:1-10:20-30", added: ":blue:31-35", target: ":blue:15", missing: ":blue:15"},
+		"covered by union":     {previous: ":1-10:20-30", added: ":31-35", target: ":20-35"},
+		"hole filled by added": {previous: ":1-10:20-30", added: ":11-19:31-35", target: ":15-35"},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			archive := testArchive()
+			archive.objects["binlog.000001.json"] = `{"previous_gtids":"` + testUUID + `:1-10", "added_gtids":"` + testUUID + `:11-12"}`
+			archive.objects["binlog.000002.json"] = `{"previous_gtids":"` + testUUID + tt.previous + `", "added_gtids":"` + testUUID + tt.added + `"}`
+
+			err := ValidateTarget(t.Context(), archive, gtidRestore(testUUID+tt.target))
+			if tt.missing == "" {
+				require.NoError(t, err)
+			} else {
+				require.ErrorIs(t, err, ErrTargetNotCovered)
+				require.ErrorContains(t, err, "missing "+strings.ToLower(testUUID)+tt.missing)
+			}
+			assert.Equal(t, []string{binlogIndexName, "binlog.000001.json", "binlog.000002.json"}, archive.reads)
+		})
+	}
 }
 
 func TestValidateTargetArchiveProblemsDoNotRejectTarget(t *testing.T) {

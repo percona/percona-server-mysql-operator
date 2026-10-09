@@ -18,8 +18,7 @@ commands:
       echo "${desc}" | grep -F 'malformed GTID source'
 
       desc=$(kubectl -n "${NAMESPACE}" get ps-restore gr-pitr-s3-restore-unknown-uuid -o jsonpath='{.status.stateDescription}')
-      echo "${desc}" | grep -F 'unknown GTID source UUIDs'
-      echo "${desc}" | grep -F '3e11fa47-71ca-11e1-9e33-c80aa9429563'
+      echo "${desc}" | grep -F 'missing 3e11fa47-71ca-11e1-9e33-c80aa9429563:11-20'
 
       desc=$(kubectl -n "${NAMESPACE}" get ps-restore gr-pitr-s3-restore-future-gtid -o jsonpath='{.status.stateDescription}')
       echo "${desc}" | grep -F 'exceeds the binlog archive'

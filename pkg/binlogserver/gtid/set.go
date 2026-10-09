@@ -29,34 +29,30 @@ type source struct {
 
 type Set map[source][]interval
 
-// UUIDs returns the sorted, unique source UUIDs, independently of GTID tags.
-func (s Set) UUIDs() []string {
-	seen := make(map[string]struct{})
-	for source, intervals := range s {
-		if len(intervals) > 0 {
-			seen[source.uuid] = struct{}{}
-		}
-	}
-	result := make([]string, 0, len(seen))
-	for uuid := range seen {
-		result = append(result, uuid)
-	}
-	slices.Sort(result)
-	return result
-}
-
-// Beyond returns transactions above the last observed transaction for each UUID and tag.
-// A source absent from observed has no known upper bound, so all its transactions remain.
-func (s Set) Beyond(observed Set) Set {
+// Subtract returns the transactions in s that are absent from other.
+func (s Set) Subtract(other Set) Set {
 	result := make(Set)
 	for source, intervals := range s {
-		var last int64
-		for _, interval := range observed[source] {
-			last = max(last, interval.end)
-		}
+		observed := other[source]
+		i := 0
 		for _, transaction := range intervals {
-			if transaction.end > last {
-				result[source] = append(result[source], interval{start: max(transaction.start, last+1), end: transaction.end})
+			start := transaction.start
+			for i < len(observed) && observed[i].end < start {
+				i++
+			}
+			covered := false
+			for j := i; j < len(observed) && observed[j].start <= transaction.end; j++ {
+				if observed[j].start > start {
+					result[source] = append(result[source], interval{start: start, end: observed[j].start - 1})
+				}
+				if observed[j].end >= transaction.end {
+					covered = true
+					break
+				}
+				start = observed[j].end + 1
+			}
+			if !covered {
+				result[source] = append(result[source], interval{start: start, end: transaction.end})
 			}
 		}
 	}
