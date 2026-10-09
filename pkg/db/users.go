@@ -45,12 +45,6 @@ func (m *UserManager) UpdateUserPasswords(ctx context.Context, users []mysql.Use
 		}
 	}
 
-	var errb, outb bytes.Buffer
-	err = m.db.exec(ctx, "FLUSH PRIVILEGES", &outb, &errb)
-	if err != nil {
-		return errors.Wrap(err, "flush privileges")
-	}
-
 	return nil
 }
 
@@ -83,12 +77,6 @@ func (m *UserManager) DiscardOldPasswords(ctx context.Context, users []mysql.Use
 				return errors.Wrap(err, "discard old password")
 			}
 		}
-	}
-
-	var errb, outb bytes.Buffer
-	err := m.db.exec(ctx, "FLUSH PRIVILEGES", &outb, &errb)
-	if err != nil {
-		return errors.Wrap(err, "flush privileges")
 	}
 
 	return nil

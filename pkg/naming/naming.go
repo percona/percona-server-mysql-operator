@@ -42,6 +42,7 @@ const (
 	AnnotationConfigHash               AnnotationKey = perconaPrefix + "configuration-hash"
 	AnnotationTLSHash                  AnnotationKey = perconaPrefix + "last-applied-tls"
 	AnnotationPasswordsUpdated         AnnotationKey = perconaPrefix + "passwords-updated"
+	AnnotationPasswordsUpdatedUsers    AnnotationKey = perconaPrefix + "passwords-updated-users"
 	AnnotationLastConfigHash           AnnotationKey = perconaPrefix + "last-config-hash"
 	AnnotationRescanNeeded             AnnotationKey = perconaPrefix + "rescan-needed"
 	AnnotationPVCResizeInProgress      AnnotationKey = perconaPrefix + "pvc-resize-in-progress"
