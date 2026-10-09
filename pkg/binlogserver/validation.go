@@ -11,7 +11,7 @@ import (
 	"github.com/pkg/errors"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
-	"github.com/percona/percona-server-mysql-operator/pkg/binlogserver/gtid"
+	"github.com/percona/percona-server-mysql-operator/pkg/mysql/gtid"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup/storage"
 )
 
