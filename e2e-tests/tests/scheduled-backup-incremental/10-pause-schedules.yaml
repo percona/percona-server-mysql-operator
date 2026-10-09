@@ -13,5 +13,6 @@ commands:
       kubectl get ps "${cluster_name}" -n "${NAMESPACE}" -o yaml \
         | yq eval '
             .spec.backup.schedule[].schedule = ""
+            | del(.metadata.resourceVersion)
           ' - \
         | kubectl apply -n "${NAMESPACE}" -f -

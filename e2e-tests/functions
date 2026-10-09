@@ -209,137 +209,114 @@ deploy_pmm_server() {
 		--force
 }
 
-get_pmm_server_token() {
-	local key_name=$1
+wait_pmm_server() {
+	kubectl -n "${NAMESPACE}" rollout status statefulset/monitoring --timeout=300s
 
-	if [[ -z $key_name ]]; then
-		key_name="operator"
-	fi
+	local endpoint
+	endpoint=$(get_service_ip monitoring-service)
+	retry 60 5 curl --insecure -sf --connect-timeout 5 --max-time 10 -o /dev/null "https://${endpoint}/v1/readyz"
+}
 
-	local ADMIN_PASSWORD
-	ADMIN_PASSWORD=$(kubectl -n "${NAMESPACE}" get secret pmm-secret -o jsonpath="{.data.PMM_ADMIN_PASSWORD}" | base64 --decode)
+pmm_api() {
+	local method=$1
+	local path=$2
+	local expected_status=$3
+	local data=$4
 
-	if [[ -z $ADMIN_PASSWORD ]]; then
+	local admin_password
+	admin_password=$(kubectl -n "${NAMESPACE}" get secret pmm-secret -o jsonpath="{.data.PMM_ADMIN_PASSWORD}" | base64 --decode)
+	if [[ -z $admin_password ]]; then
 		echo "Error: ADMIN_PASSWORD is empty or not found!" >&2
 		return 1
 	fi
 
-	local create_response create_status_code create_json_response
-	create_response=$(curl --insecure -s -X POST -H 'Content-Type: application/json' -H 'Accept: application/json' \
-		-d "{\"name\":\"${key_name}\", \"role\":\"Admin\", \"isDisabled\":false}" \
-		--user "admin:${ADMIN_PASSWORD}" \
-		"https://$(get_service_ip monitoring-service)/graph/api/serviceaccounts" \
+	local response status body
+	response=$(curl --insecure -s --connect-timeout 10 --max-time 30 -X "$method" \
+		-H 'Content-Type: application/json' -H 'Accept: application/json' \
+		--user "admin:${admin_password}" \
+		${data:+-d "$data"} \
+		"https://$(get_service_ip monitoring-service)${path}" \
 		-w "\n%{http_code}")
 
-	create_status_code=$(echo "$create_response" | tail -n1)
-	create_json_response=$(echo "$create_response" | $sed '$ d')
+	status=$(echo "$response" | tail -n1)
+	body=$(echo "$response" | $sed '$ d')
 
-	if [[ $create_status_code -ne 201 ]]; then
-		echo "Error: Failed to create PMM service account. HTTP Status: $create_status_code" >&2
-		echo "Response: $create_json_response" >&2
+	if [[ $status -ne $expected_status ]]; then
+		echo "Error: ${method} ${path} failed. HTTP Status: ${status}" >&2
+		echo "Response: ${body}" >&2
 		return 1
 	fi
 
+	echo "$body"
+}
+
+get_pmm_service_account_id() {
+	local name=$1
+
+	local accounts
+	accounts=$(pmm_api GET /graph/api/serviceaccounts/search 200) || return 1
+	echo "$accounts" | jq -r ".serviceAccounts[] | select(.name == \"${name}\").id"
+}
+
+# Looking up the service account before creating it keeps retries idempotent.
+get_or_create_pmm_service_account() {
+	local name=$1
+
+	local id
+	id=$(get_pmm_service_account_id "$name") || return 1
+	if [[ -n $id ]]; then
+		echo "$id"
+		return
+	fi
+
+	local account
+	account=$(pmm_api POST /graph/api/serviceaccounts 201 "{\"name\":\"${name}\", \"role\":\"Admin\", \"isDisabled\":false}") || return 1
+	echo "$account" | jq -r '.id'
+}
+
+get_pmm_server_token() {
+	local key_name=${1:-operator}
+
 	local service_account_id
-	service_account_id=$(echo "$create_json_response" | jq -r '.id')
+	service_account_id=$(retry 10 10 get_or_create_pmm_service_account "$key_name")
 
 	if [[ -z $service_account_id || $service_account_id == "null" ]]; then
 		echo "Error: Failed to extract service account ID!" >&2
 		return 1
 	fi
 
-	local token_response token_status_code token_json_response
-	token_response=$(curl --insecure -s -X POST -H 'Content-Type: application/json' \
-		-d "{\"name\":\"${key_name}\"}" \
-		--user "admin:${ADMIN_PASSWORD}" \
-		"https://$(get_service_ip monitoring-service)/graph/api/serviceaccounts/${service_account_id}/tokens" \
-		-w "\n%{http_code}")
+	local token
+	token=$(retry 10 10 pmm_api POST "/graph/api/serviceaccounts/${service_account_id}/tokens" 200 "{\"name\":\"${key_name}\"}" | jq -r '.key')
 
-	token_status_code=$(echo "$token_response" | tail -n1)
-	token_json_response=$(echo "$token_response" | $sed '$ d')
-
-	if [[ $token_status_code -ne 200 ]]; then
-		echo "Error: Failed to create token. HTTP Status: $token_status_code" >&2
-		echo "Response: $token_json_response" >&2
+	if [[ -z $token || $token == "null" ]]; then
+		echo "Error: Failed to create token!" >&2
 		return 1
 	fi
 
-	echo "$token_json_response" | jq -r '.key'
+	echo "$token"
 }
 
 delete_pmm_server_token() {
-	local key_name=$1
-
-	if [[ -z $key_name ]]; then
-		key_name="operator"
-	fi
-
-	local ADMIN_PASSWORD
-	ADMIN_PASSWORD=$(kubectl -n "${NAMESPACE}" get secret pmm-secret -o jsonpath="{.data.PMM_ADMIN_PASSWORD}" | base64 --decode)
-
-	if [[ -z $ADMIN_PASSWORD ]]; then
-		echo "Error: ADMIN_PASSWORD is empty or not found!" >&2
-		return 1
-	fi
-
-	local user_credentials="admin:${ADMIN_PASSWORD}"
-
-	local service_accounts_response service_accounts_status
-	service_accounts_response=$(curl --insecure -s -X GET --user "${user_credentials}" \
-		"https://$(get_service_ip monitoring-service)/graph/api/serviceaccounts/search" \
-		-w "\n%{http_code}")
-
-	service_accounts_status=$(echo "$service_accounts_response" | tail -n1)
-	service_accounts_json=$(echo "$service_accounts_response" | $sed '$ d')
-
-	if [[ $service_accounts_status -ne 200 ]]; then
-		echo "Error: Failed to fetch service accounts. HTTP Status: $service_accounts_status" >&2
-		echo "Response: $service_accounts_json" >&2
-		return 1
-	fi
+	local key_name=${1:-operator}
 
 	local service_account_id
-	service_account_id=$(echo "$service_accounts_json" | jq -r ".serviceAccounts[] | select(.name == \"${key_name}\").id")
+	service_account_id=$(retry 10 10 get_pmm_service_account_id "$key_name") || return 1
 
-	if [[ -z $service_account_id || $service_account_id == "null" ]]; then
+	if [[ -z $service_account_id ]]; then
 		echo "Service account '${key_name}' not found."
 		return 1
 	fi
 
-	local tokens_response tokens_status tokens_json
-	tokens_response=$(curl --insecure -s -X GET --user "${user_credentials}" \
-		"https://$(get_service_ip monitoring-service)/graph/api/serviceaccounts/${service_account_id}/tokens" \
-		-w "\n%{http_code}")
+	local tokens token_id
+	tokens=$(retry 10 10 pmm_api GET "/graph/api/serviceaccounts/${service_account_id}/tokens" 200) || return 1
+	token_id=$(echo "$tokens" | jq -r ".[] | select(.name == \"${key_name}\").id")
 
-	tokens_status=$(echo "$tokens_response" | tail -n1)
-	tokens_json=$(echo "$tokens_response" | $sed '$ d')
-
-	if [[ $tokens_status -ne 200 ]]; then
-		echo "Error: Failed to fetch tokens. HTTP Status: $tokens_status" >&2
-		echo "Response: $tokens_json" >&2
-		return 1
-	fi
-
-	local token_id
-	token_id=$(echo "$tokens_json" | jq -r ".[] | select(.name == \"${key_name}\").id")
-
-	if [[ -z $token_id || $token_id == "null" ]]; then
+	if [[ -z $token_id ]]; then
 		echo "Token for service account '${key_name}' not found."
 		return 1
 	fi
 
-	local delete_response delete_status
-	delete_response=$(curl --insecure -s -X DELETE --user "${user_credentials}" \
-		"https://$(get_service_ip monitoring-service)/graph/api/serviceaccounts/${service_account_id}/tokens/${token_id}" \
-		-w "\n%{http_code}")
-
-	delete_status=$(echo "$delete_response" | tail -n1)
-
-	if [[ $delete_status -ne 200 ]]; then
-		echo "Error: Failed to delete token. HTTP Status: $delete_status" >&2
-		echo "Response: $delete_response" >&2
-		return 1
-	fi
+	retry 10 10 pmm_api DELETE "/graph/api/serviceaccounts/${service_account_id}/tokens/${token_id}" 200 >/dev/null
 }
 
 has_s3_storage() {
@@ -1221,12 +1198,15 @@ get_pod_names() {
 		--sort-by=.metadata.name -o jsonpath='{.items[*].metadata.name}'
 }
 
+# Terminating pods are left out: one still shutting down after a previous
+# rollout would inflate the pod count wait_for_pods_restart waits for.
 get_pod_uids() {
 	local cluster_name=$1
 	local component=$2
 
 	kubectl get pod -n "${NAMESPACE}" --selector="$(pod_selector "${cluster_name}" "${component}")" \
-		--sort-by=.metadata.name -o jsonpath='{.items[*].metadata.uid}'
+		--sort-by=.metadata.name -o json \
+		| jq -r '[.items[] | select(.metadata.deletionTimestamp == null) | .metadata.uid] | join(" ")'
 }
 
 get_mysql_pod_names() {
@@ -1300,7 +1280,8 @@ wait_for_mysql_pods_restart() {
 
 # Waits until every pod of the given cluster app has been replaced, comparing
 # against a UID list captured with get_pod_uids before the change that should
-# restart them.
+# restart them. A pod terminating when the list was captured is missing from it,
+# so more pods than listed may come back.
 wait_for_pods_restart() {
 	local cluster_name=$1
 	local component=$2
@@ -1314,7 +1295,7 @@ wait_for_pods_restart() {
 		local replaced=true
 		local uid
 
-		if [[ $(echo "${uids_now}" | wc -w) -ne ${expected_count} ]]; then
+		if [[ $(echo "${uids_now}" | wc -w) -lt ${expected_count} ]]; then
 			replaced=false
 		else
 			for uid in ${uids_now}; do
@@ -1663,13 +1644,16 @@ get_primary_from_haproxy() {
 # haproxy pods learn a new primary on their own external-check schedule, and
 # spread-checks deliberately staggers them, so a single sample right after a
 # failover catches some of them mid-flight. Echoes the primary once every pod
-# routes to the one carrying the label.
+# routes to the one carrying the label. Callers run it inside $(...), where a
+# kuttl step timeout cannot kill it, so it has to give up on its own.
 wait_for_haproxy_primary() {
 	local cluster=$1
 	local haproxy_size=${2:-3}
+	local timeout=${3:-420}
+	local deadline=$((SECONDS + timeout))
 
 	local primary data i
-	while true; do
+	while [[ ${SECONDS} -lt ${deadline} ]]; do
 		primary=$(get_primary_from_label 2>/dev/null || true)
 
 		if [[ -z ${primary} ]]; then
@@ -1690,6 +1674,27 @@ wait_for_haproxy_primary() {
 		echo "waiting for haproxy pods to route to primary ${primary}: ${data[*]}" >&2
 		sleep 5
 	done
+
+	echo "timed out after ${timeout}s waiting for haproxy pods to route to primary ${primary}" >&2
+	dump_async_failover_state "${cluster}" >&2
+
+	return 1
+}
+
+dump_async_failover_state() {
+	local cluster=$1
+	local orc_host=$(get_orc_svc "${cluster}")
+	local pod
+
+	kubectl -n "${NAMESPACE}" get pods -L mysql.percona.com/primary -o wide
+	for pod in $(get_mysql_pod_names "${cluster}"); do
+		echo "${pod} read_only super_read_only: $(run_mysql 'SELECT @@read_only, @@super_read_only' "-h ${pod}.${cluster}-mysql" || echo unavailable)"
+	done
+	run_curl_orc "http://${orc_host}:3000/api/cluster/${cluster}.${NAMESPACE}/" \
+		| jq -c '.[] | {host: .Key.Hostname, master: .MasterKey.Hostname, readOnly: .ReadOnly, lastCheckValid: .IsLastCheckValid}' || true
+	run_curl_orc "http://${orc_host}:3000/api/audit-recovery" \
+		| jq -c '.[] | {failed: .AnalysisEntry.AnalyzedInstanceKey.Hostname, successor: .SuccessorKey.Hostname, successful: .IsSuccessful, errors: .AllErrors}' || true
+	kubectl -n "${OPERATOR_NS:-$NAMESPACE}" logs "$(get_operator_pod)" --tail=300 || true
 }
 
 # Verifies the backends HAProxy generated for the given cluster: every server is
@@ -1756,19 +1761,40 @@ check_haproxy_backends() {
 
 	# reaching the primary is not enough, x-protocol has to be writable: the DDL and
 	# the hostname go in one round trip, a failed write leaves the hostname unset
-	local host_via_x=$(run_mysqlsh \
-		"CREATE DATABASE IF NOT EXISTS check_haproxy_x; DROP DATABASE check_haproxy_x; SELECT @@hostname" \
-		"--mysqlx -h ${svc} -P 33060" "${creds}")
+	local x_query="CREATE DATABASE IF NOT EXISTS check_haproxy_x; DROP DATABASE check_haproxy_x; SELECT @@hostname"
+	local host_via_x host_via_admin
+	local deadline=$((SECONDS + 60))
+
+	# Right after a failover the cluster can still be settling, so a single
+	# miss is retried for a while before it counts as a failure.
+	while :; do
+		host_via_x=$(run_mysqlsh "${x_query}" "--mysqlx -h ${svc} -P 33060" "${creds}")
+		host_via_admin=$(run_mysql "SELECT @@hostname" "-h ${svc} -P 33062" "${creds}" || true)
+
+		if [ "${host_via_x}" = "${primary_pod}" ] && [ "${host_via_admin}" = "${primary_pod}" ]; then
+			return 0
+		fi
+		if [[ ${SECONDS} -ge ${deadline} ]]; then
+			break
+		fi
+
+		echo "waiting for x-protocol and admin ports to reach primary ${primary_pod}: x='${host_via_x}' admin='${host_via_admin}'"
+		sleep 5
+	done
+
 	if [ "${host_via_x}" != "${primary_pod}" ]; then
 		echo "x-protocol port 33060 did not reach a writable primary: got '${host_via_x}', expected '${primary_pod}'"
-		exit 1
+		# run_mysqlsh drops stderr, run it once more to show why
+		kubectl -n "${NAMESPACE}" exec mysql-client -- \
+			bash -c "printf '%s\n' \"${x_query}\" | mysqlsh --sql --quiet-start=2 --mysqlx -h ${svc} -P 33060 ${creds}" || true
 	fi
-
-	local host_via_admin=$(run_mysql "SELECT @@hostname" "-h ${svc} -P 33062" "${creds}")
 	if [ "${host_via_admin}" != "${primary_pod}" ]; then
 		echo "admin port 33062 landed on '${host_via_admin}', expected primary '${primary_pod}'"
-		exit 1
 	fi
+	if [[ $(kubectl -n "${NAMESPACE}" get ps "${cluster}" -o jsonpath='{.spec.mysql.clusterType}') == "async" ]]; then
+		dump_async_failover_state "${cluster}"
+	fi
+	exit 1
 }
 
 get_primary_from_group_replication() {

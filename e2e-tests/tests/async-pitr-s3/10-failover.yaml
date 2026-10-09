@@ -35,3 +35,6 @@ commands:
           fi
       done
       echo "Primary service endpoint correctly points to new primary: ${primary_after}"
+
+      # step 11 writes through haproxy, which learns the new primary on its own schedule
+      wait_for_haproxy_primary "${cluster_name}" >/dev/null
