@@ -2207,26 +2207,58 @@ latest_operator_version_in_vs() {
 	echo ${latest}
 }
 
+mysql_version_in_vs() {
+	local versions=$1
+
+	local available=$(echo "${versions}" \
+		| jq -r '.versions[].matrix.mysql | keys[]' \
+		| sed -E 's/^([0-9]+\.[0-9]+).*/\1/' \
+		| sort -Vu)
+
+	if echo "${available}" | grep -qx "${MYSQL_VERSION}"; then
+		echo "${MYSQL_VERSION}"
+		return
+	fi
+
+	echo "${available}" | tail -n 1
+}
+
 get_cr_with_latest_versions_in_vs() {
 	local operator_version=$(latest_operator_version_in_vs)
 	local git_tag="v${operator_version}"
 	local versions=$(curl -s https://check.percona.com/versions/v1/ps-operator/${operator_version})
 
+	local mysql_version=$(mysql_version_in_vs "${versions}")
+	if [[ ${mysql_version} != "${MYSQL_VERSION}" ]]; then
+		echo "operator ${operator_version} ships no MySQL ${MYSQL_VERSION} images, starting from ${mysql_version} instead" >&2
+	fi
+
 	local image_mysql=$(echo ${versions} \
-		| jq -r '.versions[].matrix.mysql | with_entries(select(.key | startswith("'${MYSQL_VERSION}'"))) | .[] | select(.status=="available") | .imagePath' \
-		| sort -r \
+		| jq -r '.versions[].matrix.mysql | with_entries(select(.key | startswith("'${mysql_version}'"))) | .[] | select(.status=="available") | .imagePath' \
+		| sort -Vr \
 		| head -n 1)
 	local image_backup=$(echo ${versions} \
-		| jq -r '.versions[].matrix.backup | with_entries(select(.key | startswith("'${MYSQL_VERSION}'"))) | .[].imagePath' \
-		| sort -r \
+		| jq -r '.versions[].matrix.backup | with_entries(select(.key | startswith("'${mysql_version}'"))) | .[].imagePath' \
+		| sort -Vr \
+		| head -n 1)
+	local image_router=$(echo ${versions} \
+		| jq -r '.versions[].matrix.router | with_entries(select(.key | startswith("'${mysql_version}'"))) | .[].imagePath' \
+		| sort -Vr \
 		| head -n 1)
 
 	local image_orchestrator=$(echo ${versions} | jq -r '.versions[].matrix.orchestrator[].imagePath' | head -n 1)
-	local image_router=$(echo ${versions} | jq -r '.versions[].matrix.orchestrator[].imagePath' | head -n 1)
 	local image_toolkit=$(echo ${versions} | jq -r '.versions[].matrix.toolkit[].imagePath' | head -n 1)
 	local image_haproxy=$(echo ${versions} | jq -r '.versions[].matrix.haproxy[].imagePath' | head -n 1)
 	local image_pmm_client=$(echo ${versions} | jq -r '.versions[].matrix.pmm[].imagePath' | head -n 1)
 	local image_binlog_server=$(echo ${versions} | jq -r '.versions[].matrix.binlogServer[].imagePath' | head -n 1)
+
+	local var
+	for var in image_mysql image_backup image_orchestrator image_router image_toolkit image_haproxy image_pmm_client image_binlog_server; do
+		if [[ -z ${!var} ]]; then
+			echo "failed to get ${var/image_/} image for operator ${operator_version} (MySQL ${mysql_version}) from the version service" >&2
+			exit 1
+		fi
+	done
 
 	curl "https://raw.githubusercontent.com/percona/percona-server-mysql-operator/${git_tag}/deploy/cr.yaml" \
 		-o ${TEMP_DIR}/cr.yaml
