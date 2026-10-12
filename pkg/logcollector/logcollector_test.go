@@ -396,24 +396,24 @@ func TestContainersLogRotateContainer(t *testing.T) {
 	}{
 		"no logrotate spec": {
 			wantSchedule: "0 0 * * *",
-			wantMounts:   []string{testDataVolumeName, apiv1.BinVolumeName, testBackupLogVolume},
+			wantMounts:   []string{testDataVolumeName, apiv1.BinVolumeName, testBackupLogVolume, "users"},
 		},
 		"custom schedule": {
 			logRotate:    &apiv1.LogRotateSpec{Schedule: "30 3 * * *"},
 			wantSchedule: "30 3 * * *",
-			wantMounts:   []string{testDataVolumeName, apiv1.BinVolumeName, testBackupLogVolume},
+			wantMounts:   []string{testDataVolumeName, apiv1.BinVolumeName, testBackupLogVolume, "users"},
 		},
 		"custom configuration mounts conf.d": {
 			logRotate:    &apiv1.LogRotateSpec{Configuration: "/x {}"},
 			wantSchedule: "0 0 * * *",
-			wantMounts:   []string{testDataVolumeName, apiv1.BinVolumeName, testBackupLogVolume, logrotate.VolumeName},
+			wantMounts:   []string{testDataVolumeName, apiv1.BinVolumeName, testBackupLogVolume, "users", logrotate.VolumeName},
 		},
 		"extra config mounts conf.d": {
 			logRotate: &apiv1.LogRotateSpec{
 				ExtraConfig: corev1.LocalObjectReference{Name: "extra"},
 			},
 			wantSchedule: "0 0 * * *",
-			wantMounts:   []string{testDataVolumeName, apiv1.BinVolumeName, testBackupLogVolume, logrotate.VolumeName},
+			wantMounts:   []string{testDataVolumeName, apiv1.BinVolumeName, testBackupLogVolume, "users", logrotate.VolumeName},
 		},
 	}
 
@@ -450,7 +450,7 @@ func TestContainersDoNotShareVolumeMounts(t *testing.T) {
 		mountNames(logs.VolumeMounts),
 	)
 	assert.Equal(t,
-		[]string{testDataVolumeName, apiv1.BinVolumeName, testBackupLogVolume, "s3-ca", logrotate.VolumeName},
+		[]string{testDataVolumeName, apiv1.BinVolumeName, testBackupLogVolume, "s3-ca", "users", logrotate.VolumeName},
 		mountNames(rotate.VolumeMounts),
 	)
 }

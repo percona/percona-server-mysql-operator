@@ -12,9 +12,9 @@ commands:
       for pod in $(get_mysql_pod_names logcollection); do
           marker="kuttl-post-rotate-marker-${pod}"
 
-          # mysql.conf rotates with copytruncate, so fluent-bit keeps the same inode
-          # and has to pick up writes past the truncation point. Appending a marker
-          # after 04-rotate-logs is what proves it did.
+          # mysql.conf rotates by renaming, so fluent-bit has to follow the old
+          # inode to EOF and then start tailing the file mysqld reopened.
+          # Appending a marker after 04-rotate-logs is what proves it did.
           kubectl -n "${NAMESPACE}" exec "${pod}" -c logrotate -- \
               sh -c "echo '${marker}' >>/var/lib/mysql/log/mysqld-error.log"
 

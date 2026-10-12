@@ -4,6 +4,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 )
 
 const (
@@ -21,6 +22,11 @@ const (
 	// import without an import cycle. The entrypoint resolves the logrotate
 	// status file under it, so the container fails to start when it is unset.
 	logDirEnvVar = "LOG_DIR"
+
+	// credsVolumeName mirrors the users secret volume pkg/mysql already adds to
+	// the pod, which this package cannot import without an import cycle. The
+	// postrotate hook reads the monitor password from it to flush the logs.
+	credsVolumeName = "users"
 
 	configMapNameSuffix = "log-collector-logrotate-config"
 
@@ -75,11 +81,22 @@ func Container(cr *apiv1.PerconaServerMySQL, logDir string, mounts []corev1.Volu
 				Value: logDir,
 			},
 			{
+				Name: "POD_IP",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{
+						FieldPath: "status.podIP",
+					},
+				},
+			},
+			{
 				Name:  "LOGROTATE_SCHEDULE",
 				Value: schedule(cr.Spec.LogCollector.LogRotate),
 			},
 		},
-		VolumeMounts: mounts,
+		VolumeMounts: append(mounts, corev1.VolumeMount{
+			Name:      credsVolumeName,
+			MountPath: naming.CredsMountPath,
+		}),
 	}
 
 	if lr := cr.Spec.LogCollector.LogRotate; lr != nil {

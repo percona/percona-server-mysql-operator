@@ -8,6 +8,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 )
 
 func testCR(lr *apiv1.LogRotateSpec) *apiv1.PerconaServerMySQL {
@@ -70,34 +71,34 @@ func TestContainer(t *testing.T) {
 	}{
 		"no logrotate spec": {
 			wantSchedule: defaultSchedule,
-			wantMounts:   []string{"datadir"},
+			wantMounts:   []string{"datadir", credsVolumeName},
 		},
 		"empty logrotate spec": {
 			logRotate:    new(apiv1.LogRotateSpec),
 			wantSchedule: defaultSchedule,
-			wantMounts:   []string{"datadir"},
+			wantMounts:   []string{"datadir", credsVolumeName},
 		},
 		"custom schedule": {
 			logRotate:    &apiv1.LogRotateSpec{Schedule: "30 3 * * *"},
 			wantSchedule: "30 3 * * *",
-			wantMounts:   []string{"datadir"},
+			wantMounts:   []string{"datadir", credsVolumeName},
 		},
 		"custom configuration mounts conf.d": {
 			logRotate:    &apiv1.LogRotateSpec{Configuration: "/x {}"},
 			wantSchedule: defaultSchedule,
-			wantMounts:   []string{"datadir", VolumeName},
+			wantMounts:   []string{"datadir", credsVolumeName, VolumeName},
 		},
 		"extra config mounts conf.d": {
 			logRotate: &apiv1.LogRotateSpec{
 				ExtraConfig: corev1.LocalObjectReference{Name: "extra"},
 			},
 			wantSchedule: defaultSchedule,
-			wantMounts:   []string{"datadir", VolumeName},
+			wantMounts:   []string{"datadir", credsVolumeName, VolumeName},
 		},
 		"probes are taken from the spec": {
 			logRotate:     &apiv1.LogRotateSpec{LivenessProbe: liveness, ReadinessProbe: readiness},
 			wantSchedule:  defaultSchedule,
-			wantMounts:    []string{"datadir"},
+			wantMounts:    []string{"datadir", credsVolumeName},
 			wantLiveness:  liveness,
 			wantReadiness: readiness,
 		},
@@ -127,7 +128,7 @@ func TestContainer(t *testing.T) {
 func TestContainerPodEnvUsesDownwardAPI(t *testing.T) {
 	c := Container(testCR(nil), "/var/lib/mysql/log", nil)
 
-	for _, name := range []string{"POD_NAME", "POD_NAMESPACE"} {
+	for _, name := range []string{"POD_NAME", "POD_NAMESPACE", "POD_IP"} {
 		var found bool
 		for _, e := range c.Env {
 			if e.Name != name {
@@ -140,4 +141,30 @@ func TestContainerPodEnvUsesDownwardAPI(t *testing.T) {
 		}
 		assert.True(t, found, "env %s missing", name)
 	}
+}
+
+func TestContainerMountsCredsForPostrotateFlush(t *testing.T) {
+	c := Container(testCR(nil), "/var/lib/mysql/log", nil)
+
+	var got *corev1.VolumeMount
+	for i, m := range c.VolumeMounts {
+		if m.Name == credsVolumeName {
+			got = &c.VolumeMounts[i]
+			break
+		}
+	}
+
+	require.NotNil(t, got, "postrotate flush needs the monitor password")
+	assert.Equal(t, naming.CredsMountPath, got.MountPath)
+}
+
+func TestContainerDoesNotShareMountBackingArray(t *testing.T) {
+	shared := make([]corev1.VolumeMount, 1, 4)
+	shared[0] = corev1.VolumeMount{Name: "datadir", MountPath: "/var/lib/mysql"}
+
+	first := Container(testCR(nil), "/var/lib/mysql/log", shared)
+	second := Container(testCR(nil), "/var/lib/mysql/log", shared)
+
+	assert.Equal(t, mountNames(first.VolumeMounts), mountNames(second.VolumeMounts))
+	assert.Len(t, shared, 1, "the caller's slice must not be extended in place")
 }
