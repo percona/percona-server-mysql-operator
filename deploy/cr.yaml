@@ -580,7 +580,6 @@ spec:
 #      type: ClusterIP
 #    failover:
 #      onTimeout: Abort
-#      switchoverCatchUpTimeout: 5m
 #      timeout: 6h
     size: 3
     image: perconalab/percona-server-mysql-operator:main-orchestrator

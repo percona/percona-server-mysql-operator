@@ -1067,7 +1067,6 @@ func TestFailoverSpecDefaults(t *testing.T) {
 		spec := cr.FailoverSpec()
 
 		assert.Equal(t, 6*time.Hour, spec.TimeoutDuration())
-		assert.Equal(t, 5*time.Minute, spec.SwitchoverCatchUp())
 		// Losing committed transactions is never the default.
 		assert.Equal(t, FailoverPolicyAbort, spec.OnTimeout)
 	})
@@ -1094,10 +1093,9 @@ func TestFailoverSpecDefaults(t *testing.T) {
 	t.Run("an unparsable duration falls back rather than returning zero", func(t *testing.T) {
 		// CheckNSetDefaults rejects these, so this only covers an object that
 		// never went through it. A zero timeout would mean "no limit" downstream.
-		spec := &FailoverSpec{Timeout: "soon", SwitchoverCatchUpTimeout: "-5m"}
+		spec := &FailoverSpec{Timeout: "soon"}
 
 		assert.Equal(t, 6*time.Hour, spec.TimeoutDuration())
-		assert.Equal(t, 5*time.Minute, spec.SwitchoverCatchUp())
 	})
 }
 
@@ -1117,7 +1115,6 @@ func TestCheckNSetDefaultsFailover(t *testing.T) {
 		assert.EqualError(t, err, "reconcile mysql volumeSpec: volumeSpec provided is nil")
 		assert.Equal(t, "6h0m0s", cr.Spec.Orchestrator.Failover.Timeout)
 		assert.Equal(t, FailoverPolicyAbort, cr.Spec.Orchestrator.Failover.OnTimeout)
-		assert.Equal(t, "5m0s", cr.Spec.Orchestrator.Failover.SwitchoverCatchUpTimeout)
 	})
 
 	t.Run("an unparsable timeout is rejected", func(t *testing.T) {
@@ -1135,16 +1132,6 @@ func TestCheckNSetDefaultsFailover(t *testing.T) {
 			err := cr.CheckNSetDefaults(t.Context(), nil)
 
 			assert.EqualError(t, err, "orchestrator.failover.timeout should be at least 1s")
-		}
-	})
-
-	t.Run("a switchover catch-up timeout under a second is rejected", func(t *testing.T) {
-		for _, timeout := range []string{"-1m", "999ms"} {
-			cr := newCR(&FailoverSpec{SwitchoverCatchUpTimeout: timeout})
-
-			err := cr.CheckNSetDefaults(t.Context(), nil)
-
-			assert.EqualError(t, err, "orchestrator.failover.switchoverCatchUpTimeout should be at least 1s")
 		}
 	})
 

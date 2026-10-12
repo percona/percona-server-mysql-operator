@@ -397,9 +397,13 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 		}
 
 		log.Info("Ensuring oldest mysql node is the primary")
+		catchUp, err := orchestrator.SwitchoverCatchUp(cr)
+		if err != nil {
+			return errors.Wrap(err, "switchover catch-up")
+		}
 		cluster, err := orchestrator.ResolveCluster(ctx, r.ClientCmd, orcPod, cr.ClusterHint())
 		if err == nil {
-			err = orchestrator.EnsureNodeIsPrimary(ctx, r.ClientCmd, orcPod, cluster, firstPod.GetName(), mysql.DefaultPort, cr.FailoverSpec().SwitchoverCatchUp())
+			err = orchestrator.EnsureNodeIsPrimary(ctx, r.ClientCmd, orcPod, cluster, firstPod.GetName(), mysql.DefaultPort, catchUp)
 		}
 		if err != nil {
 			if orchestratorTopologyUnavailable(err) {

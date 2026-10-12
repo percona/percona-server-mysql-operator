@@ -59,6 +59,36 @@ func TestConfigMapDataUserConfiguration(t *testing.T) {
 		assert.False(t, ok)
 	})
 
+	t.Run("maintenance lag threshold is twice the replication lag threshold", func(t *testing.T) {
+		cr := &apiv1.PerconaServerMySQL{}
+		cr.Spec.CRVersion = "1.3.0"
+
+		cfg := parse(t, cr)
+		assert.EqualValues(t, 120, cfg["ReasonableMaintenanceReplicationLagSeconds"])
+
+		cr.Spec.Orchestrator.Configuration = `{"ReasonableReplicationLagSeconds": 30}`
+		cfg = parse(t, cr)
+		assert.EqualValues(t, 60, cfg["ReasonableMaintenanceReplicationLagSeconds"])
+	})
+
+	t.Run("maintenance lag threshold stays user-tunable", func(t *testing.T) {
+		cr := &apiv1.PerconaServerMySQL{}
+		cr.Spec.CRVersion = "1.3.0"
+		cr.Spec.Orchestrator.Configuration = `{"ReasonableReplicationLagSeconds": 30, "ReasonableMaintenanceReplicationLagSeconds": 45}`
+
+		cfg := parse(t, cr)
+		assert.EqualValues(t, 45, cfg["ReasonableMaintenanceReplicationLagSeconds"])
+	})
+
+	t.Run("a non-numeric replication lag threshold is rejected", func(t *testing.T) {
+		cr := &apiv1.PerconaServerMySQL{}
+		cr.Spec.CRVersion = "1.3.0"
+		cr.Spec.Orchestrator.Configuration = `{"ReasonableReplicationLagSeconds": "30"}`
+
+		_, err := ConfigMapData(cr)
+		assert.ErrorContains(t, err, "ReasonableReplicationLagSeconds")
+	})
+
 	t.Run("reserved keys cannot be overridden", func(t *testing.T) {
 		cr := &apiv1.PerconaServerMySQL{}
 		cr.Spec.CRVersion = "1.3.0"
@@ -165,12 +195,12 @@ func TestConfigMapDataUserConfiguration(t *testing.T) {
 		assert.NotContains(t, cfg["PreFailoverProcesses"], "echo pwned")
 		assert.NotContains(t, cfg["PostFailoverProcesses"], "echo pwned")
 		assert.NotContains(t, cfg["PostUnsuccessfulFailoverProcesses"], "echo pwned")
-		assert.EqualValues(t, 300, cfg["ReasonableMaintenanceReplicationLagSeconds"])
 		assert.EqualValues(t, 6*60*60+60*60, cfg["RecoveryPeriodBlockSeconds"])
 		assert.EqualValues(t, 7, cfg["UnseenInstanceForgetHours"])
 
 		// non-reserved keys (incl. the now-overridable ones) get through
 		assert.EqualValues(t, 9, cfg["InstancePollSeconds"])
+		assert.EqualValues(t, 1200, cfg["ReasonableMaintenanceReplicationLagSeconds"])
 		assert.EqualValues(t, "evil", cfg["MySQLHostnameResolveMethod"])
 		assert.EqualValues(t, "evil", cfg["HostnameResolveMethod"])
 		assert.EqualValues(t, false, cfg["UseSuperReadOnly"])
@@ -205,14 +235,105 @@ func TestBakedConfigDisablesPromotionLagVeto(t *testing.T) {
 	assert.EqualValues(t, 0, cfg["FailMasterPromotionOnLagMinutes"])
 }
 
-func TestBakedConfigGivesTheTakeoverTimeToCatchUp(t *testing.T) {
+func TestBakedMaintenanceLagMatchesFallback(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join("..", "..", "build", "orchestrator.conf.json"))
 	require.NoError(t, err)
 
 	cfg := map[string]any{}
 	require.NoError(t, json.Unmarshal(data, &cfg))
 
-	assert.EqualValues(t, 300, cfg["ReasonableMaintenanceReplicationLagSeconds"])
+	assert.EqualValues(t, bakedMaintenanceLagSeconds, cfg["ReasonableMaintenanceReplicationLagSeconds"])
+}
+
+func TestSwitchoverCatchUp(t *testing.T) {
+	tests := map[string]struct {
+		version string
+		config  string
+		want    time.Duration
+	}{
+		"derived by default":                    {"1.3.0", "", 120 * time.Second},
+		"follows the replication lag threshold": {"1.3.0", `{"ReasonableReplicationLagSeconds": 30}`, 60 * time.Second},
+		"user value wins":                       {"1.3.0", `{"ReasonableMaintenanceReplicationLagSeconds": 45}`, 45 * time.Second},
+		"baked value before 1.3.0":              {"1.2.0", "", 300 * time.Second},
+		"user value before 1.3.0":               {"1.2.0", `{"ReasonableMaintenanceReplicationLagSeconds": 45}`, 45 * time.Second},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := &apiv1.PerconaServerMySQL{}
+			cr.Spec.CRVersion = tt.version
+			cr.Spec.Orchestrator.Configuration = tt.config
+
+			got, err := SwitchoverCatchUp(cr)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestSwitchoverCatchUpRejectsInvalidSeconds(t *testing.T) {
+	const bounds = "must be a whole number of seconds between 1 and 9223372036"
+	tests := map[string]struct {
+		version string
+		config  string
+		want    string
+	}{
+		"fractional": {
+			"1.3.0", `{"ReasonableMaintenanceReplicationLagSeconds": 45.5}`,
+			"ReasonableMaintenanceReplicationLagSeconds: " + bounds + ", got 45.5",
+		},
+		"zero": {
+			"1.3.0", `{"ReasonableMaintenanceReplicationLagSeconds": 0}`,
+			"ReasonableMaintenanceReplicationLagSeconds: " + bounds + ", got 0",
+		},
+		"negative": {
+			"1.3.0", `{"ReasonableMaintenanceReplicationLagSeconds": -1}`,
+			"ReasonableMaintenanceReplicationLagSeconds: " + bounds + ", got -1",
+		},
+		"overflowing": {
+			"1.3.0", `{"ReasonableMaintenanceReplicationLagSeconds": 1e19}`,
+			"ReasonableMaintenanceReplicationLagSeconds: " + bounds + ", got 1e+19",
+		},
+		"not a number": {
+			"1.3.0", `{"ReasonableMaintenanceReplicationLagSeconds": "45"}`,
+			"ReasonableMaintenanceReplicationLagSeconds: must be a number, got 45",
+		},
+		"fractional replication lag": {
+			"1.3.0", `{"ReasonableReplicationLagSeconds": 30.5}`,
+			"ReasonableReplicationLagSeconds: " + bounds + ", got 30.5",
+		},
+		"zero replication lag": {
+			"1.3.0", `{"ReasonableReplicationLagSeconds": 0}`,
+			"ReasonableReplicationLagSeconds: " + bounds + ", got 0",
+		},
+		"derived lag overflows": {
+			"1.3.0", `{"ReasonableReplicationLagSeconds": 9000000000}`,
+			"derive ReasonableMaintenanceReplicationLagSeconds from ReasonableReplicationLagSeconds: " + bounds + ", got 18000000000",
+		},
+		"invalid user value before 1.3": {
+			"1.2.0", `{"ReasonableMaintenanceReplicationLagSeconds": 0}`,
+			"ReasonableMaintenanceReplicationLagSeconds: " + bounds + ", got 0",
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := &apiv1.PerconaServerMySQL{}
+			cr.Spec.CRVersion = tt.version
+			cr.Spec.Orchestrator.Configuration = tt.config
+
+			_, err := SwitchoverCatchUp(cr)
+			assert.EqualError(t, err, tt.want)
+		})
+	}
+
+	t.Run("whole float accepted", func(t *testing.T) {
+		cr := &apiv1.PerconaServerMySQL{}
+		cr.Spec.CRVersion = "1.3.0"
+		cr.Spec.Orchestrator.Configuration = `{"ReasonableMaintenanceReplicationLagSeconds": 45.0}`
+
+		got, err := SwitchoverCatchUp(cr)
+		require.NoError(t, err)
+		assert.Equal(t, 45*time.Second, got)
+	})
 }
 
 func TestConfigMapDataRendersFailoverHook(t *testing.T) {
@@ -251,7 +372,6 @@ func TestConfigMapDataRendersFailoverHook(t *testing.T) {
 		// {recoveryUID} is what the hook claims the source under and what the
 		// post hooks release and acknowledge.
 		assert.Contains(t, hook, "-uid {recoveryUID}")
-		assert.EqualValues(t, 300, cfg["ReasonableMaintenanceReplicationLagSeconds"])
 	})
 
 	t.Run("every post hook finishes the recovery", func(t *testing.T) {
@@ -299,9 +419,8 @@ func TestConfigMapDataRendersFailoverHook(t *testing.T) {
 		cr := &apiv1.PerconaServerMySQL{}
 		cr.Spec.CRVersion = "1.3.0"
 		cr.Spec.Orchestrator.Failover = &apiv1.FailoverSpec{
-			Timeout:                  "30m",
-			OnTimeout:                apiv1.FailoverPolicyForce,
-			SwitchoverCatchUpTimeout: "2m",
+			Timeout:   "30m",
+			OnTimeout: apiv1.FailoverPolicyForce,
 		}
 
 		cfg := parse(t, cr)
@@ -309,7 +428,6 @@ func TestConfigMapDataRendersFailoverHook(t *testing.T) {
 
 		assert.Contains(t, hook, "-timeout 30m0s")
 		assert.Contains(t, hook, "-on-timeout ForceWithPossibleDataLoss")
-		assert.EqualValues(t, 120, cfg["ReasonableMaintenanceReplicationLagSeconds"])
 	})
 }
 
