@@ -8095,10 +8095,6 @@ spec:
                         - Abort
                         - ForceWithPossibleDataLoss
                         type: string
-                      switchoverCatchUpTimeout:
-                        default: 5m
-                        pattern: ^([0-9]+(\.[0-9]+)?(ns|us|ms|s|m|h))+$
-                        type: string
                       timeout:
                         default: 6h
                         pattern: ^([0-9]+(\.[0-9]+)?(ns|us|ms|s|m|h))+$

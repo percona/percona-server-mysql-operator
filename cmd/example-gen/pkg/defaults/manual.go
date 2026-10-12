@@ -116,9 +116,8 @@ func orchestratorDefaults(spec *apiv1.OrchestratorSpec) {
 	spec.Enabled = false
 	spec.Configuration = `{"ReasonableReplicationLagSeconds": 30}`
 	spec.Failover = &apiv1.FailoverSpec{
-		Timeout:                  "6h",
-		OnTimeout:                apiv1.FailoverPolicyAbort,
-		SwitchoverCatchUpTimeout: "5m",
+		Timeout:   "6h",
+		OnTimeout: apiv1.FailoverPolicyAbort,
 	}
 	spec.ServiceAccountName = "percona-server-mysql-operator-orchestrator"
 	spec.PodSecurityContext = &corev1.PodSecurityContext{
