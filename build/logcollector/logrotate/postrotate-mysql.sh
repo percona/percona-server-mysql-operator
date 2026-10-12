@@ -25,8 +25,12 @@ mysql_exec() {
 # NO_WRITE_TO_BINLOG keeps it local; naming the types spares the binary log.
 mysql_exec -e 'FLUSH NO_WRITE_TO_BINLOG ERROR LOGS, SLOW LOGS, GENERAL LOGS;'
 
-# FLUSH does not reopen the audit log, so the component rotates its own file.
+# FLUSH does not reopen the audit log, so ask it to rotate itself.
+# PS 8.4+ has the component; 8.0 still ships the audit_log plugin.
 audit_component=$(mysql_exec -e "SELECT COUNT(*) FROM mysql.component WHERE component_urn = '${AUDIT_COMPONENT_URN}'" 2>/dev/null || echo 0)
+audit_plugin=$(mysql_exec -e 'SHOW PLUGINS' 2>/dev/null | grep -c 'audit_log' || true)
 if [ "${audit_component:-0}" -gt 0 ]; then
 	mysql_exec -e 'DO audit_log_rotate();'
+elif [ "${audit_plugin:-0}" -gt 0 ]; then
+	mysql_exec -e 'SET GLOBAL audit_log_flush=1;'
 fi
