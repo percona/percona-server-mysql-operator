@@ -417,22 +417,6 @@ func ObjectHash(obj runtime.Object) (string, error) {
 	return hex.EncodeToString(hash[:]), nil
 }
 
-func RunningPods(ctx context.Context, cl client.Reader, l map[string]string, namespace string) ([]corev1.Pod, error) {
-	all, err := PodsByLabels(ctx, cl, l, namespace)
-	if err != nil {
-		return nil, errors.Wrap(err, "get pods by labels")
-	}
-
-	var running []corev1.Pod
-	for _, pod := range all {
-		if !IsPodRunning(pod) {
-			continue
-		}
-		running = append(running, pod)
-	}
-	return running, nil
-}
-
 func ReadyPods(ctx context.Context, cl client.Reader, l map[string]string, namespace string) ([]corev1.Pod, error) {
 	all, err := PodsByLabels(ctx, cl, l, namespace)
 	if err != nil {

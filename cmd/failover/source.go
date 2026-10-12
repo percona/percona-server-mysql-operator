@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log"
@@ -28,6 +29,7 @@ var errSourceRecovered = errors.New("the source is back; standing down without p
 type sourceDatabase interface {
 	GetGTIDExecuted(ctx context.Context) (string, error)
 	IsReadonly(ctx context.Context) (bool, error)
+	ShowReplicaStatus(ctx context.Context) (map[string]string, error)
 	Close() error
 }
 
@@ -106,7 +108,7 @@ func (w *sourceWatch) probe(ctx context.Context) bool {
 	return true
 }
 
-// usable reports whether the source is serving writes again and holds every
+// usable reports whether the source is serving as a primary again and holds every
 // transaction this replica has executed.
 func (w *sourceWatch) usable(ctx context.Context) error {
 	d, err := w.connect(ctx, w.host)
@@ -115,16 +117,29 @@ func (w *sourceWatch) usable(ctx context.Context) error {
 	}
 	defer d.Close() //nolint:errcheck
 
-	// A mysqld that answers is not a source that is back. Every pod starts
-	// read-only and only a promotion clears it, so a source still read-only
-	// here is one that merely restarted: nothing is driving it, and handing the
-	// replica back would leave the cluster without a primary.
+	// A restarted pod is always read-only, and only orchestrator clears it,
+	// once the stand-down ends our recovery.
 	readOnly, err := d.IsReadonly(ctx)
 	if err != nil {
 		return fmt.Errorf("get source read_only: %w", err)
 	}
+
+	isConfiguredAsReplica := func() error {
+		status, err := d.ShowReplicaStatus(ctx)
+		switch {
+		case err == nil:
+			return fmt.Errorf("source %s is back read-only but replicates from %s", w.host, status["Source_Host"])
+		case !errors.Is(err, sql.ErrNoRows):
+			return fmt.Errorf("get source replica status: %w", err)
+		default:
+			return nil
+		}
+	}
+
 	if readOnly {
-		return fmt.Errorf("source %s is back but read-only", w.host)
+		if err := isConfiguredAsReplica(); err != nil {
+			return err
+		}
 	}
 
 	sourceSet, err := d.GetGTIDExecuted(ctx)

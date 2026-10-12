@@ -24,7 +24,7 @@ commands:
       # directory cannot rejoin: bootstrap refuses to clone over it. Its volume
       # goes before the pod is let back in, which is the procedure for a node
       # lost with its disk.
-      kubectl -n "${NAMESPACE}" delete pvc "datadir-${dead}" --wait=true
+      delete_pvc "datadir-${dead}"
       kubectl -n "${NAMESPACE}" delete resourcequota no-new-pods
 
       # The StatefulSet controller backs off after the refused creations; an

@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
@@ -77,9 +78,14 @@ type Instance struct {
 	ElapsedDowntime       time.Duration     `json:"ElapsedDowntime"`
 	ExecBinlogCoordinates BinlogCoordinates `json:"ExecBinlogCoordinates"`
 	ExecutedGtidSet       string            `json:"ExecutedGtidSet"`
+	ReplicationLagSeconds sql.NullInt64     `json:"ReplicationLagSeconds"`
 }
 
 const PromotionRulePrefer = "prefer"
+
+// ProblemReplicationLag is reported for a replica lagging more than
+// ReasonableReplicationLagSeconds.
+const ProblemReplicationLag = "replication_lag"
 
 var masterFailoverAnalyses = map[string]bool{
 	"DeadMaster":                true,
@@ -106,6 +112,10 @@ var (
 	// ErrRecoveryNotAttempted is orchestrator turning a takeover away because
 	// another recovery of the same instance holds its place in the audit
 	ErrRecoveryNotAttempted = errors.New("recovery not attempted")
+
+	// ErrInstanceUnreachable is orchestrator's own answer that it could not
+	// read the instance when asked to refresh it.
+	ErrInstanceUnreachable = errors.New("instance unreachable")
 )
 
 func exec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, endpoint string, outb, errb *bytes.Buffer) error {
@@ -262,6 +272,8 @@ func RemovePeer(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, p
 const (
 	DowntimeOwner            = "percona-server-mysql-operator"
 	DowntimeReasonSwitchover = "graceful-switchover"
+
+	DowntimeReasonForcePromote = "force-promote"
 
 	// switchoverDowntimeFactor scales the takeover's own catch-up wait, which
 	// orchestrator bounds by ReasonableMaintenanceReplicationLagSeconds. A
@@ -476,6 +488,37 @@ func GetInstance(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, 
 
 	if err := orcResp.Error(); err != nil {
 		return nil, err
+	}
+
+	return instance, nil
+}
+
+// RefreshInstance has orchestrator read the instance now rather than answer
+// from its last poll. It fails when orchestrator can't reach the instance.
+func RefreshInstance(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, host string, port int) (*Instance, error) {
+	url := fmt.Sprintf("api/refresh/%s/%d", host, port)
+
+	var res, errb bytes.Buffer
+	if err := exec(ctx, cliCmd, pod, url, &res, &errb); err != nil {
+		return nil, err
+	}
+
+	orcResp := new(orcResponse)
+	if err := unmarshalOrcResponse(res.Bytes(), orcResp); err != nil {
+		return nil, err
+	}
+	if err := orcResp.Error(); err != nil {
+		return nil, errors.Wrap(ErrInstanceUnreachable, err.Error())
+	}
+
+	instance, err := GetInstance(ctx, cliCmd, pod, host, port)
+	if err != nil {
+		return nil, err
+	}
+
+	// GetInstance decodes an ERROR answer into an empty instance.
+	if instance.Key.Hostname == "" {
+		return nil, ErrEmptyResponse
 	}
 
 	return instance, nil
