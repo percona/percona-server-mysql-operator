@@ -5,6 +5,7 @@ set -o errexit
 MYSQL_ADMIN_PORT=33062
 MONITOR_USER=monitor
 CREDS_MOUNT_PATH=${CREDS_MOUNT_PATH:-/etc/mysql/mysql-users-secret}
+AUDIT_COMPONENT_URN='file://component_audit_log_filter'
 TIMEOUT=10
 
 # awk is not in the image's package set, so split with the shell instead.
@@ -16,9 +17,16 @@ fi
 MYSQL_PWD=$(cat "${CREDS_MOUNT_PATH}/${MONITOR_USER}")
 export MYSQL_PWD
 
-# NO_WRITE_TO_BINLOG keeps the flush local: every pod rotates its own logs. The
-# log types are named explicitly so the binary log is not rotated along with
-# them, which would disrupt binlog retention and PITR.
-/usr/bin/timeout "${TIMEOUT}" /usr/bin/mysql -nN \
-	-u"${MONITOR_USER}" -h"${NODE_IP}" -P"${MYSQL_ADMIN_PORT}" \
-	-e 'FLUSH NO_WRITE_TO_BINLOG ERROR LOGS, SLOW LOGS, GENERAL LOGS;'
+mysql_exec() {
+	/usr/bin/timeout "${TIMEOUT}" /usr/bin/mysql -nN \
+		-u"${MONITOR_USER}" -h"${NODE_IP}" -P"${MYSQL_ADMIN_PORT}" "$@"
+}
+
+# NO_WRITE_TO_BINLOG keeps it local; naming the types spares the binary log.
+mysql_exec -e 'FLUSH NO_WRITE_TO_BINLOG ERROR LOGS, SLOW LOGS, GENERAL LOGS;'
+
+# FLUSH does not reopen the audit log, so the component rotates its own file.
+audit_component=$(mysql_exec -e "SELECT COUNT(*) FROM mysql.component WHERE component_urn = '${AUDIT_COMPONENT_URN}'" 2>/dev/null || echo 0)
+if [ "${audit_component:-0}" -gt 0 ]; then
+	mysql_exec -e 'DO audit_log_rotate();'
+fi
