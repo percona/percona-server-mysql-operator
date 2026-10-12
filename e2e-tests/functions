@@ -51,6 +51,28 @@ wait_for_delete() {
 	done
 }
 
+# A StatefulSet recreates the claim of a missing pod as soon as the old one is
+# gone, so waiting for the name to disappear can hang forever. Wait for the
+# object we deleted instead.
+delete_pvc() {
+	local pvc=$1
+	local timeout=${2:-120}
+	local uid elapsed=0
+
+	uid=$(kubectl -n "${NAMESPACE}" get pvc "${pvc}" -o jsonpath='{.metadata.uid}')
+	kubectl -n "${NAMESPACE}" delete pvc "${pvc}" --wait=false
+
+	until [[ $(kubectl -n "${NAMESPACE}" get pvc "${pvc}" -o jsonpath='{.metadata.uid}' --ignore-not-found) != "${uid}" ]]; do
+		if ((elapsed >= timeout)); then
+			echo "Timeout (${timeout}s) exceeded while waiting for ${pvc} (${uid}) to be deleted"
+			kubectl -n "${NAMESPACE}" get pvc "${pvc}" -o yaml || true
+			return 1
+		fi
+		sleep 1
+		elapsed=$((elapsed + 1))
+	done
+}
+
 apply_binlog_server_keyring_secret() {
 	kubectl -n "${NAMESPACE}" apply --server-side --force-conflicts -f "${DEPLOY_DIR}/keyring-secret.yaml"
 }

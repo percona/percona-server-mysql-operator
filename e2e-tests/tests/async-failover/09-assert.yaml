@@ -1,0 +1,85 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 600
+commands:
+  - script: |-
+      set -o errexit
+
+      source ../../functions
+
+      cluster=$(get_cluster_name)
+      returning=$(cat "${TEMP_DIR}/returning-primary")
+
+      # Orchestrator, not the hook, makes it writable again.
+      retry=0
+      until [[ $(run_mysql "SELECT @@read_only" "-h ${returning}.${cluster}-mysql") == "0" ]]; do
+          if [[ ${retry} -ge 60 ]]; then
+              echo "orchestrator never made ${returning} writable after the stand-down"
+              exit 1
+          fi
+          sleep 5
+          retry=$((retry + 1))
+      done
+
+      retry=0
+      until [[ $(get_primary_from_label) == "${returning}" ]]; do
+          if [[ ${retry} -ge 24 ]]; then
+              echo "the primary label is on '$(get_primary_from_label)', expected ${returning}"
+              exit 1
+          fi
+          sleep 5
+          retry=$((retry + 1))
+      done
+
+      wait_cluster_consistency_async "${cluster}" 3 3
+
+      for pod in $(get_mysql_pods); do
+          row=$(run_mysql "SELECT COUNT(*) FROM myDB.myTable WHERE id = 100901" "-h ${pod}.${cluster}-mysql")
+          if [[ ${row} != "1" ]]; then
+              echo "${pod} lost the row the stand-down should have kept"
+              exit 1
+          fi
+      done
+
+      touch "${TEMP_DIR}/stop-sampler"
+      if [[ ! -s ${TEMP_DIR}/writable-samples ]]; then
+          echo "the read_only sampler recorded nothing"
+          exit 1
+      fi
+      if grep -qv '^[01]$' "${TEMP_DIR}/writable-samples"; then
+          echo "two pods were writable at once: $(sort -u "${TEMP_DIR}/writable-samples" | tr '\n' ' ')"
+          exit 1
+      fi
+
+      forced_after=$(kubectl -n "${NAMESPACE}" get events \
+          --field-selector "reason=FailoverForced,involvedObject.name=${cluster}" \
+          -o jsonpath='{range .items[*]}{.count}{"\n"}{end}' \
+          | awk '{ n += ($1 == "" ? 1 : $1) } END { print n + 0 }')
+      if [[ ${forced_after} -gt $(cat "${TEMP_DIR}/forced-events-before") ]]; then
+          echo "a forced promotion was announced during the stand-down:"
+          kubectl -n "${NAMESPACE}" get events \
+              --field-selector "reason=FailoverForced,involvedObject.name=${cluster}" \
+              -o jsonpath='{range .items[*]}{.message}{"\n"}{end}'
+          exit 1
+      fi
+
+      blocked=$(get_cluster_condition "${cluster}" AsyncFailoverBlocked)
+      if [[ ${blocked} != "False" ]]; then
+          echo "AsyncFailoverBlocked is '${blocked}' after the stand-down, expected False"
+          exit 1
+      fi
+
+      # The NoWriteableMaster recovery must not be left active, or it blocks
+      # the next failover for RecoveryPeriodBlockSeconds.
+      retry=0
+      unacknowledged='[.[] | select(.Acknowledged == false) | select(.Id as $id | ($before | index($id)) | not)]'
+      until [[ $(run_curl_orc "http://$(get_orc_svc "${cluster}"):3000/api/audit-recovery" | jq --argjson before "$(cat "${TEMP_DIR}/unacknowledged-before")" "${unacknowledged} | length") == "0" ]]; do
+          if [[ ${retry} -ge 24 ]]; then
+              echo "orchestrator still holds an unacknowledged recovery"
+              run_curl_orc "http://$(get_orc_svc "${cluster}"):3000/api/audit-recovery" | jq --argjson before "$(cat "${TEMP_DIR}/unacknowledged-before")" "${unacknowledged}"
+              exit 1
+          fi
+          sleep 5
+          retry=$((retry + 1))
+      done
+    timeout: 600
