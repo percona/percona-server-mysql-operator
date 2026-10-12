@@ -195,8 +195,8 @@ func TestConfigMapDataUserConfiguration(t *testing.T) {
 		assert.NotContains(t, cfg["PreFailoverProcesses"], "echo pwned")
 		assert.NotContains(t, cfg["PostFailoverProcesses"], "echo pwned")
 		assert.NotContains(t, cfg["PostUnsuccessfulFailoverProcesses"], "echo pwned")
-		assert.EqualValues(t, 6*60*60+60*60, cfg["RecoveryPeriodBlockSeconds"])
-		assert.EqualValues(t, 7, cfg["UnseenInstanceForgetHours"])
+		assert.EqualValues(t, 60*60+60*60, cfg["RecoveryPeriodBlockSeconds"])
+		assert.EqualValues(t, 2, cfg["UnseenInstanceForgetHours"])
 
 		// non-reserved keys (incl. the now-overridable ones) get through
 		assert.EqualValues(t, 9, cfg["InstancePollSeconds"])
@@ -364,7 +364,7 @@ func TestConfigMapDataRendersFailoverHook(t *testing.T) {
 		cfg := parse(t, cr)
 		hook := hookOf(t, cfg)
 
-		assert.Contains(t, hook, "-timeout 6h0m0s")
+		assert.Contains(t, hook, "-timeout 1h0m0s")
 		assert.Contains(t, hook, "-on-timeout Abort")
 		// {command} is what tells a planned takeover from a primary that is
 		// really gone; the hook must keep receiving it.

@@ -50,7 +50,7 @@ import (
 const (
 	defaultGracePeriodSec int64 = 600
 
-	defaultFailoverTimeout = 6 * time.Hour
+	defaultFailoverTimeout = time.Hour
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -365,7 +365,7 @@ type FailoverSpec struct {
 	// if the Orchestrator raft leader changes mid-failover, which delays the
 	// OnTimeout decision rather than bringing it forward.
 	// +kubebuilder:validation:Pattern=`^([0-9]+(\.[0-9]+)?(ns|us|ms|s|m|h))+$`
-	// +kubebuilder:default="6h"
+	// +kubebuilder:default="1h"
 	Timeout string `json:"timeout,omitempty"`
 
 	// OnTimeout decides what happens when Timeout expires.

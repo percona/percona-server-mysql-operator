@@ -57,7 +57,7 @@ If the old primary's pod can't be scheduled or reached over the network, the att
 1. `cmd/orc-handler` waits up to 2 minutes for the source pod to exist and get an IP (`sourcePodWait`).
 2. `cmd/failover` gives up once the source sends nothing for 2 minutes (`-stall-timeout`). This covers the sidecar not listening yet, the response headers and every read of the body. A transfer that keeps making progress is never cut by it.
 
-The failover timeout (default `6h`) is not per attempt. It spans all of orchestrator's retries and is counted from the first attempt for this source. `cmd/orc-handler` records that moment in a `seen` mark (`orc-handler/seen/<source>`) and passes each attempt only what's left of the budget as `failover -timeout`. Once the budget is spent, the `onTimeout` policy applies. A mark that no attempt refreshed for an hour is dropped, so an unrelated later failure of the same source starts with the full budget.
+The failover timeout (default `1h`) is not per attempt. It spans all of orchestrator's retries and is counted from the first attempt for this source. `cmd/orc-handler` records that moment in a `seen` mark (`orc-handler/seen/<source>`) and passes each attempt only what's left of the budget as `failover -timeout`. Once the budget is spent, the `onTimeout` policy applies. A mark that no attempt refreshed for an hour is dropped, so an unrelated later failure of the same source starts with the full budget.
 
 ### Updating replica relay logs
 
@@ -213,13 +213,13 @@ The failover is configured under `spec.orchestrator.failover`:
 spec:
   orchestrator:
     failover:
-      timeout: 6h
+      timeout: 1h
       onTimeout: Abort
 ```
 
 | Field | Default | Meaning |
 |---|---|---|
-| `timeout` | `6h` | How long the cluster tries to recover the transactions stranded on the dead primary. It spans every retry and is counted from the first attempt (see [retry semantics](#what-if-the-old-primarys-pod-is-unreachable)). |
+| `timeout` | `1h` | How long the cluster tries to recover the transactions stranded on the dead primary. It spans every retry and is counted from the first attempt (see [retry semantics](#what-if-the-old-primarys-pod-is-unreachable)). |
 | `onTimeout` | `Abort` | What happens once `timeout` expires: `Abort` or `ForceWithPossibleDataLoss`. |
 
 The block only applies to async clusters. Setting it on a group replication cluster fails validation. The whole mechanism, meaning the hooks and every derived orchestrator setting, is only rendered for `crVersion` 1.3.0 or later. On an older `crVersion` the block is validated but has no effect.
@@ -260,7 +260,7 @@ The pre hook is the only thing that decides whether the candidate is safe to pro
 | `RecoveryPeriodBlockSeconds` | `timeout` + 1h | Orchestrator measures this from the start of a recovery. A shorter value would let it register a second recovery of the same failure while the hook is still working on the first. `finish` acknowledges the recovery when it's over, which ends the block early, so a promoted cluster isn't left unrecoverable for this long. |
 | `PreFailoverProcesses`, `PostFailoverProcesses`, `PostUnsuccessfulFailoverProcesses` | the `orc-handler` hooks | The mechanism itself. |
 
-With the default `6h` timeout, the shipped `build/orchestrator.conf.json` already carries the derived values (`RecoveryPeriodBlockSeconds: 25200`, `UnseenInstanceForgetHours: 7`).
+With the default `1h` timeout, the shipped `build/orchestrator.conf.json` already carries the derived values (`RecoveryPeriodBlockSeconds: 7200`, `UnseenInstanceForgetHours: 2`).
 
 ### Hook deadline (`hookTimeout`)
 
