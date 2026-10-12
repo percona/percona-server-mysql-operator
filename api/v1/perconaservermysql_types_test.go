@@ -1066,7 +1066,7 @@ func TestFailoverSpecDefaults(t *testing.T) {
 
 		spec := cr.FailoverSpec()
 
-		assert.Equal(t, 6*time.Hour, spec.TimeoutDuration())
+		assert.Equal(t, time.Hour, spec.TimeoutDuration())
 		// Losing committed transactions is never the default.
 		assert.Equal(t, FailoverPolicyAbort, spec.OnTimeout)
 	})
@@ -1078,7 +1078,7 @@ func TestFailoverSpecDefaults(t *testing.T) {
 		spec := cr.FailoverSpec()
 
 		assert.Equal(t, FailoverPolicyForce, spec.OnTimeout)
-		assert.Equal(t, 6*time.Hour, spec.TimeoutDuration())
+		assert.Equal(t, time.Hour, spec.TimeoutDuration())
 	})
 
 	t.Run("the accessor does not mutate the cr", func(t *testing.T) {
@@ -1095,7 +1095,7 @@ func TestFailoverSpecDefaults(t *testing.T) {
 		// never went through it. A zero timeout would mean "no limit" downstream.
 		spec := &FailoverSpec{Timeout: "soon"}
 
-		assert.Equal(t, 6*time.Hour, spec.TimeoutDuration())
+		assert.Equal(t, time.Hour, spec.TimeoutDuration())
 	})
 }
 
@@ -1113,7 +1113,7 @@ func TestCheckNSetDefaultsFailover(t *testing.T) {
 		err := cr.CheckNSetDefaults(t.Context(), nil)
 
 		assert.EqualError(t, err, "reconcile mysql volumeSpec: volumeSpec provided is nil")
-		assert.Equal(t, "6h0m0s", cr.Spec.Orchestrator.Failover.Timeout)
+		assert.Equal(t, "1h0m0s", cr.Spec.Orchestrator.Failover.Timeout)
 		assert.Equal(t, FailoverPolicyAbort, cr.Spec.Orchestrator.Failover.OnTimeout)
 	})
 
