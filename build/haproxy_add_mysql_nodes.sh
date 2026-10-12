@@ -53,19 +53,16 @@ function main() {
 		NODE_LIST_MYSQLX+=("server ${node_name} ${mysql_host}:${MYSQLX_PORT} ${send_proxy} ${SERVER_OPTIONS} backup")
 	done
 
-	if [ "${#NODE_LIST_REPL[@]}" -gt 1 ]; then
-		for i in "${!NODE_LIST_ADMIN[@]}"; do
-			node_name=$(echo "${NODE_LIST_ADMIN[$i]}" | cut -d ' ' -f 2)
-			# mysql-admin replicas run the same external check against the
-			# same admin port as mysql-replicas, so mirror the state with 'track'
-			# instead of running duplicate checks.
-			NODE_LIST_ADMIN[$i]="$(echo "${NODE_LIST_ADMIN[$i]}" | sed 's/ check / /') track mysql-replicas/${node_name}"
-		done
-		for i in "${!NODE_LIST_MYSQLX[@]}"; do
-			node_name=$(echo "${NODE_LIST_MYSQLX[$i]}" | cut -d ' ' -f 2)
-			NODE_LIST_MYSQLX[$i]="$(echo "${NODE_LIST_MYSQLX[$i]}" | sed 's/ check / /')"
-		done
-	fi
+	for i in "${!NODE_LIST_ADMIN[@]}"; do
+		node_name=$(echo "${NODE_LIST_ADMIN[$i]}" | cut -d ' ' -f 2)
+		# mysql-admin replicas mirror the corresponding server in mysql-primary
+		# instead of running duplicate checks.
+		NODE_LIST_ADMIN[$i]="$(echo "${NODE_LIST_ADMIN[$i]}" | sed 's/ check / /') track mysql-primary/${node_name}"
+	done
+	for i in "${!NODE_LIST_MYSQLX[@]}"; do
+		node_name=$(echo "${NODE_LIST_MYSQLX[$i]}" | cut -d ' ' -f 2)
+		NODE_LIST_MYSQLX[$i]="$(echo "${NODE_LIST_MYSQLX[$i]}" | sed 's/ check / /') track mysql-primary/${node_name}"
+	done
 
 	if [ -n "$primary_mysql_host" ]; then
 		if [[ "${#NODE_LIST[@]}" -ne 0 ]]; then
@@ -117,9 +114,8 @@ function main() {
 		echo "${NODE_LIST_REPL[*]}"
 	) >>"$path_to_haproxy_cfg/haproxy.cfg"
 
-	# the primary is the only node mysql-x and mysql-admin check: their replicas
-	# track mysql-replicas or stay idle as backups. haproxy_check_replicas.sh
-	# would always mark it down, so check these backends as primary.
+	# The primary is the only node mysql-x and mysql-admin check. Their replicas
+	# track the corresponding servers in mysql-primary and stay idle as backups.
 	cat <<-EOF >>"$path_to_haproxy_cfg/haproxy.cfg"
 		    backend mysql-x
 		      mode tcp
