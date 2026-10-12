@@ -7,7 +7,10 @@ commands:
 
       source ../../functions
 
-      kubectl patch ps $(get_cluster_name) -n "${NAMESPACE}" \
+      cluster=$(get_cluster_name)
+      uids_before=$(get_pod_uids "${cluster}" database)
+
+      kubectl patch ps "${cluster}" -n "${NAMESPACE}" \
         --type='merge' \
         -p '{
           "spec": {
@@ -25,3 +28,8 @@ commands:
             }
           }
         }'
+
+      # the assert would pass on the status from before the restart
+      wait_for_pods_restart "${cluster}" database "${uids_before}" 600
+      wait_cluster_consistency_async "${cluster}" 3 3
+    timeout: 1200

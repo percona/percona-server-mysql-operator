@@ -33,6 +33,32 @@ func TestConfigMapDataUserConfiguration(t *testing.T) {
 		assert.EqualValues(t, 20, cfg["ReasonableReplicationLagSeconds"])
 	})
 
+	t.Run("replication lag threshold defaults to a minute", func(t *testing.T) {
+		cr := &apiv1.PerconaServerMySQL{}
+		cr.Spec.CRVersion = "1.3.0"
+
+		cfg := parse(t, cr)
+		assert.EqualValues(t, 60, cfg["ReasonableReplicationLagSeconds"])
+	})
+
+	t.Run("replication lag threshold stays user-tunable", func(t *testing.T) {
+		cr := &apiv1.PerconaServerMySQL{}
+		cr.Spec.CRVersion = "1.3.0"
+		cr.Spec.Orchestrator.Configuration = `{"ReasonableReplicationLagSeconds": 20}`
+
+		cfg := parse(t, cr)
+		assert.EqualValues(t, 20, cfg["ReasonableReplicationLagSeconds"])
+	})
+
+	t.Run("replication lag threshold is left alone before 1.3.0", func(t *testing.T) {
+		cr := &apiv1.PerconaServerMySQL{}
+		cr.Spec.CRVersion = "1.2.0"
+
+		cfg := parse(t, cr)
+		_, ok := cfg["ReasonableReplicationLagSeconds"]
+		assert.False(t, ok)
+	})
+
 	t.Run("reserved keys cannot be overridden", func(t *testing.T) {
 		cr := &apiv1.PerconaServerMySQL{}
 		cr.Spec.CRVersion = "1.3.0"

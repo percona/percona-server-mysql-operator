@@ -22,6 +22,9 @@ const (
 	// forcePromoteAny is the annotation value that leaves the choice of which
 	// replica to promote to the operator.
 	forcePromoteAny = "true"
+	// forcePromoteDowntime keeps orchestrator's own recoveries off the old
+	// primary for as long as a forced takeover can take.
+	forcePromoteDowntime = 5 * time.Minute
 
 	reasonNoWritablePrimary = "NoWritablePrimary"
 	reasonPrimaryWritable   = "PrimaryWritable"
@@ -139,10 +142,11 @@ func (r *PerconaServerMySQLReconciler) reconcileForcePromote(
 	// one that still takes writes, the promoted replica misses them and the
 	// old primary is left running on its own.
 	if hasWritablePrimary(primary) {
-		r.Recorder.Eventf(cr, corev1.EventTypeWarning, naming.EventFailoverForced,
-			"Refusing to force a promotion: %s is a writable primary. Forcing one is only for a cluster"+
-				" left without a writable primary.", primary.Alias)
-		return r.consumeForcePromote(ctx, cr)
+		return r.refuseWritablePrimary(ctx, cr, primary.Alias)
+	}
+
+	if primary.Key.Hostname == "" {
+		return r.refuseForcePromote(ctx, cr, errors.New("orchestrator does not know the cluster's primary"))
 	}
 
 	instances, err := orchestrator.Cluster(ctx, r.ClientCmd, orcPod, cluster)
@@ -158,6 +162,45 @@ func (r *PerconaServerMySQLReconciler) reconcileForcePromote(
 
 	if primary.Alias == candidate {
 		log.Info("Requested candidate is already the primary, nothing to promote", "candidate", candidate)
+		return r.consumeForcePromote(ctx, cr)
+	}
+
+	host, port := primary.Key.Hostname, int(primary.Key.Port)
+
+	// someone else's downtime
+	if primary.IsDowntimed && primary.DowntimeReason != orchestrator.DowntimeReasonForcePromote {
+		return errors.Errorf("%s is downtimed by %s (%s)", host, primary.DowntimeOwner, primary.DowntimeReason)
+	}
+
+	if err := orchestrator.BeginDowntime(ctx, r.ClientCmd, orcPod, host, port,
+		orchestrator.DowntimeOwner, orchestrator.DowntimeReasonForcePromote, int(forcePromoteDowntime.Seconds())); err != nil {
+		return errors.Wrapf(err, "begin downtime on %s", host)
+	}
+	takenOver := false
+	defer func() {
+		if takenOver {
+			return
+		}
+		if err := orchestrator.EndDowntime(context.WithoutCancel(ctx), r.ClientCmd, orcPod, host, port); err != nil {
+			log.Error(err, "failed to end the downtime", "instance", host)
+		}
+	}()
+
+	fresh, err := orchestrator.RefreshInstance(ctx, r.ClientCmd, orcPod, host, port)
+	// retry if last check is not valid
+	toleratedUnreachable := errors.Is(err, orchestrator.ErrInstanceUnreachable) && !primary.IsLastCheckValid
+	switch {
+	case err != nil && !toleratedUnreachable:
+		return errors.Wrapf(err, "refresh %s", host)
+	case err != nil:
+		log.Info("Old primary is unreachable, taking over", "primary", host)
+	case hasWritablePrimary(fresh):
+		return r.refuseWritablePrimary(ctx, cr, primary.Alias)
+	default:
+		r.Recorder.Eventf(cr, corev1.EventTypeWarning, naming.EventFailoverForced,
+			"Refusing to force a promotion: %s is back read-only. Orchestrator makes it writable only once"+
+				" a replica of it is replicating, with its IO and SQL threads running; check the replicas'"+
+				" replication status.", primary.Alias)
 		return r.consumeForcePromote(ctx, cr)
 	}
 
@@ -185,12 +228,20 @@ func (r *PerconaServerMySQLReconciler) reconcileForcePromote(
 			"Could not force the promotion of %s: %v", candidate, err)
 		return nil
 	}
+	takenOver = true
 
 	r.Recorder.Eventf(cr, corev1.EventTypeWarning, naming.EventFailoverForced,
 		"Forced the promotion of %s on request. Transactions the old primary committed and never"+
 			" delivered are lost.", candidate)
 
 	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) refuseWritablePrimary(ctx context.Context, cr *apiv1.PerconaServerMySQL, alias string) error {
+	r.Recorder.Eventf(cr, corev1.EventTypeWarning, naming.EventFailoverForced,
+		"Refusing to force a promotion: %s is a writable primary. Forcing one is only for a cluster"+
+			" left without a writable primary.", alias)
+	return r.consumeForcePromote(ctx, cr)
 }
 
 // refuseForcePromote answers the annotation when orchestrator cannot say which
