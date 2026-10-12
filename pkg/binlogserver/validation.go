@@ -29,10 +29,9 @@ type archiveMetadata struct {
 	PreviousGTIDs *string `json:"previous_gtids"`
 	AddedGTIDs    *string `json:"added_gtids"`
 	MinTimestamp  string  `json:"min_timestamp"`
-	MaxTimestamp  string  `json:"max_timestamp"`
 }
 
-// ValidateTarget rejects targets outside the archive's bounds or containing unknown source UUIDs.
+// ValidateTarget rejects dates before the archive starts and GTIDs not covered by the archive.
 func ValidateTarget(ctx context.Context, st storage.Storage, restore *apiv1.PerconaServerMySQLRestore) error {
 	subcommand, targetArg, err := SearchArgs(restore)
 	if err != nil {
@@ -55,7 +54,8 @@ func ValidateTarget(ctx context.Context, st storage.Storage, restore *apiv1.Perc
 	}
 }
 
-// validateTimestampTarget checks the oldest and latest archived timestamps.
+// validateTimestampTarget checks the oldest archived timestamp.
+// Dates beyond the archive end are allowed to restore all available binlogs.
 func validateTimestampTarget(ctx context.Context, st storage.Storage, names []string, targetArg string) error {
 	target, err := time.Parse(binlogTimestampLayout, targetArg)
 	if err != nil {
@@ -77,34 +77,6 @@ func validateTimestampTarget(ctx context.Context, st storage.Storage, names []st
 	if target.Before(oldest) {
 		return errors.Wrapf(ErrTargetNotCovered,
 			"timestamp is too old, the archive starts at %s", metadata.MinTimestamp)
-	}
-	latestName := names[len(names)-1]
-	// Read the archive tail only when the oldest binlog cannot prove coverage.
-	if latestName != name {
-		latest, err := time.Parse(binlogTimestampLayout, metadata.MaxTimestamp)
-		if err != nil {
-			return errors.Wrap(err, "parse max_timestamp")
-		}
-		if !latest.Before(oldest) && !target.After(latest) {
-			return nil
-		}
-		metadata, err = getBinlogMetadata(ctx, st, latestName)
-		if err != nil {
-			return errors.Wrapf(err, "read metadata of binlog %s", latestName)
-		}
-	}
-	if metadata.MaxTimestamp == "" {
-		return errors.Errorf("binlog %s has no max_timestamp", latestName)
-	}
-	latest, err := time.Parse(binlogTimestampLayout, metadata.MaxTimestamp)
-	if err != nil {
-		return errors.Wrapf(err, "parse max_timestamp %s", metadata.MaxTimestamp)
-	}
-	if latest.Before(oldest) {
-		return errors.New("binlog archive has inconsistent timestamp bounds")
-	}
-	if target.After(latest) {
-		return errors.Wrapf(ErrTargetNotCovered, "timestamp is too new, the archive ends at %s", metadata.MaxTimestamp)
 	}
 	return nil
 }

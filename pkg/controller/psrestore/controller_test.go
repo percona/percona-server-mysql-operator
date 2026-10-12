@@ -577,11 +577,11 @@ func TestPITRValidationBeforePause(t *testing.T) {
 	}{
 		"unknown UUID":               {target: unknown + ":1-2008", metadata: `{"previous_gtids":"", "added_gtids":"` + known + `:1-2006"}`, wantDesc: unknown},
 		"future GTID":                {target: known + ":2007-2008", metadata: `{"previous_gtids":"", "added_gtids":"` + known + `:1-2006"}`, wantDesc: "exceeds the binlog archive"},
-		"future timestamp":           {pitrType: apiv1.PITRDate, target: "2026-09-09 13:00:01", metadata: `{"min_timestamp":"2026-09-09T12:00:00", "max_timestamp":"2026-09-09T13:00:00"}`, wantDesc: "timestamp is too new"},
+		"old timestamp":              {pitrType: apiv1.PITRDate, target: "2026-09-09 11:59:59", metadata: `{"min_timestamp":"2026-09-09T12:00:00"}`, wantDesc: "timestamp is too old"},
 		"malformed timestamp":        {pitrType: apiv1.PITRDate, target: "yesterday", wantDesc: "invalid pitr target"},
 		"timestamp missing metadata": {pitrType: apiv1.PITRDate, target: "2026-09-09 12:15:00", wantDesc: "not found"},
 		"timestamp corrupt metadata": {pitrType: apiv1.PITRDate, target: "2026-09-09 12:15:00", metadata: "not-json", wantDesc: "parse metadata"},
-		"timestamp missing maximum":  {pitrType: apiv1.PITRDate, target: "2026-09-09 12:15:00", metadata: `{"min_timestamp":"2026-09-09T12:00:00"}`, wantDesc: "has no max_timestamp"},
+		"timestamp missing minimum":  {pitrType: apiv1.PITRDate, target: "2026-09-09 12:15:00", metadata: `{}`, wantDesc: "has no min_timestamp"},
 		"timestamp storage failure":  {pitrType: apiv1.PITRDate, target: "2026-09-09 12:15:00", storageErr: true, wantDesc: "storage unavailable"},
 		"malformed UUID":             {target: "not-a-uuid:1", wantDesc: "malformed GTID source"},
 		"missing metadata":           {target: known + ":2008", wantDesc: "not found"},

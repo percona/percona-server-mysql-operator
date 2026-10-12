@@ -20,4 +20,4 @@ delete:
   - apiVersion: ps.percona.com/v1
     kind: PerconaServerMySQLRestore
     metadata:
-      name: gr-pitr-s3-restore-future-date
+      name: gr-pitr-s3-restore-too-old-date

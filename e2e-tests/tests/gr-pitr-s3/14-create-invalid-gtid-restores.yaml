@@ -44,7 +44,7 @@ commands:
           '
       set -x
 
-      for restore_name in gr-pitr-s3-restore-too-old-gtid gr-pitr-s3-restore-bad-gtid gr-pitr-s3-restore-unknown-uuid gr-pitr-s3-restore-future-gtid gr-pitr-s3-restore-future-date; do
+      for restore_name in gr-pitr-s3-restore-too-old-gtid gr-pitr-s3-restore-bad-gtid gr-pitr-s3-restore-unknown-uuid gr-pitr-s3-restore-future-gtid gr-pitr-s3-restore-too-old-date; do
           target_type=gtid
           target_field=gtid
           if [[ "${restore_name}" == gr-pitr-s3-restore-too-old-gtid ]]; then
@@ -53,10 +53,10 @@ commands:
               target='3e11fa47-71ca-11e1-9e33-c80aa9429563:11-20'
           elif [[ "${restore_name}" == gr-pitr-s3-restore-future-gtid ]]; then
               target='3e11fa47-71ca-11e1-9e33-c80aa9429562:21-25'
-          elif [[ "${restore_name}" == gr-pitr-s3-restore-future-date ]]; then
+          elif [[ "${restore_name}" == gr-pitr-s3-restore-too-old-date ]]; then
               target_type=date
               target_field=date
-              target='2026-09-09 13:00:01'
+              target='2026-09-09 11:59:59'
           else
               target='not-a-uuid:1-5'
           fi
