@@ -1,6 +1,6 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
-timeout: 120
+timeout: 180
 commands:
   - script: |-
       set -o errexit
@@ -8,12 +8,17 @@ commands:
 
       source ../../functions
 
+      log=/var/lib/mysql/log/mysqld-error.log
+      probe_user=kuttl-flush-probe
+
       rotated=0
       for pod in $(get_mysql_pod_names logcollection); do
           marker="kuttl-pre-rotate-marker-${pod}"
 
+          inode_before=$(kubectl -n "${NAMESPACE}" exec "${pod}" -c logrotate -- stat -c %i "${log}")
+
           kubectl -n "${NAMESPACE}" exec "${pod}" -c logrotate -- \
-              sh -c "echo '${marker}' >>/var/lib/mysql/log/mysqld-error.log"
+              sh -c "echo '${marker}' >>${log}"
 
           # -f forces a rotation regardless of the age/size conditions in the config,
           # so the test does not have to wait for the cron schedule.
@@ -21,15 +26,34 @@ commands:
               logrotate -f -s /var/lib/mysql/log/logrotate.status \
               /opt/percona/logcollector/logrotate/conf.d/mysql.conf
 
-          kubectl -n "${NAMESPACE}" exec "${pod}" -c logrotate -- \
-              grep -q "${marker}" /var/lib/mysql/log/mysqld-error.log.1
+          inode_rotated=$(kubectl -n "${NAMESPACE}" exec "${pod}" -c logrotate -- stat -c %i "${log}.1")
+          [ "${inode_rotated}" = "${inode_before}" ]
 
-          # The config rotates by renaming with nocreate, so the live log only
-          # reappears once the postrotate flush makes mysqld reopen the path.
+          kubectl -n "${NAMESPACE}" exec "${pod}" -c logrotate -- \
+              grep -q "${marker}" "${log}.1"
+
+          # nocreate leaves the live log missing until the flush reopens the path.
           retry 12 5 bash -c "
-              kubectl -n '${NAMESPACE}' exec '${pod}' -c logrotate -- \
-                  test -f /var/lib/mysql/log/mysqld-error.log
+              kubectl -n '${NAMESPACE}' exec '${pod}' -c logrotate -- test -f ${log}
           "
+
+          inode_after=$(kubectl -n "${NAMESPACE}" exec "${pod}" -c logrotate -- stat -c %i "${log}")
+          [ "${inode_after}" != "${inode_before}" ]
+
+          # A failed login makes mysqld write the line itself: without the flush
+          # it would still hold the rotated file and the line would land there.
+          if kubectl -n "${NAMESPACE}" exec "${pod}" -c logrotate -- \
+              bash -c 'MYSQL_PWD=wrong mysql -nN -ukuttl-flush-probe -h"${POD_IP}" -P33062 -e "SELECT 1"' 2>/dev/null; then
+              echo "probe login unexpectedly succeeded"
+              exit 1
+          fi
+
+          retry 12 5 bash -c "
+              kubectl -n '${NAMESPACE}' exec '${pod}' -c logrotate -- grep -q ${probe_user} ${log}
+          "
+
+          kubectl -n "${NAMESPACE}" exec "${pod}" -c logrotate -- \
+              sh -c "! grep -q ${probe_user} ${log}.1"
 
           rotated=$((rotated + 1))
       done

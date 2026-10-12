@@ -8,19 +8,20 @@ commands:
 
       source ../../functions
 
+      probe_user=kuttl-collect-probe
+
       collecting=0
       for pod in $(get_mysql_pod_names logcollection); do
-          marker="kuttl-post-rotate-marker-${pod}"
-
-          # mysql.conf rotates by renaming, so fluent-bit has to follow the old
-          # inode to EOF and then start tailing the file mysqld reopened.
-          # Appending a marker after 04-rotate-logs is what proves it did.
-          kubectl -n "${NAMESPACE}" exec "${pod}" -c logrotate -- \
-              sh -c "echo '${marker}' >>/var/lib/mysql/log/mysqld-error.log"
+          # A failed login makes mysqld write to the reopened log itself.
+          if kubectl -n "${NAMESPACE}" exec "${pod}" -c logrotate -- \
+              bash -c 'MYSQL_PWD=wrong mysql -nN -ukuttl-collect-probe -h"${POD_IP}" -P33062 -e "SELECT 1"' 2>/dev/null; then
+              echo "probe login unexpectedly succeeded"
+              exit 1
+          fi
 
           retry 18 10 bash -c "
               kubectl -n '${NAMESPACE}' logs '${pod}' -c logs --tail=-1 \
-                  | grep -q '${marker}'
+                  | grep -q ${probe_user}
           "
 
           collecting=$((collecting + 1))
