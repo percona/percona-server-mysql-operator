@@ -30,7 +30,7 @@ mysql_exec -e 'FLUSH NO_WRITE_TO_BINLOG ERROR LOGS, SLOW LOGS, GENERAL LOGS;'
 audit_component=$(mysql_exec -e "SELECT COUNT(*) FROM mysql.component WHERE component_urn = '${AUDIT_COMPONENT_URN}'" 2>/dev/null || echo 0)
 audit_plugin=$(mysql_exec -e 'SHOW PLUGINS' 2>/dev/null | grep -c 'audit_log' || true)
 if [ "${audit_component:-0}" -gt 0 ]; then
-	mysql_exec -e 'DO audit_log_rotate();'
+	mysql_exec -e 'DO audit_log_rotate();' || echo "WARNING: audit log rotation failed" >&2
 elif [ "${audit_plugin:-0}" -gt 0 ]; then
-	mysql_exec -e 'SET GLOBAL audit_log_flush=1;'
+	mysql_exec -e 'SET GLOBAL audit_log_flush=1;' || echo "WARNING: audit log flush failed" >&2
 fi
