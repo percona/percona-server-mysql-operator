@@ -21,3 +21,12 @@ commands:
         | yq eval ".spec.backup.storages.local-s3.s3.endpointUrl=\"http://s3-storage-all-in-one.${NAMESPACE}:8333\"" - \
         | yq eval '.spec.backup.storages.local-s3.s3.region="us-east-1"' - \
         | kubectl -n "${NAMESPACE}" apply -f -
+
+      # Removing the metadata rolls the mysql and router pods. 06-assert can pass
+      # on the stale ready status before the rollout starts, so wait for it here.
+      cluster_name=$(get_cluster_name)
+      kubectl -n "${NAMESPACE}" wait sts "${cluster_name}-mysql" --for=jsonpath='{.metadata.generation}'=4 --timeout=120s
+      kubectl -n "${NAMESPACE}" wait deployment "${cluster_name}-router" --for=jsonpath='{.metadata.generation}'=4 --timeout=120s
+      wait_for_sts_pods_updated "${cluster_name}-mysql" 600
+      kubectl -n "${NAMESPACE}" rollout status deployment "${cluster_name}-router" --timeout=300s
+    timeout: 900
