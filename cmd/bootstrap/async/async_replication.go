@@ -275,7 +275,9 @@ func Bootstrap(ctx context.Context) error {
 func getTopology(ctx context.Context, fqdn string, peers sets.Set[string]) (string, []string, error) {
 	replicas := sets.New[string]()
 	gtids := make(map[string]string)
+	sources := make(map[string]string)
 	primary := ""
+	writable := ""
 
 	var subtractor gtidSubtractor
 
@@ -326,18 +328,29 @@ func getTopology(ctx context.Context, fqdn string, peers sets.Set[string]) (stri
 		gtids[replicaHost] = gtid
 		log.Printf("Peer %s GTIDExecuted=%s", replicaHost, gtid)
 
+		if source != "" {
+			sources[replicaHost] = source
+			log.Printf("Peer %s is configured to replicate from %s", replicaHost, source)
+		}
+
 		if status == mysqldb.ReplicationStatusActive {
 			primary = source
 		}
+
+		if status == mysqldb.ReplicationStatusNotInitiated {
+			ok, err := db.IsWritable(ctx)
+			if err != nil {
+				return "", nil, errors.Wrapf(err, "check whether %s is writable", peer)
+			}
+			if ok {
+				writable = replicaHost
+			}
+		}
 	}
 
-	if primary == "" && peers.Len() == 1 {
-		primary = sets.List(peers)[0]
-	} else if primary == "" {
-		primary, err = electPrimary(ctx, subtractor, fqdn, gtids)
-		if err != nil {
-			return "", nil, err
-		}
+	primary, err = choosePrimary(ctx, subtractor, fqdn, peers, primary, writable, gtids, sources)
+	if err != nil {
+		return "", nil, err
 	}
 
 	if replicas.Len() > 0 {
@@ -443,9 +456,28 @@ func orderDonors(ctx context.Context, s gtidSubtractor, replicas []string, fqdn 
 	return ordered, nil
 }
 
+// choosePrimary decides the primary from what getTopology read off the peers:
+// the source of an actively replicating peer, else a writable peer with no
+// channel, else the GTID election.
+func choosePrimary(ctx context.Context, s gtidSubtractor, fqdn string, peers sets.Set[string], active, writable string, gtids, sources map[string]string) (string, error) {
+	switch {
+	case active != "":
+		return active, nil
+	case peers.Len() == 1:
+		return sets.List(peers)[0], nil
+	case writable != "":
+		// only a primary is writable, and the replicas may not have been
+		// repointed to it yet
+		return writable, nil
+	default:
+		return electPrimary(ctx, s, fqdn, gtids, sources)
+	}
+}
+
 // electPrimary picks the peer whose executed GTID set holds every other peer's.
-// When several do, it picks the first of them that is not fqdn.
-func electPrimary(ctx context.Context, s gtidSubtractor, fqdn string, gtids map[string]string) (string, error) {
+// When several do, it picks the one most other peers are configured to replicate
+// from, and failing that the first of them that is not fqdn.
+func electPrimary(ctx context.Context, s gtidSubtractor, fqdn string, gtids, sources map[string]string) (string, error) {
 	if len(gtids) == 0 {
 		return "", nil
 	}
@@ -481,6 +513,26 @@ func electPrimary(ctx context.Context, s gtidSubtractor, fqdn string, gtids map[
 		return "", errors.Wrapf(errDivergedPeers, "none of %v holds every transaction", peers)
 	case 1:
 		return complete[0], nil
+	}
+
+	// replicas whose source died keep their channel configured, so it still
+	// names the primary. Without this the primary restarting before a failover
+	// would follow one of its own replicas
+	best, bestVotes := "", 0
+	for _, candidate := range complete {
+		votes := 0
+		for peer, source := range sources {
+			if peer != candidate && source == candidate {
+				votes++
+			}
+		}
+
+		if votes > bestVotes {
+			best, bestVotes = candidate, votes
+		}
+	}
+	if best != "" {
+		return best, nil
 	}
 
 	// The complete peers hold the same transactions, so there is nothing to
