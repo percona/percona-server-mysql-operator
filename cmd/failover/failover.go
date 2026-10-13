@@ -543,7 +543,7 @@ func postStream(ctx context.Context, sourceURL, password string, body []byte) (*
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.DialContext = (&net.Dialer{Timeout: sidecarDialTimeout}).DialContext
 	client := &http.Client{Transport: transport}
-	waiting := false
+	var dialErr error
 
 	for {
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, sourceURL, bytes.NewReader(body))
@@ -554,13 +554,17 @@ func postStream(ctx context.Context, sourceURL, password string, body []byte) (*
 		req.SetBasicAuth(string(apiv1.UserOperator), password)
 
 		resp, err := client.Do(req)
+		// the transport reports only the cancellation, not why we were still retrying
+		if err != nil && ctx.Err() != nil && dialErr != nil {
+			return nil, fmt.Errorf("%w, last dial error: %w", err, dialErr)
+		}
 		if !isDialError(err) {
 			return resp, err
 		}
-		if !waiting {
+		if dialErr == nil {
 			log.Printf("Waiting for the source sidecar to listen: %v", err)
-			waiting = true
 		}
+		dialErr = err
 
 		select {
 		case <-ctx.Done():
