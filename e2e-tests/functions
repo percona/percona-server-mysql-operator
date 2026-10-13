@@ -1764,6 +1764,7 @@ check_haproxy_backends() (
 	local cluster=$1
 	local primary_pod=${2:-$(get_primary_from_label)}
 	local haproxy_size=${3:-3}
+	local config_check=${4:-}
 	local expected_config="${TEST_CONFIG_DIR}/expected-haproxy.cfg"
 	local work_dir
 	work_dir=$(mktemp -d "${TEMP_DIR}/haproxy-backends.XXXXXX")
@@ -1807,10 +1808,12 @@ check_haproxy_backends() (
 			return 1
 		fi
 
-		normalize_haproxy_config "${primary_server}" <"${config_file}" >"${normalized_config}"
-		if ! diff -u "${expected_config}" "${normalized_config}"; then
-			echo "${pod}: generated HAProxy configuration does not match ${expected_config}"
-			return 1
+		if [ "${config_check}" != "--skip-config-check" ]; then
+			normalize_haproxy_config "${primary_server}" <"${config_file}" >"${normalized_config}"
+			if ! diff -u "${expected_config}" "${normalized_config}"; then
+				echo "${pod}: generated HAProxy configuration does not match ${expected_config}"
+				return 1
+			fi
 		fi
 
 		local not_up
