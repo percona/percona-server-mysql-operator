@@ -71,34 +71,34 @@ func TestContainer(t *testing.T) {
 	}{
 		"no logrotate spec": {
 			wantSchedule: defaultSchedule,
-			wantMounts:   []string{"datadir", credsVolumeName},
+			wantMounts:   []string{"datadir", CredsVolumeName},
 		},
 		"empty logrotate spec": {
 			logRotate:    new(apiv1.LogRotateSpec),
 			wantSchedule: defaultSchedule,
-			wantMounts:   []string{"datadir", credsVolumeName},
+			wantMounts:   []string{"datadir", CredsVolumeName},
 		},
 		"custom schedule": {
 			logRotate:    &apiv1.LogRotateSpec{Schedule: "30 3 * * *"},
 			wantSchedule: "30 3 * * *",
-			wantMounts:   []string{"datadir", credsVolumeName},
+			wantMounts:   []string{"datadir", CredsVolumeName},
 		},
 		"custom configuration mounts conf.d": {
 			logRotate:    &apiv1.LogRotateSpec{Configuration: "/x {}"},
 			wantSchedule: defaultSchedule,
-			wantMounts:   []string{"datadir", credsVolumeName, VolumeName},
+			wantMounts:   []string{"datadir", CredsVolumeName, VolumeName},
 		},
 		"extra config mounts conf.d": {
 			logRotate: &apiv1.LogRotateSpec{
 				ExtraConfig: corev1.LocalObjectReference{Name: "extra"},
 			},
 			wantSchedule: defaultSchedule,
-			wantMounts:   []string{"datadir", credsVolumeName, VolumeName},
+			wantMounts:   []string{"datadir", CredsVolumeName, VolumeName},
 		},
 		"probes are taken from the spec": {
 			logRotate:     &apiv1.LogRotateSpec{LivenessProbe: liveness, ReadinessProbe: readiness},
 			wantSchedule:  defaultSchedule,
-			wantMounts:    []string{"datadir", credsVolumeName},
+			wantMounts:    []string{"datadir", CredsVolumeName},
 			wantLiveness:  liveness,
 			wantReadiness: readiness,
 		},
@@ -143,12 +143,28 @@ func TestContainerPodEnvUsesDownwardAPI(t *testing.T) {
 	}
 }
 
-func TestContainerMountsCredsForPostrotateFlush(t *testing.T) {
+func TestContainerDoesNotShareMountBackingArray(t *testing.T) {
+	// Spare capacity is what makes append reuse the caller's array.
+	shared := make([]corev1.VolumeMount, 1, 8)
+	shared[0] = corev1.VolumeMount{Name: "datadir", MountPath: "/var/lib/mysql"}
+
+	c := Container(testCR(nil), "/var/lib/mysql/log", shared)
+	require.Equal(t, []string{"datadir", CredsVolumeName}, mountNames(c.VolumeMounts))
+
+	// The caller appending to its own slice writes at the same index the creds
+	// mount occupies, and would clobber it if the arrays were shared.
+	_ = append(shared, corev1.VolumeMount{Name: "hijack", MountPath: "/hijack"}) //nolint:gocritic
+
+	assert.Equal(t, []string{"datadir", CredsVolumeName}, mountNames(c.VolumeMounts),
+		"container mounts must not alias the caller's backing array")
+}
+
+func TestContainerCredsMountIsPresent(t *testing.T) {
 	c := Container(testCR(nil), "/var/lib/mysql/log", nil)
 
 	var got *corev1.VolumeMount
 	for i, m := range c.VolumeMounts {
-		if m.Name == credsVolumeName {
+		if m.Name == CredsVolumeName {
 			got = &c.VolumeMounts[i]
 			break
 		}
@@ -156,15 +172,4 @@ func TestContainerMountsCredsForPostrotateFlush(t *testing.T) {
 
 	require.NotNil(t, got, "postrotate flush needs the monitor password")
 	assert.Equal(t, naming.CredsMountPath, got.MountPath)
-}
-
-func TestContainerDoesNotShareMountBackingArray(t *testing.T) {
-	shared := make([]corev1.VolumeMount, 1, 4)
-	shared[0] = corev1.VolumeMount{Name: "datadir", MountPath: "/var/lib/mysql"}
-
-	first := Container(testCR(nil), "/var/lib/mysql/log", shared)
-	second := Container(testCR(nil), "/var/lib/mysql/log", shared)
-
-	assert.Equal(t, mountNames(first.VolumeMounts), mountNames(second.VolumeMounts))
-	assert.Len(t, shared, 1, "the caller's slice must not be extended in place")
 }

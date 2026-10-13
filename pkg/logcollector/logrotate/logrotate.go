@@ -23,10 +23,8 @@ const (
 	// status file under it, so the container fails to start when it is unset.
 	logDirEnvVar = "LOG_DIR"
 
-	// credsVolumeName mirrors the users secret volume pkg/mysql already adds to
-	// the pod, which this package cannot import without an import cycle. The
-	// postrotate hook reads the monitor password from it to flush the logs.
-	credsVolumeName = "users"
+	// CredsVolumeName holds only the monitor password the postrotate hook needs.
+	CredsVolumeName = "log-collector-logrotate-creds"
 
 	configMapNameSuffix = "log-collector-logrotate-config"
 
@@ -93,10 +91,7 @@ func Container(cr *apiv1.PerconaServerMySQL, logDir string, mounts []corev1.Volu
 				Value: schedule(cr.Spec.LogCollector.LogRotate),
 			},
 		},
-		VolumeMounts: append(mounts, corev1.VolumeMount{
-			Name:      credsVolumeName,
-			MountPath: naming.CredsMountPath,
-		}),
+		VolumeMounts: credsMounts(mounts),
 	}
 
 	if lr := cr.Spec.LogCollector.LogRotate; lr != nil {
@@ -109,6 +104,17 @@ func Container(cr *apiv1.PerconaServerMySQL, logDir string, mounts []corev1.Volu
 	}
 
 	return container
+}
+
+// credsMounts copies mounts before appending: appending in place could write
+// into a backing array the caller still holds.
+func credsMounts(mounts []corev1.VolumeMount) []corev1.VolumeMount {
+	out := make([]corev1.VolumeMount, 0, len(mounts)+2)
+	out = append(out, mounts...)
+	return append(out, corev1.VolumeMount{
+		Name:      CredsVolumeName,
+		MountPath: naming.CredsMountPath,
+	})
 }
 
 func schedule(lr *apiv1.LogRotateSpec) string {

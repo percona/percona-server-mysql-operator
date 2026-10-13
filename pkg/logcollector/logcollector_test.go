@@ -208,19 +208,20 @@ func TestVolumes(t *testing.T) {
 			}),
 		},
 		"no custom config": {
-			cr: testCR(),
+			cr:        testCR(),
+			wantNames: []string{logrotate.CredsVolumeName},
 		},
 		"fluent-bit config only": {
 			cr: testCR(func(cr *apiv1.PerconaServerMySQL) {
 				cr.Spec.LogCollector.Configuration = "pipeline: {}"
 			}),
-			wantNames: []string{configVolumeName},
+			wantNames: []string{configVolumeName, logrotate.CredsVolumeName},
 		},
 		"logrotate config only": {
 			cr: testCR(func(cr *apiv1.PerconaServerMySQL) {
 				cr.Spec.LogCollector.LogRotate = &apiv1.LogRotateSpec{Configuration: "/x {}"}
 			}),
-			wantNames: []string{logrotate.VolumeName},
+			wantNames: []string{logrotate.VolumeName, logrotate.CredsVolumeName},
 		},
 		"logrotate extra config only": {
 			cr: testCR(func(cr *apiv1.PerconaServerMySQL) {
@@ -228,12 +229,13 @@ func TestVolumes(t *testing.T) {
 					ExtraConfig: corev1.LocalObjectReference{Name: "extra"},
 				}
 			}),
-			wantNames: []string{logrotate.VolumeName},
+			wantNames: []string{logrotate.VolumeName, logrotate.CredsVolumeName},
 		},
-		"empty logrotate spec adds no volume": {
+		"empty logrotate spec adds no config volume": {
 			cr: testCR(func(cr *apiv1.PerconaServerMySQL) {
 				cr.Spec.LogCollector.LogRotate = &apiv1.LogRotateSpec{Schedule: "0 0 * * *"}
 			}),
+			wantNames: []string{logrotate.CredsVolumeName},
 		},
 		"all sources plus user volumes": {
 			cr: testCR(func(cr *apiv1.PerconaServerMySQL) {
@@ -244,7 +246,7 @@ func TestVolumes(t *testing.T) {
 				}
 				cr.Spec.LogCollector.Volumes = []corev1.Volume{{Name: "s3-ca"}}
 			}),
-			wantNames: []string{configVolumeName, logrotate.VolumeName, "s3-ca"},
+			wantNames: []string{configVolumeName, logrotate.VolumeName, logrotate.CredsVolumeName, "s3-ca"},
 		},
 	}
 
@@ -265,7 +267,6 @@ func TestVolumesLogRotateProjection(t *testing.T) {
 	})
 
 	vols := Volumes(cr)
-	require.Len(t, vols, 1)
 	require.NotNil(t, vols[0].Projected)
 	require.Len(t, vols[0].Projected.Sources, 2)
 
@@ -396,24 +397,24 @@ func TestContainersLogRotateContainer(t *testing.T) {
 	}{
 		"no logrotate spec": {
 			wantSchedule: "0 0 * * *",
-			wantMounts:   []string{testDataVolumeName, apiv1.BinVolumeName, testBackupLogVolume, "users"},
+			wantMounts:   []string{testDataVolumeName, apiv1.BinVolumeName, testBackupLogVolume, logrotate.CredsVolumeName},
 		},
 		"custom schedule": {
 			logRotate:    &apiv1.LogRotateSpec{Schedule: "30 3 * * *"},
 			wantSchedule: "30 3 * * *",
-			wantMounts:   []string{testDataVolumeName, apiv1.BinVolumeName, testBackupLogVolume, "users"},
+			wantMounts:   []string{testDataVolumeName, apiv1.BinVolumeName, testBackupLogVolume, logrotate.CredsVolumeName},
 		},
 		"custom configuration mounts conf.d": {
 			logRotate:    &apiv1.LogRotateSpec{Configuration: "/x {}"},
 			wantSchedule: "0 0 * * *",
-			wantMounts:   []string{testDataVolumeName, apiv1.BinVolumeName, testBackupLogVolume, "users", logrotate.VolumeName},
+			wantMounts:   []string{testDataVolumeName, apiv1.BinVolumeName, testBackupLogVolume, logrotate.CredsVolumeName, logrotate.VolumeName},
 		},
 		"extra config mounts conf.d": {
 			logRotate: &apiv1.LogRotateSpec{
 				ExtraConfig: corev1.LocalObjectReference{Name: "extra"},
 			},
 			wantSchedule: "0 0 * * *",
-			wantMounts:   []string{testDataVolumeName, apiv1.BinVolumeName, testBackupLogVolume, "users", logrotate.VolumeName},
+			wantMounts:   []string{testDataVolumeName, apiv1.BinVolumeName, testBackupLogVolume, logrotate.CredsVolumeName, logrotate.VolumeName},
 		},
 	}
 
@@ -450,7 +451,7 @@ func TestContainersDoNotShareVolumeMounts(t *testing.T) {
 		mountNames(logs.VolumeMounts),
 	)
 	assert.Equal(t,
-		[]string{testDataVolumeName, apiv1.BinVolumeName, testBackupLogVolume, "s3-ca", "users", logrotate.VolumeName},
+		[]string{testDataVolumeName, apiv1.BinVolumeName, testBackupLogVolume, "s3-ca", logrotate.CredsVolumeName, logrotate.VolumeName},
 		mountNames(rotate.VolumeMounts),
 	)
 }
@@ -462,4 +463,24 @@ func TestContainersLogRotateLogDir(t *testing.T) {
 	)
 
 	assert.Equal(t, LogDir(testDataMountPath), envValue(rotate.Env, LogDirEnvVar))
+}
+
+func TestVolumesLogRotateCredsExposeOnlyMonitor(t *testing.T) {
+	vols := Volumes(testCR())
+
+	var got *corev1.Volume
+	for i, v := range vols {
+		if v.Name == logrotate.CredsVolumeName {
+			got = &vols[i]
+			break
+		}
+	}
+
+	require.NotNil(t, got)
+	require.NotNil(t, got.Secret)
+	assert.Equal(t, "internal-"+testClusterName, got.Secret.SecretName)
+	require.Len(t, got.Secret.Items, 1,
+		"only the monitor password may reach the log collector image")
+	assert.Equal(t, string(apiv1.UserMonitor), got.Secret.Items[0].Key)
+	assert.Equal(t, string(apiv1.UserMonitor), got.Secret.Items[0].Path)
 }
