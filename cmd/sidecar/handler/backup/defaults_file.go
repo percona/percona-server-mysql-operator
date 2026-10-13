@@ -1,8 +1,11 @@
 package backup
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -12,16 +15,14 @@ import (
 	xb "github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
 )
 
-// generateDefaultsFile creates a temporary merged defaults file when the user specifies --defaults-file
-// It includes the configuration from `spec.mysql.configuration`, when present, followed by the file specified in the --defaults-file.
-func generateDefaultsFile(conf *xb.BackupConfig) (string, error) {
+func defaultsFilePaths(conf *xb.BackupConfig) []string {
 	if conf == nil {
-		return "", nil
+		return nil
 	}
 
 	defaultsFileValue := conf.ContainerOptions.GetArgs().GetXtrabackupFlagValue("--defaults-file")
 	if defaultsFileValue == "" {
-		return "", nil
+		return nil
 	}
 
 	defaultsFiles := make([]string, 0, 2)
@@ -29,6 +30,33 @@ func generateDefaultsFile(conf *xb.BackupConfig) (string, error) {
 		defaultsFiles = append(defaultsFiles, mysql.CustomMyCnfPath)
 	}
 	defaultsFiles = append(defaultsFiles, defaultsFileValue)
+	return defaultsFiles
+}
+
+// preflightDefaultsFiles validates each configuration file directly using xtrabackup.
+// This is necessary because xtrabackup can exit with code 0 even when files
+// referenced by !include directives are invalid or do not exist.
+func preflightDefaultsFiles(ctx context.Context, conf *xb.BackupConfig) error {
+	for _, path := range defaultsFilePaths(conf) {
+		cmd := exec.CommandContext(ctx, "xtrabackup", "--defaults-file="+path, "--print-defaults")
+		cmd.Env = envs(*conf)
+		// Leave stdout unset to discard printed options, which may contain secrets.
+		var stderr bytes.Buffer
+		cmd.Stderr = &stderr
+		if err := cmd.Run(); err != nil {
+			return errors.Wrapf(err, "preflight defaults file %q: %s", path, strings.TrimSpace(stderr.String()))
+		}
+	}
+	return nil
+}
+
+// generateDefaultsFile creates a temporary merged defaults file when the user specifies --defaults-file.
+// It includes spec.mysql.configuration, when present, followed by the user's file.
+func generateDefaultsFile(conf *xb.BackupConfig) (string, error) {
+	defaultsFiles := defaultsFilePaths(conf)
+	if len(defaultsFiles) == 0 {
+		return "", nil
+	}
 
 	generatedPath, err := createMergedDefaultsFile(defaultsFiles...)
 	if err != nil {
