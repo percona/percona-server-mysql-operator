@@ -50,6 +50,10 @@ func preflightDefaultsFiles(ctx context.Context, conf *xb.BackupConfig) error {
 		if err := cmd.Run(); err != nil {
 			return errors.Wrapf(err, "preflight defaults file %q: %s", path, strings.TrimSpace(stderr.String()))
 		}
+		// Errors in included files may be reported only on stderr, with exit code 0.
+		if strings.Contains(stderr.String(), "[ERROR]") {
+			return errors.Errorf("preflight defaults file %q: %s", path, strings.TrimSpace(stderr.String()))
+		}
 	}
 	return nil
 }

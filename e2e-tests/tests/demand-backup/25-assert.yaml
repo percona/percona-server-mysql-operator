@@ -6,7 +6,7 @@ commands:
       set -o errexit
       set -o pipefail
 
-      for case in missing invalid; do
+      for case in missing invalid include-missing include-invalid; do
         backup_name="demand-backup-defaults-${case}"
         defaults_file="/tmp/xb-defaults-${case}.cnf"
         backup_source=$(kubectl -n "${NAMESPACE}" get ps-backup "${backup_name}" -o jsonpath='{.status.backupSource}')
@@ -19,6 +19,18 @@ commands:
           | grep -F -- "${defaults_file}"; then
           echo "Backup ${backup_name} did not log a preflight failure for ${defaults_file}"
           exit 1
+        fi
+
+        if [[ "${case}" == include-* ]]; then
+          if ! kubectl -n "${NAMESPACE}" logs "${backup_source_pod}" -c xtrabackup \
+            | grep -F -- "${backup_name}" \
+            | grep -F -- 'xtrabackup defaults file preflight failed' \
+            | grep -F -- "${defaults_file}" \
+            | grep -F -- '[ERROR]' \
+            | grep -F -- "/tmp/xb-defaults-${case#include-}.cnf"; then
+            echo "Backup ${backup_name} did not log the included-file error"
+            exit 1
+          fi
         fi
       done
 ---
@@ -33,5 +45,19 @@ apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQLBackup
 metadata:
   name: demand-backup-defaults-invalid
+status:
+  state: Failed
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQLBackup
+metadata:
+  name: demand-backup-defaults-include-missing
+status:
+  state: Failed
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQLBackup
+metadata:
+  name: demand-backup-defaults-include-invalid
 status:
   state: Failed
