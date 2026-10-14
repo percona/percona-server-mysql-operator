@@ -1706,6 +1706,35 @@ func TestStagingPath(t *testing.T) {
 	})
 }
 
+func TestRemoveStagingDir(t *testing.T) {
+	t.Run("removes a staging dir the job created", func(t *testing.T) {
+		dir := filepath.Join(t.TempDir(), "source-logs")
+		require.NoError(t, prepareStagingDir(dir))
+		writeFile(t, dir, "binlog.000004", []byte("DATA"))
+
+		removeStagingDir(dir)
+
+		assert.NoDirExists(t, dir)
+	})
+
+	t.Run("a missing dir is not an error", func(t *testing.T) {
+		dir := filepath.Join(t.TempDir(), "source-logs")
+
+		removeStagingDir(dir)
+
+		assert.NoDirExists(t, dir)
+	})
+
+	t.Run("leaves a dir the job does not own alone", func(t *testing.T) {
+		dir := t.TempDir()
+		writeFile(t, dir, "ibdata1", []byte("DATA"))
+
+		removeStagingDir(dir)
+
+		assert.FileExists(t, filepath.Join(dir, "ibdata1"), "nothing may be deleted")
+	})
+}
+
 func TestIsDialError(t *testing.T) {
 	dial := func(err error) error { return &net.OpError{Op: "dial", Net: "tcp", Err: err} }
 

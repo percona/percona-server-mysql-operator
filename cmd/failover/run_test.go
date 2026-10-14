@@ -190,6 +190,7 @@ func TestRun(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, string(before)+binlogEvent("four-tail")+binlogEvent("whole-five")+binlogEvent("whole-six"), string(after))
 		j.relay.assertUntouched(t)
+		assert.NoDirExists(t, j.cfg.stagingDir, "the staged logs must be removed once applied")
 	})
 
 	t.Run("an instance with no replication channel is left alone", func(t *testing.T) {
@@ -238,6 +239,7 @@ func TestRun(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, string(before)+binlogEvent("four-tail")+binlogEvent("whole-five")+binlogEvent("whole-six"), string(after),
 			"the splice must land even when the job does not wait for it")
+		assert.NoDirExists(t, j.cfg.stagingDir, "the staged logs are spliced and no longer needed")
 	})
 
 	t.Run("-wait=false returns as soon as the applier is started", func(t *testing.T) {
@@ -261,6 +263,7 @@ func TestRun(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, before, after)
 		j.relay.assertUntouched(t)
+		assert.NoDirExists(t, j.cfg.stagingDir)
 	})
 
 	t.Run("a missing source host stops nothing", func(t *testing.T) {
@@ -521,6 +524,7 @@ func TestRun(t *testing.T) {
 
 		require.ErrorIs(t, err, errSourceRecovered)
 		assert.Empty(t, j.fake.ops, "replication must not be touched when there is nothing to fail over")
+		assert.NoDirExists(t, j.cfg.stagingDir, "nothing was fetched")
 
 		after, err := os.ReadFile(j.relay.target)
 		require.NoError(t, err)
@@ -631,6 +635,7 @@ func TestRun(t *testing.T) {
 		after, err := os.ReadFile(j.relay.target)
 		require.NoError(t, err)
 		assert.NotEqual(t, before, after, "the splice stays for the applier to work through")
+		assert.NoDirExists(t, j.cfg.stagingDir, "standing down must not leave the staged logs behind")
 	})
 
 	t.Run("a source missing transactions we hold is promoted past", func(t *testing.T) {
@@ -659,6 +664,7 @@ func TestRun(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "apply relay logs")
 		assert.Contains(t, err.Error(), "Duplicate entry")
+		assert.FileExists(t, filepath.Join(j.cfg.stagingDir, "binlog.000005"), "a failed apply keeps the staged logs to look into")
 	})
 }
 

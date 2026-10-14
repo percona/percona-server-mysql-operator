@@ -24,7 +24,7 @@ const failoverBinary = "/opt/percona/failover"
 const (
 	// execSlack is the margin on top of everything the hook is known to wait for
 	execSlack      = 10 * time.Second
-	defaultTimeout = 6 * time.Hour
+	defaultTimeout = time.Hour
 
 	// probeTimeout bounds the worker's look at the source before a forced promotion
 	probeTimeout = time.Minute

@@ -50,8 +50,7 @@ import (
 const (
 	defaultGracePeriodSec int64 = 600
 
-	defaultFailoverTimeout                  = 6 * time.Hour
-	defaultFailoverSwitchoverCatchUpTimeout = 5 * time.Minute
+	defaultFailoverTimeout = time.Hour
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -371,19 +370,13 @@ type FailoverSpec struct {
 	// if the Orchestrator raft leader changes mid-failover, which delays the
 	// OnTimeout decision rather than bringing it forward.
 	// +kubebuilder:validation:Pattern=`^([0-9]+(\.[0-9]+)?(ns|us|ms|s|m|h))+$`
-	// +kubebuilder:default="6h"
+	// +kubebuilder:default="1h"
 	Timeout string `json:"timeout,omitempty"`
 
 	// OnTimeout decides what happens when Timeout expires.
 	// +kubebuilder:validation:Enum=Abort;ForceWithPossibleDataLoss
 	// +kubebuilder:default=Abort
 	OnTimeout FailoverPolicy `json:"onTimeout,omitempty"`
-
-	// SwitchoverCatchUpTimeout bounds how long a planned switchover waits for the
-	// candidate to apply everything the current primary wrote before promoting it.
-	// +kubebuilder:validation:Pattern=`^([0-9]+(\.[0-9]+)?(ns|us|ms|s|m|h))+$`
-	// +kubebuilder:default="5m"
-	SwitchoverCatchUpTimeout string `json:"switchoverCatchUpTimeout,omitempty"`
 }
 
 func (s *FailoverSpec) SetDefaults() {
@@ -393,27 +386,16 @@ func (s *FailoverSpec) SetDefaults() {
 	if s.OnTimeout == "" {
 		s.OnTimeout = FailoverPolicyAbort
 	}
-	if s.SwitchoverCatchUpTimeout == "" {
-		s.SwitchoverCatchUpTimeout = defaultFailoverSwitchoverCatchUpTimeout.String()
-	}
 }
 
 func (s *FailoverSpec) validate() error {
-	for _, f := range []struct {
-		name  string
-		value string
-	}{
-		{"orchestrator.failover.timeout", s.Timeout},
-		{"orchestrator.failover.switchoverCatchUpTimeout", s.SwitchoverCatchUpTimeout},
-	} {
-		d, err := time.ParseDuration(f.value)
-		if err != nil {
-			return errors.Wrapf(err, "failed to parse %s", f.name)
-		}
-		// Both end up as whole seconds in orchestrator's configuration.
-		if d < time.Second {
-			return errors.Errorf("%s should be at least 1s", f.name)
-		}
+	d, err := time.ParseDuration(s.Timeout)
+	if err != nil {
+		return errors.Wrap(err, "failed to parse orchestrator.failover.timeout")
+	}
+	// it ends up as whole seconds in orchestrator's configuration
+	if d < time.Second {
+		return errors.New("orchestrator.failover.timeout should be at least 1s")
 	}
 
 	if !s.OnTimeout.Valid() {
@@ -428,10 +410,6 @@ func (s *FailoverSpec) validate() error {
 // objects that never went through it.
 func (s *FailoverSpec) TimeoutDuration() time.Duration {
 	return parseDurationOr(s.Timeout, defaultFailoverTimeout)
-}
-
-func (s *FailoverSpec) SwitchoverCatchUp() time.Duration {
-	return parseDurationOr(s.SwitchoverCatchUpTimeout, defaultFailoverSwitchoverCatchUpTimeout)
 }
 
 func parseDurationOr(value string, fallback time.Duration) time.Duration {
