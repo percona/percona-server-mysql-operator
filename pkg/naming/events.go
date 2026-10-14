@@ -17,6 +17,10 @@ const (
 	EventFailoverForced = "FailoverForced"
 	// EventFailoverFailed is emitted when Orchestrator gives up on a recovery.
 	EventFailoverFailed = "FailoverFailed"
+	// EventFailoverUnprotected is emitted when a failover runs without
+	// backups, which leaves nothing to recover the stranded transactions from
+	// and Orchestrator promotes a replica on its own.
+	EventFailoverUnprotected = "FailoverUnprotected"
 )
 
 const (

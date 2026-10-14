@@ -76,6 +76,14 @@ func runFailover(ctx context.Context, args []string) error {
 	g := newGate()
 
 	err := guardedFailover(ctx, g, *source, *uid, func(ctx context.Context) error {
+		c, err := connect(ctx)
+		if err != nil {
+			return err
+		}
+		if c.unprotected(ctx, g, *source) {
+			return nil
+		}
+
 		remaining, started, err := budget(g, *source, *timeout)
 		if err != nil {
 			return err
@@ -125,6 +133,30 @@ func runFailover(ctx context.Context, args []string) error {
 	}
 
 	return err
+}
+
+// unprotected reports whether the cluster runs without backups. The source's
+// stream comes from the backup sidecar, so without it the stranded
+// transactions cannot be recovered and Orchestrator promotes on its own.
+func (c *cluster) unprotected(ctx context.Context, g *gate, source string) bool {
+	if c.cr.BackupEnabled() {
+		return false
+	}
+
+	log.Info("Backups are disabled, leaving the promotion to orchestrator", "source", source)
+
+	should, err := g.notifyOnce(source, naming.EventFailoverUnprotected)
+	if err != nil {
+		log.Error(err, "failed to record the unprotected failover event", "source", source)
+	}
+	if should {
+		c.warn(ctx, naming.EventFailoverUnprotected,
+			"Backups are disabled, so the transactions stranded on %s cannot be recovered. Orchestrator"+
+				" promotes a replica without them; anything the old primary committed and never delivered is lost.",
+			source)
+	}
+
+	return true
 }
 
 // ackWait bounds the retries of an acknowledgement

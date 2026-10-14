@@ -12152,6 +12152,8 @@ spec:
                   rule: has(self.image) && size(self.image) > 0
               unsafeFlags:
                 properties:
+                  asyncFailoverWithPossibleDataLoss:
+                    type: boolean
                   backupNonReadyCluster:
                     type: boolean
                   mysqlSize:
@@ -12220,6 +12222,12 @@ spec:
                 is enabled'
               rule: '!(self.mysql.clusterType == ''async'') || self.unsafeFlags.orchestrator
                 || (has(self.orchestrator) && self.orchestrator.enabled)'
+            - message: 'Invalid configuration: When ''mysql.clusterType'' is set to
+                ''async'', ''backup.enabled'' must be true unless ''unsafeFlags.asyncFailoverWithPossibleDataLoss''
+                is enabled. Without backups a failover cannot recover the transactions
+                stranded on the old primary'
+              rule: '!(self.mysql.clusterType == ''async'') || self.unsafeFlags.asyncFailoverWithPossibleDataLoss
+                || (has(self.backup) && self.backup.enabled)'
             - message: 'Invalid configuration: When ''mysql.clusterType'' is set to
                 ''async'', ''proxy.haproxy.enabled'' must be true unless ''unsafeFlags.proxy''
                 is enabled'

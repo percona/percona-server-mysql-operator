@@ -8,9 +8,14 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	failoverlock "github.com/percona/percona-server-mysql-operator/cmd/internal/failover"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 )
 
 func TestPodName(t *testing.T) {
@@ -272,4 +277,67 @@ func TestIsSourceRecovered(t *testing.T) {
 			assert.Equal(t, tt.want, isSourceRecovered(tt.err))
 		})
 	}
+}
+
+func TestUnprotected(t *testing.T) {
+	newCluster := func(t *testing.T, backup *apiv1.BackupSpec) *cluster {
+		t.Helper()
+
+		scheme := runtime.NewScheme()
+		require.NoError(t, clientgoscheme.AddToScheme(scheme))
+		require.NoError(t, apiv1.AddToScheme(scheme))
+
+		cr := &apiv1.PerconaServerMySQL{
+			Name: "cluster1", Namespace: "ps",
+			Spec: apiv1.PerconaServerMySQLSpec{Backup: backup},
+		}
+
+		return &cluster{cr: cr, client: fake.NewClientBuilder().WithScheme(scheme).Build()}
+	}
+
+	events := func(t *testing.T, c *cluster) []corev1.Event {
+		t.Helper()
+
+		list := new(corev1.EventList)
+		require.NoError(t, c.client.List(t.Context(), list))
+		return list.Items
+	}
+
+	tests := map[string]struct {
+		backup *apiv1.BackupSpec
+		want   bool
+	}{
+		"backups enabled":       {backup: &apiv1.BackupSpec{Enabled: true}},
+		"backups disabled":      {backup: &apiv1.BackupSpec{Enabled: false}, want: true},
+		"no backup section set": {backup: nil, want: true},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			c := newCluster(t, tt.backup)
+
+			assert.Equal(t, tt.want, c.unprotected(t.Context(), testGate(t), source))
+
+			got := events(t, c)
+			if !tt.want {
+				assert.Empty(t, got)
+				return
+			}
+
+			require.Len(t, got, 1)
+			assert.Equal(t, corev1.EventTypeWarning, got[0].Type)
+			assert.Equal(t, naming.EventFailoverUnprotected, got[0].Reason)
+			assert.Contains(t, got[0].Message, source)
+		})
+	}
+
+	t.Run("the warning is recorded once per source", func(t *testing.T) {
+		c := newCluster(t, nil)
+		g := testGate(t)
+
+		assert.True(t, c.unprotected(t.Context(), g, source))
+		assert.True(t, c.unprotected(t.Context(), g, source))
+
+		assert.Len(t, events(t, c), 1)
+	})
 }
