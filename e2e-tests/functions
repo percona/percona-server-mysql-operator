@@ -1719,79 +1719,125 @@ dump_async_failover_state() {
 	kubectl -n "${OPERATOR_NS:-$NAMESPACE}" logs "$(get_operator_pod)" --tail=300 || true
 }
 
-# Verifies the backends HAProxy generated for the given cluster: every server is
-# listed on its backend's own port, every backend runs the check that matches the
-# roles it holds, and the x-protocol and admin ports reach a writable primary.
-# Every kubectl call is a full API round trip, so each haproxy pod is read in one
-# exec and the root credentials are resolved once for the whole function.
-check_haproxy_backends() {
+# Replaces dynamic server names and addresses so the generated configuration
+# can be compared with a readable haproxy.cfg template.
+normalize_haproxy_config() {
+	local primary_server=$1
+
+	awk -v primary="${primary_server}" '
+		$1 == "backend" {
+			if (has_backend) print ""
+			print "backend " $2
+			has_backend = 1
+			next
+		}
+		$1 == "server" {
+			server = $2
+			role = server == primary ? "PRIMARY" : "REPLICA"
+			split($3, address, ":")
+			line = "server " role " " role ":" address[2]
+
+			for (i = 4; i <= NF; i++) {
+				if ($i == "track" && i < NF) {
+					split($(i + 1), target, "/")
+					tracked = target[2] == server ? target[1] "/SELF" : $(i + 1)
+					line = line " track " tracked
+					i++
+					continue
+				}
+				line = line " " $i
+			}
+			print line
+			next
+		}
+		NF {
+			line = "  " $1
+			for (i = 2; i <= NF; i++) line = line " " $i
+			print line
+		}
+	'
+}
+
+# Compares the generated haproxy.cfg with the expected configuration, then
+# verifies that the x-protocol and admin ports reach the writable primary.
+check_haproxy_backends() (
 	local cluster=$1
 	local primary_pod=${2:-$(get_primary_from_label)}
 	local haproxy_size=${3:-3}
+	local config_check=${4:-}
+	local expected_config="${TEST_CONFIG_DIR}/expected-haproxy.cfg"
+	local work_dir
+	work_dir=$(mktemp -d "${TEMP_DIR}/haproxy-backends.XXXXXX")
+	trap 'rm -rf "${work_dir}"' EXIT
 
-	local primary_srv=$(kubectl -n "${NAMESPACE}" get pod "${primary_pod}" -o jsonpath='{.status.podIP}' | tr '.' '-')
+	local primary_ip
+	primary_ip=$(kubectl -n "${NAMESPACE}" get pod "${primary_pod}" -o jsonpath='{.status.podIP}')
 
 	local i
 	for i in $(seq 0 $((haproxy_size - 1))); do
 		local pod="${cluster}-haproxy-${i}"
+		local config_file="${work_dir}/${pod}.cfg"
+		local stats_file="${work_dir}/${pod}.stats"
+		local normalized_config="${work_dir}/${pod}.normalized.cfg"
 
-		local dump=$(kubectl -n "${NAMESPACE}" exec "${pod}" -c haproxy -- bash -c \
-			'cat /etc/haproxy/mysql/haproxy.cfg; echo "@@@"; echo "show stat" | socat stdio /etc/haproxy/mysql/haproxy.sock')
+		kubectl -n "${NAMESPACE}" exec "${pod}" -c haproxy -- bash -c \
+			'cat /etc/haproxy/mysql/haproxy.cfg; echo "@@@"; echo "show stat" | socat stdio /etc/haproxy/mysql/haproxy.sock' \
+			| awk -v config_file="${config_file}" -v stats_file="${stats_file}" '
+				BEGIN { output = config_file }
+				/^@@@$/ { output = stats_file; next }
+				{ print > output }
+			'
 
-		# '<backend> <kind> <name> <value>' per check and server line
-		local layout=$(awk '/backend /{b=$2}
-			     /external-check command/{print b, "check", "-", $3}
-			     /^server /{split($3,a,":"); print b, "server", $2, a[2]}' <<<"${dump%%@@@*}")
+		local primary_server
+		primary_server=$(awk -F, -v primary_address="${primary_ip}:" '
+			NR == 1 {
+				for (i = 1; i <= NF; i++) {
+					gsub(/^# /, "", $i)
+					if ($i == "svname") server_column = i
+					if ($i == "addr") address_column = i
+				}
+				next
+			}
+			$1 == "mysql-primary" && index($address_column, primary_address) == 1 {
+				print $server_column
+				exit
+			}
+		' "${stats_file}")
+		if [ -z "${primary_server}" ]; then
+			echo "${pod}: primary ${primary_pod} (${primary_ip}) is missing from HAProxy stats"
+			return 1
+		fi
 
-		local backend='' kind='' name='' value='' expected=''
-		while read -r backend kind name value; do
-			case "${backend}" in
-				mysql-primary | mysql-replicas) expected=3306 ;;
-				mysql-x) expected=33060 ;;
-				mysql-admin) expected=33062 ;;
-				*) continue ;;
-			esac
-
-			if [ "${kind}" = "server" ] && [ "${value}" != "${expected}" ]; then
-				echo "${pod}: server ${name} in backend ${backend} uses port ${value}, expected ${expected}"
-				echo "${layout}"
-				exit 1
+		if [ "${config_check}" != "--skip-config-check" ]; then
+			normalize_haproxy_config "${primary_server}" <"${config_file}" >"${normalized_config}"
+			if ! diff -u "${expected_config}" "${normalized_config}"; then
+				echo "${pod}: generated HAProxy configuration does not match ${expected_config}"
+				return 1
 			fi
+		fi
 
-			if [ "${kind}" = "check" ]; then
-				local expected_check='/opt/percona/haproxy_check_primary.sh'
-				if [ "${backend}" = "mysql-replicas" ]; then
-					expected_check='/opt/percona/haproxy_check_replicas.sh'
-				fi
-				if [ "${value}" != "${expected_check}" ]; then
-					echo "${pod}: backend ${backend} is checked by ${value}, expected ${expected_check}"
-					exit 1
-				fi
-			fi
-		done <<<"${layout}"
-
-		local not_up=$(awk -F, -v p="${primary_srv}" '$1 ~ /^mysql-(x|admin)$/ && $2 == p && $18 !~ /^UP/ {print $1, $2, $18}' <<<"${dump#*@@@}")
+		local not_up
+		not_up=$(awk -F, -v primary="${primary_server}" \
+			'$1 ~ /^mysql-(x|admin)$/ && $2 == primary && $18 !~ /^UP/ {print $1, $2, $18}' \
+			"${stats_file}")
 		if [ -n "${not_up}" ]; then
 			echo "${pod}: primary ${primary_pod} is not UP in the x-protocol/admin backends:"
 			echo "${not_up}"
-			exit 1
+			return 1
 		fi
 	done
 
-	local svc=$(get_haproxy_svc "${cluster}")
-	local creds="-uroot -p'$(get_user_pass root)'"
-
-	# reaching the primary is not enough, x-protocol has to be writable: the DDL and
-	# the hostname go in one round trip, a failed write leaves the hostname unset
+	local service
+	service=$(get_haproxy_svc "${cluster}")
+	local credentials="-uroot -p'$(get_user_pass root)'"
 	local x_query="CREATE DATABASE IF NOT EXISTS check_haproxy_x; DROP DATABASE check_haproxy_x; SELECT @@hostname"
+	local admin_query="CREATE DATABASE IF NOT EXISTS check_haproxy_admin; DROP DATABASE check_haproxy_admin; SELECT @@hostname"
 	local host_via_x host_via_admin
 	local deadline=$((SECONDS + 60))
 
-	# Right after a failover the cluster can still be settling, so a single
-	# miss is retried for a while before it counts as a failure.
 	while :; do
-		host_via_x=$(run_mysqlsh "${x_query}" "--mysqlx -h ${svc} -P 33060" "${creds}")
-		host_via_admin=$(run_mysql "SELECT @@hostname" "-h ${svc} -P 33062" "${creds}" || true)
+		host_via_x=$(run_mysqlsh "${x_query}" "--mysqlx -h ${service} -P 33060" "${credentials}")
+		host_via_admin=$(run_mysql "${admin_query}" "-h ${service} -P 33062" "${credentials}" || true)
 
 		if [ "${host_via_x}" = "${primary_pod}" ] && [ "${host_via_admin}" = "${primary_pod}" ]; then
 			return 0
@@ -1806,18 +1852,18 @@ check_haproxy_backends() {
 
 	if [ "${host_via_x}" != "${primary_pod}" ]; then
 		echo "x-protocol port 33060 did not reach a writable primary: got '${host_via_x}', expected '${primary_pod}'"
-		# run_mysqlsh drops stderr, run it once more to show why
 		kubectl -n "${NAMESPACE}" exec mysql-client -- \
-			bash -c "printf '%s\n' \"${x_query}\" | mysqlsh --sql --quiet-start=2 --mysqlx -h ${svc} -P 33060 ${creds}" || true
+			bash -c "printf '%s\n' \"${x_query}\" | mysqlsh --sql --quiet-start=2 --mysqlx -h ${service} -P 33060 ${credentials}" || true
 	fi
 	if [ "${host_via_admin}" != "${primary_pod}" ]; then
-		echo "admin port 33062 landed on '${host_via_admin}', expected primary '${primary_pod}'"
+		echo "admin port 33062 did not reach a writable primary: got '${host_via_admin}', expected '${primary_pod}'"
+		run_mysql "${admin_query}" "-h ${service} -P 33062" "${credentials}" || true
 	fi
 	if [[ $(kubectl -n "${NAMESPACE}" get ps "${cluster}" -o jsonpath='{.spec.mysql.clusterType}') == "async" ]]; then
 		dump_async_failover_state "${cluster}"
 	fi
-	exit 1
-}
+	return 1
+)
 
 get_primary_from_group_replication() {
 	run_mysql \
@@ -2775,4 +2821,3 @@ create_service_accounts() {
 		fi
 	done
 }
-
