@@ -117,6 +117,8 @@ func runFailover(ctx context.Context, args []string) error {
 			if markErr := g.markNotified(*source, naming.EventFailoverFailed); markErr != nil {
 				log.Error(markErr, "failed to mute the failover report", "source", *source)
 			}
+
+			startReceivers(ctx, *source)
 		case err != nil:
 			if markErr := g.refreshSeen(*source); markErr != nil {
 				log.Error(markErr, "failed to refresh the failover timeout", "source", *source)
@@ -355,6 +357,33 @@ func failover(ctx context.Context, source, target string, timeout time.Duration)
 
 	log.Info("Registered the promotion candidate", "candidate", candidate.Hostname)
 	return nil
+}
+
+// startReceivers starts the receivers that gave up on the source while it was down
+func startReceivers(ctx context.Context, source string) {
+	c, err := connect(ctx)
+	if err != nil {
+		log.Error(err, "failed to start the receivers", "source", source)
+		return
+	}
+
+	orcPod, err := orchestrator.GetReadyPod(ctx, c.client, c.cr)
+	if err != nil {
+		log.Error(err, "failed to start the receivers", "source", source)
+		return
+	}
+
+	instances, err := orchestrator.Cluster(ctx, c.cliCmd, orcPod, fmt.Sprintf("%s:%d", source, mysql.DefaultPort))
+	if err != nil {
+		log.Error(err, "failed to start the receivers", "source", source)
+		return
+	}
+
+	for _, replica := range orchestrator.ReplicasOf(instances, source) {
+		if err := runWorker(ctx, c, source, replica.Key.Hostname, "-start-receiver"); err != nil {
+			log.Error(err, "failed to start the receiver", "replica", replica.Key.Hostname, "source", source)
+		}
+	}
 }
 
 // probeSource asks the worker on the candidate whether the source is back. A

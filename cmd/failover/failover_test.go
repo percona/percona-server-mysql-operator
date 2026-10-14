@@ -835,6 +835,16 @@ func TestSpliceInto(t *testing.T) {
 	})
 }
 
+func TestRollbackSplice(t *testing.T) {
+	t.Run("a relay log that cannot be truncated is reported as torn", func(t *testing.T) {
+		l := newRelayLayout(t)
+		relay, err := os.Open(l.target)
+		require.NoError(t, err)
+
+		require.ErrorIs(t, rollbackSplice(relay, l.target, 4), errSpliceNotRolledBack)
+	})
+}
+
 func TestPendingBytes(t *testing.T) {
 	t.Run("sums the staged logs", func(t *testing.T) {
 		dir := t.TempDir()

@@ -130,9 +130,9 @@ commands:
           retry=$((retry + 1))
       done
 
-      # The candidate is the replica with a new worker log. The other one is
-      # never touched by the hook, so its receiver goes back up as it would
-      # after a real crash.
+      # the candidate is the replica with a new worker log. the other one's
+      # receiver stays stopped, as if it spent its retries while the source
+      # was down, and the stand-down has to start it
       candidate=""
       retry=0
       until [[ -n ${candidate} ]]; do
@@ -149,10 +149,6 @@ commands:
           retry=$((retry + 1))
       done
       echo "${candidate}" > "${TEMP_DIR}/returning-candidate"
-
-      for pod in ${replicas}; do
-          [[ ${pod} == "${candidate}" ]] || run_mysql "START REPLICA IO_THREAD" "-h ${pod}.${cluster}-mysql"
-      done
 
       retry=0
       new_logs=""

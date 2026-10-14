@@ -56,9 +56,15 @@ const (
 	// hook runs this job over an exec stream, which the kubelet closes once
 	// it is idle for long enough.
 	drainHeartbeat = time.Minute
+
+	// applierRestartTimeout bounds starting the applier again after a failed
+	// attempt, which runs once the attempt's own deadline may have passed
+	applierRestartTimeout = 10 * time.Second
 )
 
 var errRelayApplyTimeout = fmt.Errorf("timeout while waiting for relay log apply")
+
+var errSpliceNotRolledBack = errors.New("the relay log keeps a partial splice")
 
 var binlogMagic = []byte{0xfe, 'b', 'i', 'n'}
 
@@ -71,6 +77,7 @@ type database interface {
 	GetSourceLogPos(ctx context.Context) (db.ReplicaPosition, error)
 	RelayLogPaths(ctx context.Context) (string, string, error)
 	StartSQLThread(ctx context.Context) error
+	StartIOThread(ctx context.Context) error
 	StartReplicaThreads(ctx context.Context) error
 	GetGTIDExecuted(ctx context.Context) (string, error)
 	GTIDSubtract(ctx context.Context, set, other string) (string, error)
@@ -91,6 +98,7 @@ type failoverConfig struct {
 	wait           bool
 	probe          bool
 	clear          bool
+	startReceiver  bool
 	applyPoll      time.Duration
 	stallTimeout   time.Duration
 	sourcePoll     time.Duration
@@ -99,13 +107,14 @@ type failoverConfig struct {
 }
 
 type flags struct {
-	source       string
-	stagingDir   string
-	wait         bool
-	probe        bool
-	clear        bool
-	stallTimeout time.Duration
-	timeout      time.Duration
+	source        string
+	stagingDir    string
+	wait          bool
+	probe         bool
+	clear         bool
+	startReceiver bool
+	stallTimeout  time.Duration
+	timeout       time.Duration
 }
 
 func parseFlags() flags {
@@ -114,6 +123,7 @@ func parseFlags() flags {
 	flag.StringVar(&f.stagingDir, "staging-dir", sourceLogsDir, "Directory the fetched binary logs are staged in. Its contents are wiped first, so it must be empty or a directory an earlier run created.")
 	flag.BoolVar(&f.wait, "wait", true, "Wait for the applier to work through the fetched logs. With -wait=false the job returns as soon as the SQL thread is started.")
 	flag.BoolVar(&f.clear, "clear-source", false, "Only drop the replication channel a promotion left behind on this server. Nothing is fetched and -source is not read.")
+	flag.BoolVar(&f.startReceiver, "start-receiver", false, "Only start a receiver that replicates from -source and gave up retrying while it was down. Nothing is fetched.")
 	flag.BoolVar(&f.probe, "probe", false, "Only check whether the source is back and holds everything this replica does, standing down if so. Nothing is fetched.")
 	flag.DurationVar(&f.stallTimeout, "stall-timeout", sourceStallTimeout, "How long the source may go without sending anything: its sidecar not listening yet, the headers, or the next bytes of the body. The fetch as a whole is bounded by -timeout.")
 	flag.DurationVar(&f.timeout, "timeout", jobTimeout, "How long the whole job may take, fetching the logs from the source and waiting for the applier included. Zero or less means no limit.")
@@ -135,6 +145,7 @@ func config(f flags) failoverConfig {
 		wait:           f.wait,
 		probe:          f.probe,
 		clear:          f.clear,
+		startReceiver:  f.startReceiver,
 		applyPoll:      relayLogApplyPoll,
 		stallTimeout:   f.stallTimeout,
 		sourcePoll:     sourceProbePoll,
@@ -177,6 +188,9 @@ func run(ctx context.Context, cfg failoverConfig) (err error) {
 
 	if cfg.clear {
 		return clearSource(ctx, cfg)
+	}
+	if cfg.startReceiver {
+		return startReceiver(ctx, cfg)
 	}
 
 	// Read the input before touching replication: failing after STOP REPLICA
@@ -251,7 +265,8 @@ func run(ctx context.Context, cfg failoverConfig) (err error) {
 			return errSourceRecovered
 		}
 
-		// An attempt that failed after its STOP REPLICA left both threads down.
+		// an attempt that failed after its STOP REPLICA left the receiver down,
+		// and the applier too if its splice could not be rolled back
 		return watch.standDown(ctx)
 	}
 
@@ -264,6 +279,13 @@ func run(ctx context.Context, cfg failoverConfig) (err error) {
 		return fmt.Errorf("stop replica: %w", err)
 	}
 	log.Printf("Stopped replication")
+
+	applierStartAttempted := false
+	defer func() {
+		if err != nil && !applierStartAttempted && !errors.Is(err, errSpliceNotRolledBack) {
+			restartApplier(ctx, d)
+		}
+	}()
 
 	if err := d.FlushRelayLogs(ctx); err != nil {
 		return fmt.Errorf("flush relay logs: %w", err)
@@ -304,6 +326,7 @@ func run(ctx context.Context, cfg failoverConfig) (err error) {
 		return fmt.Errorf("update relay logs: %w", err)
 	}
 
+	applierStartAttempted = true
 	if err := d.StartSQLThread(ctx); err != nil {
 		return fmt.Errorf("start SQL_THREAD: %w", err)
 	}
@@ -331,6 +354,19 @@ func run(ctx context.Context, cfg failoverConfig) (err error) {
 	log.Println("DONE.")
 
 	return nil
+}
+
+// restartApplier starts the applier a failed attempt stopped
+func restartApplier(ctx context.Context, d database) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), applierRestartTimeout)
+	defer cancel()
+
+	if err := d.StartSQLThread(ctx); err != nil {
+		log.Printf("WARNING: failed to start the SQL_THREAD this attempt stopped: %v", err)
+		return
+	}
+
+	log.Printf("Started the SQL_THREAD this attempt stopped")
 }
 
 func sourceHost(source string) (string, error) {
@@ -829,7 +865,7 @@ func rollbackSplice(relay *os.File, target string, startPos uint64) error {
 	defer relay.Close() //nolint:errcheck
 
 	if err := relay.Truncate(int64(startPos)); err != nil {
-		return fmt.Errorf("truncate %s back to %d: %w", target, startPos, err)
+		return fmt.Errorf("%w: truncate %s back to %d: %w", errSpliceNotRolledBack, target, startPos, err)
 	}
 
 	return nil

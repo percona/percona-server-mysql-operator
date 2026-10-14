@@ -31,6 +31,19 @@ commands:
           retry=$((retry + 1))
       done
 
+      for pod in $(get_mysql_pods); do
+          [[ ${pod} == "${returning}" ]] && continue
+          retry=0
+          until [[ $(run_mysql "SELECT SERVICE_STATE FROM performance_schema.replication_connection_status" "-h ${pod}.${cluster}-mysql") == "ON" ]]; do
+              if [[ ${retry} -ge 24 ]]; then
+                  echo "the receiver on ${pod} never came back after the stand-down"
+                  exit 1
+              fi
+              sleep 5
+              retry=$((retry + 1))
+          done
+      done
+
       wait_cluster_consistency_async "${cluster}" 3 3
 
       for pod in $(get_mysql_pods); do
