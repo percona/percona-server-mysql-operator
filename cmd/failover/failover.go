@@ -44,7 +44,7 @@ const (
 	// deleted pod's IP drops the connection rather than refusing it, and the
 	// system's own timeout would spend most of the stall bound on one attempt.
 	sidecarDialTimeout = 5 * time.Second
-	jobTimeout         = 6 * time.Hour
+	jobTimeout         = time.Hour
 
 	// sourceStallTimeout is how long the source may go without sending
 	// anything. It is a bound on silence, not on the transfer: the job's
@@ -311,6 +311,7 @@ func run(ctx context.Context, cfg failoverConfig) (err error) {
 
 	if !cfg.wait {
 		log.Printf("Leaving the applier to work through %s on its own", filepath.Base(relayLog))
+		removeStagingDir(stagingDir)
 		return nil
 	}
 
@@ -319,12 +320,14 @@ func run(ctx context.Context, cfg failoverConfig) (err error) {
 
 	if err := waitForRelayLogsApplied(ctx, d, relayLogs, watchSource(watchCtx, watch), relayLog, startPos, cfg.applyPoll); err != nil {
 		if errors.Is(err, errSourceRecovered) {
+			removeStagingDir(stagingDir)
 			return watch.standDown(ctx)
 		}
 
 		return fmt.Errorf("apply relay logs: %w", err)
 	}
 
+	removeStagingDir(stagingDir)
 	log.Println("DONE.")
 
 	return nil
@@ -402,6 +405,20 @@ func prepareStagingDir(dir string) error {
 	}
 
 	return nil
+}
+
+// removeStagingDir drops the staged logs once they are spliced into the relay log
+func removeStagingDir(dir string) {
+	if err := checkStagingDir(dir); err != nil {
+		log.Printf("WARNING: keeping the staged logs: %v", err)
+		return
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		log.Printf("WARNING: remove staged logs in %s: %v", dir, err)
+		return
+	}
+
+	log.Printf("Removed the staged logs in %s", dir)
 }
 
 func sourceStreamURL(host string) string {
@@ -526,7 +543,7 @@ func postStream(ctx context.Context, sourceURL, password string, body []byte) (*
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.DialContext = (&net.Dialer{Timeout: sidecarDialTimeout}).DialContext
 	client := &http.Client{Transport: transport}
-	waiting := false
+	var dialErr error
 
 	for {
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, sourceURL, bytes.NewReader(body))
@@ -537,13 +554,17 @@ func postStream(ctx context.Context, sourceURL, password string, body []byte) (*
 		req.SetBasicAuth(string(apiv1.UserOperator), password)
 
 		resp, err := client.Do(req)
+		// the transport reports only the cancellation, not why we were still retrying
+		if err != nil && ctx.Err() != nil && dialErr != nil {
+			return nil, fmt.Errorf("%w, last dial error: %w", err, dialErr)
+		}
 		if !isDialError(err) {
 			return resp, err
 		}
-		if !waiting {
+		if dialErr == nil {
 			log.Printf("Waiting for the source sidecar to listen: %v", err)
-			waiting = true
 		}
+		dialErr = err
 
 		select {
 		case <-ctx.Done():

@@ -57,7 +57,7 @@ If the old primary's pod can't be scheduled or reached over the network, the att
 1. `cmd/orc-handler` waits up to 2 minutes for the source pod to exist and get an IP (`sourcePodWait`).
 2. `cmd/failover` gives up once the source sends nothing for 2 minutes (`-stall-timeout`). This covers the sidecar not listening yet, the response headers and every read of the body. A transfer that keeps making progress is never cut by it.
 
-The failover timeout (default `6h`) is not per attempt. It spans all of orchestrator's retries and is counted from the first attempt for this source. `cmd/orc-handler` records that moment in a `seen` mark (`orc-handler/seen/<source>`) and passes each attempt only what's left of the budget as `failover -timeout`. Once the budget is spent, the `onTimeout` policy applies. A mark that no attempt refreshed for an hour is dropped, so an unrelated later failure of the same source starts with the full budget.
+The failover timeout (default `1h`) is not per attempt. It spans all of orchestrator's retries and is counted from the first attempt for this source. `cmd/orc-handler` records that moment in a `seen` mark (`orc-handler/seen/<source>`) and passes each attempt only what's left of the budget as `failover -timeout`. Once the budget is spent, the `onTimeout` policy applies. A mark that no attempt refreshed for an hour is dropped, so an unrelated later failure of the same source starts with the full budget.
 
 ### Updating replica relay logs
 
@@ -141,7 +141,7 @@ Orchestrator performs the following during a graceful switchover:
 2. Wait for replica to catch up
 3. Promote
 
-The catch-up wait is bounded by `spec.orchestrator.failover.switchoverCatchUpTimeout` (default `5m`), which the operator maps to orchestrator's `ReasonableMaintenanceReplicationLagSeconds`. Before starting a switchover, the operator downtimes the old primary in orchestrator for twice that bound and ends the downtime once the switchover returns. The downtime protects step 1. While the old primary is read-only, orchestrator's own analysis reports it as a read-only master, and with `RecoverNonWriteableMaster: true` it would set `read_only=false` again within a second. It can do that because the takeover doesn't register its recovery until after the wait. Orchestrator skips recovering a downtimed instance, and the takeover itself ignores the downtime. The downtime also expires on its own, so an operator that dies mid-switchover can't leave an instance that orchestrator refuses to recover.
+Orchestrator's `ReasonableMaintenanceReplicationLagSeconds` controls both sides of step 2. Orchestrator refuses the takeover before step 1 if the candidate lags more than this, and it waits at most this long in step 2. So the value bounds how long a switchover can block writes, and nobody has to guess the catch-up time. A lagging candidate fails the takeover without freezing anything, and the operator retries it on the next reconcile. From `crVersion` 1.3.0 on, the operator sets it to twice `ReasonableReplicationLagSeconds` (default `60`, so `120`). That's the same ratio as orchestrator's own defaults. Users can override either key in `spec.orchestrator.configuration`, and the derived value follows a user's `ReasonableReplicationLagSeconds`. Older `crVersion`s keep the `300` baked into the image. Before starting a switchover, the operator downtimes the old primary in orchestrator for twice that bound and ends the downtime once the switchover returns. The downtime protects step 1. While the old primary is read-only, orchestrator's own analysis reports it as a read-only master, and with `RecoverNonWriteableMaster: true` it would set `read_only=false` again within a second. It can do that because the takeover doesn't register its recovery until after the wait. Orchestrator skips recovering a downtimed instance, and the takeover itself ignores the downtime. The downtime also expires on its own, so an operator that dies mid-switchover can't leave an instance that orchestrator refuses to recover.
 
 ## Overseeing the recovery via Operator
 
@@ -213,16 +213,14 @@ The failover is configured under `spec.orchestrator.failover`:
 spec:
   orchestrator:
     failover:
-      timeout: 6h
+      timeout: 1h
       onTimeout: Abort
-      switchoverCatchUpTimeout: 5m
 ```
 
 | Field | Default | Meaning |
 |---|---|---|
-| `timeout` | `6h` | How long the cluster tries to recover the transactions stranded on the dead primary. It spans every retry and is counted from the first attempt (see [retry semantics](#what-if-the-old-primarys-pod-is-unreachable)). |
+| `timeout` | `1h` | How long the cluster tries to recover the transactions stranded on the dead primary. It spans every retry and is counted from the first attempt (see [retry semantics](#what-if-the-old-primarys-pod-is-unreachable)). |
 | `onTimeout` | `Abort` | What happens once `timeout` expires: `Abort` or `ForceWithPossibleDataLoss`. |
-| `switchoverCatchUpTimeout` | `5m` | How long a graceful switchover waits for the candidate to catch up before promoting it. |
 
 The block only applies to async clusters. Setting it on a group replication cluster fails validation. The whole mechanism, meaning the hooks and every derived orchestrator setting, is only rendered for `crVersion` 1.3.0 or later. On an older `crVersion` the block is validated but has no effect.
 
@@ -233,7 +231,6 @@ The operator derives these orchestrator settings from the block, and it ignores 
 | `PreFailoverProcesses` | `timeout`, `onTimeout` (passed to `orc-handler failover`) |
 | `RecoveryPeriodBlockSeconds` | `timeout` + 1h |
 | `UnseenInstanceForgetHours` | ceil(`timeout` + 1h) |
-| `ReasonableMaintenanceReplicationLagSeconds` | `switchoverCatchUpTimeout` |
 
 The post hooks and orchestrator's own promotion gates (`FailMasterPromotionOnLagMinutes`, `DelayMasterPromotionIfSQLThreadNotUpToDate`) are also closed to overrides from 1.3.0 on. See [forced orchestrator settings](#forced-orchestrator-settings).
 
@@ -261,10 +258,9 @@ The pre hook is the only thing that decides whether the candidate is safe to pro
 | `DelayMasterPromotionIfSQLThreadNotUpToDate` | `false` | Keeps orchestrator from adding its own apply gate on top of the hook, which has already waited for the applier to work through the spliced events. `FailMasterPromotionIfSQLThreadNotUpToDate` stays `false` for the same reason. It was already reserved before 1.3.0. |
 | `UnseenInstanceForgetHours` | ceil(`timeout` + 1h) | Orchestrator forgets an instance it hasn't seen for this long, and the dead primary is exactly such an instance. Once its row is gone, there's no `DeadMaster` analysis left to retry the hook for, and no primary for a forced takeover to demote. So it has to outlast the failover timeout. |
 | `RecoveryPeriodBlockSeconds` | `timeout` + 1h | Orchestrator measures this from the start of a recovery. A shorter value would let it register a second recovery of the same failure while the hook is still working on the first. `finish` acknowledges the recovery when it's over, which ends the block early, so a promoted cluster isn't left unrecoverable for this long. |
-| `ReasonableMaintenanceReplicationLagSeconds` | `switchoverCatchUpTimeout` | Bounds the graceful switchover's catch-up wait. |
 | `PreFailoverProcesses`, `PostFailoverProcesses`, `PostUnsuccessfulFailoverProcesses` | the `orc-handler` hooks | The mechanism itself. |
 
-With the default `6h` timeout, the shipped `build/orchestrator.conf.json` already carries the derived values (`RecoveryPeriodBlockSeconds: 25200`, `UnseenInstanceForgetHours: 7`).
+With the default `1h` timeout, the shipped `build/orchestrator.conf.json` already carries the derived values (`RecoveryPeriodBlockSeconds: 7200`, `UnseenInstanceForgetHours: 2`).
 
 ### Hook deadline (`hookTimeout`)
 
