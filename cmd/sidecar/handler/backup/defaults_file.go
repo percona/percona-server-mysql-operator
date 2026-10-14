@@ -38,6 +38,10 @@ func defaultsFilePaths(conf *xb.BackupConfig) []string {
 // referenced by !include directives are invalid or do not exist.
 func preflightDefaultsFiles(ctx context.Context, conf *xb.BackupConfig) error {
 	for _, path := range defaultsFilePaths(conf) {
+		path, err := normalizeDefaultsFilePath(path)
+		if err != nil {
+			return err
+		}
 		cmd := exec.CommandContext(ctx, "xtrabackup", "--defaults-file="+path, "--print-defaults")
 		cmd.Env = envs(*conf)
 		// Leave stdout unset to discard printed options, which may contain secrets.
@@ -66,14 +70,22 @@ func generateDefaultsFile(conf *xb.BackupConfig) (string, error) {
 	return generatedPath, nil
 }
 
+func normalizeDefaultsFilePath(path string) (string, error) {
+	path, err := filepath.Abs(path)
+	if err != nil {
+		return "", errors.Wrap(err, "get absolute defaults file path")
+	}
+	if strings.ContainsAny(path, "\r\n") {
+		return "", errors.New("defaults file path contains a newline")
+	}
+	return path, nil
+}
+
 func createMergedDefaultsFile(paths ...string) (path string, err error) {
 	for i := range paths {
-		paths[i], err = filepath.Abs(paths[i])
+		paths[i], err = normalizeDefaultsFilePath(paths[i])
 		if err != nil {
-			return "", errors.Wrap(err, "get absolute defaults file path")
-		}
-		if strings.ContainsAny(paths[i], "\r\n") {
-			return "", errors.New("defaults file path contains a newline")
+			return "", err
 		}
 	}
 
