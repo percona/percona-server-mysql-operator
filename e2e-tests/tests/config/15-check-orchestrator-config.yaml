@@ -18,7 +18,7 @@ commands:
           poll_seconds=""
           recovery_period=""
           lag_minutes=""
-          until [[ ${poll_seconds} == "7" && ${recovery_period} == "25200" && ${lag_minutes} == "0" ]]; do
+          until [[ ${poll_seconds} == "7" && ${recovery_period} == "7200" && ${lag_minutes} == "0" ]]; do
               if (( SECONDS >= deadline )); then
                   echo "Timed out waiting for ${pod} to use the updated orchestrator configuration" >&2
                   exit 1
@@ -30,7 +30,7 @@ commands:
               # Reserved: the override above must never reach the merged config.
               lag_minutes=$(kubectl -n "${NAMESPACE}" exec "${pod}" -c orchestrator -- \
                   jq -r '.FailMasterPromotionOnLagMinutes' /etc/orchestrator/config/orchestrator.conf.json || true)
-              if [[ ${poll_seconds} != "7" || ${recovery_period} != "25200" || ${lag_minutes} != "0" ]]; then
+              if [[ ${poll_seconds} != "7" || ${recovery_period} != "7200" || ${lag_minutes} != "0" ]]; then
                   sleep 5
               fi
           done
