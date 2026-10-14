@@ -1408,7 +1408,8 @@ func TestErroredRestoreIsNotRetriedUntilSpecChanges(t *testing.T) {
 
 		r := reconciler(cl)
 		if _, err := r.Reconcile(ctx, controllerruntime.Request{
-			NamespacedName: types.NamespacedName{Name: restoreName, Namespace: namespace},
+			Name:      restoreName,
+			Namespace: namespace,
 		}); err != nil {
 			t.Fatal(err, "failed to reconcile")
 		}
@@ -1436,8 +1437,9 @@ func TestErroredRestoreIsNotRetriedUntilSpecChanges(t *testing.T) {
 			ObservedGeneration: 1,
 		}
 		backup := &apiv1.PerconaServerMySQLBackup{
-			ObjectMeta: metav1.ObjectMeta{Name: backupName, Namespace: namespace},
-			Spec:       apiv1.PerconaServerMySQLBackupSpec{ClusterName: clusterName, StorageName: "s3-us-west"},
+			Name:      backupName,
+			Namespace: namespace,
+			Spec:      apiv1.PerconaServerMySQLBackupSpec{ClusterName: clusterName, StorageName: "s3-us-west"},
 			Status: apiv1.PerconaServerMySQLBackupStatus{
 				State:       apiv1.BackupSucceeded,
 				Destination: "s3://some-bucket/some-destination",
@@ -1478,8 +1480,9 @@ func TestErroredRestoreIsNotRetriedUntilSpecChanges(t *testing.T) {
 			StateDesc: "PerconaServerMySQLBackup backup1 in namespace some-namespace is not found",
 		}
 		backup := &apiv1.PerconaServerMySQLBackup{
-			ObjectMeta: metav1.ObjectMeta{Name: backupName, Namespace: namespace},
-			Spec:       apiv1.PerconaServerMySQLBackupSpec{ClusterName: clusterName, StorageName: "s3-us-west"},
+			Name:      backupName,
+			Namespace: namespace,
+			Spec:      apiv1.PerconaServerMySQLBackupSpec{ClusterName: clusterName, StorageName: "s3-us-west"},
 			Status: apiv1.PerconaServerMySQLBackupStatus{
 				State:       apiv1.BackupSucceeded,
 				Destination: "s3://some-bucket/some-destination",
