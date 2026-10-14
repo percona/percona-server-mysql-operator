@@ -84,7 +84,7 @@ func (h *Handler) createBackupHandler(w http.ResponseWriter, req *http.Request) 
 	}()
 	if err := preflightDefaultsFiles(req.Context(), &backupConf); err != nil {
 		log.Error(err, "xtrabackup defaults file preflight failed")
-		http.Error(w, "backup failed", http.StatusInternalServerError)
+		http.Error(w, "backup failed", http.StatusBadRequest)
 		return
 	}
 	log.Info("Checking if backup exists")
