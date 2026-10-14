@@ -93,13 +93,23 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	}
 
 	status := cr.Status
-	status.StateDesc = ""
 	if status.State == apiv1.RestoreError {
+		if cr.Generation == status.ObservedGeneration || status.ObservedGeneration == 0 {
+			log.V(1).Info("Restore errored out and its spec has not changed since, not retrying it",
+				"stateDesc", status.StateDesc, "generation", cr.Generation)
+			return ctrl.Result{}, nil
+		}
 		status.State = apiv1.RestoreNew
 	}
+	status.StateDesc = ""
 
 	defer func() {
-		if status.State != cr.Status.State || status.StateDesc != cr.Status.StateDesc {
+		if status.State == apiv1.RestoreError {
+			status.ObservedGeneration = cr.Generation
+		}
+
+		if status.State != cr.Status.State || status.StateDesc != cr.Status.StateDesc ||
+			status.ObservedGeneration != cr.Status.ObservedGeneration {
 			retriable := func(err error) bool {
 				return err != nil
 			}

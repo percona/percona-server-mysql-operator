@@ -1380,3 +1380,119 @@ func TestResolveIncrementalChainStorageClientError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "create storage client: auth failure")
 }
+
+func TestErroredRestoreIsNotRetriedUntilSpecChanges(t *testing.T) {
+	const (
+		namespace   = "some-namespace"
+		clusterName = "ps-cluster1"
+		restoreName = "restore1"
+		backupName  = "backup1"
+	)
+
+	ctx := t.Context()
+
+	newRestore := func() *apiv1.PerconaServerMySQLRestore {
+		cr := readDefaultRestore(t, restoreName, namespace)
+		cr.Generation = 1
+		cr.Spec.ClusterName = clusterName
+		cr.Spec.BackupName = backupName
+		cr.Spec.BackupSource = nil
+		return cr
+	}
+
+	cluster := readDefaultCluster(t, clusterName, namespace)
+	cluster.Generation = 1
+
+	reconcile := func(t *testing.T, cl client.Client) *apiv1.PerconaServerMySQLRestore {
+		t.Helper()
+
+		r := reconciler(cl)
+		if _, err := r.Reconcile(ctx, controllerruntime.Request{
+			NamespacedName: types.NamespacedName{Name: restoreName, Namespace: namespace},
+		}); err != nil {
+			t.Fatal(err, "failed to reconcile")
+		}
+
+		cr := new(apiv1.PerconaServerMySQLRestore)
+		if err := cl.Get(ctx, types.NamespacedName{Name: restoreName, Namespace: namespace}, cr); err != nil {
+			t.Fatal(err, "failed to get restore")
+		}
+		return cr
+	}
+
+	t.Run("the backup is missing: the restore errors out and records the generation", func(t *testing.T) {
+		cl := buildFakeClient(t, newRestore(), cluster.DeepCopy())
+
+		cr := reconcile(t, cl)
+		assert.Equal(t, apiv1.RestoreError, cr.Status.State)
+		assert.Equal(t, int64(1), cr.Status.ObservedGeneration)
+	})
+
+	t.Run("the backup appears later: the restore stays in error", func(t *testing.T) {
+		errored := newRestore()
+		errored.Status = apiv1.PerconaServerMySQLRestoreStatus{
+			State:              apiv1.RestoreError,
+			StateDesc:          "PerconaServerMySQLBackup backup1 in namespace some-namespace is not found",
+			ObservedGeneration: 1,
+		}
+		backup := &apiv1.PerconaServerMySQLBackup{
+			ObjectMeta: metav1.ObjectMeta{Name: backupName, Namespace: namespace},
+			Spec:       apiv1.PerconaServerMySQLBackupSpec{ClusterName: clusterName, StorageName: "s3-us-west"},
+			Status: apiv1.PerconaServerMySQLBackupStatus{
+				State:       apiv1.BackupSucceeded,
+				Destination: "s3://some-bucket/some-destination",
+			},
+		}
+		cl := buildFakeClient(t, errored, cluster.DeepCopy(), backup)
+
+		cr := reconcile(t, cl)
+		assert.Equal(t, apiv1.RestoreError, cr.Status.State)
+		assert.Equal(t, "PerconaServerMySQLBackup backup1 in namespace some-namespace is not found", cr.Status.StateDesc)
+
+		gotCluster := new(apiv1.PerconaServerMySQL)
+		require.NoError(t, cl.Get(ctx, types.NamespacedName{Name: clusterName, Namespace: namespace}, gotCluster))
+		assert.False(t, gotCluster.Spec.Pause, "the cluster must not be paused by a restore that errored out")
+	})
+
+	t.Run("the user changes the spec: the restore is retried", func(t *testing.T) {
+		errored := newRestore()
+		errored.Generation = 2
+		errored.Status = apiv1.PerconaServerMySQLRestoreStatus{
+			State:              apiv1.RestoreError,
+			StateDesc:          "PerconaServerMySQLBackup backup1 in namespace some-namespace is not found",
+			ObservedGeneration: 1,
+		}
+		cl := buildFakeClient(t, errored, cluster.DeepCopy())
+
+		cr := reconcile(t, cl)
+		// The backup is still missing, so the restore errors out again, but it was
+		// re-evaluated: the recorded generation follows the new spec.
+		assert.Equal(t, apiv1.RestoreError, cr.Status.State)
+		assert.Equal(t, int64(2), cr.Status.ObservedGeneration)
+	})
+
+	t.Run("a restore that errored out before the upgrade is never retried", func(t *testing.T) {
+		errored := newRestore()
+		errored.Status = apiv1.PerconaServerMySQLRestoreStatus{
+			State:     apiv1.RestoreError,
+			StateDesc: "PerconaServerMySQLBackup backup1 in namespace some-namespace is not found",
+		}
+		backup := &apiv1.PerconaServerMySQLBackup{
+			ObjectMeta: metav1.ObjectMeta{Name: backupName, Namespace: namespace},
+			Spec:       apiv1.PerconaServerMySQLBackupSpec{ClusterName: clusterName, StorageName: "s3-us-west"},
+			Status: apiv1.PerconaServerMySQLBackupStatus{
+				State:       apiv1.BackupSucceeded,
+				Destination: "s3://some-bucket/some-destination",
+			},
+		}
+		cl := buildFakeClient(t, errored, cluster.DeepCopy(), backup)
+
+		cr := reconcile(t, cl)
+		assert.Equal(t, apiv1.RestoreError, cr.Status.State)
+		assert.Zero(t, cr.Status.ObservedGeneration, "the status must be left untouched")
+
+		gotCluster := new(apiv1.PerconaServerMySQL)
+		require.NoError(t, cl.Get(ctx, types.NamespacedName{Name: clusterName, Namespace: namespace}, gotCluster))
+		assert.False(t, gotCluster.Spec.Pause, "the cluster must not be paused by a restore from before the upgrade")
+	})
+}
