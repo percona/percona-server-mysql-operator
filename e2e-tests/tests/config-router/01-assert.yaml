@@ -96,6 +96,13 @@ spec:
           defaultMode: 420
           optional: true
           secretName: internal-encryption-keys-config-router
+      - name: log-collector-logrotate-creds
+        secret:
+          defaultMode: 420
+          items:
+          - key: monitor
+            path: monitor
+          secretName: internal-config-router
 status:
   observedGeneration: 1
   replicas: 3
