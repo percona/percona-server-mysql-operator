@@ -1,6 +1,26 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
 timeout: 300
+commands:
+  - script: |-
+      set -o errexit
+      set -o pipefail
+
+      for case in missing invalid; do
+        backup_name="demand-backup-defaults-${case}"
+        defaults_file="/tmp/xb-defaults-${case}.cnf"
+        backup_source=$(kubectl -n "${NAMESPACE}" get ps-backup "${backup_name}" -o jsonpath='{.status.backupSource}')
+        backup_source_pod=${backup_source%%.*}
+
+        if ! kubectl -n "${NAMESPACE}" logs "${backup_source_pod}" -c xtrabackup \
+          | grep -F -- "${backup_name}" \
+          | grep -F -- 'xtrabackup defaults file preflight failed' \
+          | grep -F -- 'preflight defaults file' \
+          | grep -F -- "${defaults_file}"; then
+          echo "Backup ${backup_name} did not log a preflight failure for ${defaults_file}"
+          exit 1
+        fi
+      done
 ---
 apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQLBackup
