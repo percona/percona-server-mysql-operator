@@ -710,6 +710,7 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr.Spec.Orchestrator.Size = 3
 			cr.Spec.Orchestrator.Enabled = true
 			cr.Spec.Proxy.HAProxy.Enabled = true
+			cr.Spec.Unsafe.AsyncFailoverWithPossibleDataLoss = true
 			cr.Spec.MySQL.VaultSecretName = ""
 
 			cr.Spec.MySQL.Image = "mysql-image"
@@ -792,6 +793,44 @@ var _ = Describe("CR validations", Ordered, func() {
 				createErr := k8sClient.Create(ctx, cr)
 				Expect(createErr).To(HaveOccurred())
 				Expect(createErr.Error()).To(ContainSubstring("'proxy.haproxy.enabled' must be true unless 'unsafeFlags.proxy' is enabled"))
+			})
+		})
+
+		When("cluster type is async and backups are disabled but unsafe flag enabled", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-22", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
+			cr.Spec.Orchestrator.Enabled = true
+			cr.Spec.Backup.Enabled = false
+			cr.Spec.Unsafe.AsyncFailoverWithPossibleDataLoss = true
+			It("should create the cluster successfully", func() {
+				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+			})
+		})
+
+		When("cluster type is async and backups are disabled with unsafe flag disabled", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-23", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
+			cr.Spec.Orchestrator.Enabled = true
+			cr.Spec.Backup.Enabled = false
+			It("the creation of the cluster should fail with error message", func() {
+				createErr := k8sClient.Create(ctx, cr)
+				Expect(createErr).To(HaveOccurred())
+				Expect(createErr.Error()).To(ContainSubstring("'backup.enabled' must be true unless 'unsafeFlags.asyncFailoverWithPossibleDataLoss' is enabled"))
+			})
+		})
+
+		When("cluster type is group replication and backups are disabled with unsafe flag disabled", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-24", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeGR
+			cr.Spec.Backup.Enabled = false
+			It("should create the cluster successfully", func() {
+				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
 			})
 		})
 
