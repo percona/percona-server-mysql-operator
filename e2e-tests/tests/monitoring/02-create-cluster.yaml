@@ -25,4 +25,3 @@ commands:
           | yq eval '.spec.proxy.haproxy.enabled = true' - \
           | yq eval '.spec.proxy.haproxy.expose.type = "LoadBalancer"' - \
           | kubectl -n "${NAMESPACE}" apply -f -
-    timeout: 10

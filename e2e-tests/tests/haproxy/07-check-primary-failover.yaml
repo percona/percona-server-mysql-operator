@@ -13,5 +13,7 @@ commands:
 
       primary_pod_from_label="$(wait_for_haproxy_primary ${test_name})"
 
-      check_haproxy_backends "${test_name}" "${primary_pod_from_label}"
+      # The deleted MySQL pod may still be rejoining, so the generated config
+      # can legitimately contain only two servers at this point.
+      check_haproxy_backends "${test_name}" "${primary_pod_from_label}" 3 --skip-config-check
     timeout: 600
