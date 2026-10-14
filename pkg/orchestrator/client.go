@@ -285,8 +285,8 @@ const (
 )
 
 // SwitchoverDowntime is how long the old primary is kept downtimed during a
-// graceful switchover, derived from the configured catch-up wait so the two
-// cannot drift apart.
+// graceful switchover, derived from the catch-up wait so the two cannot drift
+// apart.
 func SwitchoverDowntime(catchUp time.Duration) int {
 	return int(catchUp.Seconds()) * switchoverDowntimeFactor
 }
