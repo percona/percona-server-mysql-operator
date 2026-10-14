@@ -23,7 +23,7 @@ mysql_exec() {
 }
 
 # NO_WRITE_TO_BINLOG keeps it local; naming the types spares the binary log.
-mysql_exec -e 'FLUSH NO_WRITE_TO_BINLOG ERROR LOGS, SLOW LOGS, GENERAL LOGS;'
+mysql_exec -e 'FLUSH NO_WRITE_TO_BINLOG ERROR LOGS;'
 
 # FLUSH does not reopen the audit log, so ask it to rotate itself.
 # PS 8.4+ has the component; 8.0 still ships the audit_log plugin.
