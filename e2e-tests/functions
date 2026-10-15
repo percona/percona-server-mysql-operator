@@ -522,7 +522,11 @@ compare_s3_ca_in_pod() {
 			| $container.volumeMounts[]?
 			| select(.name == $volume.name)
 			| ["compare", $container.name, (.mountPath + "/" + $relativePath)]),
-			(.spec.containers[] as $container
+			(.spec as $spec
+			| $spec.volumes[]?
+			| select(.name == "s3-certs-in")
+			| select(any(.projected.sources[]?.secret.name; . == $ca))
+			| $spec.containers[] as $container
 			| $container.volumeMounts[]?
 			| select(.name == "s3-certs")
 			| ["verify", $container.name, .mountPath])
