@@ -484,32 +484,39 @@ rotate_s3_storage_tls() {
 	cat "${cert_dir}/old-ca.crt" "${cert_dir}/ca.crt" >"${cert_dir}/transition-ca.crt"
 
 	kubectl -n "${NAMESPACE}" create secret generic "${transition_ca}" \
-		--from-file=ca.crt="${cert_dir}/transition-ca.crt" \
-		--dry-run=client -o yaml | kubectl apply -f -
+		--from-file=ca.crt="${cert_dir}/transition-ca.crt"
 	kubectl -n "${NAMESPACE}" create secret generic "${rotated_ca}" \
-		--from-file=ca.crt="${cert_dir}/ca.crt" \
-		--dry-run=client -o yaml | kubectl apply -f -
-	kubectl -n "${NAMESPACE}" create secret generic s3-restore-ca-bundle-rotated \
-		--from-file=ca.crt="${cert_dir}/ca.crt" \
-		--dry-run=client -o yaml | kubectl apply -f -
-	kubectl -n "${NAMESPACE}" create secret generic s3-pitr-restore-ca-bundle-rotated \
-		--from-file=ca.crt="${cert_dir}/ca.crt" \
-		--dry-run=client -o yaml | kubectl apply -f -
+		--from-file=ca.crt="${cert_dir}/ca.crt"
 
-	patch_s3_ca_bundle() {
+	use_s3_ca_bundle() {
 		local secret_name=$1
+		local patch
 		local deadline
 		local statefulset
-		kubectl -n "${NAMESPACE}" patch ps "${cluster_name}" --type=merge -p "{
-			\"spec\": {
-				\"backup\": {
-					\"storages\": {
-						\"local-s3\": {\"s3\": {\"caBundle\": {\"name\": \"${secret_name}\", \"key\": \"ca.crt\"}}}
+
+		patch=$(jq -n --arg secret_name "${secret_name}" '{
+			"spec": {
+				"backup": {
+					"storages": {
+						"local-s3": {
+							"s3": {
+								"caBundle": {"name": $secret_name, "key": "ca.crt"}
+							}
+						}
 					},
-					\"pitr\": {\"binlogServer\": {\"storage\": {\"s3\": {\"caBundle\": {\"name\": \"${secret_name}\", \"key\": \"ca.crt\"}}}}}
+					"pitr": {
+						"binlogServer": {
+							"storage": {
+								"s3": {
+									"caBundle": {"name": $secret_name, "key": "ca.crt"}
+								}
+							}
+						}
+					}
 				}
 			}
-		}"
+		}')
+		kubectl -n "${NAMESPACE}" patch ps "${cluster_name}" --type=merge --patch "${patch}"
 
 		# A rollout status queried immediately after patching the CR can still
 		# observe the previous StatefulSet generation. Wait until reconciliation
@@ -526,23 +533,22 @@ rotate_s3_storage_tls() {
 				fi
 				sleep 5
 			done
+			kubectl -n "${NAMESPACE}" rollout status "statefulset/${statefulset}" --timeout=600s
 		done
 
-		kubectl -n "${NAMESPACE}" rollout status "statefulset/${cluster_name}-mysql" --timeout=600s
-		kubectl -n "${NAMESPACE}" rollout status "statefulset/${cluster_name}-binlog-server" --timeout=600s
 		wait_cluster_consistency_gr "${cluster_name}" 3 3
 	}
 
-	patch_s3_ca_bundle "${transition_ca}"
+	use_s3_ca_bundle "${transition_ca}"
 
+	kubectl -n "${NAMESPACE}" delete secret s3-tls
 	kubectl -n "${NAMESPACE}" create secret tls s3-tls \
 		--cert="${cert_dir}/public.crt" \
-		--key="${cert_dir}/private.key" \
-		--dry-run=client -o yaml | kubectl -n "${NAMESPACE}" apply -f -
+		--key="${cert_dir}/private.key"
 	kubectl -n "${NAMESPACE}" rollout restart deployment/s3-storage-all-in-one
 	kubectl -n "${NAMESPACE}" rollout status deployment/s3-storage-all-in-one --timeout=300s
 
-	patch_s3_ca_bundle "${rotated_ca}"
+	use_s3_ca_bundle "${rotated_ca}"
 	rm -r "${cert_dir}"
 }
 
