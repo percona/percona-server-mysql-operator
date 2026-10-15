@@ -205,7 +205,12 @@ var _ = Describe("TLS cert-manager leak regression", Ordered, func() {
 	It("second reconcile must not block in waitForCert when TLS secret already exists", func() {
 		tightCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
-		_, reconcileErr := reconciler().Reconcile(tightCtx, req)
+
+		r := reconciler()
+		r.CertWaitPoll = defaultCertWaitPoll
+		r.CertWaitTimeout = defaultCertWaitTimeout
+
+		_, reconcileErr := r.Reconcile(tightCtx, req)
 		Expect(reconcileErr).NotTo(HaveOccurred())
 	})
 
