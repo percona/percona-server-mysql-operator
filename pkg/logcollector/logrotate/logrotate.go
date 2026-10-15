@@ -4,6 +4,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 )
 
 const (
@@ -21,6 +22,9 @@ const (
 	// import without an import cycle. The entrypoint resolves the logrotate
 	// status file under it, so the container fails to start when it is unset.
 	logDirEnvVar = "LOG_DIR"
+
+	// CredsVolumeName holds only the monitor password the postrotate hook needs.
+	CredsVolumeName = "log-collector-logrotate-creds"
 
 	configMapNameSuffix = "log-collector-logrotate-config"
 
@@ -75,11 +79,19 @@ func Container(cr *apiv1.PerconaServerMySQL, logDir string, mounts []corev1.Volu
 				Value: logDir,
 			},
 			{
+				Name: "POD_IP",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{
+						FieldPath: "status.podIP",
+					},
+				},
+			},
+			{
 				Name:  "LOGROTATE_SCHEDULE",
 				Value: schedule(cr.Spec.LogCollector.LogRotate),
 			},
 		},
-		VolumeMounts: mounts,
+		VolumeMounts: credsMounts(mounts),
 	}
 
 	if lr := cr.Spec.LogCollector.LogRotate; lr != nil {
@@ -92,6 +104,17 @@ func Container(cr *apiv1.PerconaServerMySQL, logDir string, mounts []corev1.Volu
 	}
 
 	return container
+}
+
+// credsMounts copies mounts before appending: appending in place could write
+// into a backing array the caller still holds.
+func credsMounts(mounts []corev1.VolumeMount) []corev1.VolumeMount {
+	out := make([]corev1.VolumeMount, 0, len(mounts)+2)
+	out = append(out, mounts...)
+	return append(out, corev1.VolumeMount{
+		Name:      CredsVolumeName,
+		MountPath: naming.CredsMountPath,
+	})
 }
 
 func schedule(lr *apiv1.LogRotateSpec) string {
