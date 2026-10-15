@@ -1,0 +1,34 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 60
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster_name=$(get_cluster_name)
+      storage_name=$(kubectl -n "${NAMESPACE}" get ps "${cluster_name}" -o yaml | yq '(.spec.backup.storages // {}) | keys | .[0]')
+
+      kubectl -n "${NAMESPACE}" patch ps "${cluster_name}" --type merge \
+        -p '{"spec":{"backup":{"backoffLimit":0}}}'
+
+      for i in 0 1 2; do
+        kubectl -n "${NAMESPACE}" exec "${cluster_name}-mysql-${i}" -c xtrabackup -- bash -c '
+          rm -f /tmp/xb-defaults-missing.cnf
+          printf "[xtrabackup\nparallel=2\n" > /tmp/xb-defaults-invalid.cnf
+          # Included-file errors can be reported on stderr with exit code 0.
+          printf "!include /tmp/xb-defaults-missing.cnf\n" > /tmp/xb-defaults-include-missing.cnf
+          printf "!include /tmp/xb-defaults-invalid.cnf\n" > /tmp/xb-defaults-include-invalid.cnf
+        '
+      done
+
+      for case in missing invalid include-missing include-invalid; do
+        yq eval '
+          .metadata.name = "demand-backup-defaults-'"${case}"'" |
+          .spec.clusterName = "'"${cluster_name}"'" |
+          .spec.storageName = "'"${storage_name}"'" |
+          .spec.containerOptions.args.xtrabackup = ["--defaults-file=/tmp/xb-defaults-'"${case}"'.cnf"]
+        ' "${TEST_CONFIG_DIR}/backup/backup-defaults-file.yaml" | kubectl -n "${NAMESPACE}" apply -f -
+      done
