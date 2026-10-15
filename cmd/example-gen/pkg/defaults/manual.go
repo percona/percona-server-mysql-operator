@@ -159,13 +159,17 @@ func logCollectorDefaults(spec *apiv1.LogCollectorSpec) {
 		spec.LogRotate.ExtraConfig = corev1.LocalObjectReference{Name: "my-logrotate-config"}
 		spec.LogRotate.Configuration = `/var/lib/mysql/log/*.log {
     daily
+    minsize 10M
     maxsize 100M
     rotate 7
     missingok
     nocompress
     notifempty
-    copytruncate
+    nocreate
     sharedscripts
+    postrotate
+        /opt/percona/logcollector/logrotate/postrotate-mysql.sh
+    endscript
 }
 `
 	}
