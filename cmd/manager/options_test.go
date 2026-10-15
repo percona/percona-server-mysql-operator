@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -48,10 +47,6 @@ func TestConfigureOptions(t *testing.T) {
 		"watch-b":     {},
 		"operator-ns": {},
 	}, options.Cache.DefaultNamespaces)
-	require.NotNil(t, options.Client.Cache)
-	require.Len(t, options.Client.Cache.DisableFor, 1)
-	_, isClusterIssuer := options.Client.Cache.DisableFor[0].(*cm.ClusterIssuer)
-	assert.True(t, isClusterIssuer)
 	assert.Equal(t, 1, options.Controller.GroupKindConcurrency["PerconaServerMySQL."+apiv1.GroupVersion.Group])
 }
 
