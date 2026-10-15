@@ -22,8 +22,6 @@ spec:
       containers:
       - command:
         - /usr/local/bin/percona-server-mysql-operator
-        args:
-        - --leader-elect
         env:
         - name: LOG_STRUCTURED
           value: 'false'
