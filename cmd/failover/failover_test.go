@@ -1142,6 +1142,8 @@ func TestFetchLogsFromSource(t *testing.T) {
 	})
 
 	t.Run("waits for a sidecar that is not listening yet", func(t *testing.T) {
+		t.Parallel()
+
 		addr := freeAddr(t)
 		srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			_, _ = w.Write(tarBytes(t, sourceArchive[0]))
@@ -1166,6 +1168,8 @@ func TestFetchLogsFromSource(t *testing.T) {
 	})
 
 	t.Run("gives up on a sidecar that never listens once the stall bound is spent", func(t *testing.T) {
+		t.Parallel()
+
 		_, err := fetchLogsFromSource(t.Context(), filepath.Join(t.TempDir(), "source-logs"),
 			"http://"+freeAddr(t), testSourcePassword, "binlog.000004", 157, 3*sidecarPoll)
 
@@ -1176,6 +1180,8 @@ func TestFetchLogsFromSource(t *testing.T) {
 	})
 
 	t.Run("keeps waiting for a sidecar whose host does not resolve yet", func(t *testing.T) {
+		t.Parallel()
+
 		_, err := fetchLogsFromSource(t.Context(), filepath.Join(t.TempDir(), "source-logs"),
 			sourceStreamURL("mysql-0.source.invalid"), testSourcePassword, "binlog.000004", 157, 3*sidecarPoll)
 
@@ -1210,6 +1216,8 @@ func TestFetchLogsFromSource(t *testing.T) {
 	// The bound is on silence, not on the transfer: a large stranded tail over a
 	// slow link takes as long as it takes, as long as bytes keep arriving.
 	t.Run("a slow source that keeps sending is not a stalled one", func(t *testing.T) {
+		t.Parallel()
+
 		archive := tarBytes(t, sourceArchive...)
 		const chunks = 20
 		const pause = 25 * time.Millisecond
@@ -1250,6 +1258,8 @@ func TestFetchLogsFromSource(t *testing.T) {
 	})
 
 	t.Run("source unreachable", func(t *testing.T) {
+		t.Parallel()
+
 		srv, _, _ := streamServer(t, http.StatusOK, nil)
 		url := srv.URL
 		srv.Close()
