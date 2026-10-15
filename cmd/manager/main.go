@@ -23,7 +23,6 @@ import (
 	"strconv"
 	"strings"
 
-	cmscheme "github.com/cert-manager/cert-manager/pkg/client/clientset/versioned/scheme"
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	uzap "go.uber.org/zap"
@@ -38,6 +37,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	cmscheme "github.com/cert-manager/cert-manager/pkg/client/clientset/versioned/scheme"
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/controller/ps"
@@ -60,6 +60,7 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	utilruntime.Must(apiv1.AddToScheme(scheme))
+	utilruntime.Must(cmscheme.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 }
 
@@ -119,11 +120,6 @@ func main() {
 	serverVersion, err := platform.GetServerVersion(cliCmd)
 	if err != nil {
 		setupLog.Error(err, "unable to get server version")
-		os.Exit(1)
-	}
-	// Setup Scheme for cert-manager resources
-	if err := cmscheme.AddToScheme(mgr.GetScheme()); err != nil {
-		setupLog.Error(err, "unable to add cert-manager scheme")
 		os.Exit(1)
 	}
 

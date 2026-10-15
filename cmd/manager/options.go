@@ -3,10 +3,12 @@ package main
 import (
 	"strings"
 
+	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/util/validation"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	metricsServer "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	ctrlWebhook "sigs.k8s.io/controller-runtime/pkg/webhook"
 
@@ -46,6 +48,7 @@ func configureOptions(metricsAddr, probeAddr string, enableLeaderElection bool) 
 	if err := opts.configureNamespaces(); err != nil {
 		return opts.options, errors.Wrap(err, "failed to configure namespaces")
 	}
+	opts.configureUncachedObjects()
 	if err := opts.configureLeaderElection(enableLeaderElection); err != nil {
 		return opts.options, errors.Wrap(err, "failed to configure leader election")
 	}
@@ -76,6 +79,16 @@ func (o *operatorOptions) configureNamespaces() error {
 		o.options.Cache.DefaultNamespaces = namespaces
 	}
 	return nil
+}
+
+// ClusterIssuer needs to bypass caching to avoid blocked reconciliation
+// on misconfigured RBAC
+func (o *operatorOptions) configureUncachedObjects() {
+	o.options.Client.Cache = &client.CacheOptions{
+		DisableFor: []client.Object{
+			&cm.ClusterIssuer{},
+		},
+	}
 }
 
 func (o *operatorOptions) configureLeaderElection(enableLeaderElectionFlag bool) error {
