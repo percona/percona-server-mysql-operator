@@ -1255,7 +1255,7 @@ func TestFetchLogsFromSource(t *testing.T) {
 		srv.Close()
 
 		_, err := fetchLogsFromSource(t.Context(), filepath.Join(t.TempDir(), "source-logs"),
-			url, testSourcePassword, "binlog.000004", 157, testFetchTimeout)
+			url, testSourcePassword, "binlog.000004", 157, 3*sidecarPoll)
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "stream logs from source")

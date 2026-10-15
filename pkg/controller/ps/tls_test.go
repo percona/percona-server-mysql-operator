@@ -110,17 +110,6 @@ var _ = Describe("TLS secrets without cert-manager", Ordered, func() {
 		Specify("should have custom SAN", func() {
 			secret := new(corev1.Secret)
 
-			time.Sleep(time.Second * 5)
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, types.NamespacedName{Name: cr.Spec.SSLSecretName, Namespace: cr.Namespace}, secret)
-				return err == nil
-			}, time.Second*15, time.Millisecond*250).Should(BeTrue())
-
-			bl, _ := pem.Decode(secret.Data["tls.crt"])
-
-			tlsCert, err := x509.ParseCertificate(bl.Bytes)
-			Expect(err).NotTo(HaveOccurred())
-
 			dnsNames := []string{
 				"*.ps-cluster1-mysql",
 				"*.ps-cluster1-mysql.tls-1",
@@ -137,7 +126,20 @@ var _ = Describe("TLS secrets without cert-manager", Ordered, func() {
 				"ps-cluster1-mysql-primary.tls-1.svc",
 			}
 
-			Expect(tlsCert.DNSNames).Should(BeEquivalentTo(dnsNames))
+			Eventually(func() []string {
+				if err := k8sClient.Get(ctx, types.NamespacedName{Name: cr.Spec.SSLSecretName, Namespace: cr.Namespace}, secret); err != nil {
+					return nil
+				}
+				bl, _ := pem.Decode(secret.Data["tls.crt"])
+				if bl == nil {
+					return nil
+				}
+				tlsCert, err := x509.ParseCertificate(bl.Bytes)
+				if err != nil {
+					return nil
+				}
+				return tlsCert.DNSNames
+			}, time.Second*15, time.Millisecond*250).Should(BeEquivalentTo(dnsNames))
 		})
 	})
 
@@ -211,8 +213,12 @@ var _ = Describe("TLS cert-manager leak regression", Ordered, func() {
 		tightCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
 		defer cancel()
 
+		r := reconciler()
+		r.CertWaitPoll = defaultCertWaitPoll
+		r.CertWaitTimeout = defaultCertWaitTimeout
+
 		start := time.Now()
-		err := reconciler().waitForCert(tightCtx, cr, "nonexistent-cert", "nonexistent-secret")
+		err := r.waitForCert(tightCtx, cr, "nonexistent-cert", "nonexistent-secret")
 		elapsed := time.Since(start)
 
 		Expect(errors.Is(err, context.DeadlineExceeded)).To(BeTrue(),

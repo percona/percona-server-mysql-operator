@@ -23,6 +23,11 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/tls"
 )
 
+const (
+	defaultCertWaitPoll    = 3 * time.Second
+	defaultCertWaitTimeout = 10 * time.Second
+)
+
 func (r *PerconaServerMySQLReconciler) ensureTLSSecret(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx)
 
@@ -244,8 +249,17 @@ func (r *PerconaServerMySQLReconciler) ensureIssuer(ctx context.Context, cr *api
 }
 
 func (r *PerconaServerMySQLReconciler) waitForCert(ctx context.Context, cr *apiv1.PerconaServerMySQL, certName, secretName string) error {
-	ticker := time.NewTicker(3 * time.Second)
-	timeoutTimer := time.NewTimer(10 * time.Second)
+	poll := r.CertWaitPoll
+	if poll <= 0 {
+		poll = defaultCertWaitPoll
+	}
+	timeout := r.CertWaitTimeout
+	if timeout <= 0 {
+		timeout = defaultCertWaitTimeout
+	}
+
+	ticker := time.NewTicker(poll)
+	timeoutTimer := time.NewTimer(timeout)
 	defer timeoutTimer.Stop()
 	defer ticker.Stop()
 	secretFound := false
