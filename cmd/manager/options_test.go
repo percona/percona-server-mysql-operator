@@ -82,14 +82,16 @@ func TestConfigureLeaderElection(t *testing.T) {
 		wantError     string
 	}{
 		{
-			name:   "flag disables election",
-			wantID: defaultElectionID,
+			name:          "flag disables election",
+			wantID:        defaultElectionID,
+			wantNamespace: "operator-ns",
 		},
 		{
-			name:        "environment disables election",
-			flagEnabled: true,
-			envEnabled:  &disabled,
-			wantID:      defaultElectionID,
+			name:          "environment disables election",
+			flagEnabled:   true,
+			envEnabled:    &disabled,
+			wantID:        defaultElectionID,
+			wantNamespace: "operator-ns",
 		},
 		{
 			name:          "environment enables election",
@@ -105,6 +107,17 @@ func TestConfigureLeaderElection(t *testing.T) {
 			wantEnabled:   true,
 			wantID:        "custom.lease",
 			wantNamespace: "operator-ns",
+		},
+		{
+			name:          "custom lease name with election disabled",
+			leaseName:     "custom.lease",
+			wantID:        "custom.lease",
+			wantNamespace: "operator-ns",
+		},
+		{
+			name:      "invalid lease name with election disabled",
+			leaseName: "Invalid_Name",
+			wantError: "PSO_LEADER_ELECTION_LEASE_NAME",
 		},
 		{
 			name:       "invalid lease name",

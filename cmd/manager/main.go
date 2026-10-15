@@ -28,7 +28,9 @@ import (
 	"github.com/pkg/errors"
 	uzap "go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	coordinationv1 "k8s.io/api/coordination/v1"
 	eventsv1 "k8s.io/api/events/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -109,6 +111,20 @@ func main() {
 	}
 
 	nsClient := mgr.GetClient()
+	if !options.LeaderElection {
+		lease := &coordinationv1.Lease{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      options.LeaderElectionID,
+				Namespace: options.LeaderElectionNamespace,
+			},
+		}
+		if err := nsClient.Delete(ctx, lease); client.IgnoreNotFound(err) != nil {
+			setupLog.Error(err, "unable to clean up leader election Lease")
+			os.Exit(1)
+		} else if err == nil {
+			setupLog.Info("deleted leader election Lease", "lease", client.ObjectKeyFromObject(lease))
+		}
+	}
 
 	cliCmd, err := clientcmd.NewClient()
 	if err != nil {
