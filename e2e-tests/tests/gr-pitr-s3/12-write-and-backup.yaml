@@ -1,15 +1,14 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
-  - script: |-
+  - timeout: 180
+    script: |-
       set -o errexit
       set -o xtrace
 
       source ../../functions
 
       cluster_name=$(get_cluster_name)
-
-      rotate_s3_storage_tls "${cluster_name}"
 
       run_mysql \
           "INSERT myDB.myTable (id) VALUES (200500)" \
@@ -22,4 +21,3 @@ commands:
           | yq eval ".spec.clusterName = \"${cluster_name}\"" - \
           | yq eval '.spec.storageName = "local-s3"' - \
           | kubectl apply -n "${NAMESPACE}" -f -
-    timeout: 1200

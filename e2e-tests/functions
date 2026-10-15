@@ -396,6 +396,227 @@ deploy_s3_storage() {
         /usr/bin/aws --endpoint-url http://s3-storage-all-in-one:8333 s3 mb s3://operator-testing"
 }
 
+generate_storage_certificates() {
+	local cert_dir=$1
+	local ca_common_name=$2
+	local server_common_name=$3
+
+	openssl req -x509 -newkey rsa:2048 -nodes -days 2 \
+		-keyout "${cert_dir}/ca.key" -out "${cert_dir}/ca.crt" \
+		-subj "/CN=${ca_common_name}"
+	openssl req -newkey rsa:2048 -nodes \
+		-keyout "${cert_dir}/private.key" -out "${cert_dir}/server.csr" \
+		-subj "/CN=${server_common_name}"
+	printf 'subjectAltName=DNS:%s,DNS:%s.%s,DNS:%s.%s.svc' \
+		"${server_common_name}" \
+		"${server_common_name}" "${NAMESPACE}" \
+		"${server_common_name}" "${NAMESPACE}" \
+		>"${cert_dir}/server.ext"
+	openssl x509 -req -days 2 \
+		-in "${cert_dir}/server.csr" \
+		-CA "${cert_dir}/ca.crt" -CAkey "${cert_dir}/ca.key" -CAcreateserial \
+		-out "${cert_dir}/server.crt" \
+		-extfile "${cert_dir}/server.ext"
+	cat "${cert_dir}/server.crt" "${cert_dir}/ca.crt" >"${cert_dir}/public.crt"
+}
+
+generate_storage_tls_secrets() {
+	local cert_dir=$1
+	local tls_secret=$2
+	shift 2
+
+	if (($# % 2 != 0)); then
+		echo "CA secrets must be provided as name/file pairs"
+		return 1
+	fi
+
+	if [[ -n ${tls_secret} ]]; then
+		kubectl -n "${NAMESPACE}" create secret tls "${tls_secret}" \
+			--cert="${cert_dir}/public.crt" \
+			--key="${cert_dir}/private.key"
+	fi
+
+	local ca_secret
+	local ca_file
+	while (($#)); do
+		ca_secret=$1
+		ca_file=$2
+		shift 2
+		kubectl -n "${NAMESPACE}" create secret generic "${ca_secret}" \
+			--from-file=ca.crt="${ca_file}"
+	done
+}
+
+assert_s3_rejects_ca() {
+	local ca_secret=$1
+	local endpoint=$2
+	local pod_name="aws-cli-rejected-ca-${RANDOM}-$(date +%s)"
+	local overrides
+	local output
+
+	overrides=$(jq -cn \
+		--arg pod_name "${pod_name}" \
+		--arg ca_secret "${ca_secret}" \
+		--arg endpoint "${endpoint}" '{
+			spec: {
+				restartPolicy: "Never",
+				volumes: [{name: "ca", secret: {secretName: $ca_secret}}],
+				containers: [{
+					name: $pod_name,
+					image: "perconalab/awscli",
+					command: ["/usr/bin/aws"],
+					args: [
+						"--endpoint-url", $endpoint,
+						"--cli-connect-timeout", "10",
+						"--cli-read-timeout", "10",
+						"s3api", "head-bucket",
+						"--bucket", "operator-testing"
+					],
+					envFrom: [{secretRef: {name: "s3-secret"}}],
+					env: [
+						{name: "AWS_DEFAULT_REGION", value: "us-east-1"},
+						{name: "AWS_CA_BUNDLE", value: "/etc/s3/ca/ca.crt"}
+					],
+					volumeMounts: [{name: "ca", mountPath: "/etc/s3/ca", readOnly: true}]
+				}]
+			}
+		}')
+
+	if output=$(kubectl -n "${NAMESPACE}" run -i --rm "${pod_name}" \
+		--image=perconalab/awscli \
+		--restart=Never \
+		--overrides="${overrides}" 2>&1); then
+		echo "S3 unexpectedly accepted CA secret ${ca_secret}"
+		return 1
+	fi
+
+	if ! grep -Eqi 'SSL validation failed|CERTIFICATE_VERIFY_FAILED|certificate verify failed|certificate signed by unknown authority' <<<"${output}"; then
+		echo "S3 request with CA secret ${ca_secret} failed for an unexpected reason:"
+		echo "${output}"
+		return 1
+	fi
+}
+
+compare_s3_ca_in_pod() {
+	local pod=$1
+	local secret_name=$2
+	local expected_bundle=$3
+	local expected_ca=$4
+	local output_file=$5
+	local mode
+	local container
+	local ca_path
+	local mount
+
+	mount=$(kubectl -n "${NAMESPACE}" get "pod/${pod}" -o json \
+		| jq -r --arg ca "${secret_name}" '[
+			(.spec as $spec
+			| $spec.volumes[]?
+			| select(any(.projected.sources[]?.secret.name; . == $ca)) as $volume
+			| ($volume.projected.sources[]
+				| select(.secret.name == $ca)
+				| .secret.items[]
+				| select(.key == "ca.crt")
+				| .path) as $relativePath
+			| $spec.containers[] as $container
+			| $container.volumeMounts[]?
+			| select(.name == $volume.name)
+			| ["compare", $container.name, (.mountPath + "/" + $relativePath)]),
+			(.spec.containers[] as $container
+			| $container.volumeMounts[]?
+			| select(.name == "s3-certs")
+			| ["verify", $container.name, .mountPath])
+		] | first // empty | @tsv')
+	[[ -n ${mount} ]] || return 1
+
+	IFS=$'\t' read -r mode container ca_path <<<"${mount}"
+	kubectl -n "${NAMESPACE}" exec "${pod}" -c "${container}" -- cat "${ca_path}" >"${output_file}" || return 1
+
+	if [[ ${mode} == compare ]]; then
+		cmp -s "${expected_bundle}" "${output_file}"
+	else
+		openssl verify -CAfile "${output_file}" "${expected_ca}" >/dev/null
+	fi
+}
+
+wait_s3_ca_in_pods() {
+	local cluster_name=$1
+	local secret_name=$2
+	local expected_bundle=$3
+	local expected_ca=$4
+	local work_dir
+	local deadline
+	local pod
+	local pods
+
+	work_dir=$(dirname "${expected_ca}")
+	wait_cluster_consistency_gr "${cluster_name}" 3 3
+
+	pods=$(kubectl -n "${NAMESPACE}" get pods -o json \
+		| jq -r \
+			--arg mysql "${cluster_name}-mysql" \
+			--arg binlog "${cluster_name}-binlog-server" \
+			'.items[]
+			| select(any(.metadata.ownerReferences[]?;
+				.kind == "StatefulSet" and (.name == $mysql or .name == $binlog)))
+			| .metadata.name')
+	[[ -n ${pods} ]] || return 1
+
+	deadline=$((SECONDS + 600))
+	while IFS= read -r pod; do
+		until compare_s3_ca_in_pod \
+			"${pod}" \
+			"${secret_name}" \
+			"${expected_bundle}" \
+			"${expected_ca}" \
+			"${work_dir}/${pod}-ca-bundle.crt"; do
+			if ((SECONDS >= deadline)); then
+				echo "Timed out waiting for pod/${pod} to use CA secret ${secret_name}"
+				return 1
+			fi
+			sleep 5
+		done
+	done <<<"${pods}"
+}
+
+patch_storage_ca_bundle() {
+	local cluster_name=$1
+	local secret_name=$2
+	local expected_bundle=$3
+	local expected_ca=$4
+	local patch
+
+	patch=$(jq -n --arg secret_name "${secret_name}" '{
+		"spec": {
+			"backup": {
+				"storages": {
+					"local-s3": {
+						"s3": {
+							"caBundle": {"name": $secret_name, "key": "ca.crt"}
+						}
+					}
+				},
+				"pitr": {
+					"binlogServer": {
+						"storage": {
+							"s3": {
+								"caBundle": {"name": $secret_name, "key": "ca.crt"}
+							}
+						}
+					}
+				}
+			}
+		}
+	}')
+	kubectl -n "${NAMESPACE}" patch ps "${cluster_name}" --type=merge --patch "${patch}"
+
+	wait_s3_ca_in_pods \
+		"${cluster_name}" \
+		"${secret_name}" \
+		"${expected_bundle}" \
+		"${expected_ca}"
+}
+
 deploy_s3_storage_tls() {
 	local storage="${1:-2G}"
 	local access_key
@@ -405,33 +626,14 @@ deploy_s3_storage_tls() {
 	secret_key="$(kubectl -n "${NAMESPACE}" get secret s3-secret -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}' | base64 -d)"
 	cert_dir="$(mktemp -d)"
 
-	openssl req -x509 -newkey rsa:2048 -nodes -days 2 \
-		-keyout "${cert_dir}/ca.key" -out "${cert_dir}/ca.crt" \
-		-subj '/CN=s3-e2e-ca'
-	openssl req -newkey rsa:2048 -nodes \
-		-keyout "${cert_dir}/private.key" -out "${cert_dir}/server.csr" \
-		-subj '/CN=s3-storage-all-in-one'
-	printf 'subjectAltName=DNS:s3-storage-all-in-one,DNS:s3-storage-all-in-one.%s,DNS:s3-storage-all-in-one.%s.svc' "${NAMESPACE}" "${NAMESPACE}" >"${cert_dir}/server.ext"
-	openssl x509 -req -days 2 \
-		-in "${cert_dir}/server.csr" \
-		-CA "${cert_dir}/ca.crt" -CAkey "${cert_dir}/ca.key" -CAcreateserial \
-		-out "${cert_dir}/server.crt" \
-		-extfile "${cert_dir}/server.ext"
-	cat "${cert_dir}/server.crt" "${cert_dir}/ca.crt" >"${cert_dir}/public.crt"
+	generate_storage_certificates "${cert_dir}" s3-e2e-ca s3-storage-all-in-one
 
-	kubectl -n "${NAMESPACE}" create secret tls s3-tls \
-		--cert="${cert_dir}/public.crt" \
-		--key="${cert_dir}/private.key" \
-		--dry-run=client -o yaml | kubectl -n "${NAMESPACE}" apply -f -
-	kubectl -n "${NAMESPACE}" create secret generic s3-ca-bundle \
-		--from-file=ca.crt="${cert_dir}/ca.crt" \
-		--dry-run=client -o yaml | kubectl apply -f -
-	kubectl -n "${NAMESPACE}" create secret generic s3-restore-ca-bundle \
-		--from-file=ca.crt="${cert_dir}/ca.crt" \
-		--dry-run=client -o yaml | kubectl apply -f -
-	kubectl -n "${NAMESPACE}" create secret generic s3-pitr-restore-ca-bundle \
-		--from-file=ca.crt="${cert_dir}/ca.crt" \
-		--dry-run=client -o yaml | kubectl apply -f -
+	generate_storage_tls_secrets \
+		"${cert_dir}" \
+		s3-tls \
+		s3-ca-bundle "${cert_dir}/ca.crt" \
+		s3-restore-ca-bundle "${cert_dir}/ca.crt" \
+		s3-pitr-restore-ca-bundle "${cert_dir}/ca.crt"
 	rm -r "${cert_dir}"
 
 	helm uninstall -n "${NAMESPACE}" s3-storage || :
@@ -459,6 +661,7 @@ deploy_s3_storage_tls() {
 rotate_s3_storage_tls() {
 	local cluster_name=$1
 	local cert_dir
+	local old_ca=s3-ca-bundle-old
 	local transition_ca=s3-ca-bundle-transition
 	local rotated_ca=s3-ca-bundle-rotated
 	cert_dir="$(mktemp -d)"
@@ -468,87 +671,33 @@ rotate_s3_storage_tls() {
 	# transition. A second update removes the old CA after S3 serves the new leaf.
 	kubectl -n "${NAMESPACE}" get secret s3-ca-bundle \
 		-o go-template='{{index .data "ca.crt" | base64decode}}' >"${cert_dir}/old-ca.crt"
-	openssl req -x509 -newkey rsa:2048 -nodes -days 2 \
-		-keyout "${cert_dir}/ca.key" -out "${cert_dir}/ca.crt" \
-		-subj '/CN=s3-e2e-rotated-ca'
-	openssl req -newkey rsa:2048 -nodes \
-		-keyout "${cert_dir}/private.key" -out "${cert_dir}/server.csr" \
-		-subj '/CN=s3-storage-all-in-one'
-	printf 'subjectAltName=DNS:s3-storage-all-in-one,DNS:s3-storage-all-in-one.%s,DNS:s3-storage-all-in-one.%s.svc' "${NAMESPACE}" "${NAMESPACE}" >"${cert_dir}/server.ext"
-	openssl x509 -req -days 2 \
-		-in "${cert_dir}/server.csr" \
-		-CA "${cert_dir}/ca.crt" -CAkey "${cert_dir}/ca.key" -CAcreateserial \
-		-out "${cert_dir}/server.crt" \
-		-extfile "${cert_dir}/server.ext"
-	cat "${cert_dir}/server.crt" "${cert_dir}/ca.crt" >"${cert_dir}/public.crt"
+	generate_storage_certificates "${cert_dir}" s3-e2e-rotated-ca s3-storage-all-in-one
 	cat "${cert_dir}/old-ca.crt" "${cert_dir}/ca.crt" >"${cert_dir}/transition-ca.crt"
 
-	kubectl -n "${NAMESPACE}" create secret generic "${transition_ca}" \
-		--from-file=ca.crt="${cert_dir}/transition-ca.crt"
-	kubectl -n "${NAMESPACE}" create secret generic "${rotated_ca}" \
-		--from-file=ca.crt="${cert_dir}/ca.crt"
+	generate_storage_tls_secrets \
+		"${cert_dir}" \
+		"" \
+		"${old_ca}" "${cert_dir}/old-ca.crt" \
+		"${transition_ca}" "${cert_dir}/transition-ca.crt" \
+		"${rotated_ca}" "${cert_dir}/ca.crt"
 
-	use_s3_ca_bundle() {
-		local secret_name=$1
-		local patch
-		local deadline
-		local statefulset
-
-		patch=$(jq -n --arg secret_name "${secret_name}" '{
-			"spec": {
-				"backup": {
-					"storages": {
-						"local-s3": {
-							"s3": {
-								"caBundle": {"name": $secret_name, "key": "ca.crt"}
-							}
-						}
-					},
-					"pitr": {
-						"binlogServer": {
-							"storage": {
-								"s3": {
-									"caBundle": {"name": $secret_name, "key": "ca.crt"}
-								}
-							}
-						}
-					}
-				}
-			}
-		}')
-		kubectl -n "${NAMESPACE}" patch ps "${cluster_name}" --type=merge --patch "${patch}"
-
-		# A rollout status queried immediately after patching the CR can still
-		# observe the previous StatefulSet generation. Wait until reconciliation
-		# has put the selected CA into both pod templates before watching rollouts.
-		deadline=$((SECONDS + 600))
-		for statefulset in "${cluster_name}-mysql" "${cluster_name}-binlog-server"; do
-			until kubectl -n "${NAMESPACE}" get "statefulset/${statefulset}" -o json \
-				| jq -e --arg ca "${secret_name}" \
-					'any(.spec.template.spec.volumes[]?.projected.sources[]?.secret.name; . == $ca)' >/dev/null; do
-				if ((SECONDS >= deadline)); then
-					echo "Timed out waiting for statefulset/${statefulset} to use CA secret ${secret_name}"
-					kubectl -n "${NAMESPACE}" get "statefulset/${statefulset}" -o yaml
-					return 1
-				fi
-				sleep 5
-			done
-			kubectl -n "${NAMESPACE}" rollout status "statefulset/${statefulset}" --timeout=600s
-		done
-
-		wait_cluster_consistency_gr "${cluster_name}" 3 3
-	}
-
-	use_s3_ca_bundle "${transition_ca}"
+	patch_storage_ca_bundle \
+		"${cluster_name}" \
+		"${transition_ca}" \
+		"${cert_dir}/transition-ca.crt" \
+		"${cert_dir}/ca.crt"
 
 	kubectl -n "${NAMESPACE}" delete secret s3-tls
-	kubectl -n "${NAMESPACE}" create secret tls s3-tls \
-		--cert="${cert_dir}/public.crt" \
-		--key="${cert_dir}/private.key"
+	generate_storage_tls_secrets "${cert_dir}" s3-tls
 	kubectl -n "${NAMESPACE}" rollout restart deployment/s3-storage-all-in-one
 	kubectl -n "${NAMESPACE}" rollout status deployment/s3-storage-all-in-one --timeout=300s
+	assert_s3_rejects_ca "${old_ca}" "https://s3-storage-all-in-one:8443"
 
-	use_s3_ca_bundle "${rotated_ca}"
+	patch_storage_ca_bundle \
+		"${cluster_name}" \
+		"${rotated_ca}" \
+		"${cert_dir}/ca.crt" \
+		"${cert_dir}/ca.crt"
 	rm -r "${cert_dir}"
 }
 

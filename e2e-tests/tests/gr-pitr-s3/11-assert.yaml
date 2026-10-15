@@ -34,9 +34,8 @@ status:
     state: ready
   state: ready
 ---
-kind: PerconaServerMySQLBackup
-apiVersion: ps.percona.com/v1
+apiVersion: v1
+kind: Secret
 metadata:
-  name: gr-pitr-s3-backup-2
-status:
-  state: Succeeded
+  name: s3-ca-bundle-old
+type: Opaque
