@@ -1,0 +1,36 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 1200
+collectors:
+  - type: pod
+    selector: "app.kubernetes.io/component=pitr"
+    tail: 1000
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQLRestore
+metadata:
+  name: gr-pitr-s3-ca-rotation-restore
+spec:
+  backupSource:
+    storage:
+      s3:
+        caBundle:
+          name: s3-restore-ca-bundle-rotated
+          key: ca.crt
+  pitr:
+    backupSource:
+      binlogServer:
+        storage:
+          s3:
+            caBundle:
+              name: s3-pitr-restore-ca-bundle-rotated
+              key: ca.crt
+status:
+  state: Succeeded
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-pitr-s3
+status:
+  state: ready

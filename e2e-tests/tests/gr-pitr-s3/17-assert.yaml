@@ -1,0 +1,32 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 600
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-pitr-s3
+spec:
+  backup:
+    storages:
+      local-s3:
+        s3:
+          caBundle:
+            name: s3-ca-bundle-rotated
+            key: ca.crt
+    pitr:
+      binlogServer:
+        storage:
+          s3:
+            caBundle:
+              name: s3-ca-bundle-rotated
+              key: ca.crt
+status:
+  state: ready
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQLBackup
+metadata:
+  name: gr-pitr-s3-ca-rotation-post
+status:
+  state: Succeeded

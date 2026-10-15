@@ -456,6 +456,96 @@ deploy_s3_storage_tls() {
         /usr/bin/aws --no-verify-ssl --endpoint-url https://s3-storage-all-in-one:8443 s3 mb s3://operator-testing"
 }
 
+rotate_s3_storage_tls() {
+	local cluster_name=$1
+	local cert_dir
+	local transition_ca=s3-ca-bundle-transition
+	local rotated_ca=s3-ca-bundle-rotated
+	cert_dir="$(mktemp -d)"
+
+	# Introduce the new CA alongside the old one before changing the certificate
+	# served by S3. This keeps backup and binlog traffic trusted during the
+	# transition. A second update removes the old CA after S3 serves the new leaf.
+	kubectl -n "${NAMESPACE}" get secret s3-ca-bundle \
+		-o go-template='{{index .data "ca.crt" | base64decode}}' >"${cert_dir}/old-ca.crt"
+	openssl req -x509 -newkey rsa:2048 -nodes -days 2 \
+		-keyout "${cert_dir}/ca.key" -out "${cert_dir}/ca.crt" \
+		-subj '/CN=s3-e2e-rotated-ca'
+	openssl req -newkey rsa:2048 -nodes \
+		-keyout "${cert_dir}/private.key" -out "${cert_dir}/server.csr" \
+		-subj '/CN=s3-storage-all-in-one'
+	printf 'subjectAltName=DNS:s3-storage-all-in-one,DNS:s3-storage-all-in-one.%s,DNS:s3-storage-all-in-one.%s.svc' "${NAMESPACE}" "${NAMESPACE}" >"${cert_dir}/server.ext"
+	openssl x509 -req -days 2 \
+		-in "${cert_dir}/server.csr" \
+		-CA "${cert_dir}/ca.crt" -CAkey "${cert_dir}/ca.key" -CAcreateserial \
+		-out "${cert_dir}/server.crt" \
+		-extfile "${cert_dir}/server.ext"
+	cat "${cert_dir}/server.crt" "${cert_dir}/ca.crt" >"${cert_dir}/public.crt"
+	cat "${cert_dir}/old-ca.crt" "${cert_dir}/ca.crt" >"${cert_dir}/transition-ca.crt"
+
+	kubectl -n "${NAMESPACE}" create secret generic "${transition_ca}" \
+		--from-file=ca.crt="${cert_dir}/transition-ca.crt" \
+		--dry-run=client -o yaml | kubectl apply -f -
+	kubectl -n "${NAMESPACE}" create secret generic "${rotated_ca}" \
+		--from-file=ca.crt="${cert_dir}/ca.crt" \
+		--dry-run=client -o yaml | kubectl apply -f -
+	kubectl -n "${NAMESPACE}" create secret generic s3-restore-ca-bundle-rotated \
+		--from-file=ca.crt="${cert_dir}/ca.crt" \
+		--dry-run=client -o yaml | kubectl apply -f -
+	kubectl -n "${NAMESPACE}" create secret generic s3-pitr-restore-ca-bundle-rotated \
+		--from-file=ca.crt="${cert_dir}/ca.crt" \
+		--dry-run=client -o yaml | kubectl apply -f -
+
+	patch_s3_ca_bundle() {
+		local secret_name=$1
+		local deadline
+		local statefulset
+		kubectl -n "${NAMESPACE}" patch ps "${cluster_name}" --type=merge -p "{
+			\"spec\": {
+				\"backup\": {
+					\"storages\": {
+						\"local-s3\": {\"s3\": {\"caBundle\": {\"name\": \"${secret_name}\", \"key\": \"ca.crt\"}}}
+					},
+					\"pitr\": {\"binlogServer\": {\"storage\": {\"s3\": {\"caBundle\": {\"name\": \"${secret_name}\", \"key\": \"ca.crt\"}}}}}
+				}
+			}
+		}"
+
+		# A rollout status queried immediately after patching the CR can still
+		# observe the previous StatefulSet generation. Wait until reconciliation
+		# has put the selected CA into both pod templates before watching rollouts.
+		deadline=$((SECONDS + 600))
+		for statefulset in "${cluster_name}-mysql" "${cluster_name}-binlog-server"; do
+			until kubectl -n "${NAMESPACE}" get "statefulset/${statefulset}" -o json \
+				| jq -e --arg ca "${secret_name}" \
+					'any(.spec.template.spec.volumes[]?.projected.sources[]?.secret.name; . == $ca)' >/dev/null; do
+				if ((SECONDS >= deadline)); then
+					echo "Timed out waiting for statefulset/${statefulset} to use CA secret ${secret_name}"
+					kubectl -n "${NAMESPACE}" get "statefulset/${statefulset}" -o yaml
+					return 1
+				fi
+				sleep 5
+			done
+		done
+
+		kubectl -n "${NAMESPACE}" rollout status "statefulset/${cluster_name}-mysql" --timeout=600s
+		kubectl -n "${NAMESPACE}" rollout status "statefulset/${cluster_name}-binlog-server" --timeout=600s
+		wait_cluster_consistency_gr "${cluster_name}" 3 3
+	}
+
+	patch_s3_ca_bundle "${transition_ca}"
+
+	kubectl -n "${NAMESPACE}" create secret tls s3-tls \
+		--cert="${cert_dir}/public.crt" \
+		--key="${cert_dir}/private.key" \
+		--dry-run=client -o yaml | kubectl -n "${NAMESPACE}" apply -f -
+	kubectl -n "${NAMESPACE}" rollout restart deployment/s3-storage-all-in-one
+	kubectl -n "${NAMESPACE}" rollout status deployment/s3-storage-all-in-one --timeout=300s
+
+	patch_s3_ca_bundle "${rotated_ca}"
+	rm -r "${cert_dir}"
+}
+
 prepare_vault_tls() {
 	local name=$1
 	local namespace=$2
