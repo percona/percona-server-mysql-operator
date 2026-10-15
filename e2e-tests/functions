@@ -497,6 +497,25 @@ assert_s3_rejects_ca() {
 	fi
 }
 
+validate_s3_ca_bundle() {
+	local bundle=$1
+	local ca=$2
+	local expected_state=$3
+
+	case ${expected_state} in
+		present)
+			openssl verify -CAfile "${bundle}" "${ca}" >/dev/null
+			;;
+		absent)
+			! openssl verify -CAfile "${bundle}" "${ca}" >/dev/null 2>&1
+			;;
+		*)
+			echo "Unknown CA state: ${expected_state}"
+			return 1
+			;;
+	esac
+}
+
 compare_s3_ca_in_pod() {
 	local pod=$1
 	local secret_name=$2
@@ -528,7 +547,7 @@ compare_s3_ca_in_pod() {
 			| select(any(.projected.sources[]?.secret.name; . == $ca))
 			| $spec.containers[] as $container
 			| $container.volumeMounts[]?
-			| select(.name == "s3-certs")
+			| select(.name == "s3-certs" and .subPath == "ca-bundle.crt")
 			| ["verify", $container.name, .mountPath])
 		] | first // empty | @tsv')
 	[[ -n ${mount} ]] || return 1
@@ -539,8 +558,34 @@ compare_s3_ca_in_pod() {
 	if [[ ${mode} == compare ]]; then
 		cmp -s "${expected_bundle}" "${output_file}"
 	else
-		openssl verify -CAfile "${output_file}" "${expected_ca}" >/dev/null
+		validate_s3_ca_bundle "${output_file}" "${expected_ca}" present
 	fi
+}
+
+validate_s3_ca_state_in_binlog_pods() {
+	local cluster_name=$1
+	local ca=$2
+	local expected_state=$3
+	local work_dir
+	local bundle
+	local pod
+	local pods
+
+	work_dir=$(dirname "${ca}")
+	pods=$(kubectl -n "${NAMESPACE}" get pods -o json \
+		| jq -r \
+			--arg binlog "${cluster_name}-binlog-server" \
+			'.items[]
+			| select(any(.metadata.ownerReferences[]?;
+				.kind == "StatefulSet" and .name == $binlog))
+			| .metadata.name')
+	[[ -n ${pods} ]] || return 1
+
+	while IFS= read -r pod; do
+		bundle="${work_dir}/${pod}-ca-bundle.crt"
+		[[ -s ${bundle} ]] || return 1
+		validate_s3_ca_bundle "${bundle}" "${ca}" "${expected_state}" || return 1
+	done <<<"${pods}"
 }
 
 wait_s3_ca_in_pods() {
@@ -690,6 +735,10 @@ rotate_s3_storage_tls() {
 		"${transition_ca}" \
 		"${cert_dir}/transition-ca.crt" \
 		"${cert_dir}/ca.crt"
+	validate_s3_ca_state_in_binlog_pods \
+		"${cluster_name}" \
+		"${cert_dir}/old-ca.crt" \
+		present
 
 	kubectl -n "${NAMESPACE}" delete secret s3-tls
 	generate_storage_tls_secrets "${cert_dir}" s3-tls
@@ -702,6 +751,10 @@ rotate_s3_storage_tls() {
 		"${rotated_ca}" \
 		"${cert_dir}/ca.crt" \
 		"${cert_dir}/ca.crt"
+	validate_s3_ca_state_in_binlog_pods \
+		"${cluster_name}" \
+		"${cert_dir}/old-ca.crt" \
+		absent
 	rm -r "${cert_dir}"
 }
 
