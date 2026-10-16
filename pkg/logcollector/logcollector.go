@@ -100,7 +100,23 @@ func Volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 		vols = append(vols, *v)
 	}
 
+	vols = append(vols, logrotateCredsVolume(cr))
+
 	return append(vols, cr.Spec.LogCollector.Volumes...)
+}
+
+// logrotateCredsVolume exposes only the monitor password to the logrotate sidecar.
+func logrotateCredsVolume(cr *apiv1.PerconaServerMySQL) corev1.Volume {
+	return corev1.Volume{
+		Name: logrotate.CredsVolumeName,
+		Secret: &corev1.SecretVolumeSource{
+			SecretName: cr.InternalSecretName(),
+			Items: []corev1.KeyToPath{{
+				Key:  string(apiv1.UserMonitor),
+				Path: string(apiv1.UserMonitor),
+			}},
+		},
+	}
 }
 
 func logrotateVolume(cr *apiv1.PerconaServerMySQL) *corev1.Volume {

@@ -44,6 +44,11 @@ commands:
       # only append the tail of the one it was on.
       run_mysql "FLUSH BINARY LOGS" "-h ${primary_host}"
       run_mysql "INSERT myDB.myTable (id) VALUES (100501)" "-h $(get_haproxy_svc "${cluster}")"
+      # tagged GTIDs exist since 8.3 and the binary log carries them in an event
+      # of their own, which the failover has to read like any other
+      if [[ ${MYSQL_VERSION} != "8.0" ]]; then
+          run_mysql "SET gtid_next='AUTOMATIC:failover'; INSERT myDB.myTable (id) VALUES (100510)" "-h $(get_haproxy_svc "${cluster}")"
+      fi
       run_mysql "FLUSH BINARY LOGS" "-h ${primary_host}"
 
       # A primary that comes back while the failover runs makes the candidate
@@ -78,4 +83,14 @@ commands:
       echo "${rows}" | grep -q 100500
       echo "${rows}" | grep -q 100501
       echo "${rows}" | grep -q 100600
+
+      if [[ ${MYSQL_VERSION} != "8.0" ]]; then
+          echo "${rows}" | grep -q 100510
+
+          executed=$(run_mysql "SELECT @@GLOBAL.gtid_executed" "-h ${primary_after}.${cluster}-mysql")
+          if [[ ${executed} != *":failover:"* ]]; then
+              echo "the promoted primary lacks the tagged transaction: ${executed}"
+              exit 1
+          fi
+      fi
     timeout: 900
