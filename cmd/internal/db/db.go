@@ -273,7 +273,7 @@ func (d *DB) ReplicationStatus(ctx context.Context) (db.ReplicationStatus, strin
 		return db.ReplicationStatusActive, host, nil
 	}
 
-	return db.ReplicationStatusStopped, "", nil
+	return db.ReplicationStatusStopped, host, nil
 }
 
 func (d *DB) IsReplica(ctx context.Context) (bool, error) {
@@ -290,6 +290,12 @@ func (d *DB) IsReadonly(ctx context.Context) (bool, error) {
 	var readonly int
 	err := d.db.QueryRowContext(ctx, "select @@read_only and @@super_read_only").Scan(&readonly)
 	return readonly == 1, errors.Wrap(err, "select global read_only param")
+}
+
+func (d *DB) IsWritable(ctx context.Context) (bool, error) {
+	var writable int
+	err := d.db.QueryRowContext(ctx, "select @@read_only = 0").Scan(&writable)
+	return writable == 1, errors.Wrap(err, "select global read_only param")
 }
 
 func (d *DB) ReportHost(ctx context.Context) (string, error) {

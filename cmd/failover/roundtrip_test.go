@@ -70,10 +70,9 @@ func TestFailoverRoundTrip(t *testing.T) {
 		assert.Equal(t, []string{"binlog.000004", "binlog.000005", "binlog.000006"},
 			stagedNames(t, staging), "the leftover from the earlier run must be gone")
 
-		target, startPos, err := updateRelayLogs(logs, "relay-bin.000002", relay.logs(t))
+		target, err := updateRelayLogs(logs, "relay-bin.000002", relay.logs(t))
 		require.NoError(t, err)
 		assert.Equal(t, relay.target, target)
-		assert.Equal(t, uint64(len(before)), startPos)
 
 		after, err := os.ReadFile(target)
 		require.NoError(t, err)
@@ -108,7 +107,7 @@ func TestFailoverRoundTrip(t *testing.T) {
 		require.NoError(t, err)
 		assert.Empty(t, empty, "the first log contributes nothing")
 
-		target, _, err := updateRelayLogs(logs, "relay-bin.000002", relay.logs(t))
+		target, err := updateRelayLogs(logs, "relay-bin.000002", relay.logs(t))
 		require.NoError(t, err)
 
 		after, err := os.ReadFile(target)
@@ -129,7 +128,7 @@ func TestFailoverRoundTrip(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, logs, 1)
 
-		target, _, err := updateRelayLogs(logs, "relay-bin.000002", relay.logs(t))
+		target, err := updateRelayLogs(logs, "relay-bin.000002", relay.logs(t))
 		require.NoError(t, err)
 
 		after, err := os.ReadFile(target)
@@ -150,11 +149,10 @@ func TestFailoverRoundTrip(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, logs, 1)
 
-		target, startPos, err := updateRelayLogs(logs, "relay-bin.000002", relay.logs(t))
+		target, err := updateRelayLogs(logs, "relay-bin.000002", relay.logs(t))
 
 		require.NoError(t, err)
 		assert.Equal(t, "relay-bin.000002", target, "the applier stays in the log it is already in")
-		assert.Equal(t, uint64(0), startPos)
 
 		after, err := os.ReadFile(relay.target)
 		require.NoError(t, err)
@@ -171,11 +169,10 @@ func TestFailoverRoundTrip(t *testing.T) {
 		logs, err := fetchLogsFromSource(t.Context(), newStagingDir(t), src.url, testSourcePassword, "binlog.000006", end, testFetchTimeout)
 		require.NoError(t, err)
 
-		target, startPos, err := updateRelayLogs(logs, "relay-bin.000003", relay.logs(t))
+		target, err := updateRelayLogs(logs, "relay-bin.000003", relay.logs(t))
 
 		require.NoError(t, err)
 		assert.Equal(t, "relay-bin.000003", target)
-		assert.Equal(t, uint64(0), startPos)
 	})
 
 	t.Run("a purged replica that is behind the source refuses", func(t *testing.T) {
@@ -186,7 +183,7 @@ func TestFailoverRoundTrip(t *testing.T) {
 		logs, err := fetchLogsFromSource(t.Context(), newStagingDir(t), src.url, testSourcePassword, "binlog.000004", src.position, testFetchTimeout)
 		require.NoError(t, err)
 
-		_, _, err = updateRelayLogs(logs, "relay-bin.000003", relay.logs(t))
+		_, err = updateRelayLogs(logs, "relay-bin.000003", relay.logs(t))
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "so no relay log is closed and none can be appended to")

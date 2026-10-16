@@ -34,7 +34,7 @@
   ],
   "PostUnsuccessfulFailoverProcesses": [
     "echo 'PostUnsuccessfulFailoverProcesses:' && /opt/percona/orc-handler report-failover -source {failedHost} -failure-type '{failureType}'",
-    "echo 'PostUnsuccessfulFailoverProcesses:' && /opt/percona/orc-handler finish -source {failedHost} -uid {recoveryUID}"
+    "echo 'PostUnsuccessfulFailoverProcesses:' && /opt/percona/orc-handler finish -source {failedHost} -uid {recoveryUID} -failure-type '{failureType}'"
   ],
   "PreFailoverProcesses": [
     "echo 'Will recover from {failureType} on {failureCluster}'",

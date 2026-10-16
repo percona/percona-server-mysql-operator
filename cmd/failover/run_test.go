@@ -493,9 +493,12 @@ func TestRun(t *testing.T) {
 		assert.Equal(t, 1, j.fake.calls, "only the pre-check; no point polling an applier that never started")
 	})
 
-	t.Run("an applier that never drains the splice stops the promotion", func(t *testing.T) {
+	t.Run("an applier that never executes what it retrieved stops the promotion", func(t *testing.T) {
 		j := newJobFixture(t)
-		j.fake.statuses = []map[string]string{applying("relay-bin.000002", 4, drainedState)}
+		j.fake.statuses = []map[string]string{withGTIDs(applying("relay-bin.000002", 4, drainedState), "a:1", "")}
+		// The fake answers the source watch and the drain alike; the source stays
+		// down here, so only the drain asks.
+		j.fake.gtidAhead = "a:1"
 		before, err := os.ReadFile(j.relay.target)
 		require.NoError(t, err)
 
