@@ -28,7 +28,7 @@ import (
 	"github.com/pkg/errors"
 	uzap "go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	coordinationv1 "k8s.io/api/coordination/v1"
+	coordv1 "k8s.io/api/coordination/v1"
 	eventsv1 "k8s.io/api/events/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -110,17 +110,9 @@ func main() {
 	}
 
 	nsClient := mgr.GetClient()
-	if !options.LeaderElection {
-		lease := &coordinationv1.Lease{
-			Name:      options.LeaderElectionID,
-			Namespace: options.LeaderElectionNamespace,
-		}
-		if err := nsClient.Delete(ctx, lease); client.IgnoreNotFound(err) != nil {
-			setupLog.Error(err, "unable to clean up leader election Lease")
-			os.Exit(1)
-		} else if err == nil {
-			setupLog.Info("deleted leader election Lease", "lease", client.ObjectKeyFromObject(lease))
-		}
+	if err := cleanupLeaderElectionLease(ctx, nsClient, options); err != nil {
+		setupLog.Error(err, "unable to clean up leader election Lease")
+		os.Exit(1)
 	}
 
 	cliCmd, err := clientcmd.NewClient()
@@ -209,6 +201,21 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+}
+
+func cleanupLeaderElectionLease(ctx context.Context, cl client.Client, options ctrl.Options) error {
+	if options.LeaderElection {
+		return nil
+	}
+	lease := &coordv1.Lease{
+		Name:      options.LeaderElectionID,
+		Namespace: options.LeaderElectionNamespace,
+	}
+	if err := cl.Delete(ctx, lease); err != nil {
+		return client.IgnoreNotFound(err)
+	}
+	setupLog.Info("deleted leader election Lease", "lease", client.ObjectKeyFromObject(lease))
+	return nil
 }
 
 func getLogEncoder(log logr.Logger) zapcore.Encoder {
