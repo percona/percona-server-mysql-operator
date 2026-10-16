@@ -20,6 +20,8 @@ const (
 
 	// Marks an event the replica's receiver synthesized rather than one the source wrote.
 	logEventArtificialF = 0x0020
+	// marks an event the replica wrote to its relay log itself, like the Rotate closing one
+	logEventRelayLogF = 0x0040
 
 	binlogStartPos = 4
 
