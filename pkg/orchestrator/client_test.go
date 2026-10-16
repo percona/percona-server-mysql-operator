@@ -1,9 +1,14 @@
 package orchestrator
 
 import (
+	"context"
+	"io"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
+	restclient "k8s.io/client-go/rest"
 )
 
 func TestIsMasterFailover(t *testing.T) {
@@ -86,4 +91,44 @@ func TestAckRecoveryEndpoint(t *testing.T) {
 	endpoint := ackRecoveryEndpoint("1790096871059981569:ad6d704a", "orc-handler: recovery finished")
 
 	assert.Equal(t, "api/ack-recovery/uid/1790096871059981569:ad6d704a?comment=orc-handler%3A+recovery+finished", endpoint)
+}
+
+// orcAnswer answers every orchestrator API call with body
+type orcAnswer string
+
+func (a orcAnswer) Exec(_ context.Context, _ *corev1.Pod, _ string, _ []string, _ io.Reader, stdout, _ io.Writer, _ bool) error {
+	_, err := io.WriteString(stdout, string(a))
+	return err
+}
+
+func (orcAnswer) REST() restclient.Interface { return nil }
+func (orcAnswer) Config() *restclient.Config { return nil }
+
+func TestGetInstance(t *testing.T) {
+	t.Run("instance", func(t *testing.T) {
+		answer := orcAnswer(`{"Key":{"Hostname":"mysql-0","Port":3306},"IsDowntimed":true,"DowntimeReason":"lost-in-recovery"}`)
+
+		instance, err := GetInstance(t.Context(), answer, &corev1.Pod{}, "mysql-0", 3306)
+
+		require.NoError(t, err)
+		assert.Equal(t, InstanceKey{Hostname: "mysql-0", Port: 3306}, instance.Key)
+		assert.True(t, instance.IsDowntimed)
+		assert.Equal(t, "lost-in-recovery", instance.DowntimeReason)
+	})
+
+	t.Run("error answer", func(t *testing.T) {
+		answer := orcAnswer(`{"Code":"ERROR","Message":"Cannot read instance: mysql-0:3306"}`)
+
+		instance, err := GetInstance(t.Context(), answer, &corev1.Pod{}, "mysql-0", 3306)
+
+		require.EqualError(t, err, "Cannot read instance: mysql-0:3306")
+		assert.Nil(t, instance)
+	})
+
+	t.Run("empty answer", func(t *testing.T) {
+		instance, err := GetInstance(t.Context(), orcAnswer(""), &corev1.Pod{}, "mysql-0", 3306)
+
+		require.ErrorIs(t, err, ErrEmptyResponse)
+		assert.Nil(t, instance)
+	})
 }
