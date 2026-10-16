@@ -56,9 +56,15 @@ const (
 	// hook runs this job over an exec stream, which the kubelet closes once
 	// it is idle for long enough.
 	drainHeartbeat = time.Minute
+
+	// applierRestartTimeout bounds starting the applier again after a failed
+	// attempt, which runs once the attempt's own deadline may have passed
+	applierRestartTimeout = 10 * time.Second
 )
 
 var errRelayApplyTimeout = fmt.Errorf("timeout while waiting for relay log apply")
+
+var errSpliceNotRolledBack = errors.New("the relay log keeps a partial splice")
 
 var binlogMagic = []byte{0xfe, 'b', 'i', 'n'}
 
@@ -71,6 +77,7 @@ type database interface {
 	GetSourceLogPos(ctx context.Context) (db.ReplicaPosition, error)
 	RelayLogPaths(ctx context.Context) (string, string, error)
 	StartSQLThread(ctx context.Context) error
+	StartIOThread(ctx context.Context) error
 	StartReplicaThreads(ctx context.Context) error
 	GetGTIDExecuted(ctx context.Context) (string, error)
 	GTIDSubtract(ctx context.Context, set, other string) (string, error)
@@ -91,6 +98,7 @@ type failoverConfig struct {
 	wait           bool
 	probe          bool
 	clear          bool
+	startReceiver  bool
 	applyPoll      time.Duration
 	stallTimeout   time.Duration
 	sourcePoll     time.Duration
@@ -99,13 +107,14 @@ type failoverConfig struct {
 }
 
 type flags struct {
-	source       string
-	stagingDir   string
-	wait         bool
-	probe        bool
-	clear        bool
-	stallTimeout time.Duration
-	timeout      time.Duration
+	source        string
+	stagingDir    string
+	wait          bool
+	probe         bool
+	clear         bool
+	startReceiver bool
+	stallTimeout  time.Duration
+	timeout       time.Duration
 }
 
 func parseFlags() flags {
@@ -114,6 +123,7 @@ func parseFlags() flags {
 	flag.StringVar(&f.stagingDir, "staging-dir", sourceLogsDir, "Directory the fetched binary logs are staged in. Its contents are wiped first, so it must be empty or a directory an earlier run created.")
 	flag.BoolVar(&f.wait, "wait", true, "Wait for the applier to work through the fetched logs. With -wait=false the job returns as soon as the SQL thread is started.")
 	flag.BoolVar(&f.clear, "clear-source", false, "Only drop the replication channel a promotion left behind on this server. Nothing is fetched and -source is not read.")
+	flag.BoolVar(&f.startReceiver, "start-receiver", false, "Only start a receiver that replicates from -source and gave up retrying while it was down. Nothing is fetched.")
 	flag.BoolVar(&f.probe, "probe", false, "Only check whether the source is back and holds everything this replica does, standing down if so. Nothing is fetched.")
 	flag.DurationVar(&f.stallTimeout, "stall-timeout", sourceStallTimeout, "How long the source may go without sending anything: its sidecar not listening yet, the headers, or the next bytes of the body. The fetch as a whole is bounded by -timeout.")
 	flag.DurationVar(&f.timeout, "timeout", jobTimeout, "How long the whole job may take, fetching the logs from the source and waiting for the applier included. Zero or less means no limit.")
@@ -135,6 +145,7 @@ func config(f flags) failoverConfig {
 		wait:           f.wait,
 		probe:          f.probe,
 		clear:          f.clear,
+		startReceiver:  f.startReceiver,
 		applyPoll:      relayLogApplyPoll,
 		stallTimeout:   f.stallTimeout,
 		sourcePoll:     sourceProbePoll,
@@ -177,6 +188,9 @@ func run(ctx context.Context, cfg failoverConfig) (err error) {
 
 	if cfg.clear {
 		return clearSource(ctx, cfg)
+	}
+	if cfg.startReceiver {
+		return startReceiver(ctx, cfg)
 	}
 
 	// Read the input before touching replication: failing after STOP REPLICA
@@ -251,7 +265,8 @@ func run(ctx context.Context, cfg failoverConfig) (err error) {
 			return errSourceRecovered
 		}
 
-		// An attempt that failed after its STOP REPLICA left both threads down.
+		// an attempt that failed after its STOP REPLICA left the receiver down,
+		// and the applier too if its splice could not be rolled back
 		return watch.standDown(ctx)
 	}
 
@@ -264,6 +279,13 @@ func run(ctx context.Context, cfg failoverConfig) (err error) {
 		return fmt.Errorf("stop replica: %w", err)
 	}
 	log.Printf("Stopped replication")
+
+	applierStartAttempted := false
+	defer func() {
+		if err != nil && !applierStartAttempted && !errors.Is(err, errSpliceNotRolledBack) {
+			restartApplier(ctx, d)
+		}
+	}()
 
 	if err := d.FlushRelayLogs(ctx); err != nil {
 		return fmt.Errorf("flush relay logs: %w", err)
@@ -289,21 +311,41 @@ func run(ctx context.Context, cfg failoverConfig) (err error) {
 	}
 	log.Printf("Relay index lists %d relay log(s)", len(relayLogs))
 
+	// it only lets the wait cover the transaction the relay log ends inside, so
+	// failing to find it is no reason to give up the failover
+	carried, err := receivedPart(relayLogs, positions.RelayLog, positions.SourcePos)
+	if err != nil {
+		log.Printf("WARNING: not waiting for a transaction the relay log may end inside: %v", err)
+	}
+	if carried != nil {
+		log.Printf("Relay log ends inside transaction %s after %d of its %d bytes", carried, carried.received, carried.txLen)
+	}
+
 	sourceLogs, err := fetchLogsFromSource(ctx, stagingDir, cfg.sourceURL(host), password, positions.SourceLog, positions.SourcePos, cfg.stallTimeout)
 	if err != nil {
 		return fmt.Errorf("fetch logs from source: %w", err)
 	}
 	log.Printf("Fetched %d binary log(s) from source", len(sourceLogs))
 
-	if err := truncateTornTail(sourceLogs); err != nil {
-		return fmt.Errorf("check fetched logs: %w", err)
+	// with no closed relay log, updateRelayLogs refuses whatever the source sent,
+	// so leave the fetched logs as they came
+	var fetchedGTIDs string
+	if _, err := relayLogs.lastClosed(); err != nil {
+		log.Printf("WARNING: not checking the fetched logs: %v", err)
+	} else {
+		fetchedGTIDs, err = trimSourceLogs(sourceLogs, carried)
+		if err != nil {
+			return fmt.Errorf("check fetched logs: %w", err)
+		}
+		log.Printf("Fetched logs carry GTIDs %q", fetchedGTIDs)
 	}
 
-	relayLog, startPos, err := updateRelayLogs(sourceLogs, positions.RelayLog, relayLogs)
+	relayLog, err := updateRelayLogs(sourceLogs, positions.RelayLog, relayLogs)
 	if err != nil {
 		return fmt.Errorf("update relay logs: %w", err)
 	}
 
+	applierStartAttempted = true
 	if err := d.StartSQLThread(ctx); err != nil {
 		return fmt.Errorf("start SQL_THREAD: %w", err)
 	}
@@ -318,7 +360,7 @@ func run(ctx context.Context, cfg failoverConfig) (err error) {
 	watchCtx, stopWatch := context.WithCancel(ctx)
 	defer stopWatch()
 
-	if err := waitForRelayLogsApplied(ctx, d, relayLogs, watchSource(watchCtx, watch), relayLog, startPos, cfg.applyPoll); err != nil {
+	if err := waitForRelayLogsApplied(ctx, d, watchSource(watchCtx, watch), fetchedGTIDs, cfg.applyPoll); err != nil {
 		if errors.Is(err, errSourceRecovered) {
 			removeStagingDir(stagingDir)
 			return watch.standDown(ctx)
@@ -331,6 +373,19 @@ func run(ctx context.Context, cfg failoverConfig) (err error) {
 	log.Println("DONE.")
 
 	return nil
+}
+
+// restartApplier starts the applier a failed attempt stopped
+func restartApplier(ctx context.Context, d database) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), applierRestartTimeout)
+	defer cancel()
+
+	if err := d.StartSQLThread(ctx); err != nil {
+		log.Printf("WARNING: failed to start the SQL_THREAD this attempt stopped: %v", err)
+		return
+	}
+
+	log.Printf("Started the SQL_THREAD this attempt stopped")
 }
 
 func sourceHost(source string) (string, error) {
@@ -740,47 +795,47 @@ func pendingBytes(sourceLogs []string) (uint64, error) {
 
 // updateRelayLogs appends the binary logs fetched from the source to the newest
 // relay log mysqld has already closed.
-func updateRelayLogs(sourceLogs []string, relayLog string, relayLogs relayIndex) (string, uint64, error) {
+func updateRelayLogs(sourceLogs []string, relayLog string, relayLogs relayIndex) (string, error) {
 	pending, err := pendingBytes(sourceLogs)
 	if err != nil {
-		return "", 0, err
+		return "", err
 	}
 
 	if pending == 0 {
 		log.Printf("Source has nothing beyond what the replica received; skipping the splice")
-		return relayLog, 0, nil
+		return relayLog, nil
 	}
 
 	if err := validateSourceLogs(sourceLogs); err != nil {
-		return "", 0, err
+		return "", err
 	}
 
 	target, err := relayLogs.lastClosed()
 	if err != nil {
-		return "", 0, fmt.Errorf("get relay log to append to: %w", err)
+		return "", fmt.Errorf("get relay log to append to: %w", err)
 	}
 
 	applierPlace := relayLogs.place(relayLog)
 	if applierPlace < 0 {
-		return "", 0, fmt.Errorf("the index does not list the applier's relay log %q", relayLog)
+		return "", fmt.Errorf("the index does not list the applier's relay log %q", relayLog)
 	}
 	if applierPlace > relayLogs.place(target) {
-		return "", 0, fmt.Errorf("applier is on %s, ahead of the newest closed relay log %s", relayLog, filepath.Base(target))
+		return "", fmt.Errorf("applier is on %s, ahead of the newest closed relay log %s", relayLog, filepath.Base(target))
 	}
 
 	fi, err := os.Stat(target)
 	if err != nil {
-		return "", 0, fmt.Errorf("stat %s: %w", target, err)
+		return "", fmt.Errorf("stat %s: %w", target, err)
 	}
 	startPos := uint64(fi.Size())
 
 	log.Printf("updateRelayLogs sourceLogs=%d pending=%d relayLog=%s target=%s startPos=%d", len(sourceLogs), pending, relayLog, target, startPos)
 
 	if err := spliceInto(target, startPos, sourceLogs); err != nil {
-		return "", 0, err
+		return "", err
 	}
 
-	return target, startPos, nil
+	return target, nil
 }
 
 // spliceInto appends every source log to the relay log, leaving it at the length
@@ -829,7 +884,7 @@ func rollbackSplice(relay *os.File, target string, startPos uint64) error {
 	defer relay.Close() //nolint:errcheck
 
 	if err := relay.Truncate(int64(startPos)); err != nil {
-		return fmt.Errorf("truncate %s back to %d: %w", target, startPos, err)
+		return fmt.Errorf("%w: truncate %s back to %d: %w", errSpliceNotRolledBack, target, startPos, err)
 	}
 
 	return nil
@@ -839,28 +894,26 @@ type replicaStatuser interface {
 	ShowReplicaStatus(ctx context.Context) (map[string]string, error)
 }
 
+type applierStatuser interface {
+	replicaStatuser
+
+	GTIDSubtract(ctx context.Context, set, other string) (string, error)
+}
+
 // waitForRelayLogsApplied blocks until the SQL thread has worked through the relay log
 func waitForRelayLogsApplied(
 	ctx context.Context,
-	s replicaStatuser,
-	relayLogs relayIndex,
+	s applierStatuser,
 	recovered <-chan struct{},
-	relayLog string,
-	startPos uint64,
+	fetchedGTIDs string,
 	poll time.Duration,
 ) error {
-	targetPlace := relayLogs.place(relayLog)
-	if targetPlace < 0 {
-		return fmt.Errorf("the index does not list the relay log %q the applier must work through", relayLog)
-	}
-
 	started := time.Now()
 
 	ticker := time.NewTicker(poll)
 	defer ticker.Stop()
 
-	var prevLog string
-	var prevPos uint64
+	var prevLog, prevPos, missing string
 	lastReport := started
 
 	for {
@@ -889,45 +942,38 @@ func waitForRelayLogsApplied(
 			return errors.New("SQL_THREAD is not running")
 		}
 
-		// Empty until the applier has initialized, so keep waiting rather than
-		// failing to parse it.
-		currentLog := status["Relay_Log_File"]
+		currentLog, currentPos := status["Relay_Log_File"], status["Relay_Log_Pos"]
+		// empty until the applier has initialized, so keep waiting
 		if currentLog != "" {
-			currentPos, err := strconv.ParseUint(status["Relay_Log_Pos"], 10, 64)
-			if err != nil {
-				return fmt.Errorf("parse Relay_Log_Pos: %w", err)
-			}
-
-			currentPlace := relayLogs.place(currentLog)
-			if currentPlace < 0 {
-				return fmt.Errorf("the applier is on %s, which the index does not list", currentLog)
-			}
-
 			if currentLog != prevLog || currentPos != prevPos {
-				log.Printf("Applying %s:%d (source %s:%s)", currentLog, currentPos,
+				log.Printf("Applying %s:%s (source %s:%s)", currentLog, currentPos,
 					status["Relay_Source_Log_File"], status["Exec_Source_Log_Pos"])
 				lastReport = time.Now()
 			}
 
 			drained := strings.Contains(status["Replica_SQL_Running_State"], "read all relay log")
 			stable := currentLog == prevLog && currentPos == prevPos
-			// Positions are per file, so startPos only means anything once the
-			// applier is actually in the relay log we appended to.
-			progressed := currentPlace > targetPlace || (currentPlace == targetPlace && currentPos > startPos)
 
-			if drained && stable && progressed {
-				log.Printf("Applied all relay logs: %s:%d source=%s:%s GTIDExecuted=%s",
-					currentLog, currentPos, status["Relay_Source_Log_File"],
-					status["Exec_Source_Log_Pos"], status["Executed_Gtid_Set"])
-				return nil
+			if drained && stable {
+				missing, err = missingGTIDs(ctx, s, status, fetchedGTIDs)
+				if err != nil {
+					return err
+				}
+
+				if missing == "" {
+					log.Printf("Applied all relay logs: %s:%s source=%s:%s GTIDExecuted=%s",
+						currentLog, currentPos, status["Relay_Source_Log_File"],
+						status["Exec_Source_Log_Pos"], status["Executed_Gtid_Set"])
+					return nil
+				}
 			}
 
 			prevLog, prevPos = currentLog, currentPos
 		}
 
 		if time.Since(lastReport) >= drainHeartbeat {
-			log.Printf("Still applying %s:%d after %s (state %q)", prevLog, prevPos,
-				time.Since(started).Truncate(time.Second), status["Replica_SQL_Running_State"])
+			log.Printf("Still applying %s:%s after %s (state %q, missing %q)", prevLog, prevPos,
+				time.Since(started).Truncate(time.Second), status["Replica_SQL_Running_State"], missing)
 			lastReport = time.Now()
 		}
 
@@ -935,8 +981,23 @@ func waitForRelayLogsApplied(
 		case <-recovered:
 			return errSourceRecovered
 		case <-ctx.Done():
-			return fmt.Errorf("gave up after %s at %s:%d: %w: %w", time.Since(started).Truncate(time.Millisecond), prevLog, prevPos, errRelayApplyTimeout, ctx.Err())
+			return fmt.Errorf("gave up after %s at %s:%s, missing %q: %w: %w", time.Since(started).Truncate(time.Millisecond), prevLog, prevPos, missing, errRelayApplyTimeout, ctx.Err())
 		case <-ticker.C:
 		}
 	}
+}
+
+// missingGTIDs returns the transactions the applier has yet to execute.
+func missingGTIDs(ctx context.Context, s applierStatuser, status map[string]string, fetchedGTIDs string) (string, error) {
+	want := joinGTIDSets(status["Retrieved_Gtid_Set"], fetchedGTIDs)
+	if want == "" {
+		return "", nil
+	}
+
+	missing, err := s.GTIDSubtract(ctx, want, status["Executed_Gtid_Set"])
+	if err != nil {
+		return "", fmt.Errorf("compare executed GTIDs: %w", err)
+	}
+
+	return missing, nil
 }

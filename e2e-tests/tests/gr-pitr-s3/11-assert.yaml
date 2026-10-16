@@ -8,6 +8,21 @@ metadata:
   name: gr-pitr-s3
   finalizers:
     - percona.com/delete-mysql-pods-in-order
+spec:
+  backup:
+    storages:
+      local-s3:
+        s3:
+          caBundle:
+            name: s3-ca-bundle-rotated
+            key: ca.crt
+    pitr:
+      binlogServer:
+        storage:
+          s3:
+            caBundle:
+              name: s3-ca-bundle-rotated
+              key: ca.crt
 status:
   router:
     ready: 3
@@ -19,9 +34,8 @@ status:
     state: ready
   state: ready
 ---
-kind: PerconaServerMySQLBackup
-apiVersion: ps.percona.com/v1
+apiVersion: v1
+kind: Secret
 metadata:
-  name: gr-pitr-s3-backup-2
-status:
-  state: Succeeded
+  name: s3-ca-bundle-old
+type: Opaque
