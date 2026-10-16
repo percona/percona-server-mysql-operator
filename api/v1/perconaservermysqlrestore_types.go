@@ -77,10 +77,10 @@ const (
 
 // PerconaServerMySQLRestoreStatus defines the observed state of PerconaServerMySQLRestore
 type PerconaServerMySQLRestoreStatus struct { // INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	State              RestoreState `json:"state,omitempty"`
-	StateDesc          string       `json:"stateDescription,omitempty"`
-	ObservedGeneration int64        `json:"observedGeneration,omitempty"`
-	CompletedAt        *metav1.Time `json:"completed,omitempty"`
+	State             RestoreState `json:"state,omitempty"`
+	StateDesc         string       `json:"stateDescription,omitempty"`
+	ErroredGeneration int64        `json:"erroredGeneration,omitempty"`
+	CompletedAt       *metav1.Time `json:"completed,omitempty"`
 }
 
 // +kubebuilder:object:root=true

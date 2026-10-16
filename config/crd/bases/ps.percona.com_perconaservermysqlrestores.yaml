@@ -2533,7 +2533,7 @@ spec:
               completed:
                 format: date-time
                 type: string
-              observedGeneration:
+              erroredGeneration:
                 format: int64
                 type: integer
               state:

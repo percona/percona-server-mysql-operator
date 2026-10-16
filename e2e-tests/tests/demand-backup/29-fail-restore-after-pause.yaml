@@ -1,0 +1,57 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 900
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster_name=$(get_cluster_name)
+      storage_name=$(kubectl get ps "$cluster_name" -n "$NAMESPACE" -o yaml \
+        | yq '(.spec.backup.storages // {}) | keys | .[0]')
+
+      run_backup pause-fail-backup "$storage_name"
+      kubectl -n "${NAMESPACE}" wait --for=jsonpath='{.status.state}'=Succeeded \
+        ps-backup/pause-fail-backup --timeout=600s
+
+      # This restore passes every check, so it gets as far as stopping the
+      # cluster. The cluster CR asks xtrabackup for an unsupported flag, which
+      # the backups override the same way.
+      kubectl -n "${NAMESPACE}" apply -f - <<EOF
+      apiVersion: ps.percona.com/v1
+      kind: PerconaServerMySQLRestore
+      metadata:
+        name: pause-fail-restore
+      spec:
+        clusterName: ${cluster_name}
+        backupName: pause-fail-backup
+        containerOptions:
+          args:
+            xtrabackup:
+              - "--strict"
+      EOF
+
+      # The owner annotation is written in the same patch as the pause, so it
+      # marks the moment the restore holds the cluster and has not created its
+      # job yet.
+      owner=""
+      for i in $(seq 120); do
+        owner=$(kubectl -n "${NAMESPACE}" get ps "$cluster_name" \
+          -o jsonpath='{.metadata.annotations.percona\.com/paused-by-restore}')
+        if [[ -n ${owner} ]]; then
+          break
+        fi
+        sleep 1
+      done
+      if [[ -z ${owner} ]]; then
+        echo "the restore never took the pause on ${cluster_name}"
+        exit 1
+      fi
+
+      # Break the restore while the pods are still terminating. A succeeded
+      # backup is left alone by the operator, so this sticks. The restore now
+      # fails before its job exists, which used to stop the cluster for good.
+      kubectl -n "${NAMESPACE}" patch ps-backup pause-fail-backup \
+        --subresource=status --type=merge -p '{"status":{"storage":null}}'
