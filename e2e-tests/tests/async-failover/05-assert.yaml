@@ -35,3 +35,7 @@ commands:
           echo "the primary is no longer ${primary}"
           exit 1
       fi
+  - script: |-
+      source ../../functions
+
+      tail_failover_logs
