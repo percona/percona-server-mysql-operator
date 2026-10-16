@@ -59,13 +59,13 @@ func TestConfigureOptionsRequiresWatchNamespace(t *testing.T) {
 	require.ErrorContains(t, err, "WATCH_NAMESPACE")
 }
 
-func TestConfigureOptionsAllowsEmptyNamespaces(t *testing.T) {
+func TestConfigureOptionsAllowsEmptyWatchNamespace(t *testing.T) {
 	t.Setenv("WATCH_NAMESPACE", "")
-	t.Setenv("OPERATOR_NAMESPACE", "")
+	t.Setenv("OPERATOR_NAMESPACE", "operator-ns")
 
 	options, err := configureOptions(":9090", ":9091", true)
 	require.NoError(t, err)
-	assert.Empty(t, options.LeaderElectionNamespace)
+	assert.Equal(t, "operator-ns", options.LeaderElectionNamespace)
 	assert.Nil(t, options.Cache.DefaultNamespaces)
 }
 
