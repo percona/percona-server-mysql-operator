@@ -32,10 +32,14 @@ func runFinish(ctx context.Context, args []string) error {
 	finish(newGate(), *source, *uid)
 
 	// before the acknowledgement, which is what lets the next recovery start
-	if c, err := connect(ctx); err != nil {
-		log.Error(err, "failed to connect to the cluster")
-	} else if orcPod, err := c.orchestratorPod(ctx); err != nil {
-		log.Error(err, "failed to get the orchestrator pod")
+	var c *cluster
+	var orcPod *corev1.Pod
+	err := retry(ctx, ackWait, func() (err error) {
+		c, orcPod, err = connectOrchestrator(ctx)
+		return err
+	})
+	if err != nil {
+		log.Error(err, "failed to reach orchestrator")
 	} else {
 		clearCandidates(ctx, c.cliCmd, orcPod, c.cr)
 

@@ -160,7 +160,8 @@ func (c *cluster) unprotected(ctx context.Context, g *gate, source string) bool 
 	return true
 }
 
-// ackWait bounds the retries of an acknowledgement
+// ackWait bounds the retries of an acknowledgement, and of the cluster
+// connection the post hook needs before it
 const (
 	ackWait = time.Minute
 	ackPoll = 5 * time.Second
@@ -182,35 +183,53 @@ func ackRecovery(ctx context.Context, uid string) {
 		return
 	}
 
-	c, err := connect(ctx)
+	err := retry(ctx, ackWait, func() error {
+		c, orcPod, err := connectOrchestrator(ctx)
+		if err != nil {
+			return err
+		}
+		return orchestrator.AckRecovery(ctx, c.cliCmd, orcPod, uid, "orc-handler: recovery finished")
+	})
 	if err != nil {
 		log.Error(err, "failed to acknowledge the recovery", "uid", uid)
 		return
 	}
 
-	deadline := time.Now().Add(ackWait)
+	log.Info("Acknowledged the recovery", "uid", uid)
+}
+
+// connectOrchestrator connects to the cluster and picks the orchestrator pod
+// to send API calls to
+func connectOrchestrator(ctx context.Context) (*cluster, *corev1.Pod, error) {
+	c, err := connect(ctx)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "connect to the cluster")
+	}
+
+	orcPod, err := c.orchestratorPod(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return c, orcPod, nil
+}
+
+// retry calls fn until it succeeds, wait has passed or ctx is done, and
+// returns the last error
+func retry(ctx context.Context, wait time.Duration, fn func() error) error {
+	deadline := time.Now().Add(wait)
 
 	for {
-		var orcPod *corev1.Pod
-		orcPod, err = c.orchestratorPod(ctx)
-		if err == nil {
-			err = orchestrator.AckRecovery(ctx, c.cliCmd, orcPod, uid, "orc-handler: recovery finished")
-		}
-		if err == nil {
-			log.Info("Acknowledged the recovery", "uid", uid)
-			return
+		err := fn()
+		if err == nil || !time.Now().Before(deadline) {
+			return err
 		}
 
-		if !time.Now().Before(deadline) {
-			log.Error(err, "failed to acknowledge the recovery", "uid", uid)
-			return
-		}
-
-		log.Info("Failed to acknowledge the recovery, will retry", "uid", uid, "error", err.Error())
+		log.Info("Retrying after a failure", "error", err.Error())
 
 		select {
 		case <-ctx.Done():
-			return
+			return err
 		case <-time.After(ackPoll):
 		}
 	}
