@@ -9,6 +9,7 @@ import (
 	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	"github.com/pkg/errors"
+	authzv1 "k8s.io/api/authorization/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,6 +22,11 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
 	"github.com/percona/percona-server-mysql-operator/pkg/tls"
+)
+
+const (
+	defaultCertWaitPoll    = 3 * time.Second
+	defaultCertWaitTimeout = 10 * time.Second
 )
 
 func (r *PerconaServerMySQLReconciler) ensureTLSSecret(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
@@ -120,6 +126,16 @@ func (r *PerconaServerMySQLReconciler) checkTLSIssuer(ctx context.Context, cr *a
 		obj = &cm.Issuer{}
 	case cm.ClusterIssuerKind:
 		obj = &cm.ClusterIssuer{}
+		// A cached Get starts a cluster-scoped watch. If RBAC denies that watch, reconciliation is blocked.
+		// So we check and exit early if list/watch is not allowed.
+		allowed, err := subjectAllowed(ctx, r.Client, cm.SchemeGroupVersion.Group, "clusterissuers", "list", "watch")
+		if err != nil {
+			return errors.Wrap(err, "failed to check clusterissuer permissions")
+		}
+		if !allowed {
+			logf.FromContext(ctx).V(1).Info("Skipping ClusterIssuer lookup because list/watch is not allowed", "issuer", ref.Name)
+			return nil
+		}
 	default:
 		return errors.Errorf("unsupported tls.issuerConf.kind %q", kind)
 	}
@@ -132,6 +148,31 @@ func (r *PerconaServerMySQLReconciler) checkTLSIssuer(ctx context.Context, cr *a
 	}
 
 	return err
+}
+
+// Checks if the operator can perform verb on group/resource (does not require extra RBAC)
+func subjectAllowed(ctx context.Context, cl client.Client, group, resource string, verbs ...string) (bool, error) {
+	if len(verbs) == 0 {
+		return false, errors.New("no verbs to check")
+	}
+	for _, verb := range verbs {
+		review := &authzv1.SelfSubjectAccessReview{
+			Spec: authzv1.SelfSubjectAccessReviewSpec{
+				ResourceAttributes: &authzv1.ResourceAttributes{
+					Group:    group,
+					Resource: resource,
+					Verb:     verb,
+				},
+			},
+		}
+		if err := cl.Create(ctx, review); err != nil {
+			return false, errors.Wrapf(err, "create selfsubjectaccessreview for %s %s", verb, resource)
+		}
+		if !review.Status.Allowed {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 func (r *PerconaServerMySQLReconciler) ensureSSLByCertManager(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
@@ -244,8 +285,17 @@ func (r *PerconaServerMySQLReconciler) ensureIssuer(ctx context.Context, cr *api
 }
 
 func (r *PerconaServerMySQLReconciler) waitForCert(ctx context.Context, cr *apiv1.PerconaServerMySQL, certName, secretName string) error {
-	ticker := time.NewTicker(3 * time.Second)
-	timeoutTimer := time.NewTimer(10 * time.Second)
+	poll := r.CertWaitPoll
+	if poll <= 0 {
+		poll = defaultCertWaitPoll
+	}
+	timeout := r.CertWaitTimeout
+	if timeout <= 0 {
+		timeout = defaultCertWaitTimeout
+	}
+
+	ticker := time.NewTicker(poll)
+	timeoutTimer := time.NewTimer(timeout)
 	defer timeoutTimer.Stop()
 	defer ticker.Stop()
 	secretFound := false

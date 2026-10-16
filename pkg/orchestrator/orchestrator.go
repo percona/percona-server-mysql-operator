@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -602,8 +603,10 @@ func preFailoverProcesses(failover *apiv1.FailoverSpec) []string {
 // finishProcess closes the recovery on the hook's side. It ends every post
 // hook list, since orchestrator runs exactly one of them per recovery that got
 // past the pre hook.
-func finishProcess(hook string) string {
-	return fmt.Sprintf("echo '%s:' && %s finish -source {failedHost} -uid {recoveryUID}", hook, handlerBinary)
+func finishProcess(hook string, args ...string) string {
+	cmd := fmt.Sprintf("echo '%s:' && %s finish -source {failedHost} -uid {recoveryUID}", hook, handlerBinary)
+
+	return strings.Join(append([]string{cmd}, args...), " ")
 }
 
 func postFailoverProcesses() []string {
@@ -619,7 +622,8 @@ func postUnsuccessfulFailoverProcesses() []string {
 			"echo 'PostUnsuccessfulFailoverProcesses:' && %s report-failover -source {failedHost} -failure-type '{failureType}'",
 			handlerBinary,
 		),
-		finishProcess("PostUnsuccessfulFailoverProcesses"),
+		// the failure type tells finish that orchestrator gave up without promoting
+		finishProcess("PostUnsuccessfulFailoverProcesses", "-failure-type '{failureType}'"),
 	}
 }
 

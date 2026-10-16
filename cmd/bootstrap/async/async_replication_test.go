@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"k8s.io/apimachinery/pkg/util/sets"
 )
 
 const (
@@ -209,10 +210,37 @@ func TestElectPrimary(t *testing.T) {
 
 	tests := map[string]struct {
 		gtids   map[string]string
+		sources map[string]string
 		results map[[2]string]string
 		want    string
 		wantErr bool
 	}{
+		"the primary restarting before a failover stays the primary": {
+			gtids:   map[string]string{host0: ahead, host1: ahead, host2: ahead},
+			sources: map[string]string{host1: host0, host2: host0},
+			results: map[[2]string]string{
+				{ahead, ahead}: "",
+			},
+			want: host0,
+		},
+		"a ring already closed is settled by the most replicas": {
+			gtids:   map[string]string{host0: ahead, host1: ahead, host2: ahead},
+			sources: map[string]string{host0: host1, host1: host0, host2: host0},
+			results: map[[2]string]string{
+				{ahead, ahead}: "",
+			},
+			want: host0,
+		},
+		"replicas naming a peer that is behind do not elect it": {
+			gtids:   map[string]string{host0: behind, host1: ahead, host2: ahead},
+			sources: map[string]string{host2: host0},
+			results: map[[2]string]string{
+				{ahead, behind}: selfUUID + ":46242-123853",
+				{behind, ahead}: "",
+				{ahead, ahead}:  "",
+			},
+			want: host1,
+		},
 		"the peer holding every transaction is the primary": {
 			gtids: map[string]string{host0: behind, host1: ahead},
 			results: map[[2]string]string{
@@ -268,12 +296,56 @@ func TestElectPrimary(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			s := &fakeSubtractor{t: t, results: tt.results}
 
-			got, err := electPrimary(t.Context(), s, host0, tt.gtids)
+			got, err := electPrimary(t.Context(), s, host0, tt.gtids, tt.sources)
 
 			if tt.wantErr {
 				require.ErrorIs(t, err, errDivergedPeers)
 				return
 			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestChoosePrimary(t *testing.T) {
+	executed := donorUUID + ":1-8411," + selfUUID + ":1-123853"
+	peers := sets.New(host0, host1, host2)
+
+	// host0 is the ex-primary restarting after orchestrator promoted host1,
+	// before host2 was repointed: every peer holds the same transactions
+	gtids := map[string]string{host0: executed, host1: executed, host2: executed}
+	sources := map[string]string{host2: host0}
+
+	tests := map[string]struct {
+		active   string
+		writable string
+		results  map[[2]string]string
+		want     string
+	}{
+		"a writable peer outranks a stale channel naming us": {
+			writable: host1,
+			want:     host1,
+		},
+		"without a writable peer the stale channel elects us": {
+			results: map[[2]string]string{
+				{executed, executed}: "",
+			},
+			want: host0,
+		},
+		"an actively replicating peer's source outranks a writable peer": {
+			active:   host2,
+			writable: host1,
+			want:     host2,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			s := &fakeSubtractor{t: t, results: tt.results}
+
+			got, err := choosePrimary(t.Context(), s, host0, peers, tt.active, tt.writable, gtids, sources)
 
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, got)
