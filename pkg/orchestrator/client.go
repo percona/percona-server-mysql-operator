@@ -81,7 +81,11 @@ type Instance struct {
 	ReplicationLagSeconds sql.NullInt64     `json:"ReplicationLagSeconds"`
 }
 
-const PromotionRulePrefer = "prefer"
+const (
+	PromotionRulePrefer  = "prefer"
+	PromotionRuleNeutral = "neutral"
+	PromotionRuleMustNot = "must_not"
+)
 
 // ProblemReplicationLag is reported for a replica lagging more than
 // ReasonableReplicationLagSeconds.
@@ -274,6 +278,12 @@ const (
 	DowntimeReasonSwitchover = "graceful-switchover"
 
 	DowntimeReasonForcePromote = "force-promote"
+
+	// DowntimeReasonLostInRecovery is the downtime orchestrator puts on the
+	// failed primary at the end of every master recovery, for a year, whether
+	// it promoted a replica or not. Orchestrator does not recover a downtimed
+	// instance, so after a failed promotion it never retries
+	DowntimeReasonLostInRecovery = "lost-in-recovery"
 
 	// switchoverDowntimeFactor scales the takeover's own catch-up wait, which
 	// orchestrator bounds by ReasonableMaintenanceReplicationLagSeconds. A
@@ -476,8 +486,9 @@ func GetInstance(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, 
 		return nil, ErrEmptyResponse
 	}
 
+	// an ERROR answer decodes into an empty instance
 	instance := &Instance{}
-	if err := json.Unmarshal(body, instance); err == nil {
+	if err := json.Unmarshal(body, instance); err == nil && instance.Key.Hostname != "" {
 		return instance, nil
 	}
 
@@ -516,7 +527,7 @@ func RefreshInstance(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.P
 		return nil, err
 	}
 
-	// GetInstance decodes an ERROR answer into an empty instance.
+	// an OK answer without an instance
 	if instance.Key.Hostname == "" {
 		return nil, ErrEmptyResponse
 	}

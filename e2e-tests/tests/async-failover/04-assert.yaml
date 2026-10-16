@@ -29,3 +29,16 @@ commands:
           echo "the failover ran out of its budget instead of recovering the row"
           exit 1
       fi
+
+      # the hook bans every replica but the candidate, and finish has to lift
+      # the bans, or the next failover cannot promote them until they expire
+      retry=0
+      until banned=$(run_curl_orc "http://$(get_orc_svc "${cluster}"):3000/api/cluster/${cluster}.${NAMESPACE}/" \
+          | jq -r '.[] | select(.PromotionRule == "must_not") | .Key.Hostname') && [[ -z ${banned} ]]; do
+          if [[ ${retry} -ge 24 ]]; then
+              echo "the failover left must_not promotion rules on: ${banned}"
+              exit 1
+          fi
+          sleep 5
+          retry=$((retry + 1))
+      done

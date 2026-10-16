@@ -14,6 +14,7 @@ import (
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	failoverlock "github.com/percona/percona-server-mysql-operator/cmd/internal/failover"
+	perconaClientCmd "github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
@@ -159,7 +160,8 @@ func (c *cluster) unprotected(ctx context.Context, g *gate, source string) bool 
 	return true
 }
 
-// ackWait bounds the retries of an acknowledgement
+// ackWait bounds the retries of an acknowledgement, and of the cluster
+// connection the post hook needs before it
 const (
 	ackWait = time.Minute
 	ackPoll = 5 * time.Second
@@ -181,35 +183,53 @@ func ackRecovery(ctx context.Context, uid string) {
 		return
 	}
 
-	c, err := connect(ctx)
+	err := retry(ctx, ackWait, func() error {
+		c, orcPod, err := connectOrchestrator(ctx)
+		if err != nil {
+			return err
+		}
+		return orchestrator.AckRecovery(ctx, c.cliCmd, orcPod, uid, "orc-handler: recovery finished")
+	})
 	if err != nil {
 		log.Error(err, "failed to acknowledge the recovery", "uid", uid)
 		return
 	}
 
-	deadline := time.Now().Add(ackWait)
+	log.Info("Acknowledged the recovery", "uid", uid)
+}
+
+// connectOrchestrator connects to the cluster and picks the orchestrator pod
+// to send API calls to
+func connectOrchestrator(ctx context.Context) (*cluster, *corev1.Pod, error) {
+	c, err := connect(ctx)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "connect to the cluster")
+	}
+
+	orcPod, err := c.orchestratorPod(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return c, orcPod, nil
+}
+
+// retry calls fn until it succeeds, wait has passed or ctx is done, and
+// returns the last error
+func retry(ctx context.Context, wait time.Duration, fn func() error) error {
+	deadline := time.Now().Add(wait)
 
 	for {
-		var orcPod *corev1.Pod
-		orcPod, err = c.orchestratorPod(ctx)
-		if err == nil {
-			err = orchestrator.AckRecovery(ctx, c.cliCmd, orcPod, uid, "orc-handler: recovery finished")
-		}
-		if err == nil {
-			log.Info("Acknowledged the recovery", "uid", uid)
-			return
+		err := fn()
+		if err == nil || !time.Now().Before(deadline) {
+			return err
 		}
 
-		if !time.Now().Before(deadline) {
-			log.Error(err, "failed to acknowledge the recovery", "uid", uid)
-			return
-		}
-
-		log.Info("Failed to acknowledge the recovery, will retry", "uid", uid, "error", err.Error())
+		log.Info("Retrying after a failure", "error", err.Error())
 
 		select {
 		case <-ctx.Done():
-			return
+			return err
 		case <-time.After(ackPoll):
 		}
 	}
@@ -243,7 +263,7 @@ func timedOut(ctx context.Context, g *gate, source, target string, timeout time.
 		return errors.Errorf("could not recover the transactions stranded on %s within %s", source, timeout)
 	}
 
-	c, orcPod, candidate, err := candidateFor(ctx, source, target)
+	c, orcPod, candidate, others, err := candidateFor(ctx, source, target)
 	if err != nil {
 		return err
 	}
@@ -256,8 +276,10 @@ func timedOut(ctx context.Context, g *gate, source, target string, timeout time.
 		return err
 	}
 
-	if err := orchestrator.RegisterCandidate(ctx, c.cliCmd, orcPod, candidate.Hostname, candidate.Port, orchestrator.PromotionRulePrefer); err != nil {
-		return errors.Wrapf(err, "register %s as promotion candidate", candidate.Hostname)
+	// the policy accepts data loss, so orchestrator may fall back to another
+	// replica if this one is gone by the time it promotes
+	if err := registerCandidate(ctx, c.cliCmd, orcPod, *candidate, others, orchestrator.PromotionRuleNeutral); err != nil {
+		return err
 	}
 
 	log.Info("Timed out recovering the transactions stranded on the source, promoting anyway",
@@ -324,7 +346,7 @@ func guardedFailover(ctx context.Context, g *gate, source, uid string, do func(c
 func failover(ctx context.Context, source, target string, timeout time.Duration) error {
 	log := log.WithName("failover")
 
-	c, orcPod, candidate, err := candidateFor(ctx, source, target)
+	c, orcPod, candidate, others, err := candidateFor(ctx, source, target)
 	if err != nil {
 		return err
 	}
@@ -349,11 +371,28 @@ func failover(ctx context.Context, source, target string, timeout time.Duration)
 		return err
 	}
 
-	if err := orchestrator.RegisterCandidate(ctx, c.cliCmd, orcPod, candidate.Hostname, candidate.Port, orchestrator.PromotionRulePrefer); err != nil {
+	if err := registerCandidate(ctx, c.cliCmd, orcPod, *candidate, others, orchestrator.PromotionRuleMustNot); err != nil {
+		return err
+	}
+
+	log.Info("Registered the promotion candidate", "candidate", candidate.Hostname, "banned", len(others))
+	return nil
+}
+
+// registerCandidate registers candidate as the replica to promote and the
+// others under othersRule. The others go first: a candidate registered while
+// one of them failed to be banned would leave orchestrator free to promote it
+func registerCandidate(ctx context.Context, cliCmd perconaClientCmd.Client, orcPod *corev1.Pod, candidate orchestrator.InstanceKey, others []orchestrator.InstanceKey, othersRule string) error {
+	for _, other := range others {
+		if err := orchestrator.RegisterCandidate(ctx, cliCmd, orcPod, other.Hostname, other.Port, othersRule); err != nil {
+			return errors.Wrapf(err, "register %s as %s", other.Hostname, othersRule)
+		}
+	}
+
+	if err := orchestrator.RegisterCandidate(ctx, cliCmd, orcPod, candidate.Hostname, candidate.Port, orchestrator.PromotionRulePrefer); err != nil {
 		return errors.Wrapf(err, "register %s as promotion candidate", candidate.Hostname)
 	}
 
-	log.Info("Registered the promotion candidate", "candidate", candidate.Hostname)
 	return nil
 }
 
@@ -431,47 +470,105 @@ func execWorker(ctx context.Context, c *cluster, host string, args ...string) er
 }
 
 // candidateFor connects to the cluster and resolves the replica to promote,
-// which is nil when the source has none.
-func candidateFor(ctx context.Context, source, target string) (*cluster, *corev1.Pod, *orchestrator.InstanceKey, error) {
+// which is nil when the source has none, and the other replicas of the source
+func candidateFor(ctx context.Context, source, target string) (*cluster, *corev1.Pod, *orchestrator.InstanceKey, []orchestrator.InstanceKey, error) {
 	c, err := connect(ctx)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	orcPod, err := orchestrator.GetReadyPod(ctx, c.client, c.cr)
 	if err != nil {
-		return nil, nil, nil, errors.Wrap(err, "get ready orchestrator pod")
+		return nil, nil, nil, nil, errors.Wrap(err, "get ready orchestrator pod")
 	}
 
-	candidate, err := pickCandidate(ctx, c, orcPod, source, target)
+	candidate, others, err := pickCandidate(ctx, c, orcPod, source, target)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
-	return c, orcPod, candidate, nil
+	return c, orcPod, candidate, others, nil
 }
 
 // pickCandidate returns the replica to promote, or nil when the source has
-// none. An explicit target is taken as given.
-func pickCandidate(ctx context.Context, c *cluster, orcPod *corev1.Pod, source, target string) (*orchestrator.InstanceKey, error) {
-	if target != "" {
-		return &orchestrator.InstanceKey{Hostname: target, Port: mysql.DefaultPort}, nil
-	}
-
+// none, and the other replicas of the source
+func pickCandidate(ctx context.Context, c *cluster, orcPod *corev1.Pod, source, target string) (*orchestrator.InstanceKey, []orchestrator.InstanceKey, error) {
 	// By the source rather than the alias, which a primary outside the
 	// topology can hold.
 	instances, err := orchestrator.Cluster(ctx, c.cliCmd, orcPod, fmt.Sprintf("%s:%d", source, mysql.DefaultPort))
 	if err != nil {
-		return nil, errors.Wrap(err, "get cluster instances")
+		return nil, nil, errors.Wrap(err, "get cluster instances")
 	}
 
+	started := make(map[string]bool)
+	for _, replica := range orchestrator.ReplicasOf(instances, source) {
+		pod, err := c.pod(ctx, replica.Key.Hostname)
+		if apierrors.IsNotFound(errors.Cause(err)) {
+			continue
+		}
+		if err != nil {
+			return nil, nil, err
+		}
+
+		started[replica.Key.Hostname] = mysqlStarted(pod)
+	}
+
+	candidate, others, err := chooseCandidate(instances, source, target, started)
+	if err != nil {
+		return nil, nil, err
+	}
+	if candidate != nil {
+		log.Info("Picked the replica to promote", "replica", candidate.Hostname, "others", len(others))
+	}
+
+	return candidate, others, nil
+}
+
+var errNoStartedReplica = errors.New("no replica of the source has started")
+
+// chooseCandidate picks the most up to date replica of source among the started
+// ones and returns the other replicas of source apart from it
+func chooseCandidate(instances []*orchestrator.Instance, source, target string, started map[string]bool) (*orchestrator.InstanceKey, []orchestrator.InstanceKey, error) {
 	replicas := orchestrator.ReplicasOf(instances, source)
-	if len(replicas) == 0 {
-		return nil, nil
+
+	var candidate orchestrator.InstanceKey
+	switch {
+	case target != "":
+		candidate = orchestrator.InstanceKey{Hostname: target, Port: mysql.DefaultPort}
+	case len(replicas) > 0:
+		eligible := make([]*orchestrator.Instance, 0, len(replicas))
+		for _, replica := range replicas {
+			if started[replica.Key.Hostname] {
+				eligible = append(eligible, replica)
+			}
+		}
+		if len(eligible) == 0 {
+			return nil, nil, errors.Wrapf(errNoStartedReplica, "%d replica(s) of %s", len(replicas), source)
+		}
+
+		candidate = orchestrator.MostUpToDate(eligible)
+	default:
+		return nil, nil, nil
 	}
 
-	candidate := orchestrator.MostUpToDate(replicas)
-	log.Info("Picked the most up to date replica", "replica", candidate.Hostname, "replicas", len(replicas))
+	others := make([]orchestrator.InstanceKey, 0, len(replicas))
+	for _, replica := range replicas {
+		if replica.Key.Hostname != candidate.Hostname {
+			others = append(others, replica.Key)
+		}
+	}
 
-	return &candidate, nil
+	return &candidate, others, nil
+}
+
+// mysqlStarted reports whether the pod's mysql container passed its startup
+// probe since it last started
+func mysqlStarted(pod *corev1.Pod) bool {
+	for _, status := range pod.Status.ContainerStatuses {
+		if status.Name == mysql.AppName {
+			return status.Started != nil && *status.Started
+		}
+	}
+
+	return false
 }
