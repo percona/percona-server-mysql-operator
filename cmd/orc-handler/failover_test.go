@@ -341,3 +341,32 @@ func TestUnprotected(t *testing.T) {
 		assert.Len(t, events(t, c), 1)
 	})
 }
+
+func TestRetry(t *testing.T) {
+	t.Run("stops at the first success", func(t *testing.T) {
+		calls := 0
+		require.NoError(t, retry(t.Context(), time.Minute, func() error {
+			calls++
+			return nil
+		}))
+		assert.Equal(t, 1, calls)
+	})
+
+	t.Run("returns the last error once the wait is over", func(t *testing.T) {
+		calls := 0
+		err := retry(t.Context(), 0, func() error {
+			calls++
+			return errors.New("connection refused")
+		})
+		require.EqualError(t, err, "connection refused")
+		assert.Equal(t, 1, calls)
+	})
+
+	t.Run("gives up when the context is done", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+
+		err := retry(ctx, time.Minute, func() error { return errors.New("connection refused") })
+		require.EqualError(t, err, "connection refused")
+	})
+}
