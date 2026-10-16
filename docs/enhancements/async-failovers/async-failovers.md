@@ -17,10 +17,10 @@ The salvage operation (`cmd/failover`) performs these high-level steps on the fa
 3. Flush relay logs (`FLUSH RELAY LOGS`)
 4. Read the replica's positions (`Source_Log_File`, `Read_Source_Log_Pos`, `Relay_Log_File`)
 5. Fetch the missing binary logs from the failed primary
-6. Truncate a torn tail off the last fetched binary log
+6. Trim the fetched binary logs back to their last complete transaction
 7. Splice the fetched binary logs into the latest closed relay log
 8. Start the applier (`START REPLICA SQL_THREAD`)
-9. Wait until the applier works through the spliced events
+9. Wait until the applier executes every transaction it received or fetched
 
 On success IO_THREAD stays stopped: the replica is about to be promoted, and there's no source left to receive from.
 
@@ -85,6 +85,30 @@ Active relay log is `cluster1-mysql-1-relay-bin.000002` right now.
 Failover first runs `STOP REPLICA` to stop threads and then `FLUSH RELAY LOGS`. Once relay logs are flushed, `mysqld` creates a new relay log: `cluster1-mysql-1-relay-bin.000003`. Since replication threads are not running, the last read relay log is still `000002`.
 
 Then we splice binary logs into `000002` and run `START REPLICA SQL_THREAD`. SQL thread continues reading from `cluster1-mysql-1-relay-bin.000002` and starts applying new events we appended to it. For each binary log except the first, we also append an artificial rotate event into relay log so `Relay_Source_Log_File` is updated accordingly. `Relay_Source_Log_File` is important for orchestrator to decide the suitable primary for promotion.
+
+### Trimming the fetched binary logs
+
+Before splicing, `cmd/failover` walks every fetched log event by event and cuts each one back to the end of its last complete transaction. A transaction counts as complete once all `transaction_length` bytes its GTID event declares are present. This drops:
+- a partial event at the end of the last log, which the source died while writing;
+- an incomplete transaction at the end of the last log, which the source never committed;
+- a trailing Stop event, which a cleanly shut down source writes last.
+
+Only the source's last write can be torn. If any earlier log ends inside an event or a transaction, the logs can't be trusted and the attempt fails. A log holding an anonymous GTID fails the attempt too, since the source doesn't use GTIDs.
+
+The relay log can also end inside a transaction: the receiver wrote its GTID event and some of its events before the source went away. `cmd/failover` finds that transaction in the newest relay logs and works out how much of it was received by comparing where it starts on the source with `Read_Source_Log_Pos`. The fetch starts at that position, so the first fetched log must begin with exactly the rest of the transaction, or the attempt fails. If the rest is incomplete too, the first log is cut to nothing and the relay log keeps only the start, which the applier never executes. Finding this transaction is best-effort: if it fails, `cmd/failover` logs a warning and the drain doesn't wait for that transaction.
+
+Trimming returns the GTIDs of the complete transactions the fetched logs carry, the carried one included.
+
+### Waiting for the applier
+
+The drain is finished only when all of these hold:
+1. The applier reports it has read all relay logs (`Replica_SQL_Running_State`).
+2. `Relay_Log_File` and `Relay_Log_Pos` didn't move since the previous poll.
+3. `Executed_Gtid_Set` holds `Retrieved_Gtid_Set` and every GTID trimming returned.
+
+The position alone can't prove the drain finished. `Relay_Log_Pos` never moves past the Rotate and Stop events at the end of a relay log, so a drained applier and one stopped short of them look the same. The GTIDs tell them apart.
+
+The wait fails at once if the applier stops or reports an error, and it stands down if the source comes back (see below).
 
 ### What if the old primary comes back and becomes ready to serve while replica applies relay logs?
 
@@ -335,5 +359,6 @@ These changes sit outside the failover path, but without them a failover fails o
 - **Writable but unreachable primary.** A primary that is writable but unreachable from orchestrator (a network partition, a paused process) can still take writes after a promotion. Neither the hook nor the force-promote check can see it.
 - **Read-only old primary that holds less.** A reachable, read-only old primary that holds less than the candidate (only possible with relaxed durability settings) can't be force-promoted past.
 - **Durable relay logs on the candidate.** The claim that a transaction in a replica's relay log is durable depends on the replica's relay log settings. The operator sets none of them, so MySQL's defaults apply. `sync_relay_log=10000` means a host crash can lose recently received relay log events. With `relay_log_recovery=ON`, a restart discards every relay log event not yet applied, the spliced events included, and resets the received position to the applied one. Either way the next failover attempt reads the replica's position again and fetches the missing range from the source's sidecar. This costs a retry rather than data, as long as the old primary's binary logs can still be served.
+- **GTIDs with transaction lengths.** Trimming finds transaction boundaries through the `transaction_length` that GTID events carry from MySQL 8.0.2 on, and refuses a source that writes anonymous GTIDs. The entrypoint always sets `gtid-mode=ON`, so this only guards against a misconfigured source.
 - **Purged binary logs.** If the source no longer has the binary log the replica last read, because it expired or was purged, the sidecar answers `404`. Every attempt fails the same way until the timeout expires and `onTimeout` applies. Nothing can salvage those transactions.
 - **Lost PVC on the old primary.** The salvage reads the old primary's binary logs from its data volume. If the volume is gone, the transactions only it held are gone too. Nothing can salvage them, and the failover can only end through `onTimeout` or the force-promote annotation.

@@ -14,9 +14,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
-	"github.com/percona/percona-server-mysql-operator/pkg/binlogserver/gtid"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
+	"github.com/percona/percona-server-mysql-operator/pkg/mysql/gtid"
 )
 
 const BinlogServerBinary = "/usr/bin/binlog_server"
