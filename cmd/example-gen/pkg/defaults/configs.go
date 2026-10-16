@@ -36,7 +36,8 @@ frontend stats
   mode http
   http-request use-service prometheus-exporter if { path /metrics }`
 
-	configurationMySQL = `max_connections=250
+	configurationMySQL = `[mysqld]
+max_connections=250
 innodb_buffer_pool_size={{containerMemoryLimit * 3/4}}`
 
 	configurationRouter = `[default]
