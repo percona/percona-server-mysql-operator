@@ -391,6 +391,26 @@ func TestConfigMapDataRendersFailoverHook(t *testing.T) {
 		}
 	})
 
+	// finish lets orchestrator retry only the recoveries that gave up without
+	// promoting, which it tells apart by the failure type
+	t.Run("only the unsuccessful post hook passes the failure type to finish", func(t *testing.T) {
+		cr := &apiv1.PerconaServerMySQL{}
+		cr.Spec.CRVersion = "1.3.0"
+
+		cfg := parse(t, cr)
+
+		finishOf := func(key string) string {
+			processes, ok := cfg[key].([]any)
+			require.True(t, ok, "%s must be a list", key)
+			last, ok := processes[len(processes)-1].(string)
+			require.True(t, ok)
+			return last
+		}
+
+		assert.Contains(t, finishOf("PostUnsuccessfulFailoverProcesses"), "-failure-type '{failureType}'")
+		assert.NotContains(t, finishOf("PostFailoverProcesses"), "-failure-type")
+	})
+
 	t.Run("the recovery block outlasts the failover timeout", func(t *testing.T) {
 		cr := &apiv1.PerconaServerMySQL{}
 		cr.Spec.CRVersion = "1.3.0"
