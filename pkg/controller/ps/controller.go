@@ -73,6 +73,9 @@ type PerconaServerMySQLReconciler struct {
 	Recorder      record.EventRecorder
 	ClientCmd     clientcmd.Client
 	Crons         CronRegistry
+
+	CertWaitPoll    time.Duration
+	CertWaitTimeout time.Duration
 }
 
 //+kubebuilder:rbac:groups="",resources=configmaps;services;secrets,verbs=get;list;watch;create;update;patch;delete
