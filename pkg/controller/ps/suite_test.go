@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	cmscheme "github.com/cert-manager/cert-manager/pkg/client/clientset/versioned/scheme"
 	. "github.com/onsi/ginkgo/v2"
@@ -103,8 +104,10 @@ func reconciler() *PerconaServerMySQLReconciler {
 	cr := NewCronRegistry()
 	DeferCleanup(cr.crons.Stop)
 	return &PerconaServerMySQLReconciler{
-		Client: k8sClient,
-		Scheme: k8sClient.Scheme(),
+		Client:          k8sClient,
+		Scheme:          k8sClient.Scheme(),
+		CertWaitPoll:    10 * time.Millisecond,
+		CertWaitTimeout: 50 * time.Millisecond,
 		ServerVersion: &platform.ServerVersion{
 			Platform: platform.Kubernetes,
 		},

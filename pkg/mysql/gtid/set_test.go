@@ -1,7 +1,9 @@
 package gtid
 
 import (
+	"fmt"
 	"math"
+	"math/rand/v2"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -253,6 +255,182 @@ func TestSetString(t *testing.T) {
 		testUUIDA+":1:9-10,"+testUUIDA+":blue:4-7,"+testUUIDB+":3",
 		set.String(),
 	)
+
+	t.Run("allocates the string exactly once", func(t *testing.T) {
+		for _, base := range []int64{1, 123456789, 100000000000000000} {
+			set := largeSet(base)
+
+			var text string
+			allocs := testing.AllocsPerRun(10, func() { text = set.String() })
+
+			// the sorted sources and the string
+			assert.Equal(t, float64(2), allocs, "base %d", base)
+			assert.NotEmpty(t, text)
+		}
+	})
+}
+
+func TestTextLen(t *testing.T) {
+	for _, intervals := range [][]interval{
+		{{start: 1, end: 1}},
+		{{start: 9, end: 10}, {start: 99, end: 100}},
+		{{start: 123456789, end: 123457000}, {start: 999999999, end: 999999999}},
+		{{start: 1, end: math.MaxInt64}},
+	} {
+		for _, source := range []source{{uuid: testUUIDA}, {uuid: testUUIDA, tag: "blue"}} {
+			text := Set{source: intervals}.String()
+
+			assert.Equal(t, len(text), textLen(source, intervals), text)
+		}
+	}
+}
+
+// largeSet has 10 sources of 10k intervals each, two numbers from base up
+func largeSet(base int64) Set {
+	set := make(Set)
+	for i := range 10 {
+		uuid := fmt.Sprintf("%08d-1111-1111-1111-111111111111", i)
+		intervals := make([]interval, 0, 10000)
+		for j := range int64(10000) {
+			start := base + j*10
+			intervals = append(intervals, interval{start: start, end: start + j%2})
+		}
+		set[source{uuid: uuid}] = intervals
+	}
+	return set
+}
+
+func BenchmarkSetString(b *testing.B) {
+	for _, base := range []int64{1, 123456789} {
+		set := largeSet(base)
+		b.Run(fmt.Sprintf("from %d", base), func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				_ = set.String()
+			}
+		})
+	}
+}
+
+func TestSetAdd(t *testing.T) {
+	type gtid struct {
+		uuid, tag string
+		gno       int64
+	}
+
+	tests := map[string]struct {
+		add      []gtid
+		expected string
+	}{
+		"empty": {
+			expected: "",
+		},
+		"consecutive gnos make a range": {
+			add:      []gtid{{testUUIDA, "", 5}, {testUUIDA, "", 6}, {testUUIDA, "", 7}},
+			expected: testUUIDA + ":5-7",
+		},
+		"gaps split ranges": {
+			add:      []gtid{{testUUIDA, "", 1}, {testUUIDA, "", 2}, {testUUIDA, "", 4}, {testUUIDA, "", 6}, {testUUIDA, "", 7}},
+			expected: testUUIDA + ":1-2:4:6-7",
+		},
+		"out of order and repeated gnos": {
+			add:      []gtid{{testUUIDA, "", 3}, {testUUIDA, "", 1}, {testUUIDA, "", 2}, {testUUIDA, "", 2}},
+			expected: testUUIDA + ":1-3",
+		},
+		"gno filling a gap joins its neighbours": {
+			add:      []gtid{{testUUIDA, "", 1}, {testUUIDA, "", 3}, {testUUIDA, "", 2}},
+			expected: testUUIDA + ":1-3",
+		},
+		"gno just before a range extends it": {
+			add:      []gtid{{testUUIDA, "", 5}, {testUUIDA, "", 9}, {testUUIDA, "", 8}, {testUUIDA, "", 4}},
+			expected: testUUIDA + ":4-5:8-9",
+		},
+		"gno inside a range changes nothing": {
+			add:      []gtid{{testUUIDA, "", 1}, {testUUIDA, "", 2}, {testUUIDA, "", 3}, {testUUIDA, "", 2}},
+			expected: testUUIDA + ":1-3",
+		},
+		"gno before every range": {
+			add:      []gtid{{testUUIDA, "", 7}, {testUUIDA, "", 9}, {testUUIDA, "", 2}},
+			expected: testUUIDA + ":2:7:9",
+		},
+		"gno between ranges it does not touch": {
+			add:      []gtid{{testUUIDA, "", 1}, {testUUIDA, "", 9}, {testUUIDA, "", 5}},
+			expected: testUUIDA + ":1:5:9",
+		},
+		"each source and tag has its own ranges": {
+			add: []gtid{
+				{testUUIDB, "", 1},
+				{testUUIDA, "", 1},
+				{testUUIDA, "x", 1},
+				{testUUIDA, "", 2},
+				{testUUIDA, "y", 5},
+				{testUUIDA, "x", 2},
+			},
+			expected: testUUIDA + ":1-2," + testUUIDA + ":x:1-2," + testUUIDA + ":y:5," + testUUIDB + ":1",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			set := make(Set)
+			for _, g := range tt.add {
+				set.Add(g.uuid, g.tag, g.gno)
+			}
+
+			assert.Equal(t, tt.expected, set.String())
+		})
+	}
+
+	t.Run("extends a parsed set", func(t *testing.T) {
+		set, err := Parse(testUUIDA + ":1-3:7")
+		require.NoError(t, err)
+
+		set.Add(testUUIDA, "", 4)
+
+		assert.Equal(t, testUUIDA+":1-4:7", set.String())
+	})
+
+	t.Run("a range that ends at the largest GNO", func(t *testing.T) {
+		set, err := Parse(testUUIDA + ":5-9223372036854775807")
+		require.NoError(t, err)
+
+		set.Add(testUUIDA, "", 7)
+		set.Add(testUUIDA, "", 4)
+		set.Add(testUUIDA, "", 1)
+
+		assert.Equal(t, testUUIDA+":1:4-9223372036854775807", set.String())
+	})
+
+	t.Run("matches normalizing every gno at once", func(t *testing.T) {
+		r := rand.New(rand.NewPCG(1, 2))
+		for range 200 {
+			set := make(Set)
+			var all []interval
+			for range r.IntN(50) {
+				gno := r.Int64N(40) + 1
+				set.Add(testUUIDA, "", gno)
+				all = append(all, interval{start: gno, end: gno})
+			}
+
+			want := make(Set)
+			if len(all) > 0 {
+				want[source{uuid: testUUIDA}] = normalizeIntervals(all)
+			}
+			require.Equal(t, want.String(), set.String())
+		}
+	})
+}
+
+func TestSetAddSet(t *testing.T) {
+	set, err := Parse(testUUIDA + ":1-3:7," + testUUIDB + ":5")
+	require.NoError(t, err)
+	other, err := Parse(testUUIDA + ":4-5:9," + testUUIDA + ":x:1")
+	require.NoError(t, err)
+
+	set.AddSet(other)
+
+	assert.Equal(t, testUUIDA+":1-5:7:9,"+testUUIDA+":x:1,"+testUUIDB+":5", set.String())
+	assert.Equal(t, testUUIDA+":4-5:9,"+testUUIDA+":x:1", other.String())
 }
 
 func TestSetSubtract(t *testing.T) {
