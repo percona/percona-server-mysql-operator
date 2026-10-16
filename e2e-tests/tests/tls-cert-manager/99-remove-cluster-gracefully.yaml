@@ -12,6 +12,8 @@ commands:
 
       source ../../functions
 
+      kubectl delete clusterissuer "tls-cert-manager-cluster-issuer-${NAMESPACE}" --ignore-not-found
+
       destroy_cert_manager
       destroy_operator
     timeout: 60
