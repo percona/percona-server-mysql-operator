@@ -1,0 +1,14 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 120
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      ts="$(date +%s)"
+
+      kubectl -n "${NAMESPACE}" patch ps tls-cert-manager \
+          --type merge \
+          -p "{\"spec\":{\"tls\":{\"issuerConf\":{\"group\":\"cert-manager.io\",\"kind\":\"Issuer\",\"name\":\"tls-cert-manager-ps-issuer\"}}},\"metadata\":{\"annotations\":{\"debug.percona.com/force-reconcile\":\"${ts}\"}}}"
+    timeout: 120
