@@ -16752,9 +16752,7 @@ spec:
         app.kubernetes.io/name: percona-server-mysql-operator
     spec:
       containers:
-      - args:
-        - --leader-elect
-        command:
+      - command:
         - /usr/local/bin/percona-server-mysql-operator
         env:
         - name: LOG_STRUCTURED
