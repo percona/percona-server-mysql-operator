@@ -472,7 +472,7 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 			}
 			if tt.shouldSucceed {
 				if cr.Status.State != "" {
-					t.Fatalf("expected state %s, got %s", apiv1.RestoreError, cr.Status.State)
+					t.Fatalf("expected state %q, got %q", "", cr.Status.State)
 				}
 			} else {
 				if cr.Status.State != apiv1.RestoreError {
@@ -1481,4 +1481,293 @@ func TestResolveIncrementalChainStorageClientError(t *testing.T) {
 	_, err := opts.resolveIncrementalChain(ctx)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "create storage client: auth failure")
+}
+
+func TestErroredRestoreIsNotRetriedUntilSpecChanges(t *testing.T) {
+	const (
+		namespace   = "some-namespace"
+		clusterName = "ps-cluster1"
+		restoreName = "restore1"
+		backupName  = "backup1"
+	)
+
+	ctx := t.Context()
+
+	newRestore := func() *apiv1.PerconaServerMySQLRestore {
+		cr := readDefaultRestore(t, restoreName, namespace)
+		cr.Generation = 1
+		cr.Spec.ClusterName = clusterName
+		cr.Spec.BackupName = backupName
+		cr.Spec.BackupSource = nil
+		return cr
+	}
+
+	cluster := readDefaultCluster(t, clusterName, namespace)
+	cluster.Generation = 1
+
+	reconcile := func(t *testing.T, cl client.Client) *apiv1.PerconaServerMySQLRestore {
+		t.Helper()
+
+		r := reconciler(cl)
+		if _, err := r.Reconcile(ctx, controllerruntime.Request{
+			Name:      restoreName,
+			Namespace: namespace,
+		}); err != nil {
+			t.Fatal(err, "failed to reconcile")
+		}
+
+		cr := new(apiv1.PerconaServerMySQLRestore)
+		if err := cl.Get(ctx, types.NamespacedName{Name: restoreName, Namespace: namespace}, cr); err != nil {
+			t.Fatal(err, "failed to get restore")
+		}
+		return cr
+	}
+
+	t.Run("the backup is missing: the restore errors out and records the generation", func(t *testing.T) {
+		cl := buildFakeClient(t, newRestore(), cluster.DeepCopy())
+
+		cr := reconcile(t, cl)
+		assert.Equal(t, apiv1.RestoreError, cr.Status.State)
+		assert.Equal(t, int64(1), cr.Status.ErroredGeneration)
+	})
+
+	t.Run("the backup appears later: the restore stays in error", func(t *testing.T) {
+		errored := newRestore()
+		errored.Status = apiv1.PerconaServerMySQLRestoreStatus{
+			State:             apiv1.RestoreError,
+			StateDesc:         "PerconaServerMySQLBackup backup1 in namespace some-namespace is not found",
+			ErroredGeneration: 1,
+		}
+		backup := &apiv1.PerconaServerMySQLBackup{
+			Name:      backupName,
+			Namespace: namespace,
+			Spec:      apiv1.PerconaServerMySQLBackupSpec{ClusterName: clusterName, StorageName: "s3-us-west"},
+			Status: apiv1.PerconaServerMySQLBackupStatus{
+				State:       apiv1.BackupSucceeded,
+				Destination: "s3://some-bucket/some-destination",
+			},
+		}
+		cl := buildFakeClient(t, errored, cluster.DeepCopy(), backup)
+
+		cr := reconcile(t, cl)
+		assert.Equal(t, apiv1.RestoreError, cr.Status.State)
+		assert.Equal(t, "PerconaServerMySQLBackup backup1 in namespace some-namespace is not found", cr.Status.StateDesc)
+
+		gotCluster := new(apiv1.PerconaServerMySQL)
+		require.NoError(t, cl.Get(ctx, types.NamespacedName{Name: clusterName, Namespace: namespace}, gotCluster))
+		assert.False(t, gotCluster.Spec.Pause, "the cluster must not be paused by a restore that errored out")
+	})
+
+	t.Run("the user changes the spec: the restore is retried", func(t *testing.T) {
+		errored := newRestore()
+		errored.Generation = 2
+		errored.Status = apiv1.PerconaServerMySQLRestoreStatus{
+			State:             apiv1.RestoreError,
+			StateDesc:         "PerconaServerMySQLBackup backup1 in namespace some-namespace is not found",
+			ErroredGeneration: 1,
+		}
+		cl := buildFakeClient(t, errored, cluster.DeepCopy())
+
+		cr := reconcile(t, cl)
+		// The backup is still missing, so the restore errors out again, but it was
+		// re-evaluated: the recorded generation follows the new spec.
+		assert.Equal(t, apiv1.RestoreError, cr.Status.State)
+		assert.Equal(t, int64(2), cr.Status.ErroredGeneration)
+	})
+
+	t.Run("a restore that errored out before the upgrade is never retried", func(t *testing.T) {
+		errored := newRestore()
+		errored.Status = apiv1.PerconaServerMySQLRestoreStatus{
+			State:     apiv1.RestoreError,
+			StateDesc: "PerconaServerMySQLBackup backup1 in namespace some-namespace is not found",
+		}
+		backup := &apiv1.PerconaServerMySQLBackup{
+			Name:      backupName,
+			Namespace: namespace,
+			Spec:      apiv1.PerconaServerMySQLBackupSpec{ClusterName: clusterName, StorageName: "s3-us-west"},
+			Status: apiv1.PerconaServerMySQLBackupStatus{
+				State:       apiv1.BackupSucceeded,
+				Destination: "s3://some-bucket/some-destination",
+			},
+		}
+		cl := buildFakeClient(t, errored, cluster.DeepCopy(), backup)
+
+		cr := reconcile(t, cl)
+		assert.Equal(t, apiv1.RestoreError, cr.Status.State)
+		assert.Zero(t, cr.Status.ErroredGeneration, "the status must be left untouched")
+
+		gotCluster := new(apiv1.PerconaServerMySQL)
+		require.NoError(t, cl.Get(ctx, types.NamespacedName{Name: clusterName, Namespace: namespace}, gotCluster))
+		assert.False(t, gotCluster.Spec.Pause, "the cluster must not be paused by a restore from before the upgrade")
+	})
+}
+
+func TestRestoreThatPausedTheClusterFails(t *testing.T) {
+	const (
+		namespace   = "some-namespace"
+		clusterName = "ps-cluster1"
+		restoreName = "restore1"
+	)
+
+	ctx := t.Context()
+
+	newRestore := func() *apiv1.PerconaServerMySQLRestore {
+		cr := readDefaultRestore(t, restoreName, namespace)
+		cr.Generation = 1
+		cr.Spec.ClusterName = clusterName
+		cr.Spec.BackupName = "backup1"
+		cr.Spec.BackupSource = nil
+		return cr
+	}
+
+	// pausedBy is the cluster as a restore leaves it: stopped, and annotated
+	// with the owner of the pause.
+	pausedBy := func(owner string) *apiv1.PerconaServerMySQL {
+		cluster := readDefaultCluster(t, clusterName, namespace)
+		cluster.Generation = 1
+		cluster.Spec.Pause = true
+		cluster.Annotations = map[string]string{
+			naming.AnnotationPausedByRestore.String(): owner,
+		}
+		return cluster
+	}
+
+	// startedBy is a cluster somebody brought back up while the restore that
+	// stopped it is still around.
+	startedBy := func(owner string) *apiv1.PerconaServerMySQL {
+		cluster := pausedBy(owner)
+		cluster.Spec.Pause = false
+		return cluster
+	}
+
+	runningCluster := func() *apiv1.PerconaServerMySQL {
+		cluster := readDefaultCluster(t, clusterName, namespace)
+		cluster.Generation = 1
+		return cluster
+	}
+
+	getRestore := func(t *testing.T, cl client.Client) *apiv1.PerconaServerMySQLRestore {
+		t.Helper()
+		cr := new(apiv1.PerconaServerMySQLRestore)
+		require.NoError(t, cl.Get(ctx, types.NamespacedName{Name: restoreName, Namespace: namespace}, cr))
+		return cr
+	}
+
+	getCluster := func(t *testing.T, cl client.Client) *apiv1.PerconaServerMySQL {
+		t.Helper()
+		cluster := new(apiv1.PerconaServerMySQL)
+		require.NoError(t, cl.Get(ctx, types.NamespacedName{Name: clusterName, Namespace: namespace}, cluster))
+		return cluster
+	}
+
+	// The backup is missing in every case below, so validation fails the same
+	// way. What differs is what the attempt has already done to the cluster.
+	t.Run("the cluster is untouched: the restore errors out", func(t *testing.T) {
+		cl := buildFakeClient(t, newRestore(), runningCluster())
+
+		r := reconciler(cl)
+		_, err := r.Reconcile(ctx, controllerruntime.Request{Name: restoreName, Namespace: namespace})
+		require.NoError(t, err)
+
+		cr := getRestore(t, cl)
+		assert.Equal(t, apiv1.RestoreError, cr.Status.State)
+		assert.Equal(t, int64(1), cr.Status.ErroredGeneration)
+	})
+
+	t.Run("this restore holds the pause: it fails and hands the cluster back", func(t *testing.T) {
+		cr := newRestore()
+		cl := buildFakeClient(t, cr, pausedBy(pauseOwner(cr)))
+
+		r := reconciler(cl)
+		_, err := r.Reconcile(ctx, controllerruntime.Request{Name: restoreName, Namespace: namespace})
+		require.NoError(t, err)
+
+		cr = getRestore(t, cl)
+		assert.Equal(t, apiv1.RestoreFailed, cr.Status.State,
+			"a restore that stopped the cluster does not get a second go at it")
+		assert.NotEmpty(t, cr.Status.StateDesc, "the reason belongs in the status, not only in the log")
+
+		cluster := getCluster(t, cl)
+		assert.False(t, cluster.Spec.Pause, "no job was created, so the cluster goes back up right away")
+		assert.NotContains(t, cluster.Annotations, naming.AnnotationPausedByRestore.String())
+	})
+
+	t.Run("somebody took the cluster back: the restore fails right away", func(t *testing.T) {
+		cr := newRestore()
+		cl := buildFakeClient(t, cr, startedBy(pauseOwner(cr)))
+
+		r := reconciler(cl)
+		_, err := r.Reconcile(ctx, controllerruntime.Request{Name: restoreName, Namespace: namespace})
+		require.NoError(t, err)
+
+		cr = getRestore(t, cl)
+		assert.Equal(t, apiv1.RestoreFailed, cr.Status.State,
+			"a restore that lost the cluster must not take it down again")
+		assert.NotEmpty(t, cr.Status.StateDesc)
+
+		// The stale owner goes with it, so the next restore starts clean.
+		assert.NotContains(t, getCluster(t, cl).Annotations, naming.AnnotationPausedByRestore.String())
+	})
+
+	t.Run("a restore recreated with the same name does not inherit the pause", func(t *testing.T) {
+		cr := newRestore()
+		cl := buildFakeClient(t, cr, pausedBy(naming.LeaseHolderName(restoreName, "an-older-uid")))
+
+		r := reconciler(cl)
+		_, err := r.Reconcile(ctx, controllerruntime.Request{Name: restoreName, Namespace: namespace})
+		require.NoError(t, err)
+
+		assert.Equal(t, apiv1.RestoreError, getRestore(t, cl).Status.State,
+			"the pause belongs to the restore that was deleted, not to this one")
+		assert.True(t, getCluster(t, cl).Spec.Pause)
+	})
+
+	t.Run("the pause belongs to somebody else: it is left alone", func(t *testing.T) {
+		cl := buildFakeClient(t, newRestore(), pausedBy("another-restore"))
+
+		r := reconciler(cl)
+		_, err := r.Reconcile(ctx, controllerruntime.Request{Name: restoreName, Namespace: namespace})
+		require.NoError(t, err)
+		_, err = r.Reconcile(ctx, controllerruntime.Request{Name: restoreName, Namespace: namespace})
+		require.NoError(t, err)
+
+		cr := getRestore(t, cl)
+		assert.Equal(t, apiv1.RestoreError, cr.Status.State,
+			"this restore stopped nothing, so it can still be fixed in place")
+
+		cluster := getCluster(t, cl)
+		assert.True(t, cluster.Spec.Pause, "a pause this restore did not make is not ours to lift")
+		assert.Contains(t, cluster.Annotations, naming.AnnotationPausedByRestore.String())
+	})
+
+	t.Run("the restore job exists: the cluster keeps its pause", func(t *testing.T) {
+		cr := newRestore()
+		cr.Status.State = apiv1.RestoreFailed
+		cluster := pausedBy(pauseOwner(cr))
+		job := &batchv1.Job{
+			Name:      xtrabackup.RestoreJobName(cluster, cr),
+			Namespace: namespace,
+		}
+		cl := buildFakeClient(t, cr, cluster, job)
+
+		r := reconciler(cl)
+		_, err := r.Reconcile(ctx, controllerruntime.Request{Name: restoreName, Namespace: namespace})
+		require.NoError(t, err)
+
+		assert.True(t, getCluster(t, cl).Spec.Pause,
+			"the job may have changed the data already, so the cluster must not be started")
+	})
+
+	t.Run("a failed restore is not retried after a spec change", func(t *testing.T) {
+		cr := newRestore()
+		cr.Generation = 2
+		cr.Status.State = apiv1.RestoreFailed
+		cl := buildFakeClient(t, cr, pausedBy(pauseOwner(cr)))
+
+		r := reconciler(cl)
+		_, err := r.Reconcile(ctx, controllerruntime.Request{Name: restoreName, Namespace: namespace})
+		require.NoError(t, err)
+
+		assert.Equal(t, apiv1.RestoreFailed, getRestore(t, cl).Status.State)
+	})
 }

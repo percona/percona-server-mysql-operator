@@ -93,13 +93,23 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	}
 
 	status := cr.Status
-	status.StateDesc = ""
 	if status.State == apiv1.RestoreError {
+		if cr.Generation == status.ErroredGeneration || status.ErroredGeneration == 0 {
+			log.V(1).Info("Restore errored out and its spec has not changed since, not retrying it",
+				"stateDesc", status.StateDesc, "generation", cr.Generation)
+			return ctrl.Result{}, nil
+		}
 		status.State = apiv1.RestoreNew
 	}
+	status.StateDesc = ""
 
 	defer func() {
-		if status.State != cr.Status.State || status.StateDesc != cr.Status.StateDesc {
+		if status.State == apiv1.RestoreError {
+			status.ErroredGeneration = cr.Generation
+		}
+
+		if status.State != cr.Status.State || status.StateDesc != cr.Status.StateDesc ||
+			status.ErroredGeneration != cr.Status.ErroredGeneration {
 			retriable := func(err error) bool {
 				return err != nil
 			}
@@ -156,6 +166,9 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 		if err := cluster.CheckNSetDefaults(ctx, r.ServerVersion); err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "check n set defaults")
 		}
+		if err := r.releasePause(ctx, cr, cluster); err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "release pause")
+		}
 		if err := r.cleanupPITRConfigSecret(ctx, cr, cluster); err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "cleanup pitr config secret")
 		}
@@ -174,6 +187,18 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	}
 	if err := cluster.CheckNSetDefaults(ctx, r.ServerVersion); err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "check n set defaults")
+	}
+
+	fail := func(err error) (ctrl.Result, error) {
+		status.StateDesc = err.Error()
+
+		if !pausedByThisRestore(cr, cluster) {
+			status.State = apiv1.RestoreError
+			return ctrl.Result{}, nil
+		}
+		status.State = apiv1.RestoreFailed
+
+		return ctrl.Result{}, errors.Wrap(r.releasePause(ctx, cr, cluster), "release pause")
 	}
 
 	if ok, err := r.tryAcquireLease(ctx, cr, &status); err != nil {
@@ -251,6 +276,12 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 		return ctrl.Result{}, nil
 	}
 
+	if restoreJobNotFound && pausedByThisRestore(cr, cluster) && !cluster.Spec.Pause {
+		log.Info("Cluster was started while the restore was still running, giving up",
+			"cluster", cluster.Name)
+		return fail(errors.New("Cluster was started while the restore was still running"))
+	}
+
 	backup, err := utilk8s.GetRunningBackup(ctx, r.Client, cr.Spec.ClusterName, cr.Namespace)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "get running backups list")
@@ -263,9 +294,7 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	}
 
 	if err := r.validate(ctx, cr, cluster); err != nil {
-		status.State = apiv1.RestoreError
-		status.StateDesc = errors.Cause(err).Error()
-		return ctrl.Result{}, nil
+		return fail(errors.Cause(err))
 	}
 
 	// The above code is to prevent multiple restores from running at the same time. It works only if restore job is created.
@@ -278,29 +307,23 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 
 	if cr.Spec.PITR != nil {
 		if !cluster.PiTREnabled() && restoreBinlogServer(cr) == nil {
-			status.State = apiv1.RestoreError
-			status.StateDesc = "Binlog server is not enabled for the cluster"
-			return ctrl.Result{}, nil
+			return fail(errors.New("Binlog server is not enabled for the cluster"))
 		}
 
 		status.State = apiv1.RestoreStarting
 
 		if err := r.reconcilePITRConfigSecret(ctx, cr, cluster); err != nil {
-			status.State = apiv1.RestoreError
-			status.StateDesc = errors.Wrap(err, "reconcile pitr config secret").Error()
-			return ctrl.Result{}, nil
+			return fail(errors.Wrap(err, "reconcile pitr config secret"))
 		}
 
 		if err := r.validatePITRTarget(ctx, cr, cluster); err != nil {
-			status.State = apiv1.RestoreError
-			status.StateDesc = errors.Wrap(err, "validate pitr target").Error()
-			return ctrl.Result{}, nil
+			return fail(errors.Wrap(err, "validate pitr target"))
 		}
 		status.StateDesc = ""
 	}
 
 	log.Info("Pausing cluster", "cluster", cluster.Name)
-	if err := r.pauseCluster(ctx, cluster); err != nil {
+	if err := r.pauseCluster(ctx, cr, cluster); err != nil {
 		if errors.Is(err, ErrWaitingTermination) {
 			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 		}
@@ -319,13 +342,11 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 
 		restorer, err := r.getRestorer(ctx, cr, cluster)
 		if err != nil {
-			status.State = apiv1.RestoreError
-			status.StateDesc = err.Error()
-			return ctrl.Result{}, nil
+			return fail(errors.Wrap(err, "get restorer"))
 		}
 		job, err := restorer.Job(ctx)
 		if err != nil {
-			return ctrl.Result{}, errors.Wrap(err, "get job")
+			return fail(errors.Wrap(err, "get job"))
 		}
 
 		if err := r.Create(ctx, job); err != nil {
@@ -652,17 +673,32 @@ func (r *PerconaServerMySQLRestoreReconciler) removeBootstrapCondition(ctx conte
 	return err
 }
 
-func (r *PerconaServerMySQLRestoreReconciler) pauseCluster(ctx context.Context, cluster *apiv1.PerconaServerMySQL) error {
+func pauseOwner(cr *apiv1.PerconaServerMySQLRestore) string {
+	return naming.LeaseHolderName(cr.Name, string(cr.GetUID()))
+}
+
+func pausedByThisRestore(cr *apiv1.PerconaServerMySQLRestore, cluster *apiv1.PerconaServerMySQL) bool {
+	return cluster.Annotations[naming.AnnotationPausedByRestore.String()] == pauseOwner(cr)
+}
+
+func (r *PerconaServerMySQLRestoreReconciler) pauseCluster(ctx context.Context, cr *apiv1.PerconaServerMySQLRestore, cluster *apiv1.PerconaServerMySQL) error {
 	err := k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
 		c := &apiv1.PerconaServerMySQL{}
 		nn := types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}
 		if err := r.Get(ctx, nn, c); err != nil {
 			return err
 		}
+		orig := c.DeepCopy()
 
 		c.Spec.Pause = true
+		// The annotation is part of the same patch as the pause, so a pause
+		// without an owner is not a state this can end up in.
+		if c.Annotations == nil {
+			c.Annotations = make(map[string]string)
+		}
+		c.Annotations[naming.AnnotationPausedByRestore.String()] = pauseOwner(cr)
 
-		if err := r.Patch(ctx, c, client.MergeFrom(cluster)); err != nil {
+		if err := r.Patch(ctx, c, client.MergeFrom(orig)); err != nil {
 			return err
 		}
 
@@ -671,6 +707,14 @@ func (r *PerconaServerMySQLRestoreReconciler) pauseCluster(ctx context.Context, 
 	if err != nil {
 		return errors.Wrapf(err, "patch cluster %s/%s", cluster.Namespace, cluster.Name)
 	}
+
+	// Keep the copy the caller is holding in step with what was just written:
+	// the rest of this reconcile decides who owns the pause by reading it.
+	if cluster.Annotations == nil {
+		cluster.Annotations = make(map[string]string)
+	}
+	cluster.Annotations[naming.AnnotationPausedByRestore.String()] = pauseOwner(cr)
+	cluster.Spec.Pause = true
 
 	sts := &appsv1.StatefulSet{}
 	nn := types.NamespacedName{Name: mysql.Name(cluster), Namespace: cluster.Namespace}
@@ -720,17 +764,64 @@ func (r *PerconaServerMySQLRestoreReconciler) pauseCluster(ctx context.Context, 
 }
 
 func (r *PerconaServerMySQLRestoreReconciler) unpauseCluster(ctx context.Context, cluster *apiv1.PerconaServerMySQL) error {
-	return k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
+	err := k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
 		c := &apiv1.PerconaServerMySQL{}
 		nn := types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}
 		if err := r.Get(ctx, nn, c); err != nil {
 			return err
 		}
+		orig := c.DeepCopy()
 
 		c.Spec.Pause = false
+		delete(c.Annotations, naming.AnnotationPausedByRestore.String())
 
-		return r.Patch(ctx, c, client.MergeFrom(cluster))
+		return r.Patch(ctx, c, client.MergeFrom(orig))
 	})
+	if err != nil {
+		return err
+	}
+
+	delete(cluster.Annotations, naming.AnnotationPausedByRestore.String())
+	cluster.Spec.Pause = false
+
+	return nil
+}
+
+func (r *PerconaServerMySQLRestoreReconciler) releasePause(ctx context.Context, cr *apiv1.PerconaServerMySQLRestore, cluster *apiv1.PerconaServerMySQL) error {
+	if !pausedByThisRestore(cr, cluster) {
+		return nil
+	}
+
+	job := &batchv1.Job{
+		Name:      xtrabackup.RestoreJobName(cluster, cr),
+		Namespace: cr.Namespace,
+	}
+	err := r.Get(ctx, client.ObjectKeyFromObject(job), job)
+	if client.IgnoreNotFound(err) != nil {
+		return errors.Wrapf(err, "get job %s", job.Name)
+	}
+	if err == nil {
+		return nil
+	}
+
+	log := logf.FromContext(ctx)
+
+	// The cluster is already running, so there is nothing to lift and no reason
+	// to write to its spec: somebody could have stopped it again for their own
+	// reasons between the two reads. Only the stale mark goes.
+	if !cluster.Spec.Pause {
+		log.Info("Dropping the pause mark this restore left on the cluster", "cluster", cluster.Name)
+		if err := k8s.DeannotateObject(ctx, r.Client, cluster, naming.AnnotationPausedByRestore); err != nil {
+			return errors.Wrap(err, "deannotate cluster")
+		}
+		delete(cluster.Annotations, naming.AnnotationPausedByRestore.String())
+
+		return nil
+	}
+
+	log.Info("Releasing the pause this restore put on the cluster", "cluster", cluster.Name)
+
+	return errors.Wrap(r.unpauseCluster(ctx, cluster), "unpause cluster")
 }
 
 // SetupWithManager sets up the controller with the Manager.

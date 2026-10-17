@@ -1,0 +1,27 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 300
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster_name=$(get_cluster_name)
+
+      # The restore that gave up took its mark off the cluster, so the next
+      # restore does not inherit a pause that is not its own.
+      owner=$(kubectl -n "${NAMESPACE}" get ps "$cluster_name" \
+        -o jsonpath='{.metadata.annotations.percona\.com/paused-by-restore}')
+      if [[ -n ${owner} ]]; then
+        echo "the pause owner was left behind on ${cluster_name}: ${owner}"
+        exit 1
+      fi
+
+      # Reconciling everything from scratch must not bring the failed restore
+      # back to life on a cluster that is serving again.
+      kubectl -n "${OPERATOR_NS:-$NAMESPACE}" rollout restart deployment/percona-server-mysql-operator
+      kubectl -n "${OPERATOR_NS:-$NAMESPACE}" rollout status deployment/percona-server-mysql-operator --timeout=120s
+
+      sleep 60
