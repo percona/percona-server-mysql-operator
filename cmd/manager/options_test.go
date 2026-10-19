@@ -59,13 +59,13 @@ func TestConfigureOptionsRequiresWatchNamespace(t *testing.T) {
 	require.ErrorContains(t, err, "WATCH_NAMESPACE")
 }
 
-func TestConfigureOptionsAllowsEmptyNamespaces(t *testing.T) {
+func TestConfigureOptionsAllowsEmptyWatchNamespace(t *testing.T) {
 	t.Setenv("WATCH_NAMESPACE", "")
-	t.Setenv("OPERATOR_NAMESPACE", "")
+	t.Setenv("OPERATOR_NAMESPACE", "operator-ns")
 
 	options, err := configureOptions(":9090", ":9091", true)
 	require.NoError(t, err)
-	assert.Empty(t, options.LeaderElectionNamespace)
+	assert.Equal(t, "operator-ns", options.LeaderElectionNamespace)
 	assert.Nil(t, options.Cache.DefaultNamespaces)
 }
 
@@ -82,14 +82,16 @@ func TestConfigureLeaderElection(t *testing.T) {
 		wantError     string
 	}{
 		{
-			name:   "flag disables election",
-			wantID: defaultElectionID,
+			name:          "flag disables election",
+			wantID:        defaultElectionID,
+			wantNamespace: "operator-ns",
 		},
 		{
-			name:        "environment disables election",
-			flagEnabled: true,
-			envEnabled:  &disabled,
-			wantID:      defaultElectionID,
+			name:          "environment disables election",
+			flagEnabled:   true,
+			envEnabled:    &disabled,
+			wantID:        defaultElectionID,
+			wantNamespace: "operator-ns",
 		},
 		{
 			name:          "environment enables election",
@@ -105,6 +107,17 @@ func TestConfigureLeaderElection(t *testing.T) {
 			wantEnabled:   true,
 			wantID:        "custom.lease",
 			wantNamespace: "operator-ns",
+		},
+		{
+			name:          "custom lease name with election disabled",
+			leaseName:     "custom.lease",
+			wantID:        "custom.lease",
+			wantNamespace: "operator-ns",
+		},
+		{
+			name:      "invalid lease name with election disabled",
+			leaseName: "Invalid_Name",
+			wantError: "PSO_LEADER_ELECTION_LEASE_NAME",
 		},
 		{
 			name:       "invalid lease name",
