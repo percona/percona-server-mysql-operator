@@ -33,25 +33,10 @@ commands:
               - "--strict"
       EOF
 
-      # The owner annotation is written in the same patch as the pause, so it
-      # marks the moment the restore holds the cluster and has not created its
-      # job yet.
-      owner=""
-      for i in $(seq 120); do
-        owner=$(kubectl -n "${NAMESPACE}" get ps "$cluster_name" \
-          -o jsonpath='{.metadata.annotations.percona\.com/paused-by-restore}')
-        if [[ -n ${owner} ]]; then
-          break
-        fi
-        sleep 1
-      done
-      if [[ -z ${owner} ]]; then
-        echo "the restore never took the pause on ${cluster_name}"
-        exit 1
-      fi
 
-      # Break the restore while the pods are still terminating. A succeeded
-      # backup is left alone by the operator, so this sticks. The restore now
-      # fails before its job exists, which used to stop the cluster for good.
-      kubectl -n "${NAMESPACE}" patch ps-backup pause-fail-backup \
-        --subresource=status --type=merge -p '{"status":{"storage":null}}'
+      kubectl -n "${NAMESPACE}" wait --for=jsonpath='{.status.state}'=Starting \
+        ps-restore/pause-fail-restore --timeout=120s
+      kubectl -n "${NAMESPACE}" wait --for=jsonpath='{.spec.pause}'=true \
+        ps/"$cluster_name" --timeout=60s
+
+      kubectl -n "${NAMESPACE}" delete ps-backup pause-fail-backup --wait=true --timeout=300s

@@ -57,12 +57,6 @@ const (
 	// value is a MySQL pod name, or "true" to let the operator pick one. It is
 	// refused while the cluster has a writable primary.
 	AnnotationForcePromote AnnotationKey = perconaPrefix + "force-promote-with-possible-data-loss"
-
-	// AnnotationPausedByRestore names the restore that paused the cluster. It is
-	// written in the same patch as spec.pause so the two cannot disagree, and it
-	// tells the operator whose pause it is looking at: a pause somebody else
-	// made is never lifted on the operator's own initiative.
-	AnnotationPausedByRestore AnnotationKey = perconaPrefix + "paused-by-restore"
 )
 
 const (

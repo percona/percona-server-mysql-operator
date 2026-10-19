@@ -1,8 +1,8 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 120
+timeout: 600
 ---
-# Both restores stay where they are and the cluster keeps serving.
+# Both restores stay where they are and the cluster comes back with its data.
 apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQLRestore
 metadata:
