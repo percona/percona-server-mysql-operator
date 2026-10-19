@@ -39,3 +39,6 @@ spec:
   backup:
     enabled: false
     image: perconalab/percona-server-mysql-operator:main-backup8.4
+  logcollector:
+    enabled: true
+    image: perconalab/fluentbit:main-logcollector
