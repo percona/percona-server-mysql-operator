@@ -166,11 +166,11 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 		if err := cluster.CheckNSetDefaults(ctx, r.ServerVersion); err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "check n set defaults")
 		}
-		if err := r.releasePause(ctx, cr, cluster); err != nil {
-			return ctrl.Result{}, errors.Wrap(err, "release pause")
-		}
 		if err := r.cleanupPITRConfigSecret(ctx, cr, cluster); err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "cleanup pitr config secret")
+		}
+		if err := r.releasePause(ctx, cr, cluster); err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "release pause")
 		}
 		return ctrl.Result{}, nil
 	}
