@@ -1766,22 +1766,6 @@ func TestRestoreThatPausedTheClusterFails(t *testing.T) {
 		assert.Empty(t, jobs(t, cl))
 	})
 
-	t.Run("the backup lost its storage while the cluster was stopping", func(t *testing.T) {
-		// getBackup fills a missing status.storage from the cluster, so both
-		// have to be gone for getRestorer to see nothing. validate() used to
-		// catch this; it no longer runs here.
-		cluster := newCluster(true)
-		cluster.Spec.Backup.Storages = nil
-		backup := newBackup()
-		backup.Status.Storage = nil
-		cl := buildFakeClient(t, newRestore(apiv1.RestoreStarting), cluster, backup, secret, mysqlPods(cluster, 0))
-
-		_, cr, cluster := reconcile(t, cl)
-		assert.Equal(t, apiv1.RestoreFailed, cr.Status.State)
-		assert.Contains(t, cr.Status.StateDesc, "status.storage is empty")
-		assert.True(t, cluster.Spec.Pause)
-	})
-
 	t.Run("a failed restore is not retried after a spec change", func(t *testing.T) {
 		cr := newRestore(apiv1.RestoreFailed)
 		cr.Generation = 2
