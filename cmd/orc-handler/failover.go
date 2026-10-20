@@ -119,7 +119,7 @@ func runFailover(ctx context.Context, args []string) error {
 				log.Error(markErr, "failed to mute the failover report", "source", *source)
 			}
 
-			startReceivers(ctx, *source)
+			startReceivers(ctx, c, *source)
 		case err != nil:
 			if markErr := g.refreshSeen(*source); markErr != nil {
 				log.Error(markErr, "failed to refresh the failover timeout", "source", *source)
@@ -399,13 +399,7 @@ func registerCandidate(ctx context.Context, cliCmd perconaClientCmd.Client, orcP
 }
 
 // startReceivers starts the receivers that gave up on the source while it was down
-func startReceivers(ctx context.Context, source string) {
-	c, err := connect(ctx)
-	if err != nil {
-		log.Error(err, "failed to start the receivers", "source", source)
-		return
-	}
-
+func startReceivers(ctx context.Context, c *cluster, source string) {
 	orcPod, err := orchestrator.GetReadyPod(ctx, c.client, c.cr)
 	if err != nil {
 		log.Error(err, "failed to start the receivers", "source", source)

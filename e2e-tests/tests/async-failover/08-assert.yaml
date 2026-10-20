@@ -33,3 +33,7 @@ commands:
           echo "AsyncFailoverBlocked is '${blocked}' after the timed out failover, expected False"
           exit 1
       fi
+  - script: |-
+      source ../../functions
+
+      tail_failover_logs

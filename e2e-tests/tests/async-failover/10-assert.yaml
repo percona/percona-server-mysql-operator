@@ -1,0 +1,56 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 300
+commands:
+  - script: |-
+      set -o errexit
+
+      source ../../functions
+
+      cluster=$(get_cluster_name)
+      old=$(cat "${TEMP_DIR}/switchover-primary")
+
+      stop_writable_sampler
+
+      for pod in $(get_mysql_pods); do
+          offset=$(($(cat "${TEMP_DIR}/switchover-log-size-before-${pod}") + 1))
+          new=$(kubectl -n "${NAMESPACE}" exec "${pod}" -c mysql -- sh -c "tail -c +${offset} /var/lib/mysql/failover.log 2>/dev/null || true")
+          if [[ -n ${new} ]]; then
+              echo "a failover worker ran on ${pod} during the switchover:"
+              echo "${new}"
+              exit 1
+          fi
+      done
+
+      for reason in FailoverWaiting FailoverBlocked FailoverForced FailoverFailed; do
+          if [[ $(count_events "${cluster}" "${reason}") -gt $(cat "${TEMP_DIR}/switchover-${reason}-before") ]]; then
+              echo "the switchover emitted ${reason}:"
+              kubectl -n "${NAMESPACE}" get events \
+                  --field-selector "reason=${reason},involvedObject.name=${cluster}" \
+                  -o jsonpath='{range .items[*]}{.message}{"\n"}{end}'
+              exit 1
+          fi
+      done
+
+      blocked=$(get_cluster_condition "${cluster}" AsyncFailoverBlocked)
+      if [[ ${blocked} != "False" ]]; then
+          echo "AsyncFailoverBlocked is '${blocked}' after the switchover, expected False"
+          exit 1
+      fi
+
+      # the operator downtimes the old primary for the takeover, and a downtime
+      # left behind keeps orchestrator from recovering it
+      downtimed=$(run_curl_orc "http://$(get_orc_svc "${cluster}"):3000/api/cluster/${cluster}.${NAMESPACE}/" \
+          | jq -r --arg old "${old}" '.[] | select(.Key.Hostname | split(".")[0] == $old) | .IsDowntimed')
+      if [[ ${downtimed} != "false" ]]; then
+          echo "${old} is downtimed '${downtimed}' after the switchover, expected false"
+          exit 1
+      fi
+
+      run_mysql "INSERT IGNORE myDB.myTable (id) VALUES (100704)" "-h $(get_haproxy_svc "${cluster}")"
+      check_gtids_match_primary "${cluster}"
+      check_orc_topology "${cluster}"
+  - script: |-
+      source ../../functions
+
+      tail_failover_logs
