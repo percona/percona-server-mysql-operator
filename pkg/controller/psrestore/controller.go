@@ -261,9 +261,9 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 		return ctrl.Result{}, nil
 	}
 
-	// The checks run once. A restore that is already Starting has passed them
-	// and is waiting for the cluster to stop, which takes a while.
-	if status.State != apiv1.RestoreStarting {
+	// The checks run once. A restore that is Starting has passed them and is
+	// waiting for the cluster to stop, which takes a while;
+	if status.State != apiv1.RestoreStarting && status.State != apiv1.RestoreRunning {
 		backup, err := utilk8s.GetRunningBackup(ctx, r.Client, cr.Spec.ClusterName, cr.Namespace)
 		if err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "get running backups list")
@@ -290,7 +290,7 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	}
 	defer r.sm.Delete(cr.Spec.ClusterName)
 
-	if cr.Spec.PITR != nil && status.State != apiv1.RestoreStarting {
+	if cr.Spec.PITR != nil && status.State != apiv1.RestoreStarting && status.State != apiv1.RestoreRunning {
 		if !cluster.PiTREnabled() && restoreBinlogServer(cr) == nil {
 			status.State = apiv1.RestoreError
 			status.StateDesc = "Binlog server is not enabled for the cluster"
@@ -311,8 +311,11 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	}
 
 	// Every check has passed. From here on the restore is stopping the cluster
-	// and says so, and the checks above are not run again.
-	status.State = apiv1.RestoreStarting
+	// and says so, and the checks above are not run again. A Running restore
+	// is further along than that and keeps its state.
+	if status.State != apiv1.RestoreRunning {
+		status.State = apiv1.RestoreStarting
+	}
 
 	log.Info("Pausing cluster", "cluster", cluster.Name)
 	if err := r.pauseCluster(ctx, cluster); err != nil {

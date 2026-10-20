@@ -1766,6 +1766,26 @@ func TestRestoreThatPausedTheClusterFails(t *testing.T) {
 		assert.Empty(t, jobs(t, cl))
 	})
 
+	t.Run("a Running restore does not run the checks either", func(t *testing.T) {
+		// The job is running and the cluster lost the storage the backup points
+		// to. The checks are long behind this restore: failing them now would
+		// only leave it in Error with the job still going and the cluster down.
+		cluster := newCluster(true)
+		cluster.Spec.Backup.Storages = nil
+		cr := newRestore(apiv1.RestoreRunning)
+		job := &batchv1.Job{
+			Name:      xtrabackup.RestoreJobName(cluster, cr),
+			Namespace: namespace,
+			Status:    batchv1.JobStatus{Active: 1},
+		}
+		cl := buildFakeClient(t, cr, cluster, newBackup(), secret, mysqlPods(cluster, 0), job)
+
+		_, cr, cluster = reconcile(t, cl)
+		assert.Equal(t, apiv1.RestoreRunning, cr.Status.State)
+		assert.Empty(t, cr.Status.StateDesc)
+		assert.True(t, cluster.Spec.Pause)
+	})
+
 	t.Run("a failed restore is not retried after a spec change", func(t *testing.T) {
 		cr := newRestore(apiv1.RestoreFailed)
 		cr.Generation = 2
