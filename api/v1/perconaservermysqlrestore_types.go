@@ -83,6 +83,14 @@ type PerconaServerMySQLRestoreStatus struct { // INSERT ADDITIONAL STATUS FIELD 
 	CompletedAt       *metav1.Time `json:"completed,omitempty"`
 }
 
+// Equals reports whether the restore controller would have to write s to
+// replace o: it compares the fields the controller sets itself.
+func (s PerconaServerMySQLRestoreStatus) Equals(o PerconaServerMySQLRestoreStatus) bool {
+	return s.State == o.State &&
+		s.StateDesc == o.StateDesc &&
+		s.ErroredGeneration == o.ErroredGeneration
+}
+
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Namespaced

@@ -1786,14 +1786,17 @@ func TestRestoreThatPausedTheClusterFails(t *testing.T) {
 		assert.True(t, cluster.Spec.Pause)
 	})
 
-	t.Run("a failed restore is not retried after a spec change", func(t *testing.T) {
+	t.Run("a failed restore is not retried after a spec change and keeps its reason", func(t *testing.T) {
 		cr := newRestore(apiv1.RestoreFailed)
 		cr.Generation = 2
+		cr.Status.StateDesc = "get restorer: the backup went away"
 		cluster := newCluster(true)
 		cl := buildFakeClient(t, cr, cluster, newBackup(), secret, mysqlPods(cluster, 0))
 
 		_, cr, cluster = reconcile(t, cl)
 		assert.Equal(t, apiv1.RestoreFailed, cr.Status.State)
+		assert.Equal(t, "get restorer: the backup went away", cr.Status.StateDesc,
+			"the reason is what the user has to go on, every later pass must leave it alone")
 		assert.True(t, cluster.Spec.Pause)
 		assert.Empty(t, jobs(t, cl))
 	})

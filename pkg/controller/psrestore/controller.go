@@ -101,15 +101,13 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 		}
 		status.State = apiv1.RestoreNew
 	}
-	status.StateDesc = ""
 
 	defer func() {
 		if status.State == apiv1.RestoreError {
 			status.ErroredGeneration = cr.Generation
 		}
 
-		if status.State != cr.Status.State || status.StateDesc != cr.Status.StateDesc ||
-			status.ErroredGeneration != cr.Status.ErroredGeneration {
+		if !status.Equals(cr.Status) {
 			retriable := func(err error) bool {
 				return err != nil
 			}
@@ -171,6 +169,8 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 		}
 		return ctrl.Result{}, nil
 	}
+
+	status.StateDesc = ""
 
 	cluster := &apiv1.PerconaServerMySQL{}
 	nn := types.NamespacedName{Name: cr.Spec.ClusterName, Namespace: cr.Namespace}
@@ -280,6 +280,26 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 			status.StateDesc = errors.Cause(err).Error()
 			return ctrl.Result{}, nil
 		}
+
+		if cr.Spec.PITR != nil {
+			if !cluster.PiTREnabled() && restoreBinlogServer(cr) == nil {
+				status.State = apiv1.RestoreError
+				status.StateDesc = "Binlog server is not enabled for the cluster"
+				return ctrl.Result{}, nil
+			}
+
+			if err := r.reconcilePITRConfigSecret(ctx, cr, cluster); err != nil {
+				status.State = apiv1.RestoreError
+				status.StateDesc = errors.Wrap(err, "reconcile pitr config secret").Error()
+				return ctrl.Result{}, nil
+			}
+
+			if err := r.validatePITRTarget(ctx, cr, cluster); err != nil {
+				status.State = apiv1.RestoreError
+				status.StateDesc = errors.Wrap(err, "validate pitr target").Error()
+				return ctrl.Result{}, nil
+			}
+		}
 	}
 
 	// The above code is to prevent multiple restores from running at the same time. It works only if restore job is created.
@@ -289,26 +309,6 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 		return ctrl.Result{RequeueAfter: time.Second * 5}, nil
 	}
 	defer r.sm.Delete(cr.Spec.ClusterName)
-
-	if cr.Spec.PITR != nil && status.State != apiv1.RestoreStarting && status.State != apiv1.RestoreRunning {
-		if !cluster.PiTREnabled() && restoreBinlogServer(cr) == nil {
-			status.State = apiv1.RestoreError
-			status.StateDesc = "Binlog server is not enabled for the cluster"
-			return ctrl.Result{}, nil
-		}
-
-		if err := r.reconcilePITRConfigSecret(ctx, cr, cluster); err != nil {
-			status.State = apiv1.RestoreError
-			status.StateDesc = errors.Wrap(err, "reconcile pitr config secret").Error()
-			return ctrl.Result{}, nil
-		}
-
-		if err := r.validatePITRTarget(ctx, cr, cluster); err != nil {
-			status.State = apiv1.RestoreError
-			status.StateDesc = errors.Wrap(err, "validate pitr target").Error()
-			return ctrl.Result{}, nil
-		}
-	}
 
 	// Every check has passed. From here on the restore is stopping the cluster
 	// and says so, and the checks above are not run again. A Running restore
@@ -335,19 +335,23 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	if restoreJobNotFound {
 		log.Info("Creating restore job", "jobName", job.Name)
 
-		// The cluster is already stopped, so this attempt is over for good:
-		// Failed is final, and the cluster keeps its pause. The operator
-		// never starts a cluster on its own.
-		restorer, err := r.getRestorer(ctx, cr, cluster)
+		// The cluster is already stopped, so an error here ends the attempt
+		// for good: Failed is final, and the cluster keeps its pause, the
+		// operator never starts a cluster on its own. A short retry rides out
+		// an API hiccup, so only what is really gone, like a backup deleted
+		// while the pods were stopping, gets there.
+		var job *batchv1.Job
+		err := k8sretry.OnError(k8sretry.DefaultBackoff, func(error) bool { return true }, func() error {
+			restorer, err := r.getRestorer(ctx, cr, cluster)
+			if err != nil {
+				return errors.Wrap(err, "get restorer")
+			}
+			job, err = restorer.Job(ctx)
+			return errors.Wrap(err, "get job")
+		})
 		if err != nil {
 			status.State = apiv1.RestoreFailed
-			status.StateDesc = errors.Wrap(err, "get restorer").Error()
-			return ctrl.Result{}, nil
-		}
-		job, err := restorer.Job(ctx)
-		if err != nil {
-			status.State = apiv1.RestoreFailed
-			status.StateDesc = errors.Wrap(err, "get job").Error()
+			status.StateDesc = err.Error()
 			return ctrl.Result{}, nil
 		}
 
