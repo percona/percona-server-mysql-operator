@@ -69,6 +69,58 @@ func TestConfigureOptionsAllowsEmptyWatchNamespace(t *testing.T) {
 	assert.Nil(t, options.Cache.DefaultNamespaces)
 }
 
+func TestConfigureOptionsLeaderElection(t *testing.T) {
+	t.Setenv("WATCH_NAMESPACE", "")
+	t.Setenv("OPERATOR_NAMESPACE", "operator-ns")
+	t.Setenv("PSO_LEADER_ELECTION_LEASE_NAME", "")
+	t.Setenv("MAX_CONCURRENT_RECONCILES", "1")
+
+	tests := []struct {
+		name        string
+		flagEnabled bool
+		envValue    string
+		wantEnabled bool
+	}{
+		{
+			name:        "unset environment preserves disabled flag",
+			flagEnabled: false,
+			envValue:    "",
+			wantEnabled: false,
+		},
+		{
+			name:        "unset environment preserves enabled flag",
+			flagEnabled: true,
+			envValue:    "",
+			wantEnabled: true,
+		},
+		{
+			name:        "false environment overrides enabled flag",
+			flagEnabled: true,
+			envValue:    "false",
+			wantEnabled: false,
+		},
+		{
+			name:        "true environment overrides disabled flag",
+			flagEnabled: false,
+			envValue:    "true",
+			wantEnabled: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("PSO_LEADER_ELECTION_ENABLED", tt.envValue)
+			if tt.envValue == "" {
+				require.NoError(t, os.Unsetenv("PSO_LEADER_ELECTION_ENABLED"))
+			}
+
+			options, err := configureOptions(":9090", ":9091", tt.flagEnabled)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantEnabled, options.LeaderElection)
+		})
+	}
+}
+
 func TestConfigureLeaderElection(t *testing.T) {
 	enabled, disabled := true, false
 	tests := []struct {

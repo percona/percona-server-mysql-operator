@@ -14,6 +14,7 @@ IMAGE_TOOLKIT=perconalab/percona-server-mysql-operator:main-toolkit
 IMAGE_PMM_CLIENT=perconalab/pmm-client:3-dev-latest
 IMAGE_PMM_SERVER=perconalab/pmm-server:3-dev-latest
 IMAGE_BINLOG_SERVER=perconalab/percona-binlog-server:0.4.0
+IMAGE_LOG_COLLECTOR=perconalab/fluentbit:main-logcollector
 
 GKE_MIN=1.33
 GKE_MAX=1.35
