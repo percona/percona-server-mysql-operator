@@ -2791,6 +2791,60 @@ wait_for_restore() {
 	done
 }
 
+get_backup_name_from_configmap() {
+	local backup_configmap=$1
+	local backup_name
+
+	backup_name=$(kubectl get configmap "${backup_configmap}" -n "${NAMESPACE}" -o jsonpath='{.data.backupName}' 2>/dev/null || true)
+	if [[ -z ${backup_name} ]]; then
+		echo "No backup name found in configmap ${backup_configmap}" >&2
+		return 1
+	fi
+
+	echo "${backup_name}"
+}
+
+run_restore_from_configmap() {
+	local backup_configmap=$1
+	local restore_name=$2
+	local cluster_name=${3:-$(get_cluster_name)}
+
+	local backup_name
+	backup_name=$(get_backup_name_from_configmap "${backup_configmap}")
+	run_restore "${restore_name}" "${backup_name}" "${cluster_name}"
+}
+
+verify_restored_data() {
+	local restore_name=$1
+	local mysql_host=$2
+	shift 2
+
+	if (( $# == 0 || $# % 3 != 0 )); then
+		echo "Expected groups of: expected ConfigMap, query file, restored ConfigMap"
+		return 1
+	fi
+
+	while (( $# > 0 )); do
+		local expected_data_configmap=$1
+		local query_file=$2
+		local restored_data_configmap=$3
+		shift 3
+
+		local expected_data data restored_data
+		expected_data=$(kubectl get configmap "${expected_data_configmap}" -n "${NAMESPACE}" -o json | jq -c '.data')
+
+		until data=$(retry_run_mysql_query_file "${query_file}" "-h ${mysql_host}") &&
+			kubectl create configmap -n "${NAMESPACE}" "${restored_data_configmap}" \
+				--from-literal=data="${data}" --dry-run=client -o yaml \
+				| kubectl apply -n "${NAMESPACE}" -f - &&
+			restored_data=$(kubectl get configmap "${restored_data_configmap}" -n "${NAMESPACE}" -o json | jq -c '.data') &&
+			[[ ${expected_data} == "${restored_data}" ]]; do
+			echo "Waiting for data after restore ${restore_name} to match configmap ${expected_data_configmap}"
+			sleep 5
+		done
+	done
+}
+
 get_secret_value() {
 	local secret=$1
 	local key1=$2
