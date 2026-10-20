@@ -1,0 +1,46 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster=$(get_cluster_name)
+
+      wait_cluster_consistency_async "${cluster}" 3 3
+
+      primary_before=$(get_primary_from_label)
+      echo "${primary_before}" > "${TEMP_DIR}/switchover-primary"
+
+      # a graceful takeover reaches the pre-failover hook as a DeadMaster
+      # recovery of a primary that is alive. the hook must let it through
+      # without recovering anything, so no worker runs and none of its events
+      # are emitted
+      for pod in $(get_mysql_pods); do
+          kubectl -n "${NAMESPACE}" exec "${pod}" -c mysql -- sh -c 'cat /var/lib/mysql/failover.log 2>/dev/null | wc -c' \
+              > "${TEMP_DIR}/switchover-log-size-before-${pod}"
+      done
+      for reason in FailoverWaiting FailoverBlocked FailoverForced FailoverFailed; do
+          count_events "${cluster}" "${reason}" > "${TEMP_DIR}/switchover-${reason}-before"
+      done
+
+      start_writable_sampler "${cluster}" $((1200 + 300))
+
+      # a rolling restart moves the primary off the pod before restarting it,
+      # through orchestrator's graceful takeover
+      uids_before=$(get_mysql_pod_uids "${cluster}")
+      kubectl -n "${NAMESPACE}" patch ps "${cluster}" --type merge \
+          -p '{"spec":{"mysql":{"env":[{"name":"ASYNC_FAILOVER_E2E_SWITCHOVER","value":"1"}]}}}'
+
+      wait_for_pods_restart "${cluster}" database "${uids_before}" 1200
+      wait_cluster_consistency_async "${cluster}" 3 3
+
+      primary_after=$(get_primary_from_label)
+      if [[ ${primary_after} == "${primary_before}" ]]; then
+          echo "the rolling restart left the primary on ${primary_before}"
+          exit 1
+      fi
+      echo "Switched over from ${primary_before} to ${primary_after}"
+    timeout: 1200
