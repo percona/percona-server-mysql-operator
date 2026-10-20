@@ -261,9 +261,7 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 		return ctrl.Result{}, nil
 	}
 
-	// The checks run once. A restore that is Starting has passed them and is
-	// waiting for the cluster to stop, which takes a while;
-	if status.State != apiv1.RestoreStarting && status.State != apiv1.RestoreRunning {
+	if status.State == apiv1.RestoreNew {
 		backup, err := utilk8s.GetRunningBackup(ctx, r.Client, cr.Spec.ClusterName, cr.Namespace)
 		if err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "get running backups list")
@@ -313,7 +311,7 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	// Every check has passed. From here on the restore is stopping the cluster
 	// and says so, and the checks above are not run again. A Running restore
 	// is further along than that and keeps its state.
-	if status.State != apiv1.RestoreRunning {
+	if status.State == apiv1.RestoreNew {
 		status.State = apiv1.RestoreStarting
 	}
 
