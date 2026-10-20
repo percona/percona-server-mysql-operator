@@ -302,6 +302,7 @@ release: manifests
 		-e "/^    router:/,/^      image:/{s#image: .*#image: $(IMAGE_ROUTER84)#}" \
 		-e "/^  orchestrator:/,/^    image:/{s#image: .*#image: $(IMAGE_ORCHESTRATOR)#}" \
 		-e "/^  backup:/,/^    image:/{s#^    image: .*#    image: $(IMAGE_BACKUP84)#}" \
+		-e "/^  logcollector:/,/^    image:/{s#image: .*#image: $(IMAGE_LOG_COLLECTOR)#}" \
 		deploy/cr-minimal.yaml
 	$(SED) -i \
 		-e "/^spec:/,/^  crVersion:/{s/crVersion: .*/crVersion: $(VERSION)/}" \
@@ -314,6 +315,7 @@ release: manifests
 		-e "/^  toolkit:/,/^    image:/{s#image: .*#image: $(IMAGE_TOOLKIT)#}" \
 		-e "/initContainer:/,/image:/{s#image: .*#image: $(IMAGE_OPERATOR)#}" \
 		-e "/^  pmm:/,/^    image:/{s#image: .*#image: $(IMAGE_PMM_CLIENT)#}" \
+		-e "/^  logcollector:/,/^    image:/{s#image: .*#image: $(IMAGE_LOG_COLLECTOR)#}" \
 		deploy/cr.yaml
 	$(SED) -i \
 		-e "/^#      binlogServer:/,/^#        image:/{s|^#        image: .*|#        image: $(IMAGE_BINLOG_SERVER)|}" \
@@ -345,6 +347,7 @@ after-release: update-version manifests after-release-versions
 		-e "/^  toolkit:/,/^    image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-toolkit#}" \
 		-e "/initContainer:/,/image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main#}" \
 		-e "/^  pmm:/,/^    image:/{s#image: .*#image: perconalab/pmm-client:3-dev-latest#}" \
+		-e "/^  logcollector:/,/^    image:/{s#image: .*#image: perconalab/fluentbit:main-logcollector#}" \
 		deploy/cr.yaml
 		$(SED) -i \
 		-e "/^spec:/,/^  crVersion:/{s/crVersion: .*/crVersion: $(NEXT_VER)/}" \
@@ -353,6 +356,7 @@ after-release: update-version manifests after-release-versions
 		-e "/^    router:/,/^      image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-router8.4#}" \
 		-e "/^  orchestrator:/,/^    image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-orchestrator#}" \
 		-e "/^  backup:/,/^    image:/{s#^    image: .*#    image: perconalab/percona-server-mysql-operator:main-backup8.4#}" \
+		-e "/^  logcollector:/,/^    image:/{s#image: .*#image: perconalab/fluentbit:main-logcollector#}" \
 		deploy/cr-minimal.yaml
 	$(SED) -i \
 		-e "/^  mysqlshellRunner:/,/^    image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-psmysql8.4#}" \
@@ -379,4 +383,5 @@ after-release-versions:
 		-e "s#^IMAGE_PMM_CLIENT=.*#IMAGE_PMM_CLIENT=perconalab/pmm-client:3-dev-latest#" \
 		-e "s#^IMAGE_PMM_SERVER=.*#IMAGE_PMM_SERVER=perconalab/pmm-server:3-dev-latest#" \
 		-e "s#^IMAGE_BINLOG_SERVER=.*#IMAGE_BINLOG_SERVER=perconalab/percona-binlog-server:0.3.1#" \
+		-e "s#^IMAGE_LOG_COLLECTOR=.*#IMAGE_LOG_COLLECTOR=perconalab/fluentbit:main-logcollector#" \
 		e2e-tests/release_versions
