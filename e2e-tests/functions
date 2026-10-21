@@ -2955,12 +2955,12 @@ verify_restored_data() {
 	local mysql_host=$2
 	shift 2
 
-	if (( $# == 0 || $# % 3 != 0 )); then
+	if (($# == 0 || $# % 3 != 0)); then
 		echo "Expected groups of: expected ConfigMap, query file, restored ConfigMap"
 		return 1
 	fi
 
-	while (( $# > 0 )); do
+	while (($# > 0)); do
 		local expected_data_configmap=$1
 		local query_file=$2
 		local restored_data_configmap=$3
@@ -2969,12 +2969,12 @@ verify_restored_data() {
 		local expected_data data restored_data
 		expected_data=$(kubectl get configmap "${expected_data_configmap}" -n "${NAMESPACE}" -o json | jq -c '.data')
 
-		until data=$(retry_run_mysql_query_file "${query_file}" "-h ${mysql_host}") &&
-			kubectl create configmap -n "${NAMESPACE}" "${restored_data_configmap}" \
+		until data=$(retry_run_mysql_query_file "${query_file}" "-h ${mysql_host}") \
+			&& kubectl create configmap -n "${NAMESPACE}" "${restored_data_configmap}" \
 				--from-literal=data="${data}" --dry-run=client -o yaml \
-				| kubectl apply -n "${NAMESPACE}" -f - &&
-			restored_data=$(kubectl get configmap "${restored_data_configmap}" -n "${NAMESPACE}" -o json | jq -c '.data') &&
-			[[ ${expected_data} == "${restored_data}" ]]; do
+			| kubectl apply -n "${NAMESPACE}" -f - \
+			&& restored_data=$(kubectl get configmap "${restored_data_configmap}" -n "${NAMESPACE}" -o json | jq -c '.data') \
+			&& [[ ${expected_data} == "${restored_data}" ]]; do
 			echo "Waiting for data after restore ${restore_name} to match configmap ${expected_data_configmap}"
 			sleep 5
 		done
