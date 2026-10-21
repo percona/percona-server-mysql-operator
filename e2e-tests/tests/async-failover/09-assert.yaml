@@ -54,20 +54,20 @@ commands:
           fi
       done
 
-      touch "${TEMP_DIR}/stop-sampler"
-      if [[ ! -s ${TEMP_DIR}/writable-samples ]]; then
-          echo "the read_only sampler recorded nothing"
-          exit 1
-      fi
-      if grep -qv '^[01]$' "${TEMP_DIR}/writable-samples"; then
-          echo "two pods were writable at once: $(sort -u "${TEMP_DIR}/writable-samples" | tr '\n' ' ')"
+      stop_writable_sampler
+
+      # a stand-down drops the staged logs too
+      candidate=$(cat "${TEMP_DIR}/returning-candidate")
+      if kubectl -n "${NAMESPACE}" exec "${candidate}" -c mysql -- test -e /var/lib/mysql/source-logs; then
+          echo "the stand-down left its staged logs on ${candidate}"
           exit 1
       fi
 
-      forced_after=$(kubectl -n "${NAMESPACE}" get events \
-          --field-selector "reason=FailoverForced,involvedObject.name=${cluster}" \
-          -o jsonpath='{range .items[*]}{.count}{"\n"}{end}' \
-          | awk '{ n += ($1 == "" ? 1 : $1) } END { print n + 0 }')
+      run_mysql "INSERT IGNORE myDB.myTable (id) VALUES (100703)" "-h $(get_haproxy_svc "${cluster}")"
+      check_gtids_match_primary "${cluster}"
+      check_orc_topology "${cluster}"
+
+      forced_after=$(count_events "${cluster}" FailoverForced)
       if [[ ${forced_after} -gt $(cat "${TEMP_DIR}/forced-events-before") ]]; then
           echo "a forced promotion was announced during the stand-down:"
           kubectl -n "${NAMESPACE}" get events \
@@ -96,3 +96,7 @@ commands:
           retry=$((retry + 1))
       done
     timeout: 600
+  - script: |-
+      source ../../functions
+
+      tail_failover_logs
