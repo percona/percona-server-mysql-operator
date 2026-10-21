@@ -80,6 +80,10 @@ commands:
 
       wait_cluster_consistency_async "${cluster}" 3 3
 
+      run_mysql "INSERT myDB.myTable (id) VALUES (100702)" "-h $(get_haproxy_svc "${cluster}")"
+      check_gtids_match_primary "${cluster}"
+      check_orc_topology "${cluster}"
+
       rows=$(run_mysql "SELECT id FROM myDB.myTable ORDER BY id" "-h $(get_haproxy_svc "${cluster}")")
       echo "rows after the timed out failover: ${rows}"
 

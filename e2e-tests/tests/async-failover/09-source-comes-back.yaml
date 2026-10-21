@@ -9,8 +9,6 @@ commands:
 
       cluster=$(get_cluster_name)
 
-      rm -f "${TEMP_DIR}/stop-sampler" "${TEMP_DIR}/writable-samples"
-
       kubectl -n "${NAMESPACE}" delete resourcequota no-new-pods --ignore-not-found
 
       generation=$(kubectl -n "${NAMESPACE}" get sts "${cluster}-orc" -o jsonpath='{.metadata.generation}')
@@ -55,36 +53,19 @@ commands:
           | jq '[.[] | select(.Acknowledged == false) | .Id]' > "${TEMP_DIR}/unacknowledged-before"
       replicas=$(get_mysql_pods | grep -v "^${primary}$")
 
-      # Sample every pod's read_only, one pass over the pods and a second's
-      # pause per sample, until the assert stops it or this step and the
-      # assert have both timed out. More than one writable pod in any sample
-      # fails the assert.
-      (
-          set +o errexit
-          set +o xtrace
-          deadline=$(($(date +%s) + 1200 + 600))
-          while [[ ! -f ${TEMP_DIR}/stop-sampler && $(date +%s) -lt ${deadline} ]]; do
-              writable=0
-              for pod in $(get_mysql_pods); do
-                  ro=$(run_mysql "SELECT @@read_only" "-h ${pod}.${cluster}-mysql" 2>/dev/null || echo 1)
-                  [[ ${ro} == "0" ]] && writable=$((writable + 1))
-              done
-              echo "${writable}" >> "${TEMP_DIR}/writable-samples"
-              sleep 1
-          done
-      ) >/dev/null 2>&1 &
+      # Sample every pod's read_only until the assert stops it or this step and
+      # the assert have both timed out. More than one writable pod in any
+      # sample fails the assert.
+      start_writable_sampler "${cluster}" $((1200 + 600))
 
       for pod in ${replicas}; do
-          kubectl -n "${NAMESPACE}" exec "${pod}" -c mysql -- sh -c 'ls /var/lib/mysql/failover.*.log 2>/dev/null || true' \
-              > "${TEMP_DIR}/logs-before-${pod}"
+          kubectl -n "${NAMESPACE}" exec "${pod}" -c mysql -- sh -c 'cat /var/lib/mysql/failover.log 2>/dev/null | wc -c' \
+              > "${TEMP_DIR}/log-size-before-${pod}"
       done
 
       # Events from steps 05 and 08 persist, and an identical repeat only bumps
       # an Event's count, so the occurrences are summed.
-      kubectl -n "${NAMESPACE}" get events \
-          --field-selector "reason=FailoverForced,involvedObject.name=${cluster}" \
-          -o jsonpath='{range .items[*]}{.count}{"\n"}{end}' \
-          | awk '{ n += ($1 == "" ? 1 : $1) } END { print n + 0 }' > "${TEMP_DIR}/forced-events-before"
+      count_events "${cluster}" FailoverForced > "${TEMP_DIR}/forced-events-before"
 
       # Holding a read lock blocks the applier on the spliced insert, so the
       # drain stays open while the pod comes back. Nothing writes to the table
@@ -130,16 +111,15 @@ commands:
           retry=$((retry + 1))
       done
 
-      # the candidate is the replica with a new worker log. the other one's
+      # the candidate is the replica whose worker log grew. the other one's
       # receiver stays stopped, as if it spent its retries while the source
       # was down, and the stand-down has to start it
       candidate=""
       retry=0
       until [[ -n ${candidate} ]]; do
           for pod in ${replicas}; do
-              new=$(kubectl -n "${NAMESPACE}" exec "${pod}" -c mysql -- sh -c 'ls /var/lib/mysql/failover.*.log 2>/dev/null || true' \
-                  | grep -vxFf "${TEMP_DIR}/logs-before-${pod}" || true)
-              [[ -n ${new} ]] && candidate=${pod}
+              size=$(kubectl -n "${NAMESPACE}" exec "${pod}" -c mysql -- sh -c 'cat /var/lib/mysql/failover.log 2>/dev/null | wc -c')
+              [[ ${size} -gt $(cat "${TEMP_DIR}/log-size-before-${pod}") ]] && candidate=${pod}
           done
           if [[ ${retry} -ge 60 ]]; then
               echo "no replica ever started a failover worker"
@@ -150,12 +130,11 @@ commands:
       done
       echo "${candidate}" > "${TEMP_DIR}/returning-candidate"
 
+      # Only what this step's attempts appended counts.
+      offset=$(($(cat "${TEMP_DIR}/log-size-before-${candidate}") + 1))
       retry=0
-      new_logs=""
-      until [[ -n ${new_logs} ]] && kubectl -n "${NAMESPACE}" exec "${candidate}" -c mysql -- \
-          grep -l "standing down without promoting" ${new_logs}; do
-          new_logs=$(kubectl -n "${NAMESPACE}" exec "${candidate}" -c mysql -- sh -c 'ls /var/lib/mysql/failover.*.log' \
-              | grep -vxFf "${TEMP_DIR}/logs-before-${candidate}" || true)
+      until kubectl -n "${NAMESPACE}" exec "${candidate}" -c mysql -- \
+          sh -c "tail -c +${offset} /var/lib/mysql/failover.log | grep -q 'standing down without promoting'"; do
           if [[ ${retry} -ge 120 ]]; then
               echo "the worker on ${candidate} never stood down"
               exit 1

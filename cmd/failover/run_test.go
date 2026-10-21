@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -421,6 +422,18 @@ func TestRun(t *testing.T) {
 		})
 	}
 
+	t.Run("a retried attempt appends to the same log", func(t *testing.T) {
+		j := newJobFixture(t)
+		j.cfg.sourcePassword = func() (string, error) { return "wrong", nil }
+
+		require.ErrorContains(t, run(t.Context(), j.cfg), "fetch logs from source")
+		require.ErrorContains(t, run(t.Context(), j.cfg), "fetch logs from source")
+
+		got := jobLog(t, j.cfg.logDir)
+		assert.Equal(t, 2, strings.Count(got, "=== Attempt started at "))
+		assert.Equal(t, 2, strings.Count(got, "ERROR: fetch logs from source"))
+	})
+
 	t.Run("a partial event at the end of the newest log is dropped", func(t *testing.T) {
 		j := newJobFixture(t)
 		require.NoError(t, os.WriteFile(filepath.Join(j.src.dir, "binlog.000006"),
@@ -747,13 +760,13 @@ func TestProductionConfig(t *testing.T) {
 	assert.Positive(t, cfg.applyPoll)
 }
 
-// jobLog returns the log file the one run in dir wrote.
+// jobLog returns the log file the runs in dir wrote.
 func jobLog(t *testing.T, dir string) string {
 	t.Helper()
 
-	logs, err := filepath.Glob(filepath.Join(dir, "failover.*.log"))
+	logs, err := filepath.Glob(filepath.Join(dir, "failover*.log"))
 	require.NoError(t, err)
-	require.Len(t, logs, 1)
+	require.Equal(t, []string{filepath.Join(dir, logFileName)}, logs)
 
 	b, err := os.ReadFile(logs[0])
 	require.NoError(t, err)
