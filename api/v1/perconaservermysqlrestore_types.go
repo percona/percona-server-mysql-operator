@@ -77,9 +77,18 @@ const (
 
 // PerconaServerMySQLRestoreStatus defines the observed state of PerconaServerMySQLRestore
 type PerconaServerMySQLRestoreStatus struct { // INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	State       RestoreState `json:"state,omitempty"`
-	StateDesc   string       `json:"stateDescription,omitempty"`
-	CompletedAt *metav1.Time `json:"completed,omitempty"`
+	State             RestoreState `json:"state,omitempty"`
+	StateDesc         string       `json:"stateDescription,omitempty"`
+	ErroredGeneration int64        `json:"erroredGeneration,omitempty"`
+	CompletedAt       *metav1.Time `json:"completed,omitempty"`
+}
+
+// Equals reports whether the restore controller would have to write s to
+// replace o: it compares the fields the controller sets itself.
+func (s PerconaServerMySQLRestoreStatus) Equals(o PerconaServerMySQLRestoreStatus) bool {
+	return s.State == o.State &&
+		s.StateDesc == o.StateDesc &&
+		s.ErroredGeneration == o.ErroredGeneration
 }
 
 // +kubebuilder:object:root=true
