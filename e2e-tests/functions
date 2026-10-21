@@ -3164,6 +3164,15 @@ verify_all_backups_deletion() {
 
 		if ! $removed; then
 			echo "Backup still present: $backup"
+
+			local remaining_files
+			if remaining_files=$(list_files_on_storage "$storage_type" "$bucket" "$prefix" "$secret_name" "$region" "$endpoint"); then
+				echo "Files still present in storage:"
+				printf '%s\n' "$remaining_files"
+			else
+				echo "Failed to list files still present in storage"
+			fi
+
 			exit 1
 		fi
 	done
