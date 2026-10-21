@@ -1,0 +1,42 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 900
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster_name=$(get_cluster_name)
+      storage_name=$(kubectl get ps "$cluster_name" -n "$NAMESPACE" -o yaml \
+        | yq '(.spec.backup.storages // {}) | keys | .[0]')
+
+      run_backup pause-fail-backup "$storage_name"
+      kubectl -n "${NAMESPACE}" wait --for=jsonpath='{.status.state}'=Succeeded \
+        ps-backup/pause-fail-backup --timeout=600s
+
+      # This restore passes every check, so it gets as far as stopping the
+      # cluster. The cluster CR asks xtrabackup for an unsupported flag, which
+      # the backups override the same way.
+      kubectl -n "${NAMESPACE}" apply -f - <<EOF
+      apiVersion: ps.percona.com/v1
+      kind: PerconaServerMySQLRestore
+      metadata:
+        name: pause-fail-restore
+      spec:
+        clusterName: ${cluster_name}
+        backupName: pause-fail-backup
+        containerOptions:
+          args:
+            xtrabackup:
+              - "--strict"
+      EOF
+
+
+      kubectl -n "${NAMESPACE}" wait --for=jsonpath='{.status.state}'=Starting \
+        ps-restore/pause-fail-restore --timeout=120s
+      kubectl -n "${NAMESPACE}" wait --for=jsonpath='{.spec.pause}'=true \
+        ps/"$cluster_name" --timeout=60s
+
+      kubectl -n "${NAMESPACE}" delete ps-backup pause-fail-backup --wait=true --timeout=300s
