@@ -42,3 +42,7 @@ commands:
           sleep 5
           retry=$((retry + 1))
       done
+  - script: |-
+      source ../../functions
+
+      tail_failover_logs
