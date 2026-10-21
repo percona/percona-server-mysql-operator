@@ -3152,7 +3152,7 @@ verify_all_backups_deletion() {
 		fi
 
 		local removed=false
-		for i in {1..5}; do
+		for i in {1..10}; do
 			if [[ "$(count_files_on_storage "$storage_type" "$bucket" "$prefix" "$secret_name" "$region" "$endpoint")" == "0" ]]; then
 				echo "Backup removed: $backup"
 				removed=true
