@@ -1,7 +1,5 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
-delete:
-# Deleting base backup should clear the entire chain
-- apiVersion: ps.percona.com/v1
-  kind: PerconaServerMySQLBackup
-  name: base-backup-encrypted
+commands:
+  # Deleting the base backup should clear the entire chain.
+  - command: kubectl delete ps-backup base-backup-encrypted -n "${NAMESPACE}" --wait=false
