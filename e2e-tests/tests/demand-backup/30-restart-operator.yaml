@@ -18,3 +18,5 @@ commands:
       kubectl -n "${OPERATOR_NS:-$NAMESPACE}" rollout status deployment/percona-server-mysql-operator --timeout=120s
 
       sleep 60
+
+      kubectl -n "${NAMESPACE}" delete ps-backup stale-restore-backup --wait=true --timeout=300s
