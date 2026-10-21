@@ -1,0 +1,28 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 600
+---
+# Both restores stay where they are and the cluster comes back with its data.
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQLRestore
+metadata:
+  name: pause-fail-restore
+status:
+  state: Failed
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQLRestore
+metadata:
+  name: stale-restore
+status:
+  state: Error
+  erroredGeneration: 1
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: demand-backup
+spec:
+  pause: false
+status:
+  state: ready
