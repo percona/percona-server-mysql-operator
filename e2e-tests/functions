@@ -2230,7 +2230,8 @@ get_cr_with_latest_versions_in_vs() {
 
 	local mysql_version=$(mysql_version_in_vs "${versions}")
 	if [[ ${mysql_version} != "${MYSQL_VERSION}" ]]; then
-		echo "operator ${operator_version} ships no MySQL ${MYSQL_VERSION} images, starting from ${mysql_version} instead" >&2
+		echo "operator ${operator_version} ships no MySQL ${MYSQL_VERSION} images" >&2
+		exit 1
 	fi
 
 	local image_mysql=$(echo ${versions} \
