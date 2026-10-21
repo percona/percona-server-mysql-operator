@@ -1475,6 +1475,58 @@ var _ = Describe("CR validations", Ordered, func() {
 			})
 		})
 
+		autoConfigCRWithIntResources := func(name, field string, cpu, memory int64) *unstructured.Unstructured {
+			cr, err := readDefaultCR(name, ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
+			cr.Spec.Orchestrator.Enabled = true
+			cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
+			cr.Spec.MySQL.AutoConfig.Enabled = &autoConfigEnabled
+			cr.Spec.MySQL.Resources.Requests = nil
+			cr.Spec.MySQL.Resources.Limits = nil
+
+			// typed CR always sends strings for resources
+			obj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(cr)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(unstructured.SetNestedField(obj, cpu, "spec", "mysql", "resources", field, "cpu")).To(Succeed())
+			Expect(unstructured.SetNestedField(obj, memory, "spec", "mysql", "resources", field, "memory")).To(Succeed())
+
+			return &unstructured.Unstructured{Object: obj}
+		}
+
+		When("autoconfig is enabled with int cpu and memory limits", Ordered, func() {
+			obj := autoConfigCRWithIntResources("cr-validations-autoconfig-int-limits", "limits", 2, 4<<30)
+			It("should create successfully", func() {
+				Expect(k8sClient.Create(ctx, obj)).Should(Succeed())
+			})
+		})
+
+		When("autoconfig is enabled with int cpu and memory requests only", Ordered, func() {
+			obj := autoConfigCRWithIntResources("cr-validations-autoconfig-int-requests", "requests", 1, 2<<30)
+			It("should create successfully", func() {
+				Expect(k8sClient.Create(ctx, obj)).Should(Succeed())
+			})
+		})
+
+		When("autoconfig is enabled with a zero int cpu limit", Ordered, func() {
+			obj := autoConfigCRWithIntResources("cr-validations-autoconfig-int-zero-cpu", "limits", 0, 4<<30)
+			It("the creation of the cluster should fail with error message", func() {
+				createErr := k8sClient.Create(ctx, obj)
+				Expect(createErr).To(HaveOccurred())
+				Expect(createErr.Error()).To(ContainSubstring(`spec.mysql: Invalid value: "object": ` + autoConfigCPUMsg))
+			})
+		})
+
+		When("autoconfig is enabled with an int memory limit below 12Mi", Ordered, func() {
+			obj := autoConfigCRWithIntResources("cr-validations-autoconfig-int-low-memory", "limits", 2, 8<<20)
+			It("the creation of the cluster should fail with error message", func() {
+				createErr := k8sClient.Create(ctx, obj)
+				Expect(createErr).To(HaveOccurred())
+				Expect(createErr.Error()).To(ContainSubstring(`spec.mysql: Invalid value: "object": ` + autoConfigMemoryMsg))
+			})
+		})
+
 		// The floor only applies to autoconfig; a cluster that never asks for
 		// tuning may be sized however the user likes.
 		When("autoconfig is disabled, a tiny memory limit is accepted", Ordered, func() {
