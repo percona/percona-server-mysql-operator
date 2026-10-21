@@ -1,6 +1,5 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
-timeout: 1200
 commands:
   - script: |-
       set -o errexit
@@ -75,11 +74,15 @@ commands:
       echo "Promoted ${primary_after} after the budget ran out"
       echo "${primary_after}" > "${TEMP_DIR}/timed-out-candidate"
 
-      kubectl -n "${NAMESPACE}" delete pvc "datadir-${primary_before}" --wait=true
+      delete_pvc "datadir-${primary_before}"
       kubectl -n "${NAMESPACE}" delete resourcequota no-new-pods
       kubectl -n "${NAMESPACE}" annotate sts "${cluster}-mysql" "percona.com/e2e-nudge=$(date +%s)" --overwrite
 
       wait_cluster_consistency_async "${cluster}" 3 3
+
+      run_mysql "INSERT myDB.myTable (id) VALUES (100702)" "-h $(get_haproxy_svc "${cluster}")"
+      check_gtids_match_primary "${cluster}"
+      check_orc_topology "${cluster}"
 
       rows=$(run_mysql "SELECT id FROM myDB.myTable ORDER BY id" "-h $(get_haproxy_svc "${cluster}")")
       echo "rows after the timed out failover: ${rows}"

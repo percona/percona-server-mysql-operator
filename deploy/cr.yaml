@@ -14,6 +14,7 @@ spec:
 #    labels:
 #      rack: rack-22
 #  unsafeFlags:
+#    asyncFailoverWithPossibleDataLoss: false
 #    backupNonReadyCluster: false
 #    mysqlSize: false
 #    orchestrator: false
@@ -212,6 +213,7 @@ spec:
             storage: 30Gi
 #        storageClassName: standard
 #    configuration: |-
+#      [mysqld]
 #      max_connections=250
 #      innodb_buffer_pool_size={{containerMemoryLimit * 3/4}}
 #    sidecars:
@@ -580,8 +582,7 @@ spec:
 #      type: ClusterIP
 #    failover:
 #      onTimeout: Abort
-#      switchoverCatchUpTimeout: 5m
-#      timeout: 6h
+#      timeout: 1h
     size: 3
     image: perconalab/percona-server-mysql-operator:main-orchestrator
     imagePullPolicy: Always
@@ -744,13 +745,17 @@ spec:
 #      configuration: |
 #        /var/lib/mysql/log/*.log {
 #            daily
+#            minsize 10M
 #            maxsize 100M
 #            rotate 7
 #            missingok
 #            nocompress
 #            notifempty
-#            copytruncate
+#            nocreate
 #            sharedscripts
+#            postrotate
+#                /opt/percona/logcollector/logrotate/postrotate-mysql.sh
+#            endscript
 #        }
 #      extraConfig:
 #        name: my-logrotate-config

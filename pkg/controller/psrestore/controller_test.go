@@ -3,7 +3,10 @@ package psrestore
 import (
 	"context"
 	"fmt"
+	"io"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
@@ -47,6 +50,7 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 		cluster       *apiv1.PerconaServerMySQL
 		objects       []runtime.Object
 		stateDesc     string
+		state         apiv1.RestoreState
 		shouldSucceed bool
 	}{
 		{
@@ -210,6 +214,7 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 				},
 			},
 			stateDesc:     "",
+			state:         apiv1.RestoreStarting,
 			shouldSucceed: true,
 		},
 		{
@@ -396,6 +401,7 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 				},
 			},
 			stateDesc:     "",
+			state:         apiv1.RestoreStarting,
 			shouldSucceed: true,
 		},
 	}
@@ -469,8 +475,8 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 				t.Fatalf("expected stateDesc %s, got %s", tt.stateDesc, cr.Status.StateDesc)
 			}
 			if tt.shouldSucceed {
-				if cr.Status.State != "" {
-					t.Fatalf("expected state %s, got %s", apiv1.RestoreError, cr.Status.State)
+				if cr.Status.State != tt.state {
+					t.Fatalf("expected state %q, got %q", tt.state, cr.Status.State)
 				}
 			} else {
 				if cr.Status.State != apiv1.RestoreError {
@@ -548,6 +554,106 @@ func TestCompletedBaseRestoreReconcilesPITRConfigSecret(t *testing.T) {
 	}, configSecret)
 	require.NoError(t, err)
 	assert.NotEmpty(t, configSecret.Data[binlogserver.ConfigKey])
+}
+
+type pitrArchiveStorage struct {
+	fakestorage.FakeStorageClient
+	objects map[string]string
+}
+
+func (s *pitrArchiveStorage) GetObject(_ context.Context, name string) (io.ReadCloser, error) {
+	value, ok := s.objects[name]
+	if !ok {
+		return nil, errors.Errorf("object %s not found", name)
+	}
+	return io.NopCloser(strings.NewReader(value)), nil
+}
+
+func TestPITRValidationBeforePause(t *testing.T) {
+	const known = "f16872ce-c164-11f1-9049-e2574f2e2c6a"
+	const unknown = "f16872ce-c164-11f1-9049-e2574f2e2c6c"
+	tests := map[string]struct {
+		pitrType   apiv1.PITRType
+		target     string
+		metadata   string
+		storageErr bool
+		wantDesc   string
+	}{
+		"unknown UUID":               {target: unknown + ":1-2008", metadata: `{"previous_gtids":"", "added_gtids":"` + known + `:1-2006"}`, wantDesc: unknown},
+		"future GTID":                {target: known + ":2007-2008", metadata: `{"previous_gtids":"", "added_gtids":"` + known + `:1-2006"}`, wantDesc: "exceeds the binlog archive"},
+		"old timestamp":              {pitrType: apiv1.PITRDate, target: "2026-09-09 11:59:59", metadata: `{"min_timestamp":"2026-09-09T12:00:00"}`, wantDesc: "timestamp is too old"},
+		"malformed timestamp":        {pitrType: apiv1.PITRDate, target: "yesterday", wantDesc: "invalid pitr target"},
+		"timestamp missing metadata": {pitrType: apiv1.PITRDate, target: "2026-09-09 12:15:00", wantDesc: "not found"},
+		"timestamp corrupt metadata": {pitrType: apiv1.PITRDate, target: "2026-09-09 12:15:00", metadata: "not-json", wantDesc: "parse metadata"},
+		"timestamp missing minimum":  {pitrType: apiv1.PITRDate, target: "2026-09-09 12:15:00", metadata: `{}`, wantDesc: "has no min_timestamp"},
+		"timestamp storage failure":  {pitrType: apiv1.PITRDate, target: "2026-09-09 12:15:00", storageErr: true, wantDesc: "storage unavailable"},
+		"malformed UUID":             {target: "not-a-uuid:1", wantDesc: "malformed GTID source"},
+		"missing metadata":           {target: known + ":2008", wantDesc: "not found"},
+		"corrupt metadata":           {target: known + ":2008", metadata: "not-json", wantDesc: "parse metadata"},
+		"empty metadata":             {target: known + ":2008", metadata: `{"previous_gtids":"", "added_gtids":""}`, wantDesc: "empty GTID metadata"},
+		"storage failure":            {target: known + ":2008", storageErr: true, wantDesc: "storage unavailable"},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			if tt.pitrType == "" {
+				tt.pitrType = apiv1.PITRGtid
+			}
+			ctx := t.Context()
+			cluster := readDefaultCluster(t, "ps-cluster", "namespace")
+			cluster.Spec.Backup.PiTR = apiv1.PiTRSpec{
+				Enabled: true,
+				BinlogServer: &apiv1.BinlogServerSpec{
+					Image:   "binlog-server:latest",
+					Storage: apiv1.BinlogServerStorageSpec{S3: &apiv1.BackupStorageS3Spec{Bucket: "binlogs", CredentialsSecret: "binlog-s3"}},
+				},
+			}
+			restore := readDefaultRestore(t, "restore", cluster.Namespace)
+			restore.UID = "restore-uid"
+			restore.Spec.ClusterName = cluster.Name
+			restore.Spec.BackupName = ""
+			restore.Spec.BackupSource = &apiv1.RestoreBackupSource{
+				Destination: "s3://backups/backup",
+				Storage:     &apiv1.BackupStorageSpec{Type: apiv1.BackupStorageS3, S3: &apiv1.BackupStorageS3Spec{Bucket: "backups"}},
+			}
+			restore.Spec.PITR = &apiv1.RestorePITRSpec{Type: tt.pitrType, GTID: tt.target, Date: tt.target, Force: true}
+			internalSecret := &corev1.Secret{
+				Name: cluster.InternalSecretName(), Namespace: cluster.Namespace,
+				Data: map[string][]byte{string(apiv1.UserReplication): []byte("replication-password")},
+			}
+			sts := &appsv1.StatefulSet{
+				Name: mysql.Name(cluster), Namespace: cluster.Namespace,
+				Status: appsv1.StatefulSetStatus{Replicas: 3},
+			}
+			cl := buildFakeClient(t, cluster, restore, internalSecret, sts, readDefaultS3Secret(t, "binlog-s3", cluster.Namespace))
+			r := reconciler(cl)
+			archive := &pitrArchiveStorage{objects: map[string]string{"binlog.index": "./binlog.000001\n"}}
+			if tt.metadata != "" {
+				archive.objects["binlog.000001.json"] = tt.metadata
+			}
+			r.NewStorageClient = func(_ context.Context, opts storage.Options) (storage.Storage, error) {
+				_, ok := opts.(*storage.S3Options)
+				require.True(t, ok)
+				if tt.storageErr {
+					return nil, errors.New("storage unavailable")
+				}
+				return archive, nil
+			}
+			req := controllerruntime.Request{NamespacedName: client.ObjectKeyFromObject(restore)}
+			result, err := r.Reconcile(ctx, req)
+			require.NoError(t, err)
+			current := new(apiv1.PerconaServerMySQLRestore)
+			require.NoError(t, cl.Get(ctx, req.NamespacedName, current))
+			assert.Equal(t, apiv1.RestoreError, current.Status.State)
+			assert.Contains(t, current.Status.StateDesc, tt.wantDesc)
+			currentCluster := new(apiv1.PerconaServerMySQL)
+			require.NoError(t, cl.Get(ctx, client.ObjectKeyFromObject(cluster), currentCluster))
+			assert.False(t, currentCluster.Spec.Pause)
+			jobs := new(batchv1.JobList)
+			require.NoError(t, cl.List(ctx, jobs))
+			assert.Empty(t, jobs.Items)
+			assert.Zero(t, result.RequeueAfter)
+		})
+	}
 }
 
 func TestRestoreFinishesWhenClusterIsReady(t *testing.T) {
@@ -1379,4 +1485,319 @@ func TestResolveIncrementalChainStorageClientError(t *testing.T) {
 	_, err := opts.resolveIncrementalChain(ctx)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "create storage client: auth failure")
+}
+
+func TestErroredRestoreIsNotRetriedUntilSpecChanges(t *testing.T) {
+	const (
+		namespace   = "some-namespace"
+		clusterName = "ps-cluster1"
+		restoreName = "restore1"
+		backupName  = "backup1"
+	)
+
+	ctx := t.Context()
+
+	newRestore := func() *apiv1.PerconaServerMySQLRestore {
+		cr := readDefaultRestore(t, restoreName, namespace)
+		cr.Generation = 1
+		cr.Spec.ClusterName = clusterName
+		cr.Spec.BackupName = backupName
+		cr.Spec.BackupSource = nil
+		return cr
+	}
+
+	cluster := readDefaultCluster(t, clusterName, namespace)
+	cluster.Generation = 1
+
+	reconcile := func(t *testing.T, cl client.Client) *apiv1.PerconaServerMySQLRestore {
+		t.Helper()
+
+		r := reconciler(cl)
+		if _, err := r.Reconcile(ctx, controllerruntime.Request{
+			Name:      restoreName,
+			Namespace: namespace,
+		}); err != nil {
+			t.Fatal(err, "failed to reconcile")
+		}
+
+		cr := new(apiv1.PerconaServerMySQLRestore)
+		if err := cl.Get(ctx, types.NamespacedName{Name: restoreName, Namespace: namespace}, cr); err != nil {
+			t.Fatal(err, "failed to get restore")
+		}
+		return cr
+	}
+
+	t.Run("the backup is missing: the restore errors out and records the generation", func(t *testing.T) {
+		cl := buildFakeClient(t, newRestore(), cluster.DeepCopy())
+
+		cr := reconcile(t, cl)
+		assert.Equal(t, apiv1.RestoreError, cr.Status.State)
+		assert.Equal(t, int64(1), cr.Status.ErroredGeneration)
+	})
+
+	t.Run("the backup appears later: the restore stays in error", func(t *testing.T) {
+		errored := newRestore()
+		errored.Status = apiv1.PerconaServerMySQLRestoreStatus{
+			State:             apiv1.RestoreError,
+			StateDesc:         "PerconaServerMySQLBackup backup1 in namespace some-namespace is not found",
+			ErroredGeneration: 1,
+		}
+		backup := &apiv1.PerconaServerMySQLBackup{
+			Name:      backupName,
+			Namespace: namespace,
+			Spec:      apiv1.PerconaServerMySQLBackupSpec{ClusterName: clusterName, StorageName: "s3-us-west"},
+			Status: apiv1.PerconaServerMySQLBackupStatus{
+				State:       apiv1.BackupSucceeded,
+				Destination: "s3://some-bucket/some-destination",
+			},
+		}
+		cl := buildFakeClient(t, errored, cluster.DeepCopy(), backup)
+
+		cr := reconcile(t, cl)
+		assert.Equal(t, apiv1.RestoreError, cr.Status.State)
+		assert.Equal(t, "PerconaServerMySQLBackup backup1 in namespace some-namespace is not found", cr.Status.StateDesc)
+
+		gotCluster := new(apiv1.PerconaServerMySQL)
+		require.NoError(t, cl.Get(ctx, types.NamespacedName{Name: clusterName, Namespace: namespace}, gotCluster))
+		assert.False(t, gotCluster.Spec.Pause, "the cluster must not be paused by a restore that errored out")
+	})
+
+	t.Run("the user changes the spec: the restore is retried", func(t *testing.T) {
+		errored := newRestore()
+		errored.Generation = 2
+		errored.Status = apiv1.PerconaServerMySQLRestoreStatus{
+			State:             apiv1.RestoreError,
+			StateDesc:         "PerconaServerMySQLBackup backup1 in namespace some-namespace is not found",
+			ErroredGeneration: 1,
+		}
+		cl := buildFakeClient(t, errored, cluster.DeepCopy())
+
+		cr := reconcile(t, cl)
+		// The backup is still missing, so the restore errors out again, but it was
+		// re-evaluated: the recorded generation follows the new spec.
+		assert.Equal(t, apiv1.RestoreError, cr.Status.State)
+		assert.Equal(t, int64(2), cr.Status.ErroredGeneration)
+	})
+
+	t.Run("a restore that errored out before the upgrade is never retried", func(t *testing.T) {
+		errored := newRestore()
+		errored.Status = apiv1.PerconaServerMySQLRestoreStatus{
+			State:     apiv1.RestoreError,
+			StateDesc: "PerconaServerMySQLBackup backup1 in namespace some-namespace is not found",
+		}
+		backup := &apiv1.PerconaServerMySQLBackup{
+			Name:      backupName,
+			Namespace: namespace,
+			Spec:      apiv1.PerconaServerMySQLBackupSpec{ClusterName: clusterName, StorageName: "s3-us-west"},
+			Status: apiv1.PerconaServerMySQLBackupStatus{
+				State:       apiv1.BackupSucceeded,
+				Destination: "s3://some-bucket/some-destination",
+			},
+		}
+		cl := buildFakeClient(t, errored, cluster.DeepCopy(), backup)
+
+		cr := reconcile(t, cl)
+		assert.Equal(t, apiv1.RestoreError, cr.Status.State)
+		assert.Zero(t, cr.Status.ErroredGeneration, "the status must be left untouched")
+
+		gotCluster := new(apiv1.PerconaServerMySQL)
+		require.NoError(t, cl.Get(ctx, types.NamespacedName{Name: clusterName, Namespace: namespace}, gotCluster))
+		assert.False(t, gotCluster.Spec.Pause, "the cluster must not be paused by a restore from before the upgrade")
+	})
+}
+
+func TestRestoreThatPausedTheClusterFails(t *testing.T) {
+	const (
+		namespace   = "some-namespace"
+		clusterName = "ps-cluster1"
+		restoreName = "restore1"
+		backupName  = "backup1"
+		storageName = "s3-storage"
+		secretName  = "aws-secret"
+	)
+
+	ctx := t.Context()
+
+	newRestore := func(state apiv1.RestoreState) *apiv1.PerconaServerMySQLRestore {
+		cr := readDefaultRestore(t, restoreName, namespace)
+		cr.Generation = 1
+		cr.Spec.ClusterName = clusterName
+		cr.Spec.BackupName = backupName
+		cr.Spec.BackupSource = nil
+		cr.Status.State = state
+		return cr
+	}
+
+	newCluster := func(paused bool) *apiv1.PerconaServerMySQL {
+		cluster := readDefaultCluster(t, clusterName, namespace)
+		cluster.Generation = 1
+		cluster.Spec.Pause = paused
+		cluster.Spec.Backup.Storages = map[string]*apiv1.BackupStorageSpec{
+			storageName: {
+				Type: apiv1.BackupStorageS3,
+				S3:   &apiv1.BackupStorageS3Spec{Bucket: "some-bucket", CredentialsSecret: secretName},
+			},
+		}
+		cluster.Spec.Backup.InitContainer = &apiv1.InitContainerSpec{Image: "operator-image"}
+		// pauseCluster also waits for the proxies to go; keep the fixture to the
+		// MySQL pods, which is what the pause is about here.
+		cluster.Spec.Proxy.HAProxy = nil
+		cluster.Spec.Proxy.Router = nil
+		return cluster
+	}
+
+	newBackup := func() *apiv1.PerconaServerMySQLBackup {
+		return &apiv1.PerconaServerMySQLBackup{
+			Name:      backupName,
+			Namespace: namespace,
+			Spec:      apiv1.PerconaServerMySQLBackupSpec{ClusterName: clusterName, StorageName: storageName},
+			Status: apiv1.PerconaServerMySQLBackupStatus{
+				State: apiv1.BackupSucceeded,
+				Storage: &apiv1.BackupStorageSpec{
+					Type: apiv1.BackupStorageS3,
+					S3:   &apiv1.BackupStorageS3Spec{Bucket: "some-bucket", CredentialsSecret: secretName},
+				},
+			},
+		}
+	}
+
+	secret := &corev1.Secret{
+		Name:      secretName,
+		Namespace: namespace,
+		Data: map[string][]byte{
+			"AWS_ACCESS_KEY_ID":     []byte("somekey"),
+			"AWS_SECRET_ACCESS_KEY": []byte("somekey"),
+		},
+	}
+
+	// mysqlPods is the MySQL StatefulSet with that many pods still around:
+	// pauseCluster waits while it is above zero and goes on once it is zero.
+	mysqlPods := func(cluster *apiv1.PerconaServerMySQL, n int32) *appsv1.StatefulSet {
+		return &appsv1.StatefulSet{
+			Name:      mysql.Name(cluster),
+			Namespace: namespace,
+			Status:    appsv1.StatefulSetStatus{Replicas: n},
+		}
+	}
+
+	reconcile := func(t *testing.T, cl client.Client) (controllerruntime.Result, *apiv1.PerconaServerMySQLRestore, *apiv1.PerconaServerMySQL) {
+		t.Helper()
+
+		r := reconciler(cl)
+		r.NewStorageClient = func(_ context.Context, opts storage.Options) (storage.Storage, error) {
+			fake, err := fakestorage.NewFakeClient(ctx, opts)
+			if err != nil {
+				return nil, err
+			}
+			return &fakeStorageClient{Storage: fake}, nil
+		}
+		result, err := r.Reconcile(ctx, controllerruntime.Request{Name: restoreName, Namespace: namespace})
+		require.NoError(t, err)
+
+		cr := new(apiv1.PerconaServerMySQLRestore)
+		require.NoError(t, cl.Get(ctx, types.NamespacedName{Name: restoreName, Namespace: namespace}, cr))
+		cluster := new(apiv1.PerconaServerMySQL)
+		require.NoError(t, cl.Get(ctx, types.NamespacedName{Name: clusterName, Namespace: namespace}, cluster))
+		return result, cr, cluster
+	}
+
+	jobs := func(t *testing.T, cl client.Client) []batchv1.Job {
+		t.Helper()
+		list := new(batchv1.JobList)
+		require.NoError(t, cl.List(ctx, list))
+		return list.Items
+	}
+
+	t.Run("the cluster is untouched: the restore errors out", func(t *testing.T) {
+		cluster := newCluster(false)
+		cl := buildFakeClient(t, newRestore(apiv1.RestoreNew), cluster, secret, mysqlPods(cluster, 3))
+
+		_, cr, cluster := reconcile(t, cl)
+		assert.Equal(t, apiv1.RestoreError, cr.Status.State)
+		assert.Equal(t, int64(1), cr.Status.ErroredGeneration)
+		assert.False(t, cluster.Spec.Pause)
+	})
+
+	t.Run("the checks pass: the restore is Starting and the cluster is stopping", func(t *testing.T) {
+		cluster := newCluster(false)
+		cl := buildFakeClient(t, newRestore(apiv1.RestoreNew), cluster, newBackup(), secret, mysqlPods(cluster, 3))
+
+		result, cr, cluster := reconcile(t, cl)
+		assert.Equal(t, apiv1.RestoreStarting, cr.Status.State, "a restore that is stopping the cluster says so")
+		assert.True(t, cluster.Spec.Pause)
+		assert.Equal(t, 5*time.Second, result.RequeueAfter, "waiting for the pods to go")
+		assert.Empty(t, jobs(t, cl))
+	})
+
+	t.Run("a Starting restore does not run the checks again", func(t *testing.T) {
+		// The cluster lost the storage the backup points to, which validation
+		// rejects. A restore that is already Starting must not notice.
+		broken := func() *apiv1.PerconaServerMySQL {
+			cluster := newCluster(true)
+			cluster.Spec.Backup.Storages = nil
+			return cluster
+		}
+
+		cluster := broken()
+		cl := buildFakeClient(t, newRestore(apiv1.RestoreStarting), cluster, newBackup(), secret, mysqlPods(cluster, 3))
+		result, cr, _ := reconcile(t, cl)
+		assert.Equal(t, apiv1.RestoreStarting, cr.Status.State)
+		assert.Empty(t, cr.Status.StateDesc)
+		assert.Equal(t, 5*time.Second, result.RequeueAfter)
+
+		// The same cluster seen by a restore that has not started yet.
+		cluster = broken()
+		cl = buildFakeClient(t, newRestore(apiv1.RestoreNew), cluster, newBackup(), secret, mysqlPods(cluster, 3))
+		_, cr, _ = reconcile(t, cl)
+		assert.Equal(t, apiv1.RestoreError, cr.Status.State)
+		assert.Contains(t, cr.Status.StateDesc, "not found in spec.backup.storages")
+	})
+
+	t.Run("it fails after the cluster stopped: Failed, and the cluster stays paused", func(t *testing.T) {
+		// Every pod is gone, and the backup went with them. Nothing has touched
+		// the data, but the restore does not get a second go at the cluster.
+		cluster := newCluster(true)
+		cl := buildFakeClient(t, newRestore(apiv1.RestoreStarting), cluster, secret, mysqlPods(cluster, 0))
+
+		_, cr, cluster := reconcile(t, cl)
+		assert.Equal(t, apiv1.RestoreFailed, cr.Status.State)
+		assert.NotEmpty(t, cr.Status.StateDesc, "the reason belongs in the status, not only in the log")
+		assert.True(t, cluster.Spec.Pause, "the operator never starts a cluster on its own")
+		assert.Empty(t, jobs(t, cl))
+	})
+
+	t.Run("a Running restore does not run the checks either", func(t *testing.T) {
+		// The job is running and the cluster lost the storage the backup points
+		// to. The checks are long behind this restore: failing them now would
+		// only leave it in Error with the job still going and the cluster down.
+		cluster := newCluster(true)
+		cluster.Spec.Backup.Storages = nil
+		cr := newRestore(apiv1.RestoreRunning)
+		job := &batchv1.Job{
+			Name:      xtrabackup.RestoreJobName(cluster, cr),
+			Namespace: namespace,
+			Status:    batchv1.JobStatus{Active: 1},
+		}
+		cl := buildFakeClient(t, cr, cluster, newBackup(), secret, mysqlPods(cluster, 0), job)
+
+		_, cr, cluster = reconcile(t, cl)
+		assert.Equal(t, apiv1.RestoreRunning, cr.Status.State)
+		assert.Empty(t, cr.Status.StateDesc)
+		assert.True(t, cluster.Spec.Pause)
+	})
+
+	t.Run("a failed restore is not retried after a spec change and keeps its reason", func(t *testing.T) {
+		cr := newRestore(apiv1.RestoreFailed)
+		cr.Generation = 2
+		cr.Status.StateDesc = "get restorer: the backup went away"
+		cluster := newCluster(true)
+		cl := buildFakeClient(t, cr, cluster, newBackup(), secret, mysqlPods(cluster, 0))
+
+		_, cr, cluster = reconcile(t, cl)
+		assert.Equal(t, apiv1.RestoreFailed, cr.Status.State)
+		assert.Equal(t, "get restorer: the backup went away", cr.Status.StateDesc,
+			"the reason is what the user has to go on, every later pass must leave it alone")
+		assert.True(t, cluster.Spec.Pause)
+		assert.Empty(t, jobs(t, cl))
+	})
 }

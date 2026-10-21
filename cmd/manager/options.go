@@ -57,7 +57,7 @@ func configureOptions(metricsAddr, probeAddr string, enableLeaderElection bool) 
 }
 
 func (o *operatorOptions) configureNamespaces() error {
-	if o.env.OperatorNamespace != nil {
+	if o.env.OperatorNamespace != nil && *o.env.OperatorNamespace != "" {
 		o.operatorNamespace = *o.env.OperatorNamespace
 	} else {
 		var err error
@@ -85,14 +85,12 @@ func (o *operatorOptions) configureLeaderElection(enableLeaderElectionFlag bool)
 	}
 
 	o.options.LeaderElectionID = defaultElectionID
-	if o.options.LeaderElection {
-		o.options.LeaderElectionNamespace = o.operatorNamespace
-		if name := o.env.LeaderElectionID; name != "" {
-			if errs := validation.IsDNS1123Subdomain(name); len(errs) > 0 {
-				return errors.Errorf("PSO_LEADER_ELECTION_LEASE_NAME must be a valid DNS subdomain: %s", strings.Join(errs, ", "))
-			}
-			o.options.LeaderElectionID = name
+	o.options.LeaderElectionNamespace = o.operatorNamespace
+	if name := o.env.LeaderElectionID; name != "" {
+		if errs := validation.IsDNS1123Subdomain(name); len(errs) > 0 {
+			return errors.Errorf("PSO_LEADER_ELECTION_LEASE_NAME must be a valid DNS subdomain: %s", strings.Join(errs, ", "))
 		}
+		o.options.LeaderElectionID = name
 	}
 
 	o.options.LeaseDuration = &o.env.LeaseDuration

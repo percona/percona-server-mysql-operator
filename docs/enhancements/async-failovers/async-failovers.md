@@ -17,12 +17,14 @@ The salvage operation (`cmd/failover`) performs these high-level steps on the fa
 3. Flush relay logs (`FLUSH RELAY LOGS`)
 4. Read the replica's positions (`Source_Log_File`, `Read_Source_Log_Pos`, `Relay_Log_File`)
 5. Fetch the missing binary logs from the failed primary
-6. Truncate a torn tail off the last fetched binary log
+6. Trim the fetched binary logs back to their last complete transaction
 7. Splice the fetched binary logs into the latest closed relay log
 8. Start the applier (`START REPLICA SQL_THREAD`)
-9. Wait until the applier works through the spliced events
+9. Wait until the applier executes every transaction it received or fetched
 
 On success IO_THREAD stays stopped: the replica is about to be promoted, and there's no source left to receive from.
+
+If an attempt fails after step 2 and before it starts the applier itself, it starts the applier again (`START REPLICA SQL_THREAD`, on a fresh 10-second context, since the failure is often the attempt's own deadline). Nothing it can't apply is left in the relay log, because the splice either never ran or was rolled back. A failure to start it is only logged. The receiver stays down, because the next attempt would stop it again. Without this, an attempt that times out waiting for the source and is followed by `onTimeout: Abort` leaves the candidate with both threads stopped: if the source comes back later, no hook runs to start them. Neither thread is started when a splice couldn't be rolled back (`errSpliceNotRolledBack`), because the applier would stop on the partial event.
 
 ### Fetching binary logs from failed primary
 
@@ -57,7 +59,7 @@ If the old primary's pod can't be scheduled or reached over the network, the att
 1. `cmd/orc-handler` waits up to 2 minutes for the source pod to exist and get an IP (`sourcePodWait`).
 2. `cmd/failover` gives up once the source sends nothing for 2 minutes (`-stall-timeout`). This covers the sidecar not listening yet, the response headers and every read of the body. A transfer that keeps making progress is never cut by it.
 
-The failover timeout (default `6h`) is not per attempt. It spans all of orchestrator's retries and is counted from the first attempt for this source. `cmd/orc-handler` records that moment in a `seen` mark (`orc-handler/seen/<source>`) and passes each attempt only what's left of the budget as `failover -timeout`. Once the budget is spent, the `onTimeout` policy applies. A mark that no attempt refreshed for an hour is dropped, so an unrelated later failure of the same source starts with the full budget.
+The failover timeout (default `1h`) is not per attempt. It spans all of orchestrator's retries and is counted from the first attempt for this source. `cmd/orc-handler` records that moment in a `seen` mark (`orc-handler/seen/<source>`) and passes each attempt only what's left of the budget as `failover -timeout`. Once the budget is spent, the `onTimeout` policy applies. A mark that no attempt refreshed for an hour is dropped, so an unrelated later failure of the same source starts with the full budget.
 
 ### Updating replica relay logs
 
@@ -86,12 +88,36 @@ Failover first runs `STOP REPLICA` to stop threads and then `FLUSH RELAY LOGS`. 
 
 Then we splice binary logs into `000002` and run `START REPLICA SQL_THREAD`. SQL thread continues reading from `cluster1-mysql-1-relay-bin.000002` and starts applying new events we appended to it. For each binary log except the first, we also append an artificial rotate event into relay log so `Relay_Source_Log_File` is updated accordingly. `Relay_Source_Log_File` is important for orchestrator to decide the suitable primary for promotion.
 
+### Trimming the fetched binary logs
+
+Before splicing, `cmd/failover` walks every fetched log event by event and cuts each one back to the end of its last complete transaction. A transaction counts as complete once all `transaction_length` bytes its GTID event declares are present. This drops:
+- a partial event at the end of the last log, which the source died while writing;
+- an incomplete transaction at the end of the last log, which the source never committed;
+- a trailing Stop event, which a cleanly shut down source writes last.
+
+Only the source's last write can be torn. If any earlier log ends inside an event or a transaction, the logs can't be trusted and the attempt fails. A log holding an anonymous GTID fails the attempt too, since the source doesn't use GTIDs.
+
+The relay log can also end inside a transaction: the receiver wrote its GTID event and some of its events before the source went away. `cmd/failover` finds that transaction in the newest relay logs and works out how much of it was received by comparing where it starts on the source with `Read_Source_Log_Pos`. The fetch starts at that position, so the first fetched log must begin with exactly the rest of the transaction, or the attempt fails. If the rest is incomplete too, the first log is cut to nothing and the relay log keeps only the start, which the applier never executes. Finding this transaction is best-effort: if it fails, `cmd/failover` logs a warning and the drain doesn't wait for that transaction.
+
+Trimming returns the GTIDs of the complete transactions the fetched logs carry, the carried one included.
+
+### Waiting for the applier
+
+The drain is finished only when all of these hold:
+1. The applier reports it has read all relay logs (`Replica_SQL_Running_State`).
+2. `Relay_Log_File` and `Relay_Log_Pos` didn't move since the previous poll.
+3. `Executed_Gtid_Set` holds `Retrieved_Gtid_Set` and every GTID trimming returned.
+
+The position alone can't prove the drain finished. `Relay_Log_Pos` never moves past the Rotate and Stop events at the end of a relay log, so a drained applier and one stopped short of them look the same. The GTIDs tell them apart.
+
+The wait fails at once if the applier stops or reports an error, and it stands down if the source comes back (see below).
+
 ### What if the old primary comes back and becomes ready to serve while replica applies relay logs?
 
 Failover binary starts probing old primary's mysqld (using `Source_Host`) before touching anything on the replica. This probe does the following:
 
 1. Connect to `Source_Host` using operator user and ping
-2. Ensure it's writable by checking `read_only`. A read-only source counts as not back. Every pod starts read-only, nothing in the pod ever clears it, and only an orchestrator promotion makes it writable. So a primary that merely restarted comes back read-only and never causes a stand-down. Handing the replica back to it would leave the cluster with no writable primary. **This is a bug in current implementation and will be fixed in another PR.**
+2. Ensure it's a primary. A writable source is one, whatever channel it carries: a promoted primary can keep the detached `//host` channel orchestrator leaves when `RESET SLAVE ALL` fails, and failing over past it would leave two writers. A restarted pod always comes back read-only, and only orchestrator makes it writable again, so the probe doesn't wait for that. A read-only source is a primary only if it has no replication channel of its own. One that bootstrapped as a replica, for example of the candidate after a GTID tie, is not a primary coming back: handing the candidate to it would make the two replicate from each other.
 3. Ensure replica doesn't hold any transaction that the source lost. If it does, we should continue failover.
 
 The probe polls every 5 seconds, and it takes two consecutive successes to abort the failover. It runs at three points:
@@ -109,7 +135,12 @@ When the probe confirms the source is back, the worker hands the replica back in
 
 `cmd/orc-handler` finds the marker in the worker's output. The hook still fails, so orchestrator abandons the recovery and doesn't promote anything, but the hook also:
 - clears the source's `seen` mark, so the next failure of this source gets the full budget;
-- mutes the `FailoverFailed` event for this source for the dedup interval, because the cluster has its primary back and there's nothing to warn about.
+- mutes the `FailoverFailed` event for this source for the dedup interval, because the cluster has its primary back and there's nothing to warn about;
+- runs `failover -start-receiver` on every replica orchestrator lists under the source. A receiver gives up after `ASYNC_SOURCE_RETRY_COUNT` × `ASYNC_SOURCE_CONNECT_RETRY` (3 minutes in the example CR), and nothing else restarts it once the source is back: orchestrator has no recovery for replicas that stopped replicating from a live master. The worker takes the failover lock and runs `START REPLICA IO_THREAD` only if the channel replicates from the source and its receiver is `No`. A `Connecting` receiver, the candidate's already-started one and the applier are left alone. This runs while our recovery is still active, so orchestrator isn't repointing these replicas at the same time. Failures are only logged. A receiver that gave up while the source was down without any failover running (for example within `RecoveryPeriodBlockSeconds`) isn't covered.
+
+Nothing in the hook makes the source writable. Once the recovery is abandoned and acknowledged, the source is alive, so there's no `DeadMaster` analysis left to promote anything. With the candidate's receiver reconnected, orchestrator sees a read-only master with healthy replicas (`NoWriteableMasterStructureWarning`), and `RecoverNonWriteableMaster` makes it writable under its own recovery registration. The operator then moves the primary label back and acknowledges that recovery through the [stale recovery backstop](#stale-recovery-backstop). If the source comes back after the last probe, the candidate is promoted instead. The source stays read-only, because our recovery is still active and nothing else may register one.
+
+`RecoverNonWriteableMaster` needs a replica of the source with both its IO and SQL threads running. If none gets there, for example in a two-pod cluster whose candidate's applier stopped on the splice or whose receiver never reconnected, the source stays read-only and the cluster has no writable primary. A force-promote is refused while orchestrator can reach it. The way out is to fix the replica's replication (`SHOW REPLICA STATUS` names the error), after which orchestrator makes the source writable on its own.
 
 ## Orchestrating the failover via Orchestrator's hooks
 
@@ -137,7 +168,7 @@ Orchestrator performs the following during a graceful switchover:
 2. Wait for replica to catch up
 3. Promote
 
-The catch-up wait is bounded by `spec.orchestrator.failover.switchoverCatchUpTimeout` (default `5m`), which the operator maps to orchestrator's `ReasonableMaintenanceReplicationLagSeconds`. Before starting a switchover, the operator downtimes the old primary in orchestrator for twice that bound and ends the downtime once the switchover returns. The downtime protects step 1. While the old primary is read-only, orchestrator's own analysis reports it as a read-only master, and with `RecoverNonWriteableMaster: true` it would set `read_only=false` again within a second. It can do that because the takeover doesn't register its recovery until after the wait. Orchestrator skips recovering a downtimed instance, and the takeover itself ignores the downtime. The downtime also expires on its own, so an operator that dies mid-switchover can't leave an instance that orchestrator refuses to recover.
+Orchestrator's `ReasonableMaintenanceReplicationLagSeconds` controls both sides of step 2. Orchestrator refuses the takeover before step 1 if the candidate lags more than this, and it waits at most this long in step 2. So the value bounds how long a switchover can block writes, and nobody has to guess the catch-up time. A lagging candidate fails the takeover without freezing anything, and the operator retries it on the next reconcile. From `crVersion` 1.3.0 on, the operator sets it to twice `ReasonableReplicationLagSeconds` (default `60`, so `120`). That's the same ratio as orchestrator's own defaults. Users can override either key in `spec.orchestrator.configuration`, and the derived value follows a user's `ReasonableReplicationLagSeconds`. Older `crVersion`s keep the `300` baked into the image. Before starting a switchover, the operator downtimes the old primary in orchestrator for twice that bound and ends the downtime once the switchover returns. The downtime protects step 1. While the old primary is read-only, orchestrator's own analysis reports it as a read-only master, and with `RecoverNonWriteableMaster: true` it would set `read_only=false` again within a second. It can do that because the takeover doesn't register its recovery until after the wait. Orchestrator skips recovering a downtimed instance, and the takeover itself ignores the downtime. The downtime also expires on its own, so an operator that dies mid-switchover can't leave an instance that orchestrator refuses to recover.
 
 ## Overseeing the recovery via Operator
 
@@ -167,10 +198,20 @@ This is the way out of a blocked failover, for when the old primary's binary log
 
 The operator registers the candidate with `RegisterCandidate` and runs orchestrator's `force-master-takeover`. The hook skips planned takeovers, so nothing is salvaged. Promotions, failures and refusals are reported as `FailoverForced` warning events.
 
-The request is refused while the cluster has a writable primary. A forced takeover neither fences nor re-points the old primary, so if it still takes writes, the promoted replica misses them and the old primary runs on its own. The request is also refused when orchestrator can't resolve the cluster or its primary.
+The request is refused while the cluster has a writable primary. A forced takeover neither fences nor re-points the old primary, so if it still takes writes, the promoted replica misses them and the old primary runs on its own. The request is also refused when orchestrator can't resolve the cluster or its primary, including when it answers that the cluster has no master.
 
-The annotation is removed once the request is handled: promoted, failed, refused, or the candidate is already the primary. It stays, and the next reconcile retries, in two cases:
+A stand-down can make the old primary writable between orchestrator's last poll and the takeover, so the operator checks it again first:
+1. It downtimes the old primary (`force-promote`, 5 minutes), which keeps orchestrator's own recoveries off it. If the old primary is already downtimed for another reason, such as a graceful switchover, the request waits for the next reconcile: a downtime is one row per instance, so ours would replace that one and ending ours would drop it.
+2. It has orchestrator re-read it (`api/refresh`).
+   - If orchestrator can reach it, the request is refused, writable or not. A read-only old primary that answers can't be taken over anyway, because orchestrator's `force-master-takeover` only finds a master it sees writable.
+   - If orchestrator reports it can't read the instance and its last check was already failing, the takeover goes ahead. That old primary comes back read-only, and with its replicas gone, orchestrator never makes it writable again.
+   - Any other error leaves the annotation for the next reconcile: the exec into orchestrator failing, an answer that can't be parsed, or the instance read failing after a refresh that did reach it.
+3. The downtime ends once the request is handled, except after a successful takeover. By then orchestrator has downtimed the old primary itself (`lost-in-recovery`), replacing ours, and ending it would drop that one.
+
+The annotation is removed once the request is handled: promoted, failed, refused, or the candidate is already the primary. It stays, and the next reconcile retries, in four cases:
 - no orchestrator pod is ready;
+- the old primary is downtimed for another reason, or downtiming it fails;
+- the re-read of the old primary fails in any way other than orchestrator reporting it unreachable (above);
 - the takeover fails with `ErrRecoveryNotAttempted` (or registering the candidate fails). After an aborted failover, orchestrator retries the dead primary's recovery every second, and those retries hold the recovery's unique key, so a takeover can lose the race to one of them. Retrying on the next reconcile gets it through.
 
 The annotation is served even for a single-pod cluster, where the condition above isn't set.
@@ -199,16 +240,14 @@ The failover is configured under `spec.orchestrator.failover`:
 spec:
   orchestrator:
     failover:
-      timeout: 6h
+      timeout: 1h
       onTimeout: Abort
-      switchoverCatchUpTimeout: 5m
 ```
 
 | Field | Default | Meaning |
 |---|---|---|
-| `timeout` | `6h` | How long the cluster tries to recover the transactions stranded on the dead primary. It spans every retry and is counted from the first attempt (see [retry semantics](#what-if-the-old-primarys-pod-is-unreachable)). |
+| `timeout` | `1h` | How long the cluster tries to recover the transactions stranded on the dead primary. It spans every retry and is counted from the first attempt (see [retry semantics](#what-if-the-old-primarys-pod-is-unreachable)). |
 | `onTimeout` | `Abort` | What happens once `timeout` expires: `Abort` or `ForceWithPossibleDataLoss`. |
-| `switchoverCatchUpTimeout` | `5m` | How long a graceful switchover waits for the candidate to catch up before promoting it. |
 
 The block only applies to async clusters. Setting it on a group replication cluster fails validation. The whole mechanism, meaning the hooks and every derived orchestrator setting, is only rendered for `crVersion` 1.3.0 or later. On an older `crVersion` the block is validated but has no effect.
 
@@ -219,7 +258,6 @@ The operator derives these orchestrator settings from the block, and it ignores 
 | `PreFailoverProcesses` | `timeout`, `onTimeout` (passed to `orc-handler failover`) |
 | `RecoveryPeriodBlockSeconds` | `timeout` + 1h |
 | `UnseenInstanceForgetHours` | ceil(`timeout` + 1h) |
-| `ReasonableMaintenanceReplicationLagSeconds` | `switchoverCatchUpTimeout` |
 
 The post hooks and orchestrator's own promotion gates (`FailMasterPromotionOnLagMinutes`, `DelayMasterPromotionIfSQLThreadNotUpToDate`) are also closed to overrides from 1.3.0 on. See [forced orchestrator settings](#forced-orchestrator-settings).
 
@@ -229,7 +267,7 @@ Once the budget is spent, every later attempt goes straight to the `onTimeout` p
 
 **`Abort`** (default): the hook fails, so orchestrator abandons the recovery and every pod stays read-only. The hook records a `FailoverBlocked` warning event that names the source and the timeout and points at the `percona.com/force-promote-with-possible-data-loss` annotation. Orchestrator keeps retrying, and each retry fails the same way at once. The event is deduplicated per source (see [events](#events)). The cluster stays blocked until someone annotates it.
 
-**`ForceWithPossibleDataLoss`**: the hook picks the candidate the same way a normal failover does, but skips the salvage. Before promoting, it still runs `failover -probe` on the candidate (see [probe timing](#what-if-the-old-primary-comes-back-and-becomes-ready-to-serve-while-replica-applies-relay-logs)). If the old primary is back, writable, and holds every transaction the candidate has, the candidate stands down instead, and nothing is promoted: promoting would leave two writable primaries. Otherwise the hook registers the candidate (`RegisterCandidate`), records a `FailoverForced` warning event saying the old primary's undelivered transactions are lost, and exits 0 so orchestrator promotes it. If the source has no replicas, the hook exits 0 with nothing to promote.
+**`ForceWithPossibleDataLoss`**: the hook picks the candidate the same way a normal failover does, but skips the salvage. Before promoting, it still runs `failover -probe` on the candidate (see [probe timing](#what-if-the-old-primary-comes-back-and-becomes-ready-to-serve-while-replica-applies-relay-logs)). If the old primary is back as a primary (see step 2 of the probe) and holds every transaction the candidate has, the candidate stands down instead, and nothing is promoted: promoting would leave two writable primaries. Otherwise the hook registers the candidate (`RegisterCandidate`), records a `FailoverForced` warning event saying the old primary's undelivered transactions are lost, and exits 0 so orchestrator promotes it. If the source has no replicas, the hook exits 0 with nothing to promote.
 
 ### Clock restart on a raft leader change
 
@@ -247,10 +285,9 @@ The pre hook is the only thing that decides whether the candidate is safe to pro
 | `DelayMasterPromotionIfSQLThreadNotUpToDate` | `false` | Keeps orchestrator from adding its own apply gate on top of the hook, which has already waited for the applier to work through the spliced events. `FailMasterPromotionIfSQLThreadNotUpToDate` stays `false` for the same reason. It was already reserved before 1.3.0. |
 | `UnseenInstanceForgetHours` | ceil(`timeout` + 1h) | Orchestrator forgets an instance it hasn't seen for this long, and the dead primary is exactly such an instance. Once its row is gone, there's no `DeadMaster` analysis left to retry the hook for, and no primary for a forced takeover to demote. So it has to outlast the failover timeout. |
 | `RecoveryPeriodBlockSeconds` | `timeout` + 1h | Orchestrator measures this from the start of a recovery. A shorter value would let it register a second recovery of the same failure while the hook is still working on the first. `finish` acknowledges the recovery when it's over, which ends the block early, so a promoted cluster isn't left unrecoverable for this long. |
-| `ReasonableMaintenanceReplicationLagSeconds` | `switchoverCatchUpTimeout` | Bounds the graceful switchover's catch-up wait. |
 | `PreFailoverProcesses`, `PostFailoverProcesses`, `PostUnsuccessfulFailoverProcesses` | the `orc-handler` hooks | The mechanism itself. |
 
-With the default `6h` timeout, the shipped `build/orchestrator.conf.json` already carries the derived values (`RecoveryPeriodBlockSeconds: 25200`, `UnseenInstanceForgetHours: 7`).
+With the default `1h` timeout, the shipped `build/orchestrator.conf.json` already carries the derived values (`RecoveryPeriodBlockSeconds: 7200`, `UnseenInstanceForgetHours: 2`).
 
 ### Hook deadline (`hookTimeout`)
 
@@ -321,6 +358,10 @@ These changes sit outside the failover path, but without them a failover fails o
 ## Assumptions and limitations
 
 - **Durable commits on the primary.** "Zero data loss" assumes `sync_binlog=1` and `innodb_flush_log_at_trx_commit=1` on every pod. These are MySQL's defaults and the operator doesn't change them, but it doesn't enforce them either. With either relaxed, a primary that crashes can lose transactions it acknowledged to clients before they reached the binary log on disk, and no salvage can bring those back.
+- **Orchestrator behaviour the stand-down relies on.** The design assumes orchestrator runs `NoWriteableMaster` recovery only for a reachable read-only master with at least one replica whose IO and SQL threads both run, skips downtimed instances in periodic recoveries, and finds the master for `force-master-takeover` only through a writable backend row.
+- **Writable but unreachable primary.** A primary that is writable but unreachable from orchestrator (a network partition, a paused process) can still take writes after a promotion. Neither the hook nor the force-promote check can see it.
+- **Read-only old primary that holds less.** A reachable, read-only old primary that holds less than the candidate (only possible with relaxed durability settings) can't be force-promoted past.
 - **Durable relay logs on the candidate.** The claim that a transaction in a replica's relay log is durable depends on the replica's relay log settings. The operator sets none of them, so MySQL's defaults apply. `sync_relay_log=10000` means a host crash can lose recently received relay log events. With `relay_log_recovery=ON`, a restart discards every relay log event not yet applied, the spliced events included, and resets the received position to the applied one. Either way the next failover attempt reads the replica's position again and fetches the missing range from the source's sidecar. This costs a retry rather than data, as long as the old primary's binary logs can still be served.
+- **GTIDs with transaction lengths.** Trimming finds transaction boundaries through the `transaction_length` that GTID events carry from MySQL 8.0.2 on, and refuses a source that writes anonymous GTIDs. The entrypoint always sets `gtid-mode=ON`, so this only guards against a misconfigured source.
 - **Purged binary logs.** If the source no longer has the binary log the replica last read, because it expired or was purged, the sidecar answers `404`. Every attempt fails the same way until the timeout expires and `onTimeout` applies. Nothing can salvage those transactions.
 - **Lost PVC on the old primary.** The salvage reads the old primary's binary logs from its data volume. If the volume is gone, the transactions only it held are gone too. Nothing can salvage them, and the failover can only end through `onTimeout` or the force-promote annotation.

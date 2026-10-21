@@ -2533,6 +2533,9 @@ spec:
               completed:
                 format: date-time
                 type: string
+              erroredGeneration:
+                format: int64
+                type: integer
               state:
                 type: string
               stateDescription:

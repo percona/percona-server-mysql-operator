@@ -1,6 +1,5 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
-timeout: 900
 commands:
   - script: |-
       set -o errexit
@@ -33,6 +32,54 @@ commands:
           retry=$((retry + 1))
       done
 
+      # the candidate also has rows it received and has yet to apply, as a
+      # lagging replica would: the hook has to wait for those as well as for
+      # what it fetches, or promoting it throws them away with the relay log.
+      # a stopped applier queues them
+      release_lock() {
+          for id in $(run_mysql "SELECT ID FROM information_schema.PROCESSLIST WHERE INFO LIKE 'SELECT SLEEP(900)%'" "-h ${ahead}.${cluster}-mysql"); do
+              run_mysql "KILL ${id}" "-h ${ahead}.${cluster}-mysql"
+          done
+      }
+      trap 'release_lock || true' EXIT
+
+      run_mysql "STOP REPLICA SQL_THREAD" "-h ${ahead}.${cluster}-mysql"
+
+      run_mysql "INSERT myDB.myTable (id) VALUES (100601); INSERT myDB.myTable (id) VALUES (100602); INSERT myDB.myTable (id) VALUES (100603)" \
+          "-h $(get_haproxy_svc "${cluster}")"
+
+      primary_gtids=$(run_mysql "SELECT REPLACE(@@gtid_executed, '\n', '')" "-h ${primary_host}")
+      retry=0
+      until [[ $(run_mysql "SELECT GTID_SUBSET('${primary_gtids}', RECEIVED_TRANSACTION_SET) FROM performance_schema.replication_connection_status WHERE CHANNEL_NAME=''" "-h ${ahead}.${cluster}-mysql") == "1" ]]; do
+          if [[ ${retry} -ge 30 ]]; then
+              echo "${ahead} never received rows 100601-100603"
+              exit 1
+          fi
+          sleep 1
+          retry=$((retry + 1))
+      done
+
+      queued=$(run_mysql "SELECT COUNT(*) FROM myDB.myTable WHERE id BETWEEN 100601 AND 100603" "-h ${ahead}.${cluster}-mysql")
+      if [[ ${queued} != "0" ]]; then
+          echo "${ahead} applied ${queued} of rows 100601-100603 with its applier stopped"
+          exit 1
+      fi
+
+      # the lock blocks the applier once the hook restarts it after the splice.
+      # it is taken while the applier is stopped: a worker waiting on it mid
+      # transaction would hold up the hook's STOP REPLICA instead
+      run_mysql "LOCK TABLES myDB.myTable READ; SELECT SLEEP(900)" "-h ${ahead}.${cluster}-mysql" >/dev/null 2>&1 &
+
+      retry=0
+      until [[ -n $(run_mysql "SELECT ID FROM information_schema.PROCESSLIST WHERE INFO LIKE 'SELECT SLEEP(900)%'" "-h ${ahead}.${cluster}-mysql") ]]; do
+          if [[ ${retry} -ge 24 ]]; then
+              echo "${ahead} never started holding the read lock"
+              exit 1
+          fi
+          sleep 5
+          retry=$((retry + 1))
+      done
+
       run_mysql "STOP REPLICA IO_THREAD" "-h ${ahead}.${cluster}-mysql"
 
       # The row has to be on the primary's binary log and nowhere else for the
@@ -45,13 +92,56 @@ commands:
       # only append the tail of the one it was on.
       run_mysql "FLUSH BINARY LOGS" "-h ${primary_host}"
       run_mysql "INSERT myDB.myTable (id) VALUES (100501)" "-h $(get_haproxy_svc "${cluster}")"
+      # tagged GTIDs exist since 8.3 and the binary log carries them in an event
+      # of their own, which the failover has to read like any other
+      if [[ ${MYSQL_VERSION} != "8.0" ]]; then
+          run_mysql "SET gtid_next='AUTOMATIC:failover'; INSERT myDB.myTable (id) VALUES (100510)" "-h $(get_haproxy_svc "${cluster}")"
+      fi
       run_mysql "FLUSH BINARY LOGS" "-h ${primary_host}"
 
+      # A primary that comes back while the failover runs makes the candidate
+      # stand down, which step 09 covers. Here the restarted pod parks in the
+      # entrypoint without starting mysqld until the promotion lands.
+      kubectl -n "${NAMESPACE}" exec "${primary_before}" -c mysql -- touch /var/lib/mysql/sleep-forever
+      trap 'release_lock || true; kubectl -n "${NAMESPACE}" exec "${primary_before}" -c mysql -- rm -f /var/lib/mysql/sleep-forever || true' EXIT
+
       kubectl -n "${NAMESPACE}" delete pod "${primary_before}" --force --grace-period=0
+
+      # the worker has spliced once it restarts the applier, which blocks on the
+      # lock again. nothing may be promoted while the queued rows are unapplied
+      retry=0
+      until kubectl -n "${NAMESPACE}" exec "${ahead}" -c mysql -- \
+          grep -q 'Started SQL_THREAD' /var/lib/mysql/failover.log >/dev/null 2>&1; do
+          if [[ ${retry} -ge 60 ]]; then
+              echo "the failover worker never spliced on ${ahead}"
+              exit 1
+          fi
+          sleep 5
+          retry=$((retry + 1))
+      done
+
+      sleep 30
+      if [[ $(get_primary_from_label 2>/dev/null || true) == "${ahead}" \
+          || $(run_mysql "SELECT @@read_only" "-h ${ahead}.${cluster}-mysql") != "1" ]]; then
+          echo "${ahead} was promoted while its applier was still blocked on rows 100601-100603"
+          exit 1
+      fi
+
+      release_lock
 
       # Promoting the other replica would have thrown row 100600 away.
       primary_after=$(wait_for_primary "${ahead}" 600)
       echo "Primary changed from ${primary_before} to ${primary_after}"
+
+      retry=0
+      until kubectl -n "${NAMESPACE}" exec "${primary_before}" -c mysql -- rm -f /var/lib/mysql/sleep-forever; do
+          if [[ ${retry} -ge 60 ]]; then
+              echo "could not release ${primary_before} from sleep-forever"
+              exit 1
+          fi
+          sleep 5
+          retry=$((retry + 1))
+      done
 
       wait_cluster_consistency_async "${cluster}" 3 3
 
@@ -63,4 +153,30 @@ commands:
       echo "${rows}" | grep -q 100500
       echo "${rows}" | grep -q 100501
       echo "${rows}" | grep -q 100600
-    timeout: 900
+      echo "${rows}" | grep -q 100601
+      echo "${rows}" | grep -q 100602
+      echo "${rows}" | grep -q 100603
+
+      if [[ ${MYSQL_VERSION} != "8.0" ]]; then
+          echo "${rows}" | grep -q 100510
+
+          executed=$(run_mysql "SELECT @@GLOBAL.gtid_executed" "-h ${primary_after}.${cluster}-mysql")
+          if [[ ${executed} != *":failover:"* ]]; then
+              echo "the promoted primary lacks the tagged transaction: ${executed}"
+              exit 1
+          fi
+      fi
+
+      # the staged logs are a copy of the old primary's, left behind they only
+      # take up the datadir volume
+      if kubectl -n "${NAMESPACE}" exec "${primary_after}" -c mysql -- test -e /var/lib/mysql/source-logs; then
+          echo "the failover left its staged logs on ${primary_after}"
+          exit 1
+      fi
+
+      # the promoted primary takes writes through the proxy, and they reach
+      # every pod, the restarted old primary included
+      run_mysql "INSERT myDB.myTable (id) VALUES (100700)" "-h $(get_haproxy_svc "${cluster}")"
+      check_gtids_match_primary "${cluster}"
+      check_orc_topology "${cluster}"
+    timeout: 1200

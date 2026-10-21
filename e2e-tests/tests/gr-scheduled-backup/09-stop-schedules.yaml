@@ -17,5 +17,6 @@ commands:
               "schedule": "",
               "storageName": $storage
             }]
+          | del(.metadata.resourceVersion)
         ' \
         | kubectl apply -f -

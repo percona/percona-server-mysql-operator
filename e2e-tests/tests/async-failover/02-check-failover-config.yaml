@@ -1,6 +1,5 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
-timeout: 600
 commands:
   - script: |-
       set -o errexit
@@ -27,6 +26,9 @@ commands:
               catch_up=$(kubectl -n "${NAMESPACE}" exec "${pod}" -c orchestrator -- \
                   jq -r '.ReasonableMaintenanceReplicationLagSeconds' \
                   /etc/orchestrator/config/orchestrator.conf.json || true)
+              finish=$(kubectl -n "${NAMESPACE}" exec "${pod}" -c orchestrator -- \
+                  jq -r '.PostUnsuccessfulFailoverProcesses[] | select(contains("orc-handler finish"))' \
+                  /etc/orchestrator/config/orchestrator.conf.json || true)
               retry=$((retry + 1))
           done
 
@@ -37,9 +39,15 @@ commands:
           echo "${hook}" | grep -q -- "-timeout 5m0s" && timeout_flag=yes
           echo "${hook}" | grep -q -- "-on-timeout ForceWithPossibleDataLoss" && policy_flag=yes
 
+          # without the failure type finish cannot tell a failed promotion apart,
+          # and orchestrator never retries the recovery it gave up on
+          failure_type_flag=no
+          echo "${finish}" | grep -q -- "-failure-type '{failureType}'" && failure_type_flag=yes
+
           kubectl -n "${NAMESPACE}" create configmap "02-check-failover-config-${idx}" \
               --from-literal=timeout="${timeout_flag}" \
               --from-literal=policy="${policy_flag}" \
+              --from-literal=failure_type="${failure_type_flag}" \
               --from-literal=catch_up="${catch_up}"
           idx=$((idx + 1))
       done

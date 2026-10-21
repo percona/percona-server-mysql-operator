@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -103,9 +105,18 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 			}
 
 			if cr.AppliedIsAsync() && cr.OrchestratorEnabled() {
-				ready, msg, err := r.isAsyncReady(ctx, cr)
+				ready, msg, lagging, err := r.isAsyncReady(ctx, cr)
 				if err != nil {
 					return errors.Wrap(err, "check if async is ready")
+				}
+				// lagging is nil when orchestrator could not list the cluster,
+				// which says nothing about the lag.
+				if lagging != nil {
+					cond := replicationLagCondition(cr, lagging)
+					if cond.Status == metav1.ConditionTrue && !meta.IsStatusConditionTrue(status.Conditions, apiv1.ConditionReplicationLagging) {
+						r.Recorder.Event(cr, corev1.EventTypeWarning, apiv1.ConditionReplicationLagging, cond.Message)
+					}
+					meta.SetStatusCondition(&status.Conditions, cond)
 				}
 				if !ready {
 					mysqlStatus.State = apiv1.StateInitializing
@@ -114,6 +125,9 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 					r.Recorder.Event(cr, corev1.EventTypeNormal, "AsyncReplicationNotReady", msg)
 				}
 			}
+		}
+		if !cr.AppliedIsAsync() || !cr.OrchestratorEnabled() {
+			meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionReplicationLagging)
 		}
 		status.MySQL = mysqlStatus
 
@@ -429,33 +443,54 @@ func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1.
 	log.V(1).Info("Group replication is ready", "primary", status.DefaultReplicaSet.Primary, "status", status.DefaultReplicaSet.Status)
 
 	return true, nil
+
 }
 
-func (r *PerconaServerMySQLReconciler) isAsyncReady(ctx context.Context, cr *apiv1.PerconaServerMySQL) (bool, string, error) {
+// formatProblems formats a map of problems, sorted by instance, to a message like
+// 'ps-cluster1-mysql-1: [not_replicating, replication_lag], ps-cluster1-mysql-2: [not_replicating]'
+func formatProblems(problems map[string][]string) (string, error) {
+	var sb strings.Builder
+
+	for _, k := range slices.Sorted(maps.Keys(problems)) {
+		joinedValues := strings.Join(problems[k], ", ")
+		_, err := fmt.Fprintf(&sb, "%s: [%s], ", k, joinedValues)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	return strings.TrimRight(sb.String(), ", "), nil
+}
+
+// isAsyncReady also returns the replicas orchestrator reports as lagging,
+// sorted by alias. A lagging replica is still replicating, so it does not
+// make the cluster unready.
+func (r *PerconaServerMySQLReconciler) isAsyncReady(ctx context.Context, cr *apiv1.PerconaServerMySQL) (bool, string, []*orchestrator.Instance, error) {
 	log := logf.FromContext(ctx)
 
 	pod, err := getReadyOrcPod(ctx, r.Client, cr)
 	if err != nil {
-		return false, "", err
+		return false, "", nil, err
 	}
 
 	cluster, err := orchestrator.ResolveCluster(ctx, r.ClientCmd, pod, cr.ClusterHint())
 	if err != nil {
 		if errors.Is(err, orchestrator.ErrSplitTopology) || errors.Is(err, orchestrator.ErrEmptyResponse) {
-			return false, errors.Wrap(err, "orchestrator").Error(), nil
+			return false, errors.Wrap(err, "orchestrator").Error(), nil, nil
 		}
-		return false, "", err
+		return false, "", nil, err
 	}
 
 	instances, err := orchestrator.Cluster(ctx, r.ClientCmd, pod, cluster)
 	if err != nil {
 		if errors.Is(err, orchestrator.ErrEmptyResponse) || errors.Is(err, orchestrator.ErrUnableToGetClusterName) {
-			return false, errors.Wrap(err, "orchestrator").Error(), nil
+			return false, errors.Wrap(err, "orchestrator").Error(), nil, nil
 		}
-		return false, "", err
+		return false, "", nil, err
 	}
 
 	problems := make(map[string][]string)
+	lagging := []*orchestrator.Instance{}
 
 	for _, i := range instances {
 		if i.IsDowntimed {
@@ -467,25 +502,63 @@ func (r *PerconaServerMySQLReconciler) isAsyncReady(ctx context.Context, cr *api
 				"downtimeEndTs", i.DowntimeEndTimestamp)
 			continue
 		}
-		if len(i.Problems) > 0 {
-			problems[i.Alias] = i.Problems
+		var instanceProblems []string
+		for _, p := range i.Problems {
+			if cr.CompareVersion("1.3.0") >= 0 && p == orchestrator.ProblemReplicationLag {
+				// The primary's lag comes from a stale heartbeat row, e.g.
+				// one restored from a backup, not from replication.
+				if i.MasterKey.Hostname != "" {
+					lagging = append(lagging, i)
+				}
+				continue
+			}
+			instanceProblems = append(instanceProblems, p)
+		}
+		if len(instanceProblems) > 0 {
+			problems[i.Alias] = instanceProblems
+		}
+	}
+	slices.SortFunc(lagging, func(a, b *orchestrator.Instance) int {
+		return strings.Compare(a.Alias, b.Alias)
+	})
+
+	msg, err := formatProblems(problems)
+	return msg == "", msg, lagging, err
+}
+
+const (
+	reasonReplicationLagDetected = "ReplicationLagDetected"
+	reasonNoReplicationLag       = "NoReplicationLag"
+)
+
+func replicationLagCondition(cr *apiv1.PerconaServerMySQL, lagging []*orchestrator.Instance) metav1.Condition {
+	if len(lagging) == 0 {
+		return metav1.Condition{
+			Type:               apiv1.ConditionReplicationLagging,
+			Status:             metav1.ConditionFalse,
+			Reason:             reasonNoReplicationLag,
+			Message:            "No replica lags behind the primary",
+			ObservedGeneration: cr.Generation,
 		}
 	}
 
-	// formatMessage formats a map of problems to a message like
-	// 'ps-cluster1-mysql-1:[not_replicating, replication_lag], ps-cluster1-mysql-2:[not_replicating]'
-	formatMessage := func(problems map[string][]string) string {
-		var sb strings.Builder
-		for k, v := range problems {
-			joinedValues := strings.Join(v, ", ")
-			sb.WriteString(fmt.Sprintf("%s: [%s], ", k, joinedValues))
+	replicas := make([]string, 0, len(lagging))
+	for _, i := range lagging {
+		if i.ReplicationLagSeconds.Valid {
+			replicas = append(replicas, fmt.Sprintf("%s (%ds)", i.Alias, i.ReplicationLagSeconds.Int64))
+			continue
 		}
-
-		return strings.TrimRight(sb.String(), ", ")
+		replicas = append(replicas, i.Alias)
 	}
 
-	msg := formatMessage(problems)
-	return msg == "", msg, nil
+	return metav1.Condition{
+		Type:   apiv1.ConditionReplicationLagging,
+		Status: metav1.ConditionTrue,
+		Reason: reasonReplicationLagDetected,
+		Message: "Replicas lag behind the primary by more than orchestrator's ReasonableReplicationLagSeconds: " +
+			strings.Join(replicas, ", "),
+		ObservedGeneration: cr.Generation,
+	}
 }
 
 func (r *PerconaServerMySQLReconciler) allLoadBalancersReady(ctx context.Context, cr *apiv1.PerconaServerMySQL) (bool, error) {

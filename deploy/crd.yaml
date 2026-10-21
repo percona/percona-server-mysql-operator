@@ -4048,6 +4048,9 @@ spec:
               completed:
                 format: date-time
                 type: string
+              erroredGeneration:
+                format: int64
+                type: integer
               state:
                 type: string
               stateDescription:
@@ -12160,12 +12163,8 @@ spec:
                         - Abort
                         - ForceWithPossibleDataLoss
                         type: string
-                      switchoverCatchUpTimeout:
-                        default: 5m
-                        pattern: ^([0-9]+(\.[0-9]+)?(ns|us|ms|s|m|h))+$
-                        type: string
                       timeout:
-                        default: 6h
+                        default: 1h
                         pattern: ^([0-9]+(\.[0-9]+)?(ns|us|ms|s|m|h))+$
                         type: string
                     type: object
@@ -16221,6 +16220,8 @@ spec:
                   rule: has(self.image) && size(self.image) > 0
               unsafeFlags:
                 properties:
+                  asyncFailoverWithPossibleDataLoss:
+                    type: boolean
                   backupNonReadyCluster:
                     type: boolean
                   mysqlSize:
@@ -16289,6 +16290,12 @@ spec:
                 is enabled'
               rule: '!(self.mysql.clusterType == ''async'') || self.unsafeFlags.orchestrator
                 || (has(self.orchestrator) && self.orchestrator.enabled)'
+            - message: 'Invalid configuration: When ''mysql.clusterType'' is set to
+                ''async'', ''backup.enabled'' must be true unless ''unsafeFlags.asyncFailoverWithPossibleDataLoss''
+                is enabled. Without backups a failover cannot recover the transactions
+                stranded on the old primary'
+              rule: '!(self.mysql.clusterType == ''async'') || self.unsafeFlags.asyncFailoverWithPossibleDataLoss
+                || (has(self.backup) && self.backup.enabled)'
             - message: 'Invalid configuration: When ''mysql.clusterType'' is set to
                 ''async'', ''proxy.haproxy.enabled'' must be true unless ''unsafeFlags.proxy''
                 is enabled'

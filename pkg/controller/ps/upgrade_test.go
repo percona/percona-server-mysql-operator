@@ -25,6 +25,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
+	"github.com/percona/percona-server-mysql-operator/pkg/version"
 )
 
 func readDefaultCRForUpgrade(name, namespace string) *apiv1.PerconaServerMySQL {
@@ -32,6 +33,7 @@ func readDefaultCRForUpgrade(name, namespace string) *apiv1.PerconaServerMySQL {
 		Name:      name,
 		Namespace: namespace,
 		Spec: apiv1.PerconaServerMySQLSpec{
+			CRVersion: version.Version(),
 			MySQL: apiv1.MySQLSpec{
 				ClusterType: apiv1.ClusterTypeGR,
 				PodSpec: apiv1.PodSpec{
@@ -513,7 +515,7 @@ func TestSwitchOverAsync(t *testing.T) {
 				},
 				{
 					cmd: orcURL(fmt.Sprintf("api/begin-downtime/%s/%d/%s/%s/%s",
-						primary.Name, mysql.DefaultPort, orchestrator.DowntimeOwner, orchestrator.DowntimeReasonSwitchover, "600s")),
+						primary.Name, mysql.DefaultPort, orchestrator.DowntimeOwner, orchestrator.DowntimeReasonSwitchover, "240s")),
 					stdout: downtimeResp,
 				},
 				{
@@ -697,7 +699,7 @@ func TestSwitchOverAndWait(t *testing.T) {
 					stdout: oldPrimaryResp,
 				},
 				{
-					cmd: orcURL(fmt.Sprintf("api/begin-downtime/%s/%d/%s/%s/600s",
+					cmd: orcURL(fmt.Sprintf("api/begin-downtime/%s/%d/%s/%s/240s",
 						primary.Name, mysql.DefaultPort, orchestrator.DowntimeOwner, orchestrator.DowntimeReasonSwitchover)),
 					stdout: downtimeResp,
 				},
@@ -767,7 +769,7 @@ func TestSwitchOverAndWait(t *testing.T) {
 					stdout: oldPrimaryResp,
 				},
 				{
-					cmd: orcURL(fmt.Sprintf("api/begin-downtime/%s/%d/%s/%s/600s",
+					cmd: orcURL(fmt.Sprintf("api/begin-downtime/%s/%d/%s/%s/240s",
 						primary.Name, mysql.DefaultPort, orchestrator.DowntimeOwner, orchestrator.DowntimeReasonSwitchover)),
 					stdout: downtimeResp,
 				},

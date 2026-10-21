@@ -116,9 +116,8 @@ func orchestratorDefaults(spec *apiv1.OrchestratorSpec) {
 	spec.Enabled = false
 	spec.Configuration = `{"ReasonableReplicationLagSeconds": 30}`
 	spec.Failover = &apiv1.FailoverSpec{
-		Timeout:                  "6h",
-		OnTimeout:                apiv1.FailoverPolicyAbort,
-		SwitchoverCatchUpTimeout: "5m",
+		Timeout:   "1h",
+		OnTimeout: apiv1.FailoverPolicyAbort,
 	}
 	spec.ServiceAccountName = "percona-server-mysql-operator-orchestrator"
 	spec.PodSecurityContext = &corev1.PodSecurityContext{
@@ -160,13 +159,17 @@ func logCollectorDefaults(spec *apiv1.LogCollectorSpec) {
 		spec.LogRotate.ExtraConfig = corev1.LocalObjectReference{Name: "my-logrotate-config"}
 		spec.LogRotate.Configuration = `/var/lib/mysql/log/*.log {
     daily
+    minsize 10M
     maxsize 100M
     rotate 7
     missingok
     nocompress
     notifempty
-    copytruncate
+    nocreate
     sharedscripts
+    postrotate
+        /opt/percona/logcollector/logrotate/postrotate-mysql.sh
+    endscript
 }
 `
 	}

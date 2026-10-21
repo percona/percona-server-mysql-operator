@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"sync"
 	"testing"
@@ -12,9 +13,11 @@ import (
 )
 
 type fakeSourceDB struct {
-	gtid     string
-	readOnly bool
-	conn     *fakeSourceConn
+	gtid      string
+	writable  bool
+	channel   map[string]string
+	statusErr error
+	conn      *fakeSourceConn
 }
 
 var _ sourceDatabase = (*fakeSourceDB)(nil)
@@ -24,7 +27,18 @@ func (f *fakeSourceDB) GetGTIDExecuted(context.Context) (string, error) {
 }
 
 func (f *fakeSourceDB) IsReadonly(context.Context) (bool, error) {
-	return f.readOnly, nil
+	return !f.writable, nil
+}
+
+func (f *fakeSourceDB) ShowReplicaStatus(context.Context) (map[string]string, error) {
+	if f.statusErr != nil {
+		return nil, f.statusErr
+	}
+	if f.channel == nil {
+		return nil, sql.ErrNoRows
+	}
+
+	return f.channel, nil
 }
 
 func (f *fakeSourceDB) Close() error {
@@ -37,15 +51,18 @@ func (f *fakeSourceDB) Close() error {
 }
 
 // fakeSourceConn dials the source. up is consumed one entry per dial and its
-// last entry repeats, so a one-element script describes a steady state.
+// last entry repeats, so a one-element script describes a steady state. The
+// source is read-only unless writable is set, as every restarted pod is.
 type fakeSourceConn struct {
-	mu       sync.Mutex
-	up       []bool
-	gtid     string
-	readOnly bool
-	dials    int
-	closes   int
-	hosts    []string
+	mu        sync.Mutex
+	up        []bool
+	gtid      string
+	writable  bool
+	channel   map[string]string
+	statusErr error
+	dials     int
+	closes    int
+	hosts     []string
 }
 
 func (c *fakeSourceConn) connect(_ context.Context, host string) (sourceDatabase, error) {
@@ -63,7 +80,7 @@ func (c *fakeSourceConn) connect(_ context.Context, host string) (sourceDatabase
 		return nil, errors.New("dial tcp: connect: connection refused")
 	}
 
-	return &fakeSourceDB{gtid: c.gtid, readOnly: c.readOnly, conn: c}, nil
+	return &fakeSourceDB{gtid: c.gtid, writable: c.writable, channel: c.channel, statusErr: c.statusErr, conn: c}, nil
 }
 
 func (c *fakeSourceConn) count() (dials, closes int) {
@@ -130,12 +147,37 @@ func TestSourceWatch(t *testing.T) {
 			"standing down would strand transactions nothing can replicate back")
 	})
 
-	t.Run("a source that is back but still read-only is refused", func(t *testing.T) {
-		conn := &fakeSourceConn{up: []bool{true}, readOnly: true}
+	t.Run("a read-only source with no channel is confirmed", func(t *testing.T) {
+		// Every pod comes back read-only. Orchestrator makes it writable once
+		// the stand-down ends our recovery, so waiting for that here never ends.
+		conn := &fakeSourceConn{up: []bool{true}}
+		w := newWatch(t, conn, &fakeDatabase{})
+
+		assert.True(t, w.confirmed(t.Context()))
+	})
+
+	t.Run("a read-only source with a channel is refused", func(t *testing.T) {
+		conn := &fakeSourceConn{up: []bool{true}, channel: map[string]string{"Source_Host": "mysql-1.mysql"}}
 		w := newWatch(t, conn, &fakeDatabase{})
 
 		assert.False(t, w.confirmed(t.Context()),
-			"a pod that just restarted answers read-only; only a promotion puts it back in service")
+			"a source that bootstrapped as a replica would replicate from the replica we hand back to it")
+	})
+
+	t.Run("a writable source with a channel is confirmed", func(t *testing.T) {
+		// A promoted primary can keep orchestrator's detached //host channel.
+		conn := &fakeSourceConn{up: []bool{true}, writable: true, channel: map[string]string{"Source_Host": "//mysql-1.mysql"}}
+		w := newWatch(t, conn, &fakeDatabase{})
+
+		assert.True(t, w.confirmed(t.Context()),
+			"failing over past a writable source would leave two writers")
+	})
+
+	t.Run("a read-only source whose channel cannot be read is refused", func(t *testing.T) {
+		conn := &fakeSourceConn{up: []bool{true}, statusErr: errors.New("access denied")}
+		w := newWatch(t, conn, &fakeDatabase{})
+
+		assert.False(t, w.confirmed(t.Context()))
 	})
 
 	t.Run("an unreadable GTID set is refused", func(t *testing.T) {

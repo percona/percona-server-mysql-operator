@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
@@ -77,9 +78,18 @@ type Instance struct {
 	ElapsedDowntime       time.Duration     `json:"ElapsedDowntime"`
 	ExecBinlogCoordinates BinlogCoordinates `json:"ExecBinlogCoordinates"`
 	ExecutedGtidSet       string            `json:"ExecutedGtidSet"`
+	ReplicationLagSeconds sql.NullInt64     `json:"ReplicationLagSeconds"`
 }
 
-const PromotionRulePrefer = "prefer"
+const (
+	PromotionRulePrefer  = "prefer"
+	PromotionRuleNeutral = "neutral"
+	PromotionRuleMustNot = "must_not"
+)
+
+// ProblemReplicationLag is reported for a replica lagging more than
+// ReasonableReplicationLagSeconds.
+const ProblemReplicationLag = "replication_lag"
 
 var masterFailoverAnalyses = map[string]bool{
 	"DeadMaster":                true,
@@ -106,6 +116,10 @@ var (
 	// ErrRecoveryNotAttempted is orchestrator turning a takeover away because
 	// another recovery of the same instance holds its place in the audit
 	ErrRecoveryNotAttempted = errors.New("recovery not attempted")
+
+	// ErrInstanceUnreachable is orchestrator's own answer that it could not
+	// read the instance when asked to refresh it.
+	ErrInstanceUnreachable = errors.New("instance unreachable")
 )
 
 func exec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, endpoint string, outb, errb *bytes.Buffer) error {
@@ -263,6 +277,14 @@ const (
 	DowntimeOwner            = "percona-server-mysql-operator"
 	DowntimeReasonSwitchover = "graceful-switchover"
 
+	DowntimeReasonForcePromote = "force-promote"
+
+	// DowntimeReasonLostInRecovery is the downtime orchestrator puts on the
+	// failed primary at the end of every master recovery, for a year, whether
+	// it promoted a replica or not. Orchestrator does not recover a downtimed
+	// instance, so after a failed promotion it never retries
+	DowntimeReasonLostInRecovery = "lost-in-recovery"
+
 	// switchoverDowntimeFactor scales the takeover's own catch-up wait, which
 	// orchestrator bounds by ReasonableMaintenanceReplicationLagSeconds. A
 	// downtime that merely matched it would expire just as the promotion starts,
@@ -273,8 +295,8 @@ const (
 )
 
 // SwitchoverDowntime is how long the old primary is kept downtimed during a
-// graceful switchover, derived from the configured catch-up wait so the two
-// cannot drift apart.
+// graceful switchover, derived from the catch-up wait so the two cannot drift
+// apart.
 func SwitchoverDowntime(catchUp time.Duration) int {
 	return int(catchUp.Seconds()) * switchoverDowntimeFactor
 }
@@ -464,8 +486,9 @@ func GetInstance(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, 
 		return nil, ErrEmptyResponse
 	}
 
+	// an ERROR answer decodes into an empty instance
 	instance := &Instance{}
-	if err := json.Unmarshal(body, instance); err == nil {
+	if err := json.Unmarshal(body, instance); err == nil && instance.Key.Hostname != "" {
 		return instance, nil
 	}
 
@@ -476,6 +499,37 @@ func GetInstance(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, 
 
 	if err := orcResp.Error(); err != nil {
 		return nil, err
+	}
+
+	return instance, nil
+}
+
+// RefreshInstance has orchestrator read the instance now rather than answer
+// from its last poll. It fails when orchestrator can't reach the instance.
+func RefreshInstance(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, host string, port int) (*Instance, error) {
+	url := fmt.Sprintf("api/refresh/%s/%d", host, port)
+
+	var res, errb bytes.Buffer
+	if err := exec(ctx, cliCmd, pod, url, &res, &errb); err != nil {
+		return nil, err
+	}
+
+	orcResp := new(orcResponse)
+	if err := unmarshalOrcResponse(res.Bytes(), orcResp); err != nil {
+		return nil, err
+	}
+	if err := orcResp.Error(); err != nil {
+		return nil, errors.Wrap(ErrInstanceUnreachable, err.Error())
+	}
+
+	instance, err := GetInstance(ctx, cliCmd, pod, host, port)
+	if err != nil {
+		return nil, err
+	}
+
+	// an OK answer without an instance
+	if instance.Key.Hostname == "" {
+		return nil, ErrEmptyResponse
 	}
 
 	return instance, nil

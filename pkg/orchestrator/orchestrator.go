@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -559,8 +560,6 @@ var failoverConfigKeys = map[string]bool{
 	// hook just made safe.
 	"FailMasterPromotionOnLagMinutes":            true,
 	"DelayMasterPromotionIfSQLThreadNotUpToDate": true,
-	// derived from spec.orchestrator.failover.switchoverCatchUpTimeout
-	"ReasonableMaintenanceReplicationLagSeconds": true,
 	// derived from spec.orchestrator.failover.timeout. Shorter than the timeout
 	// it lets orchestrator run a second recovery of the same failure while the
 	// pre hook is still working on the first.
@@ -574,6 +573,19 @@ var failoverConfigKeys = map[string]bool{
 }
 
 const handlerBinary = "/opt/percona/orc-handler"
+
+// reasonableReplicationLagSeconds is the lag past which orchestrator reports a replica with replication_lag
+const reasonableReplicationLagSeconds = 60
+
+const (
+	// maintenanceLagFactor derives ReasonableMaintenanceReplicationLagSeconds
+	// from ReasonableReplicationLagSeconds, the same ratio as orchestrator's own
+	// defaults (10s and 20s)
+	maintenanceLagFactor = 2
+	// bakedMaintenanceLagSeconds is build/orchestrator.conf.json's value, in
+	// effect when neither the operator nor the user sets one
+	bakedMaintenanceLagSeconds = 300
+)
 
 // preFailoverProcesses renders the hook that recovers the transactions stranded
 // on the dead primary. Orchestrator aborts the recovery when it exits non-zero,
@@ -591,8 +603,10 @@ func preFailoverProcesses(failover *apiv1.FailoverSpec) []string {
 // finishProcess closes the recovery on the hook's side. It ends every post
 // hook list, since orchestrator runs exactly one of them per recovery that got
 // past the pre hook.
-func finishProcess(hook string) string {
-	return fmt.Sprintf("echo '%s:' && %s finish -source {failedHost} -uid {recoveryUID}", hook, handlerBinary)
+func finishProcess(hook string, args ...string) string {
+	cmd := fmt.Sprintf("echo '%s:' && %s finish -source {failedHost} -uid {recoveryUID}", hook, handlerBinary)
+
+	return strings.Join(append([]string{cmd}, args...), " ")
 }
 
 func postFailoverProcesses() []string {
@@ -608,7 +622,8 @@ func postUnsuccessfulFailoverProcesses() []string {
 			"echo 'PostUnsuccessfulFailoverProcesses:' && %s report-failover -source {failedHost} -failure-type '{failureType}'",
 			handlerBinary,
 		),
-		finishProcess("PostUnsuccessfulFailoverProcesses"),
+		// the failure type tells finish that orchestrator gave up without promoting
+		finishProcess("PostUnsuccessfulFailoverProcesses", "-failure-type '{failureType}'"),
 	}
 }
 
@@ -633,6 +648,60 @@ func unseenInstanceForgetHours(failover *apiv1.FailoverSpec) int {
 }
 
 func ConfigMapData(cr *apiv1.PerconaServerMySQL) (string, error) {
+	config, err := configuration(cr)
+	if err != nil {
+		return "", err
+	}
+
+	configJson, err := json.Marshal(config)
+	if err != nil {
+		return "", errors.Wrap(err, "marshal orchestrator raft nodes to json")
+	}
+
+	return string(configJson), nil
+}
+
+// SwitchoverCatchUp is the effective ReasonableMaintenanceReplicationLagSeconds.
+// Orchestrator refuses a graceful takeover to a candidate lagging more than
+// this, and waits at most this long for the candidate after freezing the primary.
+func SwitchoverCatchUp(cr *apiv1.PerconaServerMySQL) (time.Duration, error) {
+	config, err := configuration(cr)
+	if err != nil {
+		return 0, err
+	}
+
+	v, ok := config["ReasonableMaintenanceReplicationLagSeconds"]
+	if !ok {
+		return bakedMaintenanceLagSeconds * time.Second, nil
+	}
+	secs, err := seconds(v)
+	if err != nil {
+		return 0, errors.Wrap(err, "ReasonableMaintenanceReplicationLagSeconds")
+	}
+
+	return time.Duration(secs) * time.Second, nil
+}
+
+// maxSeconds is the largest whole number of seconds a time.Duration can hold
+const maxSeconds = math.MaxInt64 / int64(time.Second)
+
+func seconds(v any) (int, error) {
+	var f float64
+	switch v := v.(type) {
+	case int:
+		f = float64(v)
+	case float64:
+		f = v
+	default:
+		return 0, errors.Errorf("must be a number, got %v", v)
+	}
+	if f != math.Trunc(f) || f < 1 || f > float64(maxSeconds) {
+		return 0, errors.Errorf("must be a whole number of seconds between 1 and %d, got %v", maxSeconds, v)
+	}
+	return int(f), nil
+}
+
+func configuration(cr *apiv1.PerconaServerMySQL) (map[string]any, error) {
 	config := make(map[string]any, 0)
 
 	config["RaftNodes"] = RaftNodes(cr)
@@ -663,16 +732,16 @@ func ConfigMapData(cr *apiv1.PerconaServerMySQL) (string, error) {
 		config["PostUnsuccessfulFailoverProcesses"] = postUnsuccessfulFailoverProcesses()
 		config["RecoveryPeriodBlockSeconds"] = recoveryPeriodBlockSeconds(failover)
 		config["UnseenInstanceForgetHours"] = unseenInstanceForgetHours(failover)
-		config["ReasonableMaintenanceReplicationLagSeconds"] = int(failover.SwitchoverCatchUp().Seconds())
+		config["ReasonableReplicationLagSeconds"] = reasonableReplicationLagSeconds
 	}
 
 	if cfg := cr.Spec.Orchestrator.Configuration; cfg != "" {
 		userConfig := make(map[string]any)
 		if err := json.Unmarshal([]byte(cfg), &userConfig); err != nil {
-			return "", errors.Wrap(err, "unmarshal spec.orchestrator.configuration: must be a JSON object")
+			return nil, errors.Wrap(err, "unmarshal spec.orchestrator.configuration: must be a JSON object")
 		}
 		if userConfig == nil {
-			return "", errors.New("spec.orchestrator.configuration: must be a JSON object")
+			return nil, errors.New("spec.orchestrator.configuration: must be a JSON object")
 		}
 		for k, v := range userConfig {
 			if reservedOrchestratorConfigKeys[k] || (post130 && failoverConfigKeys[k]) {
@@ -682,12 +751,20 @@ func ConfigMapData(cr *apiv1.PerconaServerMySQL) (string, error) {
 		}
 	}
 
-	configJson, err := json.Marshal(config)
-	if err != nil {
-		return "", errors.Wrap(err, "marshal orchestrator raft nodes to json")
+	// derived after the merge so it follows a user's ReasonableReplicationLagSeconds
+	if _, ok := config["ReasonableMaintenanceReplicationLagSeconds"]; post130 && !ok {
+		lag, err := seconds(config["ReasonableReplicationLagSeconds"])
+		if err != nil {
+			return nil, errors.Wrap(err, "ReasonableReplicationLagSeconds")
+		}
+		maintenanceLag, err := seconds(lag * maintenanceLagFactor)
+		if err != nil {
+			return nil, errors.Wrap(err, "derive ReasonableMaintenanceReplicationLagSeconds from ReasonableReplicationLagSeconds")
+		}
+		config["ReasonableMaintenanceReplicationLagSeconds"] = maintenanceLag
 	}
 
-	return string(configJson), nil
+	return config, nil
 }
 
 func RBAC(cr *apiv1.PerconaServerMySQL) (*rbacv1.Role, *rbacv1.RoleBinding, *corev1.ServiceAccount) {

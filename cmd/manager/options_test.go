@@ -59,14 +59,66 @@ func TestConfigureOptionsRequiresWatchNamespace(t *testing.T) {
 	require.ErrorContains(t, err, "WATCH_NAMESPACE")
 }
 
-func TestConfigureOptionsAllowsEmptyNamespaces(t *testing.T) {
+func TestConfigureOptionsAllowsEmptyWatchNamespace(t *testing.T) {
 	t.Setenv("WATCH_NAMESPACE", "")
-	t.Setenv("OPERATOR_NAMESPACE", "")
+	t.Setenv("OPERATOR_NAMESPACE", "operator-ns")
 
 	options, err := configureOptions(":9090", ":9091", true)
 	require.NoError(t, err)
-	assert.Empty(t, options.LeaderElectionNamespace)
+	assert.Equal(t, "operator-ns", options.LeaderElectionNamespace)
 	assert.Nil(t, options.Cache.DefaultNamespaces)
+}
+
+func TestConfigureOptionsLeaderElection(t *testing.T) {
+	t.Setenv("WATCH_NAMESPACE", "")
+	t.Setenv("OPERATOR_NAMESPACE", "operator-ns")
+	t.Setenv("PSO_LEADER_ELECTION_LEASE_NAME", "")
+	t.Setenv("MAX_CONCURRENT_RECONCILES", "1")
+
+	tests := []struct {
+		name        string
+		flagEnabled bool
+		envValue    string
+		wantEnabled bool
+	}{
+		{
+			name:        "unset environment preserves disabled flag",
+			flagEnabled: false,
+			envValue:    "",
+			wantEnabled: false,
+		},
+		{
+			name:        "unset environment preserves enabled flag",
+			flagEnabled: true,
+			envValue:    "",
+			wantEnabled: true,
+		},
+		{
+			name:        "false environment overrides enabled flag",
+			flagEnabled: true,
+			envValue:    "false",
+			wantEnabled: false,
+		},
+		{
+			name:        "true environment overrides disabled flag",
+			flagEnabled: false,
+			envValue:    "true",
+			wantEnabled: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("PSO_LEADER_ELECTION_ENABLED", tt.envValue)
+			if tt.envValue == "" {
+				require.NoError(t, os.Unsetenv("PSO_LEADER_ELECTION_ENABLED"))
+			}
+
+			options, err := configureOptions(":9090", ":9091", tt.flagEnabled)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantEnabled, options.LeaderElection)
+		})
+	}
 }
 
 func TestConfigureLeaderElection(t *testing.T) {
@@ -82,14 +134,16 @@ func TestConfigureLeaderElection(t *testing.T) {
 		wantError     string
 	}{
 		{
-			name:   "flag disables election",
-			wantID: defaultElectionID,
+			name:          "flag disables election",
+			wantID:        defaultElectionID,
+			wantNamespace: "operator-ns",
 		},
 		{
-			name:        "environment disables election",
-			flagEnabled: true,
-			envEnabled:  &disabled,
-			wantID:      defaultElectionID,
+			name:          "environment disables election",
+			flagEnabled:   true,
+			envEnabled:    &disabled,
+			wantID:        defaultElectionID,
+			wantNamespace: "operator-ns",
 		},
 		{
 			name:          "environment enables election",
@@ -105,6 +159,17 @@ func TestConfigureLeaderElection(t *testing.T) {
 			wantEnabled:   true,
 			wantID:        "custom.lease",
 			wantNamespace: "operator-ns",
+		},
+		{
+			name:          "custom lease name with election disabled",
+			leaseName:     "custom.lease",
+			wantID:        "custom.lease",
+			wantNamespace: "operator-ns",
+		},
+		{
+			name:      "invalid lease name with election disabled",
+			leaseName: "Invalid_Name",
+			wantError: "PSO_LEADER_ELECTION_LEASE_NAME",
 		},
 		{
 			name:       "invalid lease name",

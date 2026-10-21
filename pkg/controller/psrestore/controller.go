@@ -93,13 +93,21 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	}
 
 	status := cr.Status
-	status.StateDesc = ""
 	if status.State == apiv1.RestoreError {
+		if cr.Generation == status.ErroredGeneration || status.ErroredGeneration == 0 {
+			log.V(1).Info("Restore errored out and its spec has not changed since, not retrying it",
+				"stateDesc", status.StateDesc, "generation", cr.Generation)
+			return ctrl.Result{}, nil
+		}
 		status.State = apiv1.RestoreNew
 	}
 
 	defer func() {
-		if status.State != cr.Status.State || status.StateDesc != cr.Status.StateDesc {
+		if status.State == apiv1.RestoreError {
+			status.ErroredGeneration = cr.Generation
+		}
+
+		if !status.Equals(cr.Status) {
 			retriable := func(err error) bool {
 				return err != nil
 			}
@@ -161,6 +169,8 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 		}
 		return ctrl.Result{}, nil
 	}
+
+	status.StateDesc = ""
 
 	cluster := &apiv1.PerconaServerMySQL{}
 	nn := types.NamespacedName{Name: cr.Spec.ClusterName, Namespace: cr.Namespace}
@@ -251,21 +261,43 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 		return ctrl.Result{}, nil
 	}
 
-	backup, err := utilk8s.GetRunningBackup(ctx, r.Client, cr.Spec.ClusterName, cr.Namespace)
-	if err != nil {
-		return ctrl.Result{}, errors.Wrap(err, "get running backups list")
-	}
-	if backup != nil {
-		status.State = apiv1.RestoreNew
-		status.StateDesc = fmt.Sprintf("PerconaServerMySQLBackup %s is still running", backup.Name)
-		log.Info("PerconaServerMySQLBackup is still running", "backup", backup.Name)
-		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
-	}
+	if status.State == apiv1.RestoreNew {
+		backup, err := utilk8s.GetRunningBackup(ctx, r.Client, cr.Spec.ClusterName, cr.Namespace)
+		if err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "get running backups list")
+		}
+		if backup != nil {
+			status.State = apiv1.RestoreNew
+			status.StateDesc = fmt.Sprintf("PerconaServerMySQLBackup %s is still running", backup.Name)
+			log.Info("PerconaServerMySQLBackup is still running", "backup", backup.Name)
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		}
 
-	if err := r.validate(ctx, cr, cluster); err != nil {
-		status.State = apiv1.RestoreError
-		status.StateDesc = errors.Cause(err).Error()
-		return ctrl.Result{}, nil
+		if err := r.validate(ctx, cr, cluster); err != nil {
+			status.State = apiv1.RestoreError
+			status.StateDesc = errors.Cause(err).Error()
+			return ctrl.Result{}, nil
+		}
+
+		if cr.Spec.PITR != nil {
+			if !cluster.PiTREnabled() && restoreBinlogServer(cr) == nil {
+				status.State = apiv1.RestoreError
+				status.StateDesc = "Binlog server is not enabled for the cluster"
+				return ctrl.Result{}, nil
+			}
+
+			if err := r.reconcilePITRConfigSecret(ctx, cr, cluster); err != nil {
+				status.State = apiv1.RestoreError
+				status.StateDesc = errors.Wrap(err, "reconcile pitr config secret").Error()
+				return ctrl.Result{}, nil
+			}
+
+			if err := r.validatePITRTarget(ctx, cr, cluster); err != nil {
+				status.State = apiv1.RestoreError
+				status.StateDesc = errors.Wrap(err, "validate pitr target").Error()
+				return ctrl.Result{}, nil
+			}
+		}
 	}
 
 	// The above code is to prevent multiple restores from running at the same time. It works only if restore job is created.
@@ -276,27 +308,11 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	}
 	defer r.sm.Delete(cr.Spec.ClusterName)
 
-	if cr.Spec.PITR != nil {
-		if !cluster.PiTREnabled() && restoreBinlogServer(cr) == nil {
-			status.State = apiv1.RestoreError
-			status.StateDesc = "Binlog server is not enabled for the cluster"
-			return ctrl.Result{}, nil
-		}
-
+	// Every check has passed. From here on the restore is stopping the cluster
+	// and says so, and the checks above are not run again. A Running restore
+	// is further along than that and keeps its state.
+	if status.State == apiv1.RestoreNew {
 		status.State = apiv1.RestoreStarting
-
-		if err := r.reconcilePITRConfigSecret(ctx, cr, cluster); err != nil {
-			status.State = apiv1.RestoreError
-			status.StateDesc = errors.Wrap(err, "reconcile pitr config secret").Error()
-			return ctrl.Result{}, nil
-		}
-
-		if err := r.validatePITRTarget(ctx, cr, cluster); err != nil {
-			status.State = apiv1.RestoreError
-			status.StateDesc = errors.Wrap(err, "validate pitr target").Error()
-			return ctrl.Result{}, nil
-		}
-		status.StateDesc = ""
 	}
 
 	log.Info("Pausing cluster", "cluster", cluster.Name)
@@ -317,15 +333,24 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	if restoreJobNotFound {
 		log.Info("Creating restore job", "jobName", job.Name)
 
-		restorer, err := r.getRestorer(ctx, cr, cluster)
+		// The cluster is already stopped, so an error here ends the attempt
+		// for good: Failed is final, and the cluster keeps its pause, the
+		// operator never starts a cluster on its own. A short retry rides out
+		// an API hiccup, so only what is really gone, like a backup deleted
+		// while the pods were stopping, gets there.
+		var job *batchv1.Job
+		err := k8sretry.OnError(k8sretry.DefaultBackoff, func(error) bool { return true }, func() error {
+			restorer, err := r.getRestorer(ctx, cr, cluster)
+			if err != nil {
+				return errors.Wrap(err, "get restorer")
+			}
+			job, err = restorer.Job(ctx)
+			return errors.Wrap(err, "get job")
+		})
 		if err != nil {
-			status.State = apiv1.RestoreError
+			status.State = apiv1.RestoreFailed
 			status.StateDesc = err.Error()
 			return ctrl.Result{}, nil
-		}
-		job, err := restorer.Job(ctx)
-		if err != nil {
-			return ctrl.Result{}, errors.Wrap(err, "get job")
 		}
 
 		if err := r.Create(ctx, job); err != nil {
@@ -444,26 +469,16 @@ func (r *PerconaServerMySQLRestoreReconciler) validatePITRTarget(
 	cr *apiv1.PerconaServerMySQLRestore,
 	cluster *apiv1.PerconaServerMySQL,
 ) error {
-	log := logf.FromContext(ctx)
-
 	if _, _, err := binlogserver.SearchArgs(cr); err != nil {
-		return err
+		return errors.Wrap(binlogserver.ErrInvalidTarget, err.Error())
 	}
 
 	st, err := r.binlogArchiveStorage(ctx, cr, cluster)
 	if err != nil {
-		log.Info("Skipping PITR target validation", "error", err.Error())
-		return nil
+		return err
 	}
 
-	if err := binlogserver.ValidateTarget(ctx, st, cr); err != nil {
-		if errors.Is(err, binlogserver.ErrTargetNotCovered) || errors.Is(err, binlogserver.ErrInvalidTarget) {
-			return err
-		}
-		log.Info("Skipping PITR target validation", "error", err.Error())
-		return nil
-	}
-	return nil
+	return binlogserver.ValidateTarget(ctx, st, cr)
 }
 
 func (r *PerconaServerMySQLRestoreReconciler) binlogArchiveStorage(

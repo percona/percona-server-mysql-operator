@@ -9,6 +9,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"maps"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -455,11 +456,10 @@ func TestUpdateRelayLogs(t *testing.T) {
 		before, err := os.ReadFile(l.target)
 		require.NoError(t, err)
 
-		target, startPos, err := updateRelayLogs(newSourceLogs(t), "relay-bin.000002", l.logs(t))
+		target, err := updateRelayLogs(newSourceLogs(t), "relay-bin.000002", l.logs(t))
 
 		require.NoError(t, err)
 		assert.Equal(t, l.target, target)
-		assert.Equal(t, uint64(len(before)), startPos)
 
 		after, err := os.ReadFile(l.target)
 		require.NoError(t, err)
@@ -474,11 +474,10 @@ func TestUpdateRelayLogs(t *testing.T) {
 	t.Run("an applier behind the target is fine", func(t *testing.T) {
 		l := newRelayLayout(t)
 
-		target, startPos, err := updateRelayLogs(newSourceLogs(t), "relay-bin.000001", l.logs(t))
+		target, err := updateRelayLogs(newSourceLogs(t), "relay-bin.000001", l.logs(t))
 
 		require.NoError(t, err)
 		assert.Equal(t, l.target, target)
-		assert.Equal(t, uint64(13), startPos)
 		l.assertUntouched(t)
 	})
 
@@ -487,7 +486,7 @@ func TestUpdateRelayLogs(t *testing.T) {
 		before, err := os.ReadFile(l.target)
 		require.NoError(t, err)
 
-		_, _, err = updateRelayLogs(newSourceLogs(t), "relay-bin.000003", l.logs(t))
+		_, err = updateRelayLogs(newSourceLogs(t), "relay-bin.000003", l.logs(t))
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "applier is on relay-bin.000003, ahead of the newest closed relay log relay-bin.000002")
@@ -505,7 +504,7 @@ func TestUpdateRelayLogs(t *testing.T) {
 		binlogFile(t, l.dir, "new-relay.000001", "")
 		writeIndex(t, l.index, "./relay-bin.000001", "./relay-bin.000002", "./relay-bin.000003", "./new-relay.000001")
 
-		_, _, err := updateRelayLogs(newSourceLogs(t), "new-relay.000001", l.logs(t))
+		_, err := updateRelayLogs(newSourceLogs(t), "new-relay.000001", l.logs(t))
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "applier is on new-relay.000001, ahead of the newest closed relay log relay-bin.000003")
@@ -521,11 +520,10 @@ func TestUpdateRelayLogs(t *testing.T) {
 		binlogFile(t, l.dir, "new-relay.000002", "")
 		writeIndex(t, l.index, "./relay-bin.000009", "./new-relay.000001", "./new-relay.000002")
 
-		got, startPos, err := updateRelayLogs(newSourceLogs(t), "relay-bin.000009", l.logs(t))
+		got, err := updateRelayLogs(newSourceLogs(t), "relay-bin.000009", l.logs(t))
 
 		require.NoError(t, err)
 		assert.Equal(t, target, got)
-		assert.Equal(t, uint64(len(magic+"new-one")), startPos)
 
 		after, err := os.ReadFile(target)
 		require.NoError(t, err)
@@ -536,7 +534,7 @@ func TestUpdateRelayLogs(t *testing.T) {
 		l := newRelayLayout(t)
 		writeIndex(t, l.index, "./relay-bin.000001")
 
-		_, _, err := updateRelayLogs(newSourceLogs(t), "relay-bin.000001", l.logs(t))
+		_, err := updateRelayLogs(newSourceLogs(t), "relay-bin.000001", l.logs(t))
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "get relay log to append to")
@@ -547,7 +545,7 @@ func TestUpdateRelayLogs(t *testing.T) {
 		l := newRelayLayout(t)
 		require.NoError(t, os.Remove(l.target))
 
-		_, _, err := updateRelayLogs(newSourceLogs(t), "relay-bin.000002", l.logs(t))
+		_, err := updateRelayLogs(newSourceLogs(t), "relay-bin.000002", l.logs(t))
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "stat ")
@@ -559,7 +557,7 @@ func TestUpdateRelayLogs(t *testing.T) {
 		require.NoError(t, os.Remove(l.target))
 		require.NoError(t, os.Mkdir(l.target, 0o755))
 
-		_, _, err := updateRelayLogs(newSourceLogs(t), "relay-bin.000002", l.logs(t))
+		_, err := updateRelayLogs(newSourceLogs(t), "relay-bin.000002", l.logs(t))
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "open ")
@@ -568,7 +566,7 @@ func TestUpdateRelayLogs(t *testing.T) {
 	t.Run("an applier relay log the index does not list", func(t *testing.T) {
 		l := newRelayLayout(t)
 
-		_, _, err := updateRelayLogs(newSourceLogs(t), "relay-bin", l.logs(t))
+		_, err := updateRelayLogs(newSourceLogs(t), "relay-bin", l.logs(t))
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), `the index does not list the applier's relay log "relay-bin"`)
@@ -578,7 +576,7 @@ func TestUpdateRelayLogs(t *testing.T) {
 	t.Run("uninitialized applier", func(t *testing.T) {
 		l := newRelayLayout(t)
 
-		_, _, err := updateRelayLogs(newSourceLogs(t), "", l.logs(t))
+		_, err := updateRelayLogs(newSourceLogs(t), "", l.logs(t))
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), `the index does not list the applier's relay log ""`)
@@ -595,7 +593,7 @@ func TestUpdateRelayLogs(t *testing.T) {
 			writeFile(t, srcDir, "binlog.000005", []byte("NOPEwhole-five")),
 		}
 
-		_, _, err = updateRelayLogs(sourceLogs, "relay-bin.000002", l.logs(t))
+		_, err = updateRelayLogs(sourceLogs, "relay-bin.000002", l.logs(t))
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "unexpected magic number")
@@ -620,7 +618,7 @@ func TestUpdateRelayLogs(t *testing.T) {
 			writeFile(t, srcDir, "binlog.000005", []byte("NOPEwhole-five")),
 		}
 
-		_, _, err := updateRelayLogs(sourceLogs, "relay-bin.000002", l.logs(t))
+		_, err := updateRelayLogs(sourceLogs, "relay-bin.000002", l.logs(t))
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "unexpected magic number")
@@ -632,7 +630,7 @@ func TestUpdateRelayLogs(t *testing.T) {
 		before, err := os.ReadFile(l.target)
 		require.NoError(t, err)
 
-		_, _, err = updateRelayLogs([]string{filepath.Join(t.TempDir(), "binlog.000004")},
+		_, err = updateRelayLogs([]string{filepath.Join(t.TempDir(), "binlog.000004")},
 			"relay-bin.000002", l.logs(t))
 
 		require.Error(t, err)
@@ -649,11 +647,10 @@ func TestUpdateRelayLogs(t *testing.T) {
 		require.NoError(t, err)
 		empty := writeFile(t, t.TempDir(), "binlog.000004", nil)
 
-		target, startPos, err := updateRelayLogs([]string{empty}, "relay-bin.000002", l.logs(t))
+		target, err := updateRelayLogs([]string{empty}, "relay-bin.000002", l.logs(t))
 
 		require.NoError(t, err)
 		assert.Equal(t, "relay-bin.000002", target)
-		assert.Equal(t, uint64(0), startPos)
 
 		after, err := os.ReadFile(l.target)
 		require.NoError(t, err)
@@ -666,32 +663,29 @@ func TestUpdateRelayLogs(t *testing.T) {
 		writeIndex(t, l.index, "./relay-bin.000003")
 		empty := writeFile(t, t.TempDir(), "binlog.000004", nil)
 
-		target, startPos, err := updateRelayLogs([]string{empty}, "relay-bin.000003", l.logs(t))
+		target, err := updateRelayLogs([]string{empty}, "relay-bin.000003", l.logs(t))
 
 		require.NoError(t, err)
 		assert.Equal(t, "relay-bin.000003", target)
-		assert.Equal(t, uint64(0), startPos)
 	})
 
 	t.Run("no source logs", func(t *testing.T) {
 		l := newRelayLayout(t)
 		writeIndex(t, l.index, "./relay-bin.000003")
 
-		target, startPos, err := updateRelayLogs(nil, "relay-bin.000003", l.logs(t))
+		target, err := updateRelayLogs(nil, "relay-bin.000003", l.logs(t))
 
 		require.NoError(t, err)
 		assert.Equal(t, "relay-bin.000003", target)
-		assert.Equal(t, uint64(0), startPos)
 	})
 
 	t.Run("nothing to splice tolerates an uninitialized applier", func(t *testing.T) {
 		l := newRelayLayout(t)
 
-		target, startPos, err := updateRelayLogs(nil, "", l.logs(t))
+		target, err := updateRelayLogs(nil, "", l.logs(t))
 
 		require.NoError(t, err)
 		assert.Empty(t, target)
-		assert.Equal(t, uint64(0), startPos)
 	})
 
 	t.Run("precedes every source log after the first with a Rotate event", func(t *testing.T) {
@@ -706,7 +700,7 @@ func TestUpdateRelayLogs(t *testing.T) {
 		first := writeFile(t, dir, "binlog.000004", []byte("tail-of-four"))
 		second := writeFile(t, dir, "binlog.000005", append([]byte(magic), append(fde(42, true), []byte("whole-five")...)...))
 
-		_, _, err = updateRelayLogs([]string{first, second}, "relay-bin.000002", l.logs(t))
+		_, err = updateRelayLogs([]string{first, second}, "relay-bin.000002", l.logs(t))
 		require.NoError(t, err)
 
 		after, err := os.ReadFile(l.target)
@@ -724,7 +718,7 @@ func TestUpdateRelayLogs(t *testing.T) {
 		before, err := os.ReadFile(l.target)
 		require.NoError(t, err)
 
-		_, _, err = updateRelayLogs(newSourceLogs(t), "relay-bin.000002", l.logs(t))
+		_, err = updateRelayLogs(newSourceLogs(t), "relay-bin.000002", l.logs(t))
 		require.NoError(t, err)
 
 		after, err := os.ReadFile(l.target)
@@ -832,6 +826,16 @@ func TestSpliceInto(t *testing.T) {
 		after, err := os.ReadFile(l.target)
 		require.NoError(t, err)
 		assert.Equal(t, before, after)
+	})
+}
+
+func TestRollbackSplice(t *testing.T) {
+	t.Run("a relay log that cannot be truncated is reported as torn", func(t *testing.T) {
+		l := newRelayLayout(t)
+		relay, err := os.Open(l.target)
+		require.NoError(t, err)
+
+		require.ErrorIs(t, rollbackSplice(relay, l.target, 4), errSpliceNotRolledBack)
 	})
 }
 
@@ -1142,6 +1146,8 @@ func TestFetchLogsFromSource(t *testing.T) {
 	})
 
 	t.Run("waits for a sidecar that is not listening yet", func(t *testing.T) {
+		t.Parallel()
+
 		addr := freeAddr(t)
 		srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			_, _ = w.Write(tarBytes(t, sourceArchive[0]))
@@ -1166,6 +1172,8 @@ func TestFetchLogsFromSource(t *testing.T) {
 	})
 
 	t.Run("gives up on a sidecar that never listens once the stall bound is spent", func(t *testing.T) {
+		t.Parallel()
+
 		_, err := fetchLogsFromSource(t.Context(), filepath.Join(t.TempDir(), "source-logs"),
 			"http://"+freeAddr(t), testSourcePassword, "binlog.000004", 157, 3*sidecarPoll)
 
@@ -1176,6 +1184,8 @@ func TestFetchLogsFromSource(t *testing.T) {
 	})
 
 	t.Run("keeps waiting for a sidecar whose host does not resolve yet", func(t *testing.T) {
+		t.Parallel()
+
 		_, err := fetchLogsFromSource(t.Context(), filepath.Join(t.TempDir(), "source-logs"),
 			sourceStreamURL("mysql-0.source.invalid"), testSourcePassword, "binlog.000004", 157, 3*sidecarPoll)
 
@@ -1210,6 +1220,8 @@ func TestFetchLogsFromSource(t *testing.T) {
 	// The bound is on silence, not on the transfer: a large stranded tail over a
 	// slow link takes as long as it takes, as long as bytes keep arriving.
 	t.Run("a slow source that keeps sending is not a stalled one", func(t *testing.T) {
+		t.Parallel()
+
 		archive := tarBytes(t, sourceArchive...)
 		const chunks = 20
 		const pause = 25 * time.Millisecond
@@ -1250,12 +1262,14 @@ func TestFetchLogsFromSource(t *testing.T) {
 	})
 
 	t.Run("source unreachable", func(t *testing.T) {
+		t.Parallel()
+
 		srv, _, _ := streamServer(t, http.StatusOK, nil)
 		url := srv.URL
 		srv.Close()
 
 		_, err := fetchLogsFromSource(t.Context(), filepath.Join(t.TempDir(), "source-logs"),
-			url, testSourcePassword, "binlog.000004", 157, testFetchTimeout)
+			url, testSourcePassword, "binlog.000004", 157, 3*sidecarPoll)
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "stream logs from source")
@@ -1303,9 +1317,38 @@ type fakeStatuser struct {
 	err      error
 	calls    int
 	onCall   func(calls int) // runs before the status is returned
+
+	subtractErr error
+	subtracts   int
 }
 
-var _ replicaStatuser = (*fakeStatuser)(nil)
+var _ applierStatuser = (*fakeStatuser)(nil)
+
+// GTIDSubtract treats a set as a list of single GTIDs, which is all the tests write.
+func (f *fakeStatuser) GTIDSubtract(_ context.Context, set, other string) (string, error) {
+	f.subtracts++
+	if f.subtractErr != nil {
+		return "", f.subtractErr
+	}
+
+	split := func(s string) []string {
+		return strings.FieldsFunc(s, func(r rune) bool { return r == ',' || r == ' ' || r == '\n' })
+	}
+
+	have := make(map[string]bool)
+	for _, g := range split(other) {
+		have[g] = true
+	}
+
+	var missing []string
+	for _, g := range split(set) {
+		if !have[g] {
+			missing = append(missing, g)
+		}
+	}
+
+	return strings.Join(missing, ","), nil
+}
 
 func (f *fakeStatuser) ShowReplicaStatus(context.Context) (map[string]string, error) {
 	f.calls++
@@ -1333,7 +1376,11 @@ type vanishingStatuser struct {
 	after int
 }
 
-var _ replicaStatuser = (*vanishingStatuser)(nil)
+var _ applierStatuser = (*vanishingStatuser)(nil)
+
+func (v *vanishingStatuser) GTIDSubtract(ctx context.Context, set, other string) (string, error) {
+	return v.inner.GTIDSubtract(ctx, set, other)
+}
 
 func (v *vanishingStatuser) ShowReplicaStatus(ctx context.Context) (map[string]string, error) {
 	if v.inner.calls >= v.after {
@@ -1352,90 +1399,108 @@ func applying(file string, pos uint64, state string) map[string]string {
 	}
 }
 
+// withGTIDs adds the GTID sets a status reports.
+func withGTIDs(status map[string]string, retrieved, executed string) map[string]string {
+	status = maps.Clone(status)
+	status["Retrieved_Gtid_Set"] = retrieved
+	status["Executed_Gtid_Set"] = executed
+
+	return status
+}
+
 func TestWaitForRelayLogsApplied(t *testing.T) {
 	const (
-		target     = "relay-bin.000002"
-		startPos   = uint64(100)
+		relayLog   = "relay-bin.000002"
 		poll       = time.Millisecond
 		patience   = time.Second
 		impatience = 50 * time.Millisecond
 	)
 
-	logs := relayIndex{"relay-bin.000001", target, "relay-bin.000003"}
-
-	t.Run("succeeds once the applier is drained, stable and past startPos", func(t *testing.T) {
+	t.Run("succeeds once the applier is drained, stable and has executed what was fetched", func(t *testing.T) {
 		f := &fakeStatuser{statuses: []map[string]string{
-			applying(target, 150, busyState),
-			applying(target, 220, drainedState),
-			applying(target, 220, drainedState),
+			withGTIDs(applying(relayLog, 150, busyState), "", "a:1"),
+			withGTIDs(applying(relayLog, 220, drainedState), "", "a:1,a:2"),
+			withGTIDs(applying(relayLog, 220, drainedState), "", "a:1,a:2"),
 		}}
 
-		require.NoError(t, waitApplied(t, f, logs, nil, target, startPos, poll, patience))
+		require.NoError(t, waitApplied(t, f, nil, "a:2", poll, patience))
 		// Stability needs the same position twice, so poll 1 can never finish it.
 		assert.GreaterOrEqual(t, f.calls, 3)
 	})
 
 	t.Run("two polls are the minimum", func(t *testing.T) {
-		f := &fakeStatuser{statuses: []map[string]string{applying(target, 220, drainedState)}}
+		f := &fakeStatuser{statuses: []map[string]string{withGTIDs(applying(relayLog, 220, drainedState), "", "a:1")}}
 
-		require.NoError(t, waitApplied(t, f, logs, nil, target, startPos, poll, patience))
+		require.NoError(t, waitApplied(t, f, nil, "a:1", poll, patience))
 		assert.Equal(t, 2, f.calls)
 	})
 
-	t.Run("startPos 0 only requires the applier to drain", func(t *testing.T) {
-		f := &fakeStatuser{statuses: []map[string]string{applying(target, 4, drainedState)}}
+	t.Run("with nothing fetched or retrieved the applier only has to drain", func(t *testing.T) {
+		f := &fakeStatuser{statuses: []map[string]string{applying(relayLog, 4, drainedState)}}
 
-		require.NoError(t, waitApplied(t, f, logs, nil, target, 0, poll, patience))
+		require.NoError(t, waitApplied(t, f, nil, "", poll, patience))
+		assert.Zero(t, f.subtracts, "an empty set has nothing to compare")
 	})
 
-	t.Run("a later relay log counts as progress", func(t *testing.T) {
-		f := &fakeStatuser{statuses: []map[string]string{applying("relay-bin.000003", 4, drainedState)}}
+	t.Run("a position short of the splice is fine once nothing is missing", func(t *testing.T) {
+		// The applier's position is the end of the last transaction it committed,
+		// so it never passes events that are not part of one, like a Stop event
+		// spliced in after a Rotate.
+		f := &fakeStatuser{statuses: []map[string]string{
+			withGTIDs(applying("relay-bin.000028", 297825767, drainedState), "a:1,a:2", "a:1,a:2"),
+		}}
 
-		require.NoError(t, waitApplied(t, f, logs, nil, target, startPos, poll, patience))
+		require.NoError(t, waitApplied(t, f, nil, "", poll, patience))
 	})
 
-	t.Run("a lower suffix later in the index counts as progress", func(t *testing.T) {
-		mixed := relayIndex{"relay-bin.000009", target, "new-relay.000001"}
-		f := &fakeStatuser{statuses: []map[string]string{applying("new-relay.000001", 4, drainedState)}}
+	t.Run("waits for the fetched transactions to execute", func(t *testing.T) {
+		f := &fakeStatuser{statuses: []map[string]string{
+			withGTIDs(applying(relayLog, 220, drainedState), "", "a:1"),
+			withGTIDs(applying(relayLog, 220, drainedState), "", "a:1"),
+			withGTIDs(applying(relayLog, 220, drainedState), "", "a:1"),
+			withGTIDs(applying(relayLog, 220, drainedState), "", "a:1,a:2"),
+		}}
 
-		require.NoError(t, waitApplied(t, f, mixed, nil, target, startPos, poll, patience))
+		require.NoError(t, waitApplied(t, f, nil, "a:2", poll, patience))
+		assert.Equal(t, 4, f.calls)
 	})
 
-	t.Run("a higher suffix earlier in the index is not progress", func(t *testing.T) {
-		mixed := relayIndex{"relay-bin.000009", target, "new-relay.000001"}
-		f := &fakeStatuser{statuses: []map[string]string{applying("relay-bin.000009", 999, drainedState)}}
+	t.Run("waits for what the receiver had already retrieved", func(t *testing.T) {
+		f := &fakeStatuser{statuses: []map[string]string{
+			withGTIDs(applying(relayLog, 220, drainedState), "a:1,a:2", "a:1"),
+			withGTIDs(applying(relayLog, 220, drainedState), "a:1,a:2", "a:1"),
+			withGTIDs(applying(relayLog, 220, drainedState), "a:1,a:2", "a:1,a:2"),
+		}}
 
-		err := waitApplied(t, f, mixed, nil, target, startPos, poll, impatience)
-
-		require.Error(t, err)
-		assert.ErrorIs(t, err, context.DeadlineExceeded)
+		require.NoError(t, waitApplied(t, f, nil, "", poll, patience))
+		assert.Equal(t, 3, f.calls)
 	})
 
 	t.Run("the pre-8.0.22 state wording still counts as drained", func(t *testing.T) {
-		f := &fakeStatuser{statuses: []map[string]string{applying(target, 220, legacyDrainedState)}}
+		f := &fakeStatuser{statuses: []map[string]string{applying(relayLog, 220, legacyDrainedState)}}
 
-		require.NoError(t, waitApplied(t, f, logs, nil, target, startPos, poll, patience))
+		require.NoError(t, waitApplied(t, f, nil, "", poll, patience))
 	})
 
-	t.Run("an empty poll does not reset progress", func(t *testing.T) {
+	t.Run("an empty poll does not reset stability", func(t *testing.T) {
 		f := &fakeStatuser{statuses: []map[string]string{
-			applying(target, 101, drainedState),
+			applying(relayLog, 101, drainedState),
 			{"Replica_SQL_Running": "Yes", "Relay_Log_File": ""},
-			applying(target, 101, drainedState),
+			applying(relayLog, 101, drainedState),
 		}}
 
-		require.NoError(t, waitApplied(t, f, logs, nil, target, startPos, poll, patience))
+		require.NoError(t, waitApplied(t, f, nil, "", poll, patience))
 		assert.Equal(t, 3, f.calls)
 	})
 
 	t.Run("waits through an uninitialized applier", func(t *testing.T) {
 		f := &fakeStatuser{statuses: []map[string]string{
 			{"Replica_SQL_Running": "Yes", "Relay_Log_File": "", "Relay_Log_Pos": "garbage"},
-			applying(target, 220, drainedState),
-			applying(target, 220, drainedState),
+			applying(relayLog, 220, drainedState),
+			applying(relayLog, 220, drainedState),
 		}}
 
-		require.NoError(t, waitApplied(t, f, logs, nil, target, startPos, poll, patience))
+		require.NoError(t, waitApplied(t, f, nil, "", poll, patience))
 		assert.Equal(t, 3, f.calls)
 	})
 
@@ -1443,32 +1508,30 @@ func TestWaitForRelayLogsApplied(t *testing.T) {
 		name     string
 		statuses []map[string]string
 		cycle    bool
+		fetched  string
 	}{
 		{
-			name:     "drained and stable in an earlier relay log",
-			statuses: []map[string]string{applying("relay-bin.000001", 999, drainedState)},
+			name:     "drained and stable but a fetched transaction never executes",
+			statuses: []map[string]string{withGTIDs(applying(relayLog, 999, drainedState), "", "a:1")},
+			fetched:  "a:1,a:2",
 		},
 		{
-			name:     "before startPos in the target log",
-			statuses: []map[string]string{applying(target, 50, drainedState)},
+			name:     "drained and stable but a retrieved transaction never executes",
+			statuses: []map[string]string{withGTIDs(applying(relayLog, 999, drainedState), "a:1,a:2", "a:1")},
 		},
 		{
-			name:     "exactly at startPos",
-			statuses: []map[string]string{applying(target, startPos, drainedState)},
-		},
-		{
-			name:     "past startPos but never drained",
-			statuses: []map[string]string{applying(target, 500, busyState)},
+			name:     "never drained",
+			statuses: []map[string]string{applying(relayLog, 500, busyState)},
 		},
 		{
 			name:     "no running state reported",
-			statuses: []map[string]string{applying(target, 500, "")},
+			statuses: []map[string]string{applying(relayLog, 500, "")},
 		},
 		{
 			name: "drained but the position keeps moving",
 			statuses: []map[string]string{
-				applying(target, 220, drainedState),
-				applying(target, 260, drainedState),
+				applying(relayLog, 220, drainedState),
+				applying(relayLog, 260, drainedState),
 			},
 			cycle: true,
 		},
@@ -1482,7 +1545,7 @@ func TestWaitForRelayLogsApplied(t *testing.T) {
 		t.Run("times out: "+tt.name, func(t *testing.T) {
 			f := &fakeStatuser{statuses: tt.statuses, cycle: tt.cycle}
 
-			err := waitApplied(t, f, logs, nil, target, startPos, poll, impatience)
+			err := waitApplied(t, f, nil, tt.fetched, poll, impatience)
 
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "gave up after")
@@ -1492,13 +1555,11 @@ func TestWaitForRelayLogsApplied(t *testing.T) {
 
 	failures := []struct {
 		name     string
-		relayLog string
 		statuses []map[string]string
 		wantErr  string
 	}{
 		{
-			name:     "SQL thread failed",
-			relayLog: target,
+			name: "SQL thread failed",
 			statuses: []map[string]string{{
 				"Replica_SQL_Running": "Yes",
 				"Last_SQL_Error":      "Error 1062: Duplicate entry",
@@ -1506,8 +1567,7 @@ func TestWaitForRelayLogsApplied(t *testing.T) {
 			wantErr: "SQL_THREAD failed: Error 1062: Duplicate entry",
 		},
 		{
-			name:     "a failed thread reports the error, not just that it stopped",
-			relayLog: target,
+			name: "a failed thread reports the error, not just that it stopped",
 			statuses: []map[string]string{{
 				"Replica_SQL_Running": "No",
 				"Last_SQL_Error":      "Error 1062: Duplicate entry",
@@ -1516,37 +1576,18 @@ func TestWaitForRelayLogsApplied(t *testing.T) {
 		},
 		{
 			name:     "SQL thread stopped",
-			relayLog: target,
 			statuses: []map[string]string{{"Replica_SQL_Running": "No"}},
 			wantErr:  "SQL_THREAD is not running",
 		},
 		{
 			name:     "SQL thread state missing",
-			relayLog: target,
 			statuses: []map[string]string{{}},
 			wantErr:  "SQL_THREAD is not running",
 		},
 		{
 			name:     "lowercase yes is not Yes",
-			relayLog: target,
 			statuses: []map[string]string{{"Replica_SQL_Running": "yes"}},
 			wantErr:  "SQL_THREAD is not running",
-		},
-		{
-			name:     "unparseable Relay_Log_Pos",
-			relayLog: target,
-			statuses: []map[string]string{{
-				"Replica_SQL_Running": "Yes",
-				"Relay_Log_File":      target,
-				"Relay_Log_Pos":       "x",
-			}},
-			wantErr: "parse Relay_Log_Pos",
-		},
-		{
-			name:     "a current relay log the index does not list",
-			relayLog: target,
-			statuses: []map[string]string{applying("garbage", 500, drainedState)},
-			wantErr:  "the applier is on garbage, which the index does not list",
 		},
 	}
 
@@ -1554,27 +1595,29 @@ func TestWaitForRelayLogsApplied(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			f := &fakeStatuser{statuses: tt.statuses}
 
-			err := waitApplied(t, f, logs, nil, tt.relayLog, startPos, poll, impatience)
+			err := waitApplied(t, f, nil, "", poll, impatience)
 
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tt.wantErr)
 		})
 	}
 
-	t.Run("a target the index does not list fails before polling", func(t *testing.T) {
-		f := &fakeStatuser{statuses: []map[string]string{applying(target, 220, drainedState)}}
+	t.Run("the GTID comparison fails", func(t *testing.T) {
+		f := &fakeStatuser{
+			statuses:    []map[string]string{withGTIDs(applying(relayLog, 220, drainedState), "", "a:1")},
+			subtractErr: errors.New("connection lost"),
+		}
 
-		err := waitApplied(t, f, logs, nil, "relay-bin", startPos, poll, patience)
+		err := waitApplied(t, f, nil, "a:1", poll, patience)
 
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), `the index does not list the relay log "relay-bin"`)
-		assert.Equal(t, 0, f.calls)
+		assert.Contains(t, err.Error(), "compare executed GTIDs: connection lost")
 	})
 
 	t.Run("the status query fails", func(t *testing.T) {
 		f := &fakeStatuser{err: errors.New("connection lost")}
 
-		err := waitApplied(t, f, logs, nil, target, startPos, poll, patience)
+		err := waitApplied(t, f, nil, "", poll, patience)
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "show replica status: connection lost")
@@ -1582,45 +1625,46 @@ func TestWaitForRelayLogsApplied(t *testing.T) {
 	})
 
 	t.Run("a channel that disappears mid-wait is not a failure", func(t *testing.T) {
-		inner := &fakeStatuser{statuses: []map[string]string{applying(target, 150, busyState)}}
+		inner := &fakeStatuser{statuses: []map[string]string{applying(relayLog, 150, busyState)}}
 		v := &vanishingStatuser{inner: inner, after: 2}
 
-		require.NoError(t, waitApplied(t, v, logs, nil, target, startPos, poll, patience))
+		require.NoError(t, waitApplied(t, v, nil, "", poll, patience))
 		assert.Equal(t, 2, inner.calls, "the wait ends on the read that finds no rows")
 	})
 
 	t.Run("a channel that is already gone is not a failure", func(t *testing.T) {
 		f := &fakeStatuser{err: sql.ErrNoRows}
 
-		require.NoError(t, waitApplied(t, f, logs, nil, target, startPos, poll, patience))
+		require.NoError(t, waitApplied(t, f, nil, "", poll, patience))
 	})
 
-	t.Run("the give-up message reports where the applier stopped", func(t *testing.T) {
-		f := &fakeStatuser{statuses: []map[string]string{applying(target, startPos, drainedState)}}
+	t.Run("the give-up message reports where the applier stopped and what is missing", func(t *testing.T) {
+		f := &fakeStatuser{statuses: []map[string]string{withGTIDs(applying(relayLog, 100, drainedState), "", "")}}
 
-		err := waitApplied(t, f, logs, nil, target, startPos, poll, 20*time.Millisecond)
+		err := waitApplied(t, f, nil, "a:7", poll, 20*time.Millisecond)
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "gave up after ")
 		assert.Contains(t, err.Error(), "at relay-bin.000002:100")
+		assert.Contains(t, err.Error(), `missing "a:7"`)
 	})
 
 	t.Run("a long poll interval does not delay the timeout", func(t *testing.T) {
-		f := &fakeStatuser{statuses: []map[string]string{applying(target, startPos, drainedState)}}
+		f := &fakeStatuser{statuses: []map[string]string{applying(relayLog, 100, busyState)}}
 
 		start := time.Now()
-		err := waitApplied(t, f, logs, nil, target, startPos, time.Second, 10*time.Millisecond)
+		err := waitApplied(t, f, nil, "", time.Second, 10*time.Millisecond)
 
 		require.Error(t, err)
 		assert.Less(t, time.Since(start), 500*time.Millisecond)
 	})
 
 	t.Run("an already cancelled context", func(t *testing.T) {
-		f := &fakeStatuser{statuses: []map[string]string{applying(target, startPos, drainedState)}}
+		f := &fakeStatuser{statuses: []map[string]string{applying(relayLog, 100, busyState)}}
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
 
-		err := waitForRelayLogsApplied(ctx, f, logs, nil, target, startPos, poll)
+		err := waitForRelayLogsApplied(ctx, f, nil, "", poll)
 
 		require.Error(t, err)
 		assert.ErrorIs(t, err, context.Canceled)
@@ -1706,6 +1750,35 @@ func TestStagingPath(t *testing.T) {
 	})
 }
 
+func TestRemoveStagingDir(t *testing.T) {
+	t.Run("removes a staging dir the job created", func(t *testing.T) {
+		dir := filepath.Join(t.TempDir(), "source-logs")
+		require.NoError(t, prepareStagingDir(dir))
+		writeFile(t, dir, "binlog.000004", []byte("DATA"))
+
+		removeStagingDir(dir)
+
+		assert.NoDirExists(t, dir)
+	})
+
+	t.Run("a missing dir is not an error", func(t *testing.T) {
+		dir := filepath.Join(t.TempDir(), "source-logs")
+
+		removeStagingDir(dir)
+
+		assert.NoDirExists(t, dir)
+	})
+
+	t.Run("leaves a dir the job does not own alone", func(t *testing.T) {
+		dir := t.TempDir()
+		writeFile(t, dir, "ibdata1", []byte("DATA"))
+
+		removeStagingDir(dir)
+
+		assert.FileExists(t, filepath.Join(dir, "ibdata1"), "nothing may be deleted")
+	})
+}
+
 func TestIsDialError(t *testing.T) {
 	dial := func(err error) error { return &net.OpError{Op: "dial", Net: "tcp", Err: err} }
 
@@ -1776,11 +1849,9 @@ func TestSourceStreamURL(t *testing.T) {
 // wait has no budget of its own any more.
 func waitApplied(
 	t *testing.T,
-	s replicaStatuser,
-	relayLogs relayIndex,
+	s applierStatuser,
 	recovered <-chan struct{},
-	relayLog string,
-	startPos uint64,
+	fetchedGTIDs string,
 	poll, timeout time.Duration,
 ) error {
 	t.Helper()
@@ -1788,7 +1859,7 @@ func waitApplied(
 	ctx, cancel := context.WithTimeout(t.Context(), timeout)
 	defer cancel()
 
-	return waitForRelayLogsApplied(ctx, s, relayLogs, recovered, relayLog, startPos, poll)
+	return waitForRelayLogsApplied(ctx, s, recovered, fetchedGTIDs, poll)
 }
 
 // freeAddr returns a local address nothing listens on.

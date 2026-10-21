@@ -1,0 +1,23 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+delete:
+  - apiVersion: ps.percona.com/v1
+    kind: PerconaServerMySQLRestore
+    metadata:
+      name: gr-pitr-s3-restore-too-old-gtid
+  - apiVersion: ps.percona.com/v1
+    kind: PerconaServerMySQLRestore
+    metadata:
+      name: gr-pitr-s3-restore-bad-gtid
+  - apiVersion: ps.percona.com/v1
+    kind: PerconaServerMySQLRestore
+    metadata:
+      name: gr-pitr-s3-restore-unknown-uuid
+  - apiVersion: ps.percona.com/v1
+    kind: PerconaServerMySQLRestore
+    metadata:
+      name: gr-pitr-s3-restore-future-gtid
+  - apiVersion: ps.percona.com/v1
+    kind: PerconaServerMySQLRestore
+    metadata:
+      name: gr-pitr-s3-restore-too-old-date

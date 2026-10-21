@@ -127,6 +127,13 @@ spec:
           defaultMode: 420
           optional: true
           secretName: internal-encryption-keys-sidecars
+      - name: log-collector-logrotate-creds
+        secret:
+          defaultMode: 420
+          items:
+          - key: monitor
+            path: monitor
+          secretName: internal-sidecars
       - emptyDir:
           medium: Memory
         name: empty-vol
