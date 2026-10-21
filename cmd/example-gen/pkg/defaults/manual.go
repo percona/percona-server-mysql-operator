@@ -114,7 +114,7 @@ func orchestratorDefaults(spec *apiv1.OrchestratorSpec) {
 	podSpecDefaults(&spec.PodSpec, ImageOrchestrator, resources("128M", "", "512M", ""), "", 30, envList("ORC_ENV", "VALUE"), envFromList("orc-env-secret"))
 
 	spec.Enabled = false
-	spec.Configuration = `{"ReasonableReplicationLagSeconds": 30}`
+	spec.Configuration = `{"ReasonableReplicationLagSeconds": 60, "ReasonableMaintenanceReplicationLagSeconds": 120}`
 	spec.Failover = &apiv1.FailoverSpec{
 		Timeout:   "1h",
 		OnTimeout: apiv1.FailoverPolicyAbort,
