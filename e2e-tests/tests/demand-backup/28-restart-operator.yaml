@@ -1,0 +1,27 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 600
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster_name=$(get_cluster_name)
+      storage_name=$(kubectl get ps "$cluster_name" -n "$NAMESPACE" -o yaml \
+        | yq '(.spec.backup.storages // {}) | keys | .[0]')
+
+      # The backup the errored restore asks for now exists. Restarting the
+      # operator reconciles every restore, which used to start this one and
+      # pause a healthy cluster.
+      run_backup stale-restore-backup "$storage_name"
+      kubectl -n "${NAMESPACE}" wait --for=jsonpath='{.status.state}'=Succeeded \
+        ps-backup/stale-restore-backup --timeout=300s
+
+      kubectl -n "${OPERATOR_NS:-$NAMESPACE}" rollout restart deployment/percona-server-mysql-operator
+      kubectl -n "${OPERATOR_NS:-$NAMESPACE}" rollout status deployment/percona-server-mysql-operator --timeout=120s
+
+      # Give the restarted operator time to reconcile the restore it should
+      # leave alone.
+      sleep 60
