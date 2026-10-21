@@ -48,7 +48,8 @@
   "RaftNodes": [
     "127.0.0.1"
   ],
-  "ReasonableMaintenanceReplicationLagSeconds": 300,
+  "ReasonableReplicationLagSeconds": 60,
+  "ReasonableMaintenanceReplicationLagSeconds": 120,
   "RecoverIntermediateMasterClusterFilters": [
     ".*"
   ],

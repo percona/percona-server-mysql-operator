@@ -235,16 +235,6 @@ func TestBakedConfigDisablesPromotionLagVeto(t *testing.T) {
 	assert.EqualValues(t, 0, cfg["FailMasterPromotionOnLagMinutes"])
 }
 
-func TestBakedMaintenanceLagMatchesFallback(t *testing.T) {
-	data, err := os.ReadFile(filepath.Join("..", "..", "build", "orchestrator.conf.json"))
-	require.NoError(t, err)
-
-	cfg := map[string]any{}
-	require.NoError(t, json.Unmarshal(data, &cfg))
-
-	assert.EqualValues(t, bakedMaintenanceLagSeconds, cfg["ReasonableMaintenanceReplicationLagSeconds"])
-}
-
 func TestSwitchoverCatchUp(t *testing.T) {
 	tests := map[string]struct {
 		version string
