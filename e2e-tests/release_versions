@@ -11,7 +11,8 @@ IMAGE_ROUTER80=percona/percona-mysql-router:8.0.46-37.1
 IMAGE_HAPROXY=percona/haproxy:3.4.4-1
 IMAGE_ORCHESTRATOR=percona/percona-orchestrator:3.2.6-24
 IMAGE_TOOLKIT=percona/percona-toolkit:3.7.1-4
-IMAGE_LOGCOLLECTOR=percona/fluentbit:5.1.4-1
+IMAGE_LOG_COLLECTOR=percona/fluentbit:5.1.4-1
+IMAGE_BINLOG_SERVER=percona/percona-server-mysql-operator:1.3.0-binlog-server-0.4.1
 IMAGE_PMM3_CLIENT=percona/pmm-client:3.9.1
 IMAGE_PMM3_SERVER=percona/pmm-server:3.9.1
 
