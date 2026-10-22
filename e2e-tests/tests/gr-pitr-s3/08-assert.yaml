@@ -1,34 +1,27 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
 timeout: 600
----
-apiVersion: ps.percona.com/v1
-kind: PerconaServerMySQL
-metadata:
-  name: gr-pitr-s3
-  finalizers:
-    - percona.com/delete-mysql-pods-in-order
-status:
-  router:
-    ready: 3
-    size: 3
-    state: ready
-  mysql:
-    ready: 3
-    size: 3
-    state: ready
-  state: ready
----
-kind: PerconaServerMySQLRestore
-apiVersion: ps.percona.com/v1
-metadata:
-  name: gr-pitr-s3-restore-date
-spec:
-  backupSource:
-    storage:
-      s3:
-        caBundle:
-          name: s3-restore-ca-bundle
-          key: ca.crt
-status:
-  state: Succeeded
+collectors:
+  - type: command
+    command: kubectl logs deployment/percona-server-mysql-operator -n "${OPERATOR_NS:-$NAMESPACE}" --tail=500
+  - type: pod
+    selector: "app.kubernetes.io/component=pitr"
+    tail: 1000
+resourceRefs:
+  - apiVersion: ps.percona.com/v1
+    kind: PerconaServerMySQL
+    name: gr-pitr-s3
+    ref: cluster
+  - apiVersion: ps.percona.com/v1
+    kind: PerconaServerMySQLRestore
+    name: gr-pitr-s3-restore-date
+    ref: restore
+assertAll:
+  - celExpr: cluster.status.state == "ready" && cluster.status.mysql.ready == 3 && cluster.status.router.ready == 3
+    message: "Cluster should be ready after restore"
+
+  - celExpr: restore.status.state == "Succeeded"
+    message: "Date PITR restore should succeed"
+
+  - celExpr: restore.spec.backupSource.storage.s3.caBundle.name == "s3-restore-ca-bundle" && restore.spec.backupSource.storage.s3.caBundle.key == "ca.crt"
+    message: "Restore should use its S3 CA bundle"

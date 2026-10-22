@@ -1,10 +1,29 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
 timeout: 600
----
-apiVersion: ps.percona.com/v1
-kind: PerconaServerMySQLBackup
-metadata:
-  name: gr-pitr-s3-backup-2
-status:
-  state: Succeeded
+collectors:
+  - type: command
+    command: kubectl logs deployment/percona-server-mysql-operator -n "${OPERATOR_NS:-$NAMESPACE}" --tail=500
+  - type: command
+    command: kubectl describe ps-backup gr-pitr-s3-backup-2 -n "${NAMESPACE}"
+  - type: command
+    command: kubectl get lease ps-gr-pitr-s3-backup-lock -n "${NAMESPACE}" -o yaml
+  - type: command
+    command: kubectl get jobs,pods -n "${NAMESPACE}" -o wide
+resourceRefs:
+  - apiVersion: ps.percona.com/v1
+    kind: PerconaServerMySQLBackup
+    name: gr-pitr-s3-backup-2
+    ref: backup
+assertAll:
+  - celExpr: backup.status.state == "Succeeded"
+    message: "Backup should succeed after failover and CA rotation"
+
+  - celExpr: backup.status.type == "full" && backup.status.destination != ""
+    message: "Full backup should have a destination"
+
+  - celExpr: >-
+      has(backup.status.storage.s3.caBundle) &&
+      backup.status.storage.s3.caBundle.name == "s3-ca-bundle-rotated" &&
+      backup.status.storage.s3.caBundle.key == "ca.crt"
+    message: "Backup should use the rotated CA bundle"

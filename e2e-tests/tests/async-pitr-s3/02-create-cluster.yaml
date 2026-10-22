@@ -10,9 +10,11 @@ commands:
       get_cr \
           | yq eval '.spec.mysql.clusterType="async"' - \
           | yq eval ".spec.mysql.size=3" - \
+          | yq eval '.spec.mysql.resources = {"limits": {"cpu": "1", "memory": "2Gi"}, "requests": {"cpu": "1", "memory": "2Gi"}}' - \
           | yq eval ".spec.orchestrator.enabled=true" - \
           | yq eval ".spec.proxy.haproxy.enabled=true" - \
           | yq eval ".spec.proxy.haproxy.size=3" - \
+          | yq eval '.spec.proxy.haproxy.resources = {"limits": {"cpu": "200m", "memory": "256Mi"}, "requests": {"cpu": "200m", "memory": "256Mi"}}' - \
           | yq eval ".spec.proxy.router.enabled=false" - \
           | yq eval ".spec.backup.backoffLimit=3" - \
           | yq eval '.spec.backup.storages.local-s3.type="s3"' - \
