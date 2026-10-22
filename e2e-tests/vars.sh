@@ -11,7 +11,7 @@ export GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 export VERSION=${VERSION:-$(echo "${GIT_BRANCH}" | sed -e 's^/^-^g; s^[.]^-^g;' | tr '[:upper:]' '[:lower:]')}
 
 export PMM_SERVER_VERSION=${PMM_SERVER_VERSION:-"1.4.3"}
-export CERT_MANAGER_VER="1.20.3"
+export CERT_MANAGER_VER="1.21.2"
 export SEAWEEDFS_VER="4.47.0"
 export CHAOS_MESH_VER="2.7.2"
 export VAULT_VER="0.16.1"
