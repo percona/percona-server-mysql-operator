@@ -6,7 +6,6 @@ RUN go mod download
 
 ARG GIT_COMMIT
 ARG BUILD_TIME
-ARG BUILD_TIME
 ARG GO_LDFLAGS
 ARG GOOS=linux
 ARG TARGETARCH
@@ -64,12 +63,52 @@ RUN GOOS=$GOOS GOARCH=$TARGETARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAG
     go build -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.GitBranch=$GIT_BRANCH -X main.BuildTime=$BUILD_TIME" \
     -o build/_output/bin/clusterset-replica-manager \
     ./cmd/clusterset-replica-manager/ \
-    && cp -r build/_output/bin/clusterset-replica-manager /usr/local/bin/clusterset-replica-manager
+	&& cp -r build/_output/bin/clusterset-replica-manager /usr/local/bin/clusterset-replica-manager
+
+# Assemble the operator helper tree here so the runtime image can copy it in one layer.
+RUN mkdir -p /opt/percona-server-mysql-operator \
+    && cp -a \
+        /usr/local/bin/bootstrap \
+        /usr/local/bin/healthcheck \
+        /usr/local/bin/sidecar \
+        /usr/local/bin/failover \
+        /usr/local/bin/peer-list \
+        /usr/local/bin/orc-handler \
+        /usr/local/bin/mysql-state-monitor \
+        /usr/local/bin/clusterset-replica-manager \
+        /usr/local/bin/pitr \
+        build/ps-entrypoint.sh \
+        build/ps-pre-stop.sh \
+        build/heartbeat-entrypoint.sh \
+        build/router-entrypoint.sh \
+        build/router_readiness_check.sh \
+        build/router_startup_check.sh \
+        build/orc-entrypoint.sh \
+        build/orchestrator.conf.json \
+        build/orc-add_mysql_nodes.sh \
+        build/ps-init-entrypoint.sh \
+        build/run-backup.sh \
+        build/run-restore.sh \
+        build/prepare-s3-certs.sh \
+        build/haproxy-entrypoint.sh \
+        build/haproxy_add_mysql_nodes.sh \
+        build/haproxy_check_primary.sh \
+        build/haproxy_check_replicas.sh \
+        build/haproxy_liveness_check.sh \
+        build/haproxy_readiness_check.sh \
+        build/haproxy_startup_check.sh \
+        build/haproxy.cfg \
+        build/haproxy-global.cfg \
+        build/pmm-prerun.sh \
+        build/binlog-server-entrypoint.sh \
+        build/run-pitr-restore.sh \
+        build/run-prepare-restore.sh \
+        build/lib \
+        build/logcollector \
+        /opt/percona-server-mysql-operator/
 
 FROM redhat/ubi9-minimal AS ubi9
 RUN microdnf -y update && microdnf clean all
-
-RUN mkdir /opt/percona-server-mysql-operator
 
 LABEL name="Percona Distribution for MySQL Operator" \
     vendor="Percona" \
@@ -79,42 +118,6 @@ LABEL name="Percona Distribution for MySQL Operator" \
 
 COPY LICENSE /licenses/
 COPY --from=go_builder /usr/local/bin/percona-server-mysql-operator /usr/local/bin/percona-server-mysql-operator
-COPY --from=go_builder /usr/local/bin/bootstrap /opt/percona-server-mysql-operator/bootstrap
-COPY --from=go_builder /usr/local/bin/healthcheck /opt/percona-server-mysql-operator/healthcheck
-COPY --from=go_builder /usr/local/bin/sidecar /opt/percona-server-mysql-operator/sidecar
-COPY --from=go_builder /usr/local/bin/failover /opt/percona-server-mysql-operator/failover
-COPY --from=go_builder /usr/local/bin/peer-list /opt/percona-server-mysql-operator/peer-list
-COPY --from=go_builder /usr/local/bin/orc-handler /opt/percona-server-mysql-operator/orc-handler
-COPY --from=go_builder /usr/local/bin/mysql-state-monitor /opt/percona-server-mysql-operator/mysql-state-monitor
-COPY --from=go_builder /usr/local/bin/clusterset-replica-manager /opt/percona-server-mysql-operator/clusterset-replica-manager
-COPY build/lib/util.sh /opt/percona-server-mysql-operator/lib/util.sh
-COPY build/ps-entrypoint.sh /opt/percona-server-mysql-operator/ps-entrypoint.sh
-COPY build/ps-pre-stop.sh /opt/percona-server-mysql-operator/ps-pre-stop.sh
-COPY build/heartbeat-entrypoint.sh /opt/percona-server-mysql-operator/heartbeat-entrypoint.sh
-COPY build/router-entrypoint.sh /opt/percona-server-mysql-operator/router-entrypoint.sh
-COPY build/router_readiness_check.sh /opt/percona-server-mysql-operator/router_readiness_check.sh
-COPY build/router_startup_check.sh /opt/percona-server-mysql-operator/router_startup_check.sh
-COPY build/orc-entrypoint.sh /opt/percona-server-mysql-operator/orc-entrypoint.sh
-COPY build/orchestrator.conf.json /opt/percona-server-mysql-operator/orchestrator.conf.json
-COPY build/orc-add_mysql_nodes.sh /opt/percona-server-mysql-operator/orc-add_mysql_nodes.sh
-COPY build/ps-init-entrypoint.sh /opt/percona-server-mysql-operator/ps-init-entrypoint.sh
-COPY build/run-backup.sh /opt/percona-server-mysql-operator/run-backup.sh
-COPY build/run-restore.sh /opt/percona-server-mysql-operator/run-restore.sh
-COPY build/prepare-s3-certs.sh /opt/percona-server-mysql-operator/prepare-s3-certs.sh
-COPY build/haproxy-entrypoint.sh /opt/percona-server-mysql-operator/haproxy-entrypoint.sh
-COPY build/haproxy_add_mysql_nodes.sh /opt/percona-server-mysql-operator/haproxy_add_mysql_nodes.sh
-COPY build/haproxy_check_primary.sh /opt/percona-server-mysql-operator/haproxy_check_primary.sh
-COPY build/haproxy_check_replicas.sh /opt/percona-server-mysql-operator/haproxy_check_replicas.sh
-COPY build/haproxy_liveness_check.sh /opt/percona-server-mysql-operator/haproxy_liveness_check.sh
-COPY build/haproxy_readiness_check.sh /opt/percona-server-mysql-operator/haproxy_readiness_check.sh
-COPY build/haproxy_startup_check.sh /opt/percona-server-mysql-operator/haproxy_startup_check.sh
-COPY build/haproxy.cfg /opt/percona-server-mysql-operator/haproxy.cfg
-COPY build/haproxy-global.cfg /opt/percona-server-mysql-operator/haproxy-global.cfg
-COPY build/pmm-prerun.sh /opt/percona-server-mysql-operator/pmm-prerun.sh
-COPY build/binlog-server-entrypoint.sh /opt/percona-server-mysql-operator/binlog-server-entrypoint.sh
-COPY --from=go_builder /usr/local/bin/pitr /opt/percona-server-mysql-operator/pitr
-COPY build/run-pitr-restore.sh /opt/percona-server-mysql-operator/run-pitr-restore.sh
-COPY build/run-prepare-restore.sh /opt/percona-server-mysql-operator/run-prepare-restore.sh
-COPY build/logcollector /opt/percona-server-mysql-operator/logcollector
+COPY --from=go_builder /opt/percona-server-mysql-operator /opt/percona-server-mysql-operator
 
 USER 2
