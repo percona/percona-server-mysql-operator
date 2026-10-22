@@ -13,8 +13,8 @@ IMAGE_ORCHESTRATOR=percona/percona-orchestrator:3.2.6-24
 IMAGE_TOOLKIT=percona/percona-toolkit:3.7.1-4
 IMAGE_LOG_COLLECTOR=percona/fluentbit:5.1.4-1
 IMAGE_BINLOG_SERVER=percona/percona-server-mysql-operator:1.3.0-binlog-server-0.4.1
-IMAGE_PMM3_CLIENT=percona/pmm-client:3.9.1
-IMAGE_PMM3_SERVER=percona/pmm-server:3.9.1
+IMAGE_PMM_CLIENT=percona/pmm-client:3.9.1
+IMAGE_PMM_SERVER=percona/pmm-server:3.9.1
 
 GKE_MIN=1.34
 GKE_MAX=1.35

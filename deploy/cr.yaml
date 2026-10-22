@@ -677,7 +677,7 @@ spec:
 #    configuration: '{"ReasonableReplicationLagSeconds": 60, "ReasonableMaintenanceReplicationLagSeconds": 120}'
   pmm:
     enabled: false
-    image: 
+    image: percona/pmm-client:3.9.1
     imagePullPolicy: Always
     serverHost: monitoring-service
 #    customClusterName: cluster1-custom
