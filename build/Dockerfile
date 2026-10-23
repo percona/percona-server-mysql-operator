@@ -5,6 +5,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 ARG GIT_COMMIT
+ARG GIT_BRANCH
 ARG BUILD_TIME
 ARG GO_LDFLAGS
 ARG GOOS=linux
