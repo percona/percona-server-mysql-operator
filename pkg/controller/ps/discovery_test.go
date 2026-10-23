@@ -111,3 +111,22 @@ func TestDiscoverMissingInstances(t *testing.T) {
 		assert.Len(t, cliCmd.commands, 1, "the attempt still has to be made")
 	})
 }
+
+func TestFirstBootstrappedPod(t *testing.T) {
+	notStarted := bootstrappedPod("cluster1-mysql-0")
+	notStarted.Status.ContainerStatuses[0].Started = new(false)
+
+	t.Run("returns nil when no pod is bootstrapped", func(t *testing.T) {
+		assert.Nil(t, firstBootstrappedPod(nil))
+		assert.Nil(t, firstBootstrappedPod([]corev1.Pod{notStarted}))
+	})
+
+	t.Run("returns the bootstrapped pod with the lowest name", func(t *testing.T) {
+		pods := []corev1.Pod{bootstrappedPod("cluster1-mysql-2"), notStarted, bootstrappedPod("cluster1-mysql-1")}
+
+		got := firstBootstrappedPod(pods)
+
+		require.NotNil(t, got)
+		assert.Equal(t, "cluster1-mysql-1", got.Name)
+	})
+}
