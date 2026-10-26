@@ -217,6 +217,25 @@ if [ "${DISTRIBUTION}" == "redhat" ]; then
 	examples_json="$(rewrite_cr_example_images "${examples_json}" "${redhat_images}")"
 fi
 
+# Optional pointer fields are omitted from deploy/cr.yaml. OLM examples still
+# publish them as JSON null, matching the 1.2.0 bundle:
+#   spec.backup.storages.s3-us-west.encryptionKeySecret
+#   spec.backup.encryptionKeySecret
+#   spec.storageScaling
+examples_json="$(jq 'map(
+	if .kind == "PerconaServerMySQL" then
+		.spec.backup.storages["s3-us-west"].encryptionKeySecret = null
+		| .spec.backup.encryptionKeySecret = null
+		| .spec = (
+			(.spec | with_entries(select(.key != "toolkit" and .key != "storageScaling")))
+			+ {storageScaling: null}
+			+ {toolkit: .spec.toolkit}
+		)
+	else
+		.
+	end
+)' <<<"${examples_json}")"
+
 export examples="${examples_json}"
 
 yq eval '
