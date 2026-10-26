@@ -6,7 +6,7 @@ metadata:
   name: backup1
 spec:
   clusterName: ps-cluster1
-  storageName: minio
+  storageName: s3-us-west
 #  type: full
 #  incrementalBaseBackupName: some-backup
 #  sourcePod: ps-cluster1-mysql-1
