@@ -218,13 +218,17 @@ if [ "${DISTRIBUTION}" == "redhat" ]; then
 fi
 
 # Optional pointer fields are omitted from deploy/cr.yaml. OLM examples still
-# publish them as JSON null, matching the 1.2.0 bundle:
+# publish them as JSON null so OpenShift does not fill their required children:
+#   spec.backup.pitr.binlogServer
+#   spec.backup.storages.s3-us-west.s3.caBundle
 #   spec.backup.storages.s3-us-west.encryptionKeySecret
 #   spec.backup.encryptionKeySecret
 #   spec.storageScaling
 examples_json="$(jq 'map(
 	if .kind == "PerconaServerMySQL" then
-		.spec.backup.storages["s3-us-west"].encryptionKeySecret = null
+		.spec.backup.pitr.binlogServer = null
+		| .spec.backup.storages["s3-us-west"].s3.caBundle = null
+		| .spec.backup.storages["s3-us-west"].encryptionKeySecret = null
 		| .spec.backup.encryptionKeySecret = null
 		| .spec = (
 			(.spec | with_entries(select(.key != "toolkit" and .key != "storageScaling")))
@@ -273,6 +277,7 @@ yq eval --inplace '
 
 if [ "${DISTRIBUTION}" == "community" ]; then
 	update_yaml_images "bundles/$DISTRIBUTION/manifests/${file_name}.v${VERSION}.clusterserviceversion.yaml"
+    chmod 644 "bundles/$DISTRIBUTION/manifests/${file_name}.v${VERSION}.clusterserviceversion.yaml"
 elif [ "${DISTRIBUTION}" == "redhat" ]; then
 	yq eval --inplace '
         .metadata.annotations["features.operators.openshift.io/disconnected"] = "true" |
