@@ -16351,10 +16351,6 @@ spec:
                 async cluster type
               rule: (oldSelf.mysql.clusterType == self.mysql.clusterType) || self.mysql.clusterType
                 == 'async' || !self.?orchestrator.?enabled.orValue(false)
-            - message: 'Invalid configuration: ''orchestrator.failover'' only applies
-                when ''mysql.clusterType'' is set to ''async'''
-              rule: '!(self.mysql.clusterType == ''group-replication'') || !has(self.orchestrator)
-                || !has(self.orchestrator.failover)'
           status:
             properties:
               backupVersion:

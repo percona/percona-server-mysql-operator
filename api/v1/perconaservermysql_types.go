@@ -71,7 +71,6 @@ const (
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async' && self.updateStrategy == 'SmartUpdate') || (has(self.orchestrator) && self.orchestrator.enabled)",message="Invalid configuration: For 'async' replication, SmartUpdate requires Orchestrator to be enabled"
 // +kubebuilder:validation:XValidation:rule="!has(self.proxy) || !(has(self.proxy.router) && has(self.proxy.router.enabled) && self.proxy.router.enabled && has(self.proxy.haproxy) && has(self.proxy.haproxy.enabled) && self.proxy.haproxy.enabled)",message="Invalid configuration: MySQL Router and HAProxy can't be enabled at the same time"
 // +kubebuilder:validation:XValidation:rule="(oldSelf.mysql.clusterType == self.mysql.clusterType) || self.mysql.clusterType == 'async' || !self.?orchestrator.?enabled.orValue(false)",message="spec.orchestrator.enabled should be false when switching from async cluster type"
-// +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'group-replication') || !has(self.orchestrator) || !has(self.orchestrator.failover)",message="Invalid configuration: 'orchestrator.failover' only applies when 'mysql.clusterType' is set to 'async'"
 type PerconaServerMySQLSpec struct {
 	Metadata  *Metadata `json:"metadata,omitempty"`
 	CRVersion string    `json:"crVersion,omitempty"`
