@@ -190,7 +190,7 @@ export version="${VERSION}"
 export timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 export name="${stem}.v${VERSION}"
 export name_certified="${stem}-certified.v${VERSION}"
-export skip_range="<v${VERSION}"
+export skip_range="<${VERSION}"
 export containerImage=$(yq eval '.[0].spec.template.spec.containers[0].image' operator_deployments.yaml)
 export deployment=$(yq eval operator_deployments.yaml)
 export account=$(yq eval '.[0] | .metadata.name' operator_accounts.yaml)
@@ -216,6 +216,42 @@ examples_json=$(jq -n "[
 if [ "${DISTRIBUTION}" == "redhat" ]; then
 	examples_json="$(rewrite_cr_example_images "${examples_json}" "${redhat_images}")"
 fi
+
+# The OpenShift console fills CRD defaults into alm-examples, which turns an
+# absent optional object into one that holds only its defaulted fields (for
+# example keyringSecret: {key: keyring.json}). Objects whose required fields
+# have no default then fail validation. An explicit null stops the console from
+# creating them. The null must sit on the outermost object that is absent from
+# the example: the API server drops nulls but keeps any parent objects a nested
+# null would create, and those parents fail validation on kubectl apply.
+#   spec.orchestrator.failover (only allowed for async clusters)
+#   spec.backup.pitr.binlogServer (keyringSecret, storage.s3 and storage.encryption)
+#   spec.backup.storages.s3-us-west.s3.caBundle (needs name)
+#   spec.backup.storages.s3-us-west.encryptionKeySecret (needs name)
+#   spec.backup.encryptionKeySecret (needs name)
+#   spec.storageScaling (kept for parity with the 1.2.0 bundle)
+# and in PerconaServerMySQLRestore:
+#   spec.pitr (needs type; any pitr object turns the restore into a PITR restore)
+#   spec.backupSource (storage needs type, s3, caBundle and encryptionKeySecret)
+examples_json="$(jq 'map(
+	if .kind == "PerconaServerMySQL" then
+		.spec.orchestrator.failover = null
+		| .spec.backup.pitr.binlogServer = null
+		| .spec.backup.storages["s3-us-west"].s3.caBundle = null
+		| .spec.backup.storages["s3-us-west"].encryptionKeySecret = null
+		| .spec.backup.encryptionKeySecret = null
+		| .spec = (
+			(.spec | with_entries(select(.key != "toolkit" and .key != "storageScaling")))
+			+ {storageScaling: null}
+			+ {toolkit: .spec.toolkit}
+		)
+	elif .kind == "PerconaServerMySQLRestore" then
+		.spec.pitr = null
+		| .spec.backupSource = null
+	else
+		.
+	end
+)' <<<"${examples_json}")"
 
 export examples="${examples_json}"
 
@@ -254,6 +290,7 @@ yq eval --inplace '
 
 if [ "${DISTRIBUTION}" == "community" ]; then
 	update_yaml_images "bundles/$DISTRIBUTION/manifests/${file_name}.v${VERSION}.clusterserviceversion.yaml"
+    chmod 644 "bundles/$DISTRIBUTION/manifests/${file_name}.v${VERSION}.clusterserviceversion.yaml"
 elif [ "${DISTRIBUTION}" == "redhat" ]; then
 	yq eval --inplace '
         .metadata.annotations["features.operators.openshift.io/disconnected"] = "true" |
