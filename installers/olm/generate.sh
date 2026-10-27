@@ -217,16 +217,26 @@ if [ "${DISTRIBUTION}" == "redhat" ]; then
 	examples_json="$(rewrite_cr_example_images "${examples_json}" "${redhat_images}")"
 fi
 
-# Optional pointer fields are omitted from deploy/cr.yaml. OLM examples still
-# publish them as JSON null so OpenShift does not fill their required children:
-#   spec.backup.pitr.binlogServer
-#   spec.backup.storages.s3-us-west.s3.caBundle
-#   spec.backup.storages.s3-us-west.encryptionKeySecret
-#   spec.backup.encryptionKeySecret
-#   spec.storageScaling
+# The OpenShift console fills CRD defaults into alm-examples, which turns an
+# absent optional object into one that holds only its defaulted fields (for
+# example keyringSecret: {key: keyring.json}). Objects whose required fields
+# have no default then fail validation. An explicit null stops the console from
+# creating them. The null must sit on the outermost object that is absent from
+# the example: the API server drops nulls but keeps any parent objects a nested
+# null would create, and those parents fail validation on kubectl apply.
+#   spec.orchestrator.failover (only allowed for async clusters)
+#   spec.backup.pitr.binlogServer (keyringSecret, storage.s3 and storage.encryption)
+#   spec.backup.storages.s3-us-west.s3.caBundle (needs name)
+#   spec.backup.storages.s3-us-west.encryptionKeySecret (needs name)
+#   spec.backup.encryptionKeySecret (needs name)
+#   spec.storageScaling (kept for parity with the 1.2.0 bundle)
+# and in PerconaServerMySQLRestore:
+#   spec.pitr (needs type; any pitr object turns the restore into a PITR restore)
+#   spec.backupSource (storage needs type, s3, caBundle and encryptionKeySecret)
 examples_json="$(jq 'map(
 	if .kind == "PerconaServerMySQL" then
-		.spec.backup.pitr.binlogServer = null
+		.spec.orchestrator.failover = null
+		| .spec.backup.pitr.binlogServer = null
 		| .spec.backup.storages["s3-us-west"].s3.caBundle = null
 		| .spec.backup.storages["s3-us-west"].encryptionKeySecret = null
 		| .spec.backup.encryptionKeySecret = null
@@ -235,6 +245,9 @@ examples_json="$(jq 'map(
 			+ {storageScaling: null}
 			+ {toolkit: .spec.toolkit}
 		)
+	elif .kind == "PerconaServerMySQLRestore" then
+		.spec.pitr = null
+		| .spec.backupSource = null
 	else
 		.
 	end
