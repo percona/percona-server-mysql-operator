@@ -283,7 +283,7 @@ spec:
 #          - 10.0.0.0/8
 #        type: ClusterIP
       size: 3
-      image: percona/haproxy:3.4.4-1
+      image: percona/haproxy:2.8.29-1
       imagePullPolicy: Always
 #      imagePullSecrets:
 #        - name: my-secret-1
