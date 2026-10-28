@@ -1286,7 +1286,7 @@ metadata:
     app.kubernetes.io/component: crd
     app.kubernetes.io/name: percona-server-crd
     app.kubernetes.io/part-of: percona-server-mysql-operator
-    app.kubernetes.io/version: v1.2.0
+    app.kubernetes.io/version: v1.3.0
   name: perconaservermysqlclustersets.ps.percona.com
 spec:
   group: ps.percona.com
