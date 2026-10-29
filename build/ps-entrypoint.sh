@@ -250,6 +250,12 @@ create_default_cnf() {
 			) >>$CFG
 		fi
 	done
+
+	# The GR plugin is loaded later (load_group_replication_plugin), so bare
+	# group_replication_* keys are unknown during "mysqld --initialize" and
+	# would make initialization fail. Rewrite them to loose_ so mysqld
+	# silently ignores them when the plugin is absent.
+	sed -i -E 's/^([[:space:]]*)group_replication_/\1loose_group_replication_/' $CFG
 }
 
 load_group_replication_plugin() {
