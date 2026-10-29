@@ -26,7 +26,7 @@ spec:
 #        writeTimeout: 30
 #        idleTime: 30
 #        logLevel: info
-#    date: "2024-11-18T11:10:48Z"
+#    date: "2024-11-18 11:10:48"
 #    force: false
 #    gtid: a3e5ff70-83e2-11ef-8e57-7a62caf7e1e3:1-36
 #    keyringSecret:
