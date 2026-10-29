@@ -582,9 +582,10 @@ const (
 	// from ReasonableReplicationLagSeconds, the same ratio as orchestrator's own
 	// defaults (10s and 20s)
 	maintenanceLagFactor = 2
-	// bakedMaintenanceLagSeconds is build/orchestrator.conf.json's value, in
-	// effect when neither the operator nor the user sets one
-	bakedMaintenanceLagSeconds = 300
+	// legacyMaintenanceLagSeconds is what init images before 1.3.0 bake into
+	// orchestrator.conf.json, in effect when neither the operator nor the user
+	// sets one
+	legacyMaintenanceLagSeconds = 300
 )
 
 // preFailoverProcesses renders the hook that recovers the transactions stranded
@@ -672,7 +673,7 @@ func SwitchoverCatchUp(cr *apiv1.PerconaServerMySQL) (time.Duration, error) {
 
 	v, ok := config["ReasonableMaintenanceReplicationLagSeconds"]
 	if !ok {
-		return bakedMaintenanceLagSeconds * time.Second, nil
+		return legacyMaintenanceLagSeconds * time.Second, nil
 	}
 	secs, err := seconds(v)
 	if err != nil {

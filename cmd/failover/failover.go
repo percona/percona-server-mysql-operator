@@ -34,6 +34,10 @@ const (
 	// create and must not touch.
 	stagingMarker = ".failover-staging"
 	sourceLogsDir = "/var/lib/mysql/source-logs"
+
+	// logFileName is shared by every attempt: the lock keeps them from
+	// writing it at the same time
+	logFileName = "failover.log"
 )
 
 const (
@@ -157,6 +161,10 @@ func config(f flags) failoverConfig {
 func main() {
 	flags := parseFlags()
 
+	// UTC with microseconds, so the attempts in failover.log line up with
+	// orchestrator's own log
+	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.LUTC)
+
 	// Nothing else bounds the fetch, and the job runs from a failover hook that
 	// holds up the promotion for as long as it takes.
 	ctx := context.Background()
@@ -221,9 +229,9 @@ func run(ctx context.Context, cfg failoverConfig) (err error) {
 	}
 	defer lock.Close() //nolint:errcheck
 
-	logFile := filepath.Join(cfg.logDir, fmt.Sprintf("failover.%s.log", time.Now().Format(time.RFC3339)))
+	logFile := filepath.Join(cfg.logDir, logFileName)
 
-	if f, err := os.OpenFile(logFile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666); err != nil {
+	if f, err := os.OpenFile(logFile, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0666); err != nil {
 		log.Printf("WARNING: keeping the log on stderr only: %v", err)
 	} else {
 		log.SetOutput(io.MultiWriter(os.Stderr, f))
@@ -233,6 +241,7 @@ func run(ctx context.Context, cfg failoverConfig) (err error) {
 		}
 	}
 
+	log.Printf("=== Attempt started at %s (pid %d): %s", time.Now().UTC().Format(time.RFC3339Nano), os.Getpid(), strings.Join(os.Args, " "))
 	log.Printf("Fetching binary logs from %s", host)
 
 	d, err := cfg.newDatabase(ctx)

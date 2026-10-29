@@ -213,6 +213,7 @@ spec:
             storage: 30Gi
 #        storageClassName: standard
 #    configuration: |-
+#      [mysqld]
 #      max_connections=250
 #      innodb_buffer_pool_size={{containerMemoryLimit * 3/4}}
 #    sidecars:
@@ -673,7 +674,7 @@ spec:
 #    podSecurityContext:
 #      supplementalGroups:
 #        - 1001
-#    configuration: '{"ReasonableReplicationLagSeconds": 30}'
+#    configuration: '{"ReasonableReplicationLagSeconds": 60, "ReasonableMaintenanceReplicationLagSeconds": 120}'
   pmm:
     enabled: false
     image: perconalab/pmm-client:3-dev-latest
