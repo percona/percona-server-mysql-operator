@@ -1,6 +1,9 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
 timeout: 180
+collectors:
+  - type: command
+    command: kubectl logs deployment/percona-server-mysql-operator -n "${OPERATOR_NS:-$NAMESPACE}" --tail=500
 commands:
   - script: |-
       set -o errexit

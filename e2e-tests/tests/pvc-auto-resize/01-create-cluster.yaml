@@ -25,6 +25,7 @@ commands:
           | yq eval '.spec.storageScaling.autoscaling.maxSize="12Gi"' - \
           | yq eval '.spec.mysql.volumeSpec.persistentVolumeClaim.resources.requests.storage="10Gi"' - \
           | yq eval '.spec.mysql.resources.limits.memory="2Gi"' - \
-          | yq eval '.spec.mysql.resources.requests.memory="1Gi"' -)"
+          | yq eval '.spec.mysql.resources.requests.memory="1Gi"' - \
+          | yq eval '... comments = ""' -)"
 
       printf '%s\n' "$cr" | kubectl -n "${NAMESPACE}" apply -f -

@@ -1,14 +1,18 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 delete:
-- apiVersion: ps.percona.com/v1
-  kind: PerconaServerMySQL
-  metadata:
-    name: gr-cross-cluster-dc1
-- apiVersion: ps.percona.com/v1
-  kind: PerconaServerMySQL
-  metadata:
-    name: gr-cross-cluster-dc2
+  - apiVersion: ps.percona.com/v1
+    kind: PerconaServerMySQL
+    metadata:
+      name: gr-cross-cluster-dc1
+  - apiVersion: ps.percona.com/v1
+    kind: PerconaServerMySQL
+    metadata:
+      name: gr-cross-cluster-dc2
+  - apiVersion: ps.percona.com/v1
+    kind: PerconaServerMySQL
+    metadata:
+      name: gr-cross-cluster-single-node
 commands:
   - script: |-
       set -o errexit

@@ -29,6 +29,8 @@ func testGate(t *testing.T) *gate {
 
 const uid = "3b0f4d2e-recovery"
 
+const keptClaimIdle = 250 * time.Millisecond
+
 func TestGateEnter(t *testing.T) {
 	t.Run("the first caller gets in", func(t *testing.T) {
 		g := testGate(t)
@@ -117,13 +119,13 @@ func TestGateClaim(t *testing.T) {
 
 	t.Run("keeping the claim stops it going idle", func(t *testing.T) {
 		g := testGate(t)
-		g.claimIdle = 40 * time.Millisecond
+		g.claimIdle = keptClaimIdle
 		require.NoError(t, g.claim(source, uid))
 
 		stop := g.keepClaim(t.Context(), source)
 		t.Cleanup(stop)
 
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(3 * keptClaimIdle)
 
 		require.ErrorIs(t, g.claim(source, "another"), errClaimed)
 	})
@@ -290,10 +292,10 @@ func TestGuardedFailover(t *testing.T) {
 
 	t.Run("the claim is kept alive while the failover runs", func(t *testing.T) {
 		g := testGate(t)
-		g.claimIdle = 40 * time.Millisecond
+		g.claimIdle = keptClaimIdle
 
 		err := guardedFailover(t.Context(), g, source, uid, func(context.Context) error {
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(3 * keptClaimIdle)
 			return nil
 		})
 

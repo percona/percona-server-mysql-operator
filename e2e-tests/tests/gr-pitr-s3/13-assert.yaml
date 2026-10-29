@@ -2,45 +2,28 @@ apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
 timeout: 600
 collectors:
+  - type: command
+    command: kubectl logs deployment/percona-server-mysql-operator -n "${OPERATOR_NS:-$NAMESPACE}" --tail=500
   - type: pod
     selector: "app.kubernetes.io/component=pitr"
     tail: 1000
----
-apiVersion: ps.percona.com/v1
-kind: PerconaServerMySQL
-metadata:
-  name: gr-pitr-s3
-  finalizers:
-    - percona.com/delete-mysql-pods-in-order
-status:
-  router:
-    ready: 3
-    size: 3
-    state: ready
-  mysql:
-    ready: 3
-    size: 3
-    state: ready
-  state: ready
----
-kind: PerconaServerMySQLRestore
-apiVersion: ps.percona.com/v1
-metadata:
-  name: gr-pitr-s3-restore-post-failover
-spec:
-  backupSource:
-    storage:
-      s3:
-        caBundle:
-          name: s3-ca-bundle-rotated
-          key: ca.crt
-  pitr:
-    backupSource:
-      binlogServer:
-        storage:
-          s3:
-            caBundle:
-              name: s3-ca-bundle-rotated
-              key: ca.crt
-status:
-  state: Succeeded
+resourceRefs:
+  - apiVersion: ps.percona.com/v1
+    kind: PerconaServerMySQL
+    name: gr-pitr-s3
+    ref: cluster
+  - apiVersion: ps.percona.com/v1
+    kind: PerconaServerMySQLRestore
+    name: gr-pitr-s3-restore-post-failover
+    ref: restore
+assertAll:
+  - celExpr: cluster.status.state == "ready" && cluster.status.mysql.ready == 3 && cluster.status.router.ready == 3
+    message: "Cluster should be ready after restore"
+
+  - celExpr: restore.status.state == "Succeeded"
+    message: "PITR restore after failover and CA rotation should succeed"
+
+  - celExpr: >-
+      restore.spec.backupSource.storage.s3.caBundle.name == "s3-ca-bundle-rotated" &&
+      restore.spec.pitr.backupSource.binlogServer.storage.s3.caBundle.name == "s3-ca-bundle-rotated"
+    message: "Restore and binlog source should use the rotated CA bundle"

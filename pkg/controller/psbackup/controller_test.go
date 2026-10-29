@@ -597,6 +597,39 @@ func TestPrepareStatusCompressed(t *testing.T) {
 	}
 }
 
+func TestPrepareStatusDestination(t *testing.T) {
+	const namespace = "test"
+	const storageName = "s3-us-west"
+
+	cluster, err := readDefaultCR("ps-cluster1", namespace)
+	require.NoError(t, err)
+
+	backup, err := readDefaultCRBackup("backup1", namespace)
+	require.NoError(t, err)
+	backup.Spec.ClusterName = cluster.Name
+	backup.Spec.StorageName = storageName
+
+	storage := cluster.Spec.Backup.Storages[storageName]
+	require.NotNil(t, storage)
+
+	reconciler := PerconaServerMySQLBackupReconciler{}
+
+	t.Run("generate when empty", func(t *testing.T) {
+		status := apiv1.PerconaServerMySQLBackupStatus{}
+
+		require.NoError(t, reconciler.prepareStatus(backup, cluster, storage, &status, "mysql-0"))
+		assert.NotEmpty(t, status.Destination)
+	})
+
+	t.Run("preserve existing", func(t *testing.T) {
+		const destination = apiv1.BackupDestination("s3://bucket/existing-backup")
+		status := apiv1.PerconaServerMySQLBackupStatus{Destination: destination}
+
+		require.NoError(t, reconciler.prepareStatus(backup, cluster, storage, &status, "mysql-0"))
+		assert.Equal(t, destination, status.Destination)
+	})
+}
+
 func TestCheckFinalizers(t *testing.T) {
 	scheme := runtime.NewScheme()
 	require.NoError(t, clientgoscheme.AddToScheme(scheme))

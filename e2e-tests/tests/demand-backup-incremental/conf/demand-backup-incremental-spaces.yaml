@@ -6,11 +6,25 @@ spec:
   mysql:
     clusterType: async
     size: 3
+    resources:
+      limits:
+        cpu: "1"
+        memory: 2Gi
+      requests:
+        cpu: "1"
+        memory: 2Gi
 
   proxy:
     haproxy:
       enabled: true
       size: 3
+      resources:
+        limits:
+          cpu: 200m
+          memory: 256Mi
+        requests:
+          cpu: 200m
+          memory: 256Mi
 
   orchestrator:
     enabled: true

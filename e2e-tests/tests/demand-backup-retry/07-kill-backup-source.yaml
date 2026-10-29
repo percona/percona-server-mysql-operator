@@ -1,7 +1,7 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
-  - timeout: 120
+  - timeout: 300
     script: |-
       set -o errexit
       set -o xtrace
@@ -10,6 +10,13 @@ commands:
 
       pod=$(kubectl get ps-backup demand-backup-retry -n ${NAMESPACE} -o jsonpath='{.status.backupSource}' | cut -d'.' -f1)
       kubectl delete pod "$pod" -n ${NAMESPACE} --force --grace-period=0
+
+      # Wait until the running backup observes the lost source and fails. If the
+      # cluster is paused first, the Job controller can delete the backup Pod
+      # while it is still running, leaving no failed attempt to assert or retry.
+      kubectl wait pod -n "$NAMESPACE" \
+        -l 'app.kubernetes.io/component=backup,app.kubernetes.io/instance=demand-backup-retry' \
+        --for='jsonpath={.status.phase}=Failed' --timeout=120s
 
       # Keep the cluster unready until the backup controller suspends the job
       kubectl patch ps demand-backup-retry -n "$NAMESPACE" --type=merge \

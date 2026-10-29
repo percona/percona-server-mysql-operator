@@ -4048,6 +4048,9 @@ spec:
               completed:
                 format: date-time
                 type: string
+              erroredGeneration:
+                format: int64
+                type: integer
               state:
                 type: string
               stateDescription:
@@ -11482,14 +11485,14 @@ spec:
                     || (has(self.resources.requests) && ''memory'' in self.resources.requests)))'
                 - message: mysql.resources cpu must be greater than 0 when mysql.autoConfig.enabled
                     is true
-                  rule: '!(self.?autoConfig.?enabled.orValue(false)) || sign(quantity(has(self.resources.limits)
+                  rule: '!(self.?autoConfig.?enabled.orValue(false)) || sign(quantity(string(has(self.resources.limits)
                     && ''cpu'' in self.resources.limits ? self.resources.limits[''cpu'']
-                    : self.resources.requests[''cpu''])) == 1'
+                    : self.resources.requests[''cpu'']))) == 1'
                 - message: mysql.resources memory must be at least 12Mi when mysql.autoConfig.enabled
                     is true
-                  rule: '!(self.?autoConfig.?enabled.orValue(false)) || quantity(has(self.resources.limits)
+                  rule: '!(self.?autoConfig.?enabled.orValue(false)) || quantity(string(has(self.resources.limits)
                     && ''memory'' in self.resources.limits ? self.resources.limits[''memory'']
-                    : self.resources.requests[''memory'']).compareTo(quantity(''12Mi''))
+                    : self.resources.requests[''memory''])).compareTo(quantity(''12Mi''))
                     >= 0'
                 - message: mysql.autoConfig.version is required when mysql.autoConfig.enabled
                     is true
@@ -16348,10 +16351,6 @@ spec:
                 async cluster type
               rule: (oldSelf.mysql.clusterType == self.mysql.clusterType) || self.mysql.clusterType
                 == 'async' || !self.?orchestrator.?enabled.orValue(false)
-            - message: 'Invalid configuration: ''orchestrator.failover'' only applies
-                when ''mysql.clusterType'' is set to ''async'''
-              rule: '!(self.mysql.clusterType == ''group-replication'') || !has(self.orchestrator)
-                || !has(self.orchestrator.failover)'
           status:
             properties:
               backupVersion:

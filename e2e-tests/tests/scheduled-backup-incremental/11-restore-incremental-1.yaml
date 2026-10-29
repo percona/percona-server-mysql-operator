@@ -1,0 +1,18 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - timeout: 60
+    script: |-
+      set -o errexit
+      set -o xtrace
+      set -o pipefail
+
+      source ../../functions
+
+      cluster_name=$(get_cluster_name)
+      mysql_host=$(get_haproxy_svc "${cluster_name}")
+      restore_name="scheduled-backup-incremental-restore-1"
+
+      run_mysql "DROP DATABASE IF EXISTS myDB; DROP DATABASE IF EXISTS myDB2" "-h ${mysql_host}"
+      # Restore the latest incremental backup from the first incremental schedule engagement.
+      run_restore_from_configmap "06-scheduled-backup-incremental-backup" "${restore_name}" "${cluster_name}"

@@ -1,0 +1,23 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 120
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster_name=$(get_cluster_name)
+
+      # The backup does not exist yet, so the restore errors out and records the
+      # generation it was rejected at.
+      kubectl -n "${NAMESPACE}" apply -f - <<EOF
+      apiVersion: ps.percona.com/v1
+      kind: PerconaServerMySQLRestore
+      metadata:
+        name: stale-restore
+      spec:
+        clusterName: ${cluster_name}
+        backupName: stale-restore-backup
+      EOF

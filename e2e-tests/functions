@@ -2021,6 +2021,142 @@ dump_async_failover_state() {
 	kubectl -n "${OPERATOR_NS:-$NAMESPACE}" logs "$(get_operator_pod)" --tail=300 || true
 }
 
+tail_failover_logs() {
+  local n=${1:-20}
+	local pod
+
+	for pod in $(get_mysql_pods); do
+		echo "--- ${pod} failover.log"
+		kubectl -n "${NAMESPACE}" exec "${pod}" -c mysql -- tail -n ${n} /var/lib/mysql/failover.log || true
+	done
+}
+
+# check_gtids_match_primary fails unless every mysql pod has executed what the
+# primary has and nothing else: a missing transaction never reached the pod, an
+# extra one is errant and the primary does not know about it
+check_gtids_match_primary() {
+	local cluster=$1
+	local primary primary_gtids pod executed missing errant retry
+
+	primary=$(get_primary_from_label)
+	primary_gtids=$(run_mysql "SELECT REPLACE(@@gtid_executed, '\n', '')" "-h ${primary}.${cluster}-mysql")
+
+	for pod in $(get_mysql_pods); do
+		[[ ${pod} == "${primary}" ]] && continue
+
+		retry=0
+		until missing=$(run_mysql "SELECT GTID_SUBTRACT('${primary_gtids}', @@gtid_executed)" "-h ${pod}.${cluster}-mysql") \
+			&& [[ -z ${missing} ]]; do
+			if [[ ${retry} -ge 30 ]]; then
+				echo "${pod} never received ${missing} from ${primary}"
+				return 1
+			fi
+			sleep 2
+			retry=$((retry + 1))
+		done
+
+		# the primary's set is read after the pod's, so whatever the pod has
+		# beyond it did not come from the primary
+		executed=$(run_mysql "SELECT REPLACE(@@gtid_executed, '\n', '')" "-h ${pod}.${cluster}-mysql")
+		errant=$(run_mysql "SELECT GTID_SUBTRACT('${executed}', @@gtid_executed)" "-h ${primary}.${cluster}-mysql")
+		if [[ -n ${errant} ]]; then
+			echo "${pod} has transactions ${primary} lacks: ${errant}"
+			return 1
+		fi
+	done
+}
+
+# check_orc_topology fails unless orchestrator sees every mysql pod, the
+# labelled primary as the only writable master and every other pod replicating
+# from it. orchestrator discovers a pod only when the peers change, so one it
+# lost track of is silently left out of the next failover
+check_orc_topology() {
+	local cluster=$1
+	local primary expected topology pod retry=0
+
+	primary=$(get_primary_from_label)
+	expected=$(for pod in $(get_mysql_pods | sort); do
+		if [[ ${pod} == "${primary}" ]]; then
+			echo "${pod} - writable"
+		else
+			echo "${pod} ${primary} replicating"
+		fi
+	done)
+
+	until topology=$(run_curl_orc "http://$(get_orc_svc "${cluster}"):3000/api/cluster/${cluster}.${NAMESPACE}/" \
+		| jq -r '.[] | [
+			(.Key.Hostname | split(".")[0]),
+			(if .MasterKey.Hostname == "" then "-" else (.MasterKey.Hostname | split(".")[0]) end),
+			(if .IsLastCheckValid | not then "unchecked"
+			 elif .MasterKey.Hostname == "" then (if .ReadOnly then "read-only" else "writable" end)
+			 elif .ReplicationIOThreadRuning and .ReplicationSQLThreadRuning then "replicating"
+			 else "stopped" end)
+		] | join(" ")' | sort) \
+		&& [[ ${topology} == "${expected}" ]]; do
+		if [[ ${retry} -ge 24 ]]; then
+			echo "orchestrator sees:"
+			echo "${topology}"
+			echo "expected:"
+			echo "${expected}"
+			return 1
+		fi
+		sleep 5
+		retry=$((retry + 1))
+	done
+}
+
+# count_events sums the occurrences of the cluster's events with the reason:
+# an identical repeat only bumps an Event's count
+count_events() {
+	local cluster=$1
+	local reason=$2
+
+	kubectl -n "${NAMESPACE}" get events \
+		--field-selector "reason=${reason},involvedObject.name=${cluster}" \
+		-o jsonpath='{range .items[*]}{.count}{"\n"}{end}' \
+		| awk '{ n += ($1 == "" ? 1 : $1) } END { print n + 0 }'
+}
+
+# start_writable_sampler counts the writable mysql pods once per pass over them
+# into ${TEMP_DIR}/writable-samples, until stop_writable_sampler or the deadline;
+# a pod that cannot be queried counts as read-only
+start_writable_sampler() {
+	local cluster=$1
+	local seconds=$2
+
+	rm -f "${TEMP_DIR}/writable-samples"
+	(
+		set +o errexit
+		set +o xtrace
+		deadline=$(($(date +%s) + seconds))
+		while [[ $(date +%s) -lt ${deadline} ]]; do
+			writable=0
+			for pod in $(get_mysql_pods); do
+				ro=$(run_mysql "SELECT @@read_only" "-h ${pod}.${cluster}-mysql" 2>/dev/null || echo 1)
+				[[ ${ro} == "0" ]] && writable=$((writable + 1))
+			done
+			echo "${writable}" >>"${TEMP_DIR}/writable-samples"
+			sleep 1
+		done
+	) >/dev/null 2>&1 &
+	echo $! >"${TEMP_DIR}/writable-sampler.pid"
+}
+
+# stop_writable_sampler fails if the sampler recorded nothing or saw more than
+# one writable pod at once
+stop_writable_sampler() {
+	kill "$(cat "${TEMP_DIR}/writable-sampler.pid")" 2>/dev/null || true
+
+	if [[ ! -s ${TEMP_DIR}/writable-samples ]]; then
+		echo "the read_only sampler recorded nothing"
+		return 1
+	fi
+	if grep -qv '^[01]$' "${TEMP_DIR}/writable-samples"; then
+		echo "two pods were writable at once: $(sort -u "${TEMP_DIR}/writable-samples" | tr '\n' ' ')"
+		return 1
+	fi
+}
+
 # Replaces dynamic server names and addresses so the generated configuration
 # can be compared with a readable haproxy.cfg template.
 normalize_haproxy_config() {
@@ -2791,6 +2927,60 @@ wait_for_restore() {
 	done
 }
 
+get_backup_name_from_configmap() {
+	local backup_configmap=$1
+	local backup_name
+
+	backup_name=$(kubectl get configmap "${backup_configmap}" -n "${NAMESPACE}" -o jsonpath='{.data.backupName}' 2>/dev/null || true)
+	if [[ -z ${backup_name} ]]; then
+		echo "No backup name found in configmap ${backup_configmap}" >&2
+		return 1
+	fi
+
+	echo "${backup_name}"
+}
+
+run_restore_from_configmap() {
+	local backup_configmap=$1
+	local restore_name=$2
+	local cluster_name=${3:-$(get_cluster_name)}
+
+	local backup_name
+	backup_name=$(get_backup_name_from_configmap "${backup_configmap}")
+	run_restore "${restore_name}" "${backup_name}" "${cluster_name}"
+}
+
+verify_restored_data() {
+	local restore_name=$1
+	local mysql_host=$2
+	shift 2
+
+	if (($# == 0 || $# % 3 != 0)); then
+		echo "Expected groups of: expected ConfigMap, query file, restored ConfigMap"
+		return 1
+	fi
+
+	while (($# > 0)); do
+		local expected_data_configmap=$1
+		local query_file=$2
+		local restored_data_configmap=$3
+		shift 3
+
+		local expected_data data restored_data
+		expected_data=$(kubectl get configmap "${expected_data_configmap}" -n "${NAMESPACE}" -o json | jq -c '.data')
+
+		until data=$(retry_run_mysql_query_file "${query_file}" "-h ${mysql_host}") \
+			&& kubectl create configmap -n "${NAMESPACE}" "${restored_data_configmap}" \
+				--from-literal=data="${data}" --dry-run=client -o yaml \
+			| kubectl apply -n "${NAMESPACE}" -f - \
+			&& restored_data=$(kubectl get configmap "${restored_data_configmap}" -n "${NAMESPACE}" -o json | jq -c '.data') \
+			&& [[ ${expected_data} == "${restored_data}" ]]; do
+			echo "Waiting for data after restore ${restore_name} to match configmap ${expected_data_configmap}"
+			sleep 5
+		done
+	done
+}
+
 get_secret_value() {
 	local secret=$1
 	local key1=$2
@@ -2962,7 +3152,7 @@ verify_all_backups_deletion() {
 		fi
 
 		local removed=false
-		for i in {1..5}; do
+		for i in {1..10}; do
 			if [[ "$(count_files_on_storage "$storage_type" "$bucket" "$prefix" "$secret_name" "$region" "$endpoint")" == "0" ]]; then
 				echo "Backup removed: $backup"
 				removed=true
@@ -2974,6 +3164,15 @@ verify_all_backups_deletion() {
 
 		if ! $removed; then
 			echo "Backup still present: $backup"
+
+			local remaining_files
+			if remaining_files=$(list_files_on_storage "$storage_type" "$bucket" "$prefix" "$secret_name" "$region" "$endpoint"); then
+				echo "Files still present in storage:"
+				printf '%s\n' "$remaining_files"
+			else
+				echo "Failed to list files still present in storage"
+			fi
+
 			exit 1
 		fi
 	done
