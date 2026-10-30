@@ -54,7 +54,7 @@ set_image() {
 }
 
 set_image IMAGE "perconalab/percona-server-mysql-operator:${VERSION}"
-# there are no operator builds of the MySQL 9.7 images yet, so use the upstream ones
+# We will not build custom images for 9.7 and will use pillar latest ones (main version tag)
 if [[ ${MYSQL_VERSION} == "9.7" ]]; then
 	set_image IMAGE_MYSQL "percona/percona-server:${MYSQL_VERSION}"
 	set_image IMAGE_BACKUP "percona/percona-xtrabackup:${MYSQL_VERSION}"
