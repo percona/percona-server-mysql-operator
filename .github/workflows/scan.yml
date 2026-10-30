@@ -39,7 +39,7 @@ jobs:
           layers=$(docker inspect --format='{{len .RootFS.Layers}}' "$image")
           echo "$image has $layers layers (must be fewer than ${{ env.MAX_IMAGE_LAYERS }})"
           if [ "$layers" -ge "${{ env.MAX_IMAGE_LAYERS }}" ]; then
-            echo "::error::Docker image $image has $layers layers, which is greater than ${{ env.MAX_IMAGE_LAYERS }}"
+            echo "::error::Docker image $image has $layers layers, which is greater than ${{ env.MAX_IMAGE_LAYERS }} allowed by Openshift certification"
             exit 1
           fi
 
@@ -68,7 +68,7 @@ jobs:
           layers=$(docker inspect --format='{{len .RootFS.Layers}}' "$image")
           echo "$image has $layers layers (must be fewer than ${{ env.MAX_IMAGE_LAYERS }})"
           if [ "$layers" -ge "${{ env.MAX_IMAGE_LAYERS }}" ]; then
-            echo "::error::Docker image $image has $layers layers, which is greater than ${{ env.MAX_IMAGE_LAYERS }}"
+            echo "::error::Docker image $image has $layers layers, which is greater than ${{ env.MAX_IMAGE_LAYERS }} allowed by Openshift certificatio"
             exit 1
           fi
 
