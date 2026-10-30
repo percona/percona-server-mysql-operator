@@ -342,7 +342,7 @@ after-release: update-version manifests after-release-versions
 		-e "/^    haproxy:/,/^      image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-haproxy#}" \
 		-e "/^    router:/,/^      image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-router8.4#}" \
 		-e "/^  orchestrator:/,/^    image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-orchestrator#}" \
-		-e "/^#      binlogServer:/,/^#        image:/{s|^#        image: .*|#        image: perconalab/percona-binlog-server:0.3.1|}" \
+		-e "/^#      binlogServer:/,/^#        image:/{s|^#        image: .*|#        image: perconalab/percona-binlog-server:0.4.1|}" \
 		-e "/^  backup:/,/^    image:/{s#^    image: .*#    image: perconalab/percona-server-mysql-operator:main-backup8.4#}" \
 		-e "/^  toolkit:/,/^    image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-toolkit#}" \
 		-e "/initContainer:/,/image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main#}" \
@@ -367,10 +367,16 @@ after-release: update-version manifests after-release-versions
 	$(SED) -i \
 		-e "s|$(IMAGE_OPERATOR)|perconalab/percona-server-mysql-operator:main|g" \
 		pkg/controller/ps/suite_test.go
+	$(SED) -i \
+		-e "/^#      binlogServer:/,/^#        image:/{s|^#        image: .*|#        image: perconalab/percona-binlog-server:0.4.1|}" \
+		deploy/backup/restore.yaml
 
 after-release-versions:
 	$(SED) -i \
 		-e "s#^IMAGE_OPERATOR=.*#IMAGE_OPERATOR=$(IMAGE_TAG_BASE):main#" \
+		-e "s#^IMAGE_MYSQL97=.*#IMAGE_MYSQL97=percona/percona-server:9.7#" \
+		-e "s#^IMAGE_BACKUP97=.*#IMAGE_BACKUP97=percona/percona-xtrabackup:9.7#" \
+		-e "s#^IMAGE_ROUTER97=.*#IMAGE_ROUTER97=percona/percona-mysql-router:9.7#" \
 		-e "s#^IMAGE_MYSQL84=.*#IMAGE_MYSQL84=$(IMAGE_TAG_BASE):main-psmysql8.4#" \
 		-e "s#^IMAGE_BACKUP84=.*#IMAGE_BACKUP84=$(IMAGE_TAG_BASE):main-backup8.4#" \
 		-e "s#^IMAGE_ROUTER84=.*#IMAGE_ROUTER84=$(IMAGE_TAG_BASE):main-router8.4#" \
@@ -382,6 +388,6 @@ after-release-versions:
 		-e "s#^IMAGE_TOOLKIT=.*#IMAGE_TOOLKIT=$(IMAGE_TAG_BASE):main-toolkit#" \
 		-e "s#^IMAGE_PMM_CLIENT=.*#IMAGE_PMM_CLIENT=perconalab/pmm-client:3-dev-latest#" \
 		-e "s#^IMAGE_PMM_SERVER=.*#IMAGE_PMM_SERVER=perconalab/pmm-server:3-dev-latest#" \
-		-e "s#^IMAGE_BINLOG_SERVER=.*#IMAGE_BINLOG_SERVER=perconalab/percona-binlog-server:0.3.1#" \
+		-e "s#^IMAGE_BINLOG_SERVER=.*#IMAGE_BINLOG_SERVER=perconalab/percona-binlog-server:0.4.1#" \
 		-e "s#^IMAGE_LOG_COLLECTOR=.*#IMAGE_LOG_COLLECTOR=perconalab/fluentbit:main-logcollector#" \
 		e2e-tests/release_versions

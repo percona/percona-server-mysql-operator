@@ -56,7 +56,7 @@ spec:
             fieldRef:
               apiVersion: v1
               fieldPath: metadata.namespace
-        image: percona/percona-server-mysql-operator:1.3.0
+        image: perconalab/percona-server-mysql-operator:main
         imagePullPolicy: Always
         name: manager
         securityContext:
