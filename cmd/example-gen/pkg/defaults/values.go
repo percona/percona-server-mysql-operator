@@ -14,7 +14,7 @@ const (
 	ImagePMM           = "perconalab/pmm-client:3-dev-latest"
 	ImageLogCollector  = "perconalab/fluentbit:main-logcollector"
 	ImageBackup        = "perconalab/percona-server-mysql-operator:main-backup8.4"
-	ImageBinlogServer  = "perconalab/percona-binlog-server:0.3.1"
+	ImageBinlogServer  = "perconalab/percona-binlog-server:0.4.1"
 	ImageToolkit       = "perconalab/percona-server-mysql-operator:main-toolkit"
 )
 
