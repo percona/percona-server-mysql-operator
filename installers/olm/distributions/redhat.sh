@@ -39,7 +39,12 @@ catalog_digest() {
 			--connect-timeout 5 \
 			--max-time "${redhat_catalog_curl_timeout}" \
 			"${redhat_catalog_api}/repositories/registry/${redhat_registry}/repository/${repository}/tag/${tag}" \
-			| jq -er '.docker_image_digest // .data.docker_image_digest // .data[0].docker_image_digest' 2>/dev/null
+			| jq -er '
+				.docker_image_digest
+				// (.data | if type == "object" then .docker_image_digest
+					elif type == "array" then .[0].docker_image_digest
+					else empty end)
+			' 2>/dev/null
 	)" || digest="$(
 		curl -fsSL \
 			--connect-timeout 5 \
@@ -125,7 +130,9 @@ image_version() {
 mysql_major_version() {
 	local image
 	image="$(yq eval '.spec.mysql.image' "${repo_root}/deploy/cr.yaml")"
-	grep -oE '[0-9]+\.[0-9]+' <<<"$(image_version "${image}")" | tail -n1
+	# Tags look like 8.4.11-11.1. The leading major.minor is the release line;
+	# later N.N matches belong to the build suffix.
+	grep -oE '^[0-9]+\.[0-9]+' <<<"$(image_version "${image}")"
 }
 
 build_redhat_related_images() {
@@ -136,21 +143,29 @@ build_redhat_related_images() {
 	# shellcheck source=/dev/null
 	source "${repo_root}/e2e-tests/release_versions"
 
+	add_related_image "mysql9.7" "${redhat_containers_repository}" \
+		"$(release_component_tag ps "$(image_version "${IMAGE_MYSQL97}")")"
 	add_related_image "mysql8.4" "${redhat_containers_repository}" \
 		"$(release_component_tag ps "$(image_version "${IMAGE_MYSQL84}")")"
 	add_related_image "mysql8.0" "${redhat_containers_repository}" \
 		"$(release_component_tag ps "$(image_version "${IMAGE_MYSQL80}")")"
 
+	add_related_image "router9.7" "${redhat_containers_repository}" \
+		"$(release_component_tag router "$(image_version "${IMAGE_ROUTER97}")")"
 	add_related_image "router8.4" "${redhat_containers_repository}" \
 		"$(release_component_tag router "$(image_version "${IMAGE_ROUTER84}")")"
 	add_related_image "router8.0" "${redhat_containers_repository}" \
 		"$(release_component_tag router "$(image_version "${IMAGE_ROUTER80}")")"
 
+	add_related_image "backup9.7" "${redhat_containers_repository}" \
+		"$(release_component_tag backup "$(image_version "${IMAGE_BACKUP97}")")"
 	add_related_image "backup8.4" "${redhat_containers_repository}" \
 		"$(release_component_tag backup "$(image_version "${IMAGE_BACKUP84}")")"
 	add_related_image "backup8.0" "${redhat_containers_repository}" \
 		"$(release_component_tag backup "$(image_version "${IMAGE_BACKUP80}")")"
 
+	add_related_image "logcollector" "${redhat_containers_repository}" \
+		"$(release_component_tag logcollector "$(image_version "${IMAGE_LOG_COLLECTOR}")")"
 	add_related_image "toolkit" "${redhat_containers_repository}" "${redhat_release}-toolkit"
 	add_related_image "pmm3" "${redhat_containers_repository}" "${redhat_release}-pmm3"
 	add_related_image "haproxy" "${redhat_containers_repository}" "${redhat_release}-haproxy"
@@ -169,6 +184,7 @@ build_redhat_related_images() {
 		--arg orchestrator_image "$(related_image_by_name orchestrator)" \
 		--arg pmm_image "$(related_image_by_name pmm3)" \
 		--arg toolkit_image "$(related_image_by_name toolkit)" \
+		--arg logcollector_image "$(related_image_by_name logcollector)" \
 		--argjson related_images "${redhat_related_images}" \
 		'{
 			operatorImage: $operator_image,
@@ -179,6 +195,7 @@ build_redhat_related_images() {
 			orchestratorImage: $orchestrator_image,
 			pmmImage: $pmm_image,
 			toolkitImage: $toolkit_image,
+			logcollectorImage: $logcollector_image,
 			relatedImages: $related_images
 		}'
 }
@@ -198,6 +215,22 @@ rewrite_cr_example_images() {
 				| .spec.pmm.image = $images.pmmImage
 				| .spec.backup.image = $images.backupImage
 				| .spec.toolkit.image = $images.toolkitImage
+				| .spec.logcollector.image = $images.logcollectorImage
+				| .spec.initContainer = {image: $images.operatorImage}
+				| .spec = (
+					.spec as $spec
+					| ($spec | del(.initContainer) | to_entries) as $entries
+					| ($entries | map(.key) | index("upgradeOptions")) as $at
+					| if $at == null then
+						$spec
+					else
+						(
+							$entries[:$at + 1]
+							+ [{key: "initContainer", value: $spec.initContainer}]
+							+ $entries[$at + 1:]
+						) | from_entries
+					end
+				)
 			else
 				.
 			end
