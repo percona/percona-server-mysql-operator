@@ -6,7 +6,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.8.2
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/Percona-Lab/percona-version-service v0.0.0-20230324081000-27de445df239
-	github.com/Tusamarco/mysqloperatorcalculator v1.21.1-0.20260906085949-3f1cd18285ff
+	github.com/Tusamarco/mysqloperatorcalculator v1.21.1
 	github.com/cert-manager/cert-manager v1.21.3
 	github.com/dustin/go-humanize v1.1.0
 	github.com/flosch/pongo2 v0.0.0-20200913210552-0d938eb266f3
