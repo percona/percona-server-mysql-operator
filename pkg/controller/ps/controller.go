@@ -1614,7 +1614,21 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 		return nil
 	}
 
-	if err := orchestrator.Discover(ctx, r.ClientCmd, pod, mysql.ServiceName(cr), mysql.DefaultPort); err != nil {
+	mysqlPods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr), cr.Namespace)
+	if err != nil {
+		return errors.Wrap(err, "get mysql pods")
+	}
+
+	// Discover through a pod-specific FQDN. The headless service name resolves to all
+	// pod IPs in random order, which makes orchestrator mix up instance data when it
+	// re-resolves that hostname.
+	seed := firstBootstrappedPod(mysqlPods)
+	if seed == nil {
+		log.Info("mysql is not ready, no bootstrapped mysql pods. skip")
+		return nil
+	}
+
+	if err := orchestrator.Discover(ctx, r.ClientCmd, pod, mysql.PodFQDN(cr, seed), mysql.DefaultPort); err != nil {
 		switch {
 		case errors.Is(err, orchestrator.ErrUnauthorized):
 			log.Info("mysql is not ready, unauthorized orchestrator discover response. skip")
@@ -1666,11 +1680,6 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 	clusterInstances, err := orchestrator.Cluster(ctx, r.ClientCmd, pod, cluster)
 	if err != nil {
 		return errors.Wrap(err, "get cluster instances")
-	}
-
-	mysqlPods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr), cr.Namespace)
-	if err != nil {
-		return errors.Wrap(err, "get mysql pods")
 	}
 
 	r.discoverMissingInstances(ctx, cr, pod, clusterInstances, mysqlPods)
@@ -1732,6 +1741,21 @@ func (r *PerconaServerMySQLReconciler) discoverMissingInstances(
 
 		log.Info("Discovered instance orchestrator was missing", "instance", p.Name)
 	}
+}
+
+// firstBootstrappedPod returns the bootstrapped pod with the lowest name, or nil if there is none.
+func firstBootstrappedPod(pods []corev1.Pod) *corev1.Pod {
+	var first *corev1.Pod
+	for i := range pods {
+		if !bootstrapped(pods[i]) {
+			continue
+		}
+		if first == nil || pods[i].Name < first.Name {
+			first = &pods[i]
+		}
+	}
+
+	return first
 }
 
 // bootstrapped reports whether the pod's mysql container passed its startup probe.
