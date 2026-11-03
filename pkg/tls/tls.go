@@ -183,19 +183,47 @@ func isCertManagerSecretCreatedByUser(ctx context.Context, c client.Client, cr *
 		return false, nil
 	}
 
+	// The secret produced by the operator-managed Certificate carries the
+	// cert-manager.io/certificate-name annotation equal to the operator's
+	// certificate name (<cr.Name>-ssl). If it matches, the secret is managed
+	// by the operator regardless of the issuer kind (Issuer or ClusterIssuer).
+	// This is required when switching between issuer kinds: cert-manager updates
+	// the issuer-kind annotation to "ClusterIssuer", which would otherwise make
+	// the operator treat the secret as user-created and stop reconciling it.
+	if secret.Annotations[cm.CertificateNameKey] == cr.Name+"-ssl" {
+		return false, nil
+	}
+
 	issuerName := secret.Annotations[cm.IssuerNameAnnotationKey]
-	if secret.Annotations[cm.IssuerKindAnnotationKey] != cm.IssuerKind || issuerName == "" {
+	if issuerName == "" {
 		return true, nil
 	}
-	issuer := new(cm.Issuer)
-	if err := c.Get(ctx, types.NamespacedName{
-		Name:      issuerName,
-		Namespace: secret.Namespace,
-	}, issuer); err != nil {
-		if k8serrors.IsNotFound(err) {
-			return true, nil
+
+	switch secret.Annotations[cm.IssuerKindAnnotationKey] {
+	case cm.IssuerKind:
+		issuer := new(cm.Issuer)
+		if err := c.Get(ctx, types.NamespacedName{
+			Name:      issuerName,
+			Namespace: secret.Namespace,
+		}, issuer); err != nil {
+			if k8serrors.IsNotFound(err) {
+				return true, nil
+			}
+			return true, errors.Wrap(err, "failed to get issuer")
 		}
-		return true, errors.Wrap(err, "failed to get issuer")
+		return !metav1.IsControlledBy(issuer, cr), nil
+	case cm.ClusterIssuerKind:
+		// ClusterIssuers are cluster-scoped and cannot be owned by a namespaced
+		// cr, so ownership can't be used to detect operator management. If the
+		// operator is configured to use this exact ClusterIssuer, treat the
+		// secret as operator-managed.
+		if cr.Spec.TLS != nil && cr.Spec.TLS.IssuerConf != nil &&
+			cr.Spec.TLS.IssuerConf.Kind == cm.ClusterIssuerKind &&
+			cr.Spec.TLS.IssuerConf.Name == issuerName {
+			return false, nil
+		}
+		return true, nil
+	default:
+		return true, nil
 	}
-	return !metav1.IsControlledBy(issuer, cr), nil
 }
