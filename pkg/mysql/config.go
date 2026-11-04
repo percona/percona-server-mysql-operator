@@ -41,7 +41,11 @@ func (c *Configurable) GetConfigMapKey() string {
 
 func (c *Configurable) GetConfiguration() string {
 	cr := apiv1.PerconaServerMySQL(*c)
-	return cr.Spec.MySQL.Configuration
+	cfg := cr.Spec.MySQL.Configuration
+	if strings.TrimSpace(cfg) == "" {
+		return cfg
+	}
+	return withMySQLdSection(cfg)
 }
 
 func (c *Configurable) GetResources() corev1.ResourceRequirements {
