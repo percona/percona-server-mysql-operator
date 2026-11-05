@@ -225,7 +225,8 @@ fi
 # the example: the API server drops nulls but keeps any parent objects a nested
 # null would create, and those parents fail validation on kubectl apply.
 #   spec.orchestrator.failover (only allowed for async clusters)
-#   spec.backup.pitr.binlogServer (keyringSecret, storage.s3 and storage.encryption)
+#   spec.backup.pitr.binlogServer stays, with keyringSecret, storage.encryption,
+#   and storage.s3.caBundle set to null so those defaulted objects are not created
 #   spec.backup.storages.s3-us-west.s3.caBundle (needs name)
 #   spec.backup.storages.s3-us-west.encryptionKeySecret (needs name)
 #   spec.backup.encryptionKeySecret (needs name)
@@ -236,7 +237,10 @@ fi
 examples_json="$(jq 'map(
 	if .kind == "PerconaServerMySQL" then
 		.spec.orchestrator.failover = null
-		| .spec.backup.pitr.binlogServer = null
+		| .spec.backup.pitr.binlogServer = {
+			keyringSecret: null,
+			storage: { encryption: null, s3: { caBundle: null } }
+		}
 		| .spec.backup.storages["s3-us-west"].s3.caBundle = null
 		| .spec.backup.storages["s3-us-west"].encryptionKeySecret = null
 		| .spec.backup.encryptionKeySecret = null
