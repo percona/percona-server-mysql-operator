@@ -44,7 +44,7 @@ spec:
 #      privileged: false
 #      runAsGroup: 1001
 #      runAsUser: 1001
-#    image: percona/percona-server-mysql-operator:1.3.0-2
+#    image: percona/percona-server-mysql-operator:1.3.0-3
 #    resources:
 #      limits:
 #        cpu: 100m
@@ -97,7 +97,7 @@ spec:
 #        privileged: false
 #        runAsGroup: 1001
 #        runAsUser: 1001
-#      image: percona/percona-server-mysql-operator:1.3.0-2
+#      image: percona/percona-server-mysql-operator:1.3.0-3
 #      resources:
 #        limits:
 #          cpu: 100m
@@ -310,7 +310,7 @@ spec:
 #          privileged: false
 #          runAsGroup: 1001
 #          runAsUser: 1001
-#        image: percona/percona-server-mysql-operator:1.3.0-2
+#        image: percona/percona-server-mysql-operator:1.3.0-3
 #        resources:
 #          limits:
 #            cpu: 100m
@@ -466,7 +466,7 @@ spec:
 #          privileged: false
 #          runAsGroup: 1001
 #          runAsUser: 1001
-#        image: percona/percona-server-mysql-operator:1.3.0-2
+#        image: percona/percona-server-mysql-operator:1.3.0-3
 #        resources:
 #          limits:
 #            cpu: 100m
@@ -611,7 +611,7 @@ spec:
 #        privileged: false
 #        runAsGroup: 1001
 #        runAsUser: 1001
-#      image: percona/percona-server-mysql-operator:1.3.0-2
+#      image: percona/percona-server-mysql-operator:1.3.0-3
 #      resources:
 #        limits:
 #          cpu: 100m
@@ -827,7 +827,7 @@ spec:
 #            privileged: false
 #            runAsGroup: 1001
 #            runAsUser: 1001
-#          image: percona/percona-server-mysql-operator:1.3.0-2
+#          image: percona/percona-server-mysql-operator:1.3.0-3
 #          resources:
 #            limits:
 #              cpu: 100m
@@ -875,7 +875,7 @@ spec:
 #        privileged: false
 #        runAsGroup: 1001
 #        runAsUser: 1001
-#      image: percona/percona-server-mysql-operator:1.3.0-2
+#      image: percona/percona-server-mysql-operator:1.3.0-3
 #      resources:
 #        limits:
 #          cpu: 100m

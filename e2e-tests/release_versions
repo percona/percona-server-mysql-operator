@@ -1,4 +1,4 @@
-IMAGE_OPERATOR=percona/percona-server-mysql-operator:1.3.0-2
+IMAGE_OPERATOR=percona/percona-server-mysql-operator:1.3.0-3
 IMAGE_MYSQL97=percona/percona-server:9.7.2-2.1
 IMAGE_BACKUP97=percona/percona-xtrabackup:9.7.1-rc1.1
 IMAGE_ROUTER97=percona/percona-mysql-router:9.7.2-2.1
