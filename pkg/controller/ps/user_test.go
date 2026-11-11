@@ -491,6 +491,11 @@ func (c *rolloutRecordingClient) Update(ctx context.Context, obj client.Object, 
 }
 
 func (c *rolloutRecordingClient) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+	c.writes = append(c.writes, "patch "+writeTarget(obj))
+	if _, ok := obj.(*corev1.Secret); ok {
+		return c.Client.Patch(ctx, obj, patch, opts...)
+	}
+
 	secret := new(corev1.Secret)
 	if err := c.Get(ctx, c.internalSecretNN, secret); err != nil {
 		return err
@@ -499,7 +504,6 @@ func (c *rolloutRecordingClient) Patch(ctx context.Context, obj client.Object, p
 		c.secretAtRestart = make(map[string]*corev1.Secret)
 	}
 	c.secretAtRestart[writeTarget(obj)] = secret
-	c.writes = append(c.writes, "patch "+writeTarget(obj))
 
 	return c.Client.Patch(ctx, obj, patch, opts...)
 }
@@ -538,7 +542,7 @@ func TestReconcileUsersRecordsChangeBeforeRestarts(t *testing.T) {
 			oldToken:  "token",
 			wantUsers: "monitor,operator",
 			wantWrites: []string{
-				"update Secret/internal-gr",
+				"patch Secret/internal-gr",
 				"patch StatefulSet/gr-mysql",
 				"patch Deployment/gr-router",
 			},
@@ -548,13 +552,13 @@ func TestReconcileUsersRecordsChangeBeforeRestarts(t *testing.T) {
 			oldToken:  "token",
 			wantUsers: string(apiv1.UserPMMServerToken),
 			wantWrites: []string{
-				"update Secret/internal-gr",
+				"patch Secret/internal-gr",
 				"patch StatefulSet/gr-mysql",
 			},
 		},
 		"a first PMM server token": {
 			change:     map[string]string{string(apiv1.UserPMMServerToken): "token"},
-			wantWrites: []string{"update Secret/internal-gr"},
+			wantWrites: []string{"patch Secret/internal-gr"},
 		},
 	}
 
