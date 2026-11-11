@@ -395,11 +395,12 @@ func (r *PerconaServerMySQLReconciler) recordPasswordChange(
 ) error {
 	log := logf.FromContext(ctx).WithName("reconcileUsers")
 
+	orig := internalSecret.DeepCopy()
 	internalSecret.Data = secret.DeepCopy().Data
 	k8s.AddAnnotation(internalSecret, naming.AnnotationPasswordsUpdated.String(), "false")
 	k8s.AddAnnotation(internalSecret, naming.AnnotationPasswordsUpdatedUsers.String(), joinUsers(changedUsers))
-	if err := r.Update(ctx, internalSecret); err != nil {
-		return errors.Wrapf(err, "update Secret/%s", internalSecret.Name)
+	if err := r.Patch(ctx, internalSecret, client.MergeFrom(orig)); err != nil {
+		return errors.Wrapf(err, "patch Secret/%s", internalSecret.Name)
 	}
 
 	log.Info("Updated internal secret", "secretName", cr.InternalSecretName(), "users", joinUsers(changedUsers))
@@ -710,7 +711,7 @@ func (r *PerconaServerMySQLReconciler) passwordsPropagated(
 				}
 
 				// A container that is not running, e.g. in CrashLoopBackOff, holds no password and reads the updated secret when it starts.
-				if !containerRunning(pod, comp.name) {
+				if !k8s.IsContainerRunning(pod, comp.name) {
 					continue
 				}
 
@@ -743,16 +744,6 @@ func (r *PerconaServerMySQLReconciler) passwordsPropagated(
 
 	log.Info("Updated password propagated")
 	return nil
-}
-
-func containerRunning(pod *corev1.Pod, name string) bool {
-	for _, status := range pod.Status.ContainerStatuses {
-		if status.Name == name {
-			return status.State.Running != nil
-		}
-	}
-
-	return false
 }
 
 func getMySQLURI(user apiv1.SystemUser, password, host string) string {
