@@ -76,6 +76,16 @@ func IsPodRunning(pod corev1.Pod) bool {
 	return pod.Status.Phase == corev1.PodRunning && pod.GetDeletionTimestamp().IsZero()
 }
 
+func IsContainerRunning(pod *corev1.Pod, name string) bool {
+	for _, status := range pod.Status.ContainerStatuses {
+		if status.Name == name {
+			return status.State.Running != nil
+		}
+	}
+
+	return false
+}
+
 func IsPodReady(pod corev1.Pod) bool {
 	if !IsPodRunning(pod) {
 		return false
