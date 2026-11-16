@@ -108,7 +108,7 @@ RUN mkdir -p /opt/percona-server-mysql-operator \
         build/logcollector \
         /opt/percona-server-mysql-operator/
 
-FROM redhat/ubi9-minimal AS ubi9
+FROM redhat/ubi9-minimal:9.9 AS ubi9
 RUN microdnf -y update && microdnf clean all
 
 LABEL name="Percona Distribution for MySQL Operator" \
