@@ -876,6 +876,14 @@ func TestConfigurableGetConfiguration(t *testing.T) {
 			configuration: "[mysqld]\ninnodb_buffer_pool_size={{ containerMemoryLimit }}\n",
 			want:          "[mysqld]\ninnodb_buffer_pool_size={{ containerMemoryLimit }}\n",
 		},
+		"bare keys get [mysqld] prepended": {
+			configuration: "max_connections=450",
+			want:          "[mysqld]\nmax_connections=450",
+		},
+		"bare keys multiline": {
+			configuration: "max_connections=450\ninnodb_buffer_pool_size=1G\n",
+			want:          "[mysqld]\nmax_connections=450\ninnodb_buffer_pool_size=1G\n",
+		},
 	}
 
 	for name, tc := range tests {
