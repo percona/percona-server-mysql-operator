@@ -1,0 +1,34 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 600
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      cert_data="$(kubectl -n "${NAMESPACE}" get certificate tls-cert-manager-ssl -o jsonpath='{.spec.issuerRef.name}{"|"}{.spec.issuerRef.kind}{"|"}{.spec.issuerRef.group}{"|"}{.status.conditions[?(@.type=="Ready")].status}')"
+      cert_issuer_name="$(printf '%s' "${cert_data}" | cut -d '|' -f 1)"
+      cert_issuer_kind="$(printf '%s' "${cert_data}" | cut -d '|' -f 2)"
+      cert_issuer_group="$(printf '%s' "${cert_data}" | cut -d '|' -f 3)"
+      cert_ready="$(printf '%s' "${cert_data}" | cut -d '|' -f 4)"
+
+      if [ "${cert_issuer_name}" != "tls-cert-manager-ps-issuer" ]; then
+          echo "Unexpected certificate issuer name: ${cert_issuer_name}"
+          exit 1
+      fi
+
+      if [ "${cert_issuer_kind}" != "Issuer" ]; then
+          echo "Unexpected certificate issuer kind: ${cert_issuer_kind}"
+          exit 1
+      fi
+
+      if [ "${cert_issuer_group}" != "cert-manager.io" ]; then
+          echo "Unexpected certificate issuer group: ${cert_issuer_group}"
+          exit 1
+      fi
+
+      if [ "${cert_ready}" != "True" ]; then
+          echo "Certificate is not Ready: ${cert_ready}"
+          exit 1
+      fi
+    timeout: 600
