@@ -22,8 +22,8 @@ github.com/Masterminds/semver/v3 v3.5.0 h1:kQceYJfbupGfZOKZQg0kou0DgAKhzDg2NZPAw
 github.com/Masterminds/semver/v3 v3.5.0/go.mod h1:4V+yj/TJE1HU9XfppCwVMZq3I84lprf4nC11bSS5beM=
 github.com/Percona-Lab/percona-version-service v0.0.0-20230324081000-27de445df239 h1:3A878XXdSJGu9JPeOQ7bPe3g7SLkghJqcMFWL8GulLA=
 github.com/Percona-Lab/percona-version-service v0.0.0-20230324081000-27de445df239/go.mod h1:2gW0U0FS5Bpl2cL9PrmeSb1Vp/5x0zmrN1o5iiiTd9k=
-github.com/Tusamarco/mysqloperatorcalculator v1.21.1-0.20260906085949-3f1cd18285ff h1:FBlK50im4W3E6v4sOehYaFrmiR7K6N68Ff72ZkDiZWQ=
-github.com/Tusamarco/mysqloperatorcalculator v1.21.1-0.20260906085949-3f1cd18285ff/go.mod h1:LWnrvFd1IZtrjqeNQm8jdDxUq3aupIk4R0adOeXQn2M=
+github.com/Tusamarco/mysqloperatorcalculator v1.21.1 h1:3oHAvdZSbr/PodZYk+aGNnNQbLay472Sy7GlANc6olA=
+github.com/Tusamarco/mysqloperatorcalculator v1.21.1/go.mod h1:LWnrvFd1IZtrjqeNQm8jdDxUq3aupIk4R0adOeXQn2M=
 github.com/andybalholm/brotli v1.2.2 h1:HzTuoo2ErYQqf5qvcJInB8uvqSVxRttzkFexPWtnceM=
 github.com/andybalholm/brotli v1.2.2/go.mod h1:rzTDkvFWvIrjDXZHkuS16NPggd91W3kUSvPlQ1pLaKY=
 github.com/apache/arrow-go/v18 v18.7.0 h1:Vw/i+cJyebUofT7JlqFpe65LrmwxULn166jjwStM4HY=
