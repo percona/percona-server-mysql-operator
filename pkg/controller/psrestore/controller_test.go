@@ -1801,3 +1801,122 @@ func TestRestoreThatPausedTheClusterFails(t *testing.T) {
 		assert.Empty(t, jobs(t, cl))
 	})
 }
+
+func TestRestorePrepareJobByCRVersion(t *testing.T) {
+	const (
+		namespace   = "some-namespace"
+		clusterName = "ps-cluster"
+		restoreName = "restore"
+		restoreUID  = "restore-uid"
+		backupName  = "backup1"
+	)
+
+	tests := []struct {
+		name              string
+		crVersion         string
+		prepareJob        *batchv1.JobStatus
+		expectedState     apiv1.RestoreState
+		prepareJobCreated bool
+		stateDescNotEmpty bool
+	}{
+		{
+			name:              "crVersion 1.2.0 does not run the prepare job",
+			crVersion:         "1.2.0",
+			expectedState:     apiv1.RestoreSucceeded,
+			prepareJobCreated: false,
+		},
+		{
+			name:              "crVersion 1.3.0 creates the prepare job",
+			crVersion:         "1.3.0",
+			expectedState:     apiv1.RestoreRunning,
+			prepareJobCreated: true,
+		},
+		{
+			name:              "current crVersion creates the prepare job",
+			expectedState:     apiv1.RestoreRunning,
+			prepareJobCreated: true,
+		},
+		{
+			name: "failed prepare job sets the state description",
+			prepareJob: &batchv1.JobStatus{Conditions: []batchv1.JobCondition{{
+				Type:   batchv1.JobFailed,
+				Status: corev1.ConditionTrue,
+			}}},
+			expectedState:     apiv1.RestoreFailed,
+			prepareJobCreated: true,
+			stateDescNotEmpty: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := t.Context()
+
+			cluster := readDefaultCluster(t, clusterName, namespace)
+			if tt.crVersion != "" {
+				cluster.Spec.CRVersion = tt.crVersion
+			}
+			cluster.Status.State = apiv1.StateReady
+			meta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{
+				Type:   apiv1.ConditionInnoDBClusterBootstrapped,
+				Status: metav1.ConditionTrue,
+			})
+
+			backup := readDefaultBackup(t, backupName, namespace)
+			backup.Spec.ClusterName = clusterName
+
+			restore := readDefaultRestore(t, restoreName, namespace)
+			restore.UID = types.UID(restoreUID)
+			restore.Spec.ClusterName = clusterName
+			restore.Spec.BackupName = backupName
+			restore.Status.State = apiv1.RestoreRunning
+
+			restoreJob := &batchv1.Job{
+				Name:      xtrabackup.RestoreJobName(cluster, restore),
+				Namespace: namespace,
+				Status: batchv1.JobStatus{Conditions: []batchv1.JobCondition{{
+					Type:   batchv1.JobComplete,
+					Status: corev1.ConditionTrue,
+				}}},
+			}
+
+			lease := &coordv1.Lease{
+				Name:      naming.RestoreLeaseName(clusterName),
+				Namespace: namespace,
+				Spec: coordv1.LeaseSpec{
+					HolderIdentity: new(naming.LeaseHolderName(restoreName, restoreUID)),
+				},
+			}
+
+			objs := []runtime.Object{cluster, backup, restore, restoreJob, lease}
+			if tt.prepareJob != nil {
+				objs = append(objs, &batchv1.Job{
+					Name:      xtrabackup.PrepareJobName(restore),
+					Namespace: namespace,
+					Status:    *tt.prepareJob,
+				})
+			}
+
+			cl := buildFakeClient(t, objs...)
+			r := reconciler(cl)
+			_, err := r.Reconcile(ctx, controllerruntime.Request{
+				NamespacedName: client.ObjectKeyFromObject(restore),
+			})
+			require.NoError(t, err)
+
+			currentRestore := new(apiv1.PerconaServerMySQLRestore)
+			require.NoError(t, cl.Get(ctx, client.ObjectKeyFromObject(restore), currentRestore))
+			assert.Equal(t, tt.expectedState, currentRestore.Status.State)
+			if tt.stateDescNotEmpty {
+				assert.NotEmpty(t, currentRestore.Status.StateDesc)
+			}
+
+			err = cl.Get(ctx, types.NamespacedName{Name: xtrabackup.PrepareJobName(restore), Namespace: namespace}, new(batchv1.Job))
+			if tt.prepareJobCreated {
+				require.NoError(t, err)
+			} else {
+				assert.True(t, k8serrors.IsNotFound(err), "prepare job must not be created, got err=%v", err)
+			}
+		})
+	}
+}

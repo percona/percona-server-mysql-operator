@@ -218,11 +218,17 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 			return ctrl.Result{}, errors.Wrap(err, "reconcile pitr config secret")
 		}
 
-		if state, err := r.reconcilePrepareJob(ctx, cr, cluster); err != nil {
-			return ctrl.Result{}, errors.Wrap(err, "reconcile prepare job")
-		} else if state != apiv1.RestoreSucceeded {
-			status.State = state
-			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		// The prepare job was added in 1.3.0. Older init images don't have run-prepare-restore.sh.
+		if cluster.CompareVersion("1.3.0") >= 0 {
+			if state, err := r.reconcilePrepareJob(ctx, cr, cluster); err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "reconcile prepare job")
+			} else if state != apiv1.RestoreSucceeded {
+				status.State = state
+				if state == apiv1.RestoreFailed {
+					status.StateDesc = fmt.Sprintf("prepare job %s failed", xtrabackup.PrepareJobName(cr))
+				}
+				return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+			}
 		}
 
 		if cr.Spec.PITR != nil {
