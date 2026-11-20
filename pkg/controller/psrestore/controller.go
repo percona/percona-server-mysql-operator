@@ -226,6 +226,7 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 				status.State = state
 				if state == apiv1.RestoreFailed {
 					status.StateDesc = fmt.Sprintf("prepare job %s failed", xtrabackup.PrepareJobName(cr))
+					return ctrl.Result{}, nil
 				}
 				return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 			}

@@ -1818,6 +1818,7 @@ func TestRestorePrepareJobByCRVersion(t *testing.T) {
 		expectedState     apiv1.RestoreState
 		prepareJobCreated bool
 		stateDescNotEmpty bool
+		requeueAfter      time.Duration
 	}{
 		{
 			name:              "crVersion 1.2.0 does not run the prepare job",
@@ -1830,11 +1831,13 @@ func TestRestorePrepareJobByCRVersion(t *testing.T) {
 			crVersion:         "1.3.0",
 			expectedState:     apiv1.RestoreRunning,
 			prepareJobCreated: true,
+			requeueAfter:      5 * time.Second,
 		},
 		{
 			name:              "current crVersion creates the prepare job",
 			expectedState:     apiv1.RestoreRunning,
 			prepareJobCreated: true,
+			requeueAfter:      5 * time.Second,
 		},
 		{
 			name: "failed prepare job sets the state description",
@@ -1899,10 +1902,11 @@ func TestRestorePrepareJobByCRVersion(t *testing.T) {
 
 			cl := buildFakeClient(t, objs...)
 			r := reconciler(cl)
-			_, err := r.Reconcile(ctx, controllerruntime.Request{
+			result, err := r.Reconcile(ctx, controllerruntime.Request{
 				NamespacedName: client.ObjectKeyFromObject(restore),
 			})
 			require.NoError(t, err)
+			assert.Equal(t, tt.requeueAfter, result.RequeueAfter)
 
 			currentRestore := new(apiv1.PerconaServerMySQLRestore)
 			require.NoError(t, cl.Get(ctx, client.ObjectKeyFromObject(restore), currentRestore))
