@@ -57,6 +57,7 @@ scheduled-backup-incremental
 service-per-pod
 sidecars
 smart-update
+switch-cluster-type
 storage
 telemetry
 tls-cert-manager

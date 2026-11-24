@@ -7,10 +7,13 @@ spec:
   mysql:
     clusterType: async
     size: 3
+    autoConfig:
+      enabled: true
+      loadType: heavyWrites
     resources:
       limits:
-        cpu: "1"
-        memory: 2Gi
+        cpu: "2"
+        memory: 4Gi
       requests:
         cpu: "1"
         memory: 2Gi

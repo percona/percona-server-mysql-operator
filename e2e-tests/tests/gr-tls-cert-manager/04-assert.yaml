@@ -63,7 +63,7 @@ metadata:
     app.kubernetes.io/name: router
     app.kubernetes.io/part-of: percona-server
 status:
-  observedGeneration: 1
+  observedGeneration: 2
   replicas: 3
   updatedReplicas: 3
   readyReplicas: 3
